@@ -1,0 +1,36 @@
+{
+  "name": "cohort-discord-bot",
+  "version": "1.0.0",
+  "main": "src/index.js",
+  "scripts": {
+    "start": "node src/index.js",
+    "dev": "nodemon src/index.js",
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "keywords": [
+    "discord",
+    "strategy",
+    "ancient",
+    "warfare"
+  ],
+  "author": "",
+  "license": "ISC",
+  "description": "Ancient warfare strategy game for Discord",
+  "dependencies": {
+    "@anthropic-ai/claude-agent-sdk": "^0.1.1",
+    "@anthropic-ai/sdk": "^0.24.2",
+    "discord.js": "^14.14.1",
+    "dotenv": "^16.3.1",
+    "groq-sdk": "^0.5.0",
+    "lodash": "^4.17.21",
+    "openai": "^4.52.0",
+    "papaparse": "^5.4.1",
+    "sequelize": "^6.35.0",
+    "sqlite3": "^5.1.6",
+    "uuid": "^9.0.1"
+  },
+  "devDependencies": {
+    "install": "^0.13.0",
+    "nodemon": "^3.0.2"
+  }
+}
