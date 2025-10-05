@@ -25,6 +25,11 @@ module.exports = (sequelize) => {
             ),
             allowNull: true
         },
+        armyComposition: {
+            type: DataTypes.JSON,
+            allowNull: true,
+            defaultValue: null
+        },
         rank: {
             type: DataTypes.ENUM(
                 'Recruit',      // 0-2 battles

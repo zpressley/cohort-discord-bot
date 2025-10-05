@@ -735,7 +735,7 @@ async function showSupportSelection(interaction, composition) {
 }
 
 async function saveArmy(interaction, composition) {
-    const { models } = require('../../database/setup');
+    const { models } = require('../database/setup');
     
     const totalWarriors = composition.units.reduce((total, unit) => total + unit.quality.size, 0);
     const eliteSize = getEliteUnitSize(composition.culture);

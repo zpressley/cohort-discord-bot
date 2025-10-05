@@ -39,16 +39,16 @@ async function setupDatabase() {
         await sequelize.authenticate();
         console.log('✅ Database connection established successfully.');
         
-        // Check if database file exists
+       // Check if database file exists AND has tables
         const dbPath = process.env.DB_PATH || path.join(__dirname, '../../data/cohort.db');
         const dbExists = fs.existsSync(dbPath);
-        
-        if (!dbExists) {
-            // Fresh database - create clean tables
+
+        if (!dbExists || fs.statSync(dbPath).size === 0) {
+            // Fresh or empty database - create clean tables
             console.log('📝 Creating fresh database...');
             await sequelize.sync({ force: true });
         } else {
-            // Existing database - skip sync to avoid migration issues
+            // Existing database with data - skip sync to avoid migration issues
             console.log('📂 Using existing database (no sync)...');
         }
         
