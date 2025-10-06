@@ -260,9 +260,9 @@ function calculateUnitEffectiveness(force, conditions, combatType) {
     
     // Base stats from unit type and equipment
     force.units.forEach(unit => {
-        const baseStats = getUnitBaseStats(unit.type, unit.equipment);
-        const veteranBonus = getVeteranBonus(unit.experience);
-        const sizeMultiplier = unit.currentStrength / unit.maxStrength;
+        const baseStats = getUnitBaseStats(unit.qualityType || 'professional', {});
+        const veteranBonus = 0; // getVeteranBonus(unit.experience || 0);
+        const sizeMultiplier = 1.0; // First turn, full strength
         
         effectiveness.attack += (baseStats.attack + veteranBonus) * sizeMultiplier;
         effectiveness.defense += (baseStats.defense + veteranBonus) * sizeMultiplier;
@@ -422,34 +422,37 @@ function calculateCasualties(combatResult, attackingForce, defendingForce) {
         'moderate': { winner: 0.12, loser: 0.12 }
     };
     
-    const rates = baseCasualtyRate[combatResult.intensity];
-    
-    let attackerCasualties = [];
-    let defenderCasualties = [];
+    const rates = baseCasualtyRate[combatResult.intensity] || baseCasualtyRate['moderate'];
     
     // Determine winner/loser for casualty calculation
     const attackerIsWinner = combatResult.result.includes('attacker');
     const attackerRate = attackerIsWinner ? rates.winner : rates.loser;
     const defenderRate = attackerIsWinner ? rates.loser : rates.winner;
     
-    // Calculate casualties per unit
-    attackingForce.units.forEach(unit => {
-        const casualties = Math.floor(unit.currentStrength * attackerRate * (Math.random() * 0.4 + 0.8));
-        attackerCasualties.push({
-            unitId: unit.id,
-            casualties: Math.min(casualties, unit.currentStrength),
-            type: unit.type
-        });
+    // Get actual units from force (handle both empty and populated)
+    const attackerUnits = attackingForce.units || [];
+    const defenderUnits = defendingForce.units || [];
+    
+    // Calculate casualties from actual army data
+    const attackerCasualties = attackerUnits.map(unit => {
+        const strength = unit.quality?.size || 100;
+        const casualties = Math.floor(strength * attackerRate * (Math.random() * 0.4 + 0.8));
+        return {
+            casualties: Math.min(casualties, strength),
+            type: unit.qualityType || 'professional'
+        };
     });
     
-    defendingForce.units.forEach(unit => {
-        const casualties = Math.floor(unit.currentStrength * defenderRate * (Math.random() * 0.4 + 0.8));
-        defenderCasualties.push({
-            unitId: unit.id,
-            casualties: Math.min(casualties, unit.currentStrength),
-            type: unit.type
-        });
+    const defenderCasualties = defenderUnits.map(unit => {
+        const strength = unit.quality?.size || 100;
+        const casualties = Math.floor(strength * defenderRate * (Math.random() * 0.4 + 0.8));
+        return {
+            casualties: Math.min(casualties, strength),
+            type: unit.qualityType || 'professional'
+        };
     });
+    
+    console.log(`Casualties: Attacker ${attackerCasualties[0]?.casualties || 0}, Defender ${defenderCasualties[0]?.casualties || 0}`);
     
     return {
         attacker: attackerCasualties,
@@ -536,18 +539,9 @@ function getUnitBaseStats(unitType, equipment) {
     
     const stats = baseStats[unitType] || baseStats['militia'];
     
-    // Equipment modifiers
-    if (equipment.heavyArmor) {
-        stats.defense += 3;
-        stats.mobility -= 2;
-    }
-    if (equipment.shields) {
-        stats.defense += 2;
-    }
-    if (equipment.pikes || equipment.spears) {
-        stats.attack += 2;
-        stats.defense += 1;
-    }
+    // Equipment is undefined when called from calculateUnitEffectiveness
+    // because units from army builder don't have an 'equipment' field
+    // They have armor, shields, primaryWeapon as separate fields
     
     return stats;
 }

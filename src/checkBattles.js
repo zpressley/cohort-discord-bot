@@ -1,37 +1,26 @@
 const { models } = require('./database/setup');
 
-async function check() {
-    // Get the most recent battle
-    const battle = await models.Battle.findOne({
+async function fix() {
+    // Delete the stuck battle
+    await models.Battle.destroy({
         where: {
-            player1Id: '664280448788201522'
-        },
-        order: [['createdAt', 'DESC']]
+            id: 'c2180a7b-6a05-43d0-87cd-c7e7b82c8c47'
+        }
     });
     
-    if (!battle) {
-        console.log('\n❌ No battles found\n');
-        process.exit(0);
-    }
+    console.log('✅ Deleted stuck battle');
     
-    console.log('\n=== BATTLE ARMY DATA ===\n');
-    console.log('Battle ID:', battle.id.substring(0, 8));
-    console.log('Player 1 Culture:', battle.player1Culture);
-    console.log('Player 2 Culture:', battle.player2Culture);
+    // Show remaining battles
+    const battles = await models.Battle.findAll({
+        where: { player1Id: '664280448788201522' }
+    });
     
-    console.log('\nPlayer 1 Army:', JSON.stringify(battle.battleState?.player1?.army, null, 2));
-    console.log('\nPlayer 2 Army:', JSON.stringify(battle.battleState?.player2?.army, null, 2));
-    
-    // Also check Commander
-    console.log('\n=== COMMANDER DATA ===\n');
-    const commander = await models.Commander.findByPk('664280448788201522');
-    console.log('Culture:', commander.culture);
-    console.log('Has armyComposition:', commander.armyComposition !== null && commander.armyComposition !== undefined);
-    if (commander.armyComposition) {
-        console.log('Army units:', commander.armyComposition.units?.length || 0);
-    }
+    console.log(`\nRemaining battles: ${battles.length}`);
+    battles.forEach(b => {
+        console.log(`${b.id.substring(0, 8)} - ${b.status}`);
+    });
     
     process.exit(0);
 }
 
-check();
+fix();

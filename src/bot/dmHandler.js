@@ -12,15 +12,15 @@ const processedMessages = new Set();
  */
 async function handleDMCommand(message, client) {
     try {
-        // Prevent duplicate processing
         if (processedMessages.has(message.id)) return;
         processedMessages.add(message.id);
         setTimeout(() => processedMessages.delete(message.id), 60000);
         
         const { models } = require('../database/setup');
+        const { isQuestion } = require('../ai/orderInterpreter');
+        const { answerTacticalQuestion } = require('../ai/officerQA');
         const userId = message.author.id;
         
-        // Check if player is in an active battle
         const activeBattle = await models.Battle.findOne({
             where: {
                 status: 'in_progress',
@@ -33,43 +33,41 @@ async function handleDMCommand(message, client) {
         
         if (!activeBattle) {
             await message.reply(
-                '📜 You are not currently in an active battle.\n\n' +
+                'You are not currently in an active battle.\n\n' +
                 'Use `/lobby` in a server channel to create or join battles!'
             );
             return;
         }
         
-        console.log(`Battle order received from ${userId} for battle ${activeBattle.id}`);
-        
-        // Get current turn
-        const currentTurn = await models.BattleTurn.findOne({
-            where: {
-                battleId: activeBattle.id,
-                turnNumber: activeBattle.currentTurn
-            }
-        });
-        
-        // Check if player already submitted orders this turn
         const playerSide = activeBattle.player1Id === userId ? 'player1' : 'player2';
-        const hasSubmitted = currentTurn && 
-            (playerSide === 'player1' ? currentTurn.player1Command : currentTurn.player2Command);
         
-        if (hasSubmitted) {
+        // Check if this is a question or an order
+        if (isQuestion(message.content)) {
+            // Answer question as officer
+            const eliteUnit = await models.EliteUnit.findOne({
+                where: { commanderId: userId }
+            });
+            
+            const answer = await answerTacticalQuestion(
+                message.content,
+                activeBattle.battleState,
+                playerSide,
+                eliteUnit
+            );
+            
             await message.reply(
-                '⚠️ You have already submitted orders for this turn.\n\n' +
-                'Waiting for your opponent to submit their commands...'
+                `**${answer.officerName}:**\n\n${answer.response}\n\n` +
+                `*Confidence: ${answer.confidence}*`
             );
             return;
         }
         
-        // Process the order
+        // Process as order
         await processPlayerOrder(message, activeBattle, userId, playerSide, client);
         
     } catch (error) {
         console.error('DM handler error:', error);
-        await message.reply(
-            '❌ Error processing your command. Please try again or use `/abandon-battle` if stuck.'
-        );
+        await message.reply('Error processing your command.');
     }
 }
 
@@ -132,107 +130,67 @@ async function processPlayerOrder(message, battle, playerId, playerSide, client)
 async function processTurnResolution(battle, battleTurn, client) {
     try {
         const { models } = require('../database/setup');
+        const { processTurn } = require('../game/turnOrchestrator');
+        const { RIVER_CROSSING_MAP } = require('../game/maps/riverCrossing');
         
         console.log(`\n⚔️ RESOLVING TURN ${battle.currentTurn} - Battle ${battle.id}`);
         console.log(`Player 1 Order: "${battleTurn.player1Command}"`);
         console.log(`Player 2 Order: "${battleTurn.player2Command}"`);
         
-        // Load battle context with proper culture lookup
-        const battleContext = await loadBattleContext(battle);
+        // Get the map for this scenario
+        const scenarioMaps = {
+            'river_crossing': RIVER_CROSSING_MAP,
+            // Add other maps as you build them
+            'bridge_control': RIVER_CROSSING_MAP, // Placeholder
+            'forest_ambush': RIVER_CROSSING_MAP,  // Placeholder
+            'hill_fort_assault': RIVER_CROSSING_MAP, // Placeholder
+            'desert_oasis': RIVER_CROSSING_MAP // Placeholder
+        };
         
-        console.log(`Cultures loaded: ${battleContext.player1.culture} vs ${battleContext.player2.culture}`);
+        const map = scenarioMaps[battle.scenario] || RIVER_CROSSING_MAP;
         
-        // Parse player orders
-        const { parsePlayerOrders } = require('../game/orderParser');
-        
-        const player1Orders = await parsePlayerOrders(
+        // Process complete turn with orchestrator
+        const turnResult = await processTurn(
+            battle,
             battleTurn.player1Command,
-            battleContext.player1.army,
-            battleContext.player1.culture,
-            battleContext
-        );
-        
-        const player2Orders = await parsePlayerOrders(
             battleTurn.player2Command,
-            battleContext.player2.army,
-            battleContext.player2.culture,
-            battleContext
+            map
         );
         
-        console.log('Orders parsed successfully');
+        if (!turnResult.success) {
+            throw new Error(turnResult.error);
+        }
         
-        // Resolve combat
-        const { resolveCombat } = require('../game/battleEngine');
+        console.log(`✅ Turn orchestration complete`);
+        console.log(`   Movements: P1 ${turnResult.turnResults.movements.player1Moves}, P2 ${turnResult.turnResults.movements.player2Moves}`);
+        console.log(`   Combat engagements: ${turnResult.turnResults.combats}`);
+        console.log(`   Casualties: P1 ${turnResult.turnResults.casualties.player1}, P2 ${turnResult.turnResults.casualties.player2}`);
         
-        const combatResult = await resolveCombat(
-            buildCombatForce(battleContext.player1, player1Orders),
-            buildCombatForce(battleContext.player2, player2Orders),
-            { weather: battleContext.weather, terrain: battleContext.terrain, scenario: battleContext.scenario },
-            { turnNumber: battleContext.currentTurn, morale: { attacker: 100, defender: 100 } }
-        );
+        // Update battle state in database
+        battle.battleState = turnResult.newBattleState;
+        battle.currentTurn += 1;
         
-        console.log(`Combat resolved: ${combatResult.combatResult.result}`);
-        
-        // Generate AI narrative
-        const { generateBattleNarrative } = require('../ai/aiNarrativeEngine');
-        
-        const narrative = await generateBattleNarrative(
-            combatResult.combatResult,
-            {
-                attackerCulture: battleContext.player1.culture,
-                defenderCulture: battleContext.player2.culture,
-                terrain: battleContext.terrain,
-                formations: {
-                    attacker: player1Orders.validatedOrders.commands[0]?.formation?.type || 'standard',
-                    defender: player2Orders.validatedOrders.commands[0]?.formation?.type || 'standard'
-                },
-                turnNumber: battleContext.currentTurn
-            },
-            {},
-            []
-        );
-        
-        console.log('AI narrative generated');
-        
-        // Store resolution in database
-        battleTurn.aiResolution = narrative.mainNarrative.fullNarrative;
-        battleTurn.combatResults = JSON.stringify(combatResult);
+        // Store turn results
+        battleTurn.aiResolution = turnResult.narrative.mainNarrative.fullNarrative;
+        battleTurn.combatResults = JSON.stringify(turnResult.turnResults);
         battleTurn.isResolved = true;
+        
+        await battle.save();
         await battleTurn.save();
         
-        // Send results to both players (skip TEST users)
-        await sendTurnResults(battle, battleTurn, narrative, combatResult, client);
+        // Send results to both players
+        await sendTurnResults(battle, battleTurn, turnResult.narrative, turnResult.turnResults, client);
         
-        // Update battle state
-        battle.currentTurn += 1;
-        await battle.save();
-        
-        // Check victory conditions
-        const victory = checkVictory(battle, combatResult);
-        if (victory.achieved) {
-            await endBattle(battle, victory, client);
+        // Check victory
+        if (turnResult.victory.achieved) {
+            await endBattle(battle, turnResult.victory, client);
         } else {
-            await sendNextTurnBriefings(battle, client);
+            await sendNextTurnBriefings(battle, turnResult.newBattleState, client);
         }
         
     } catch (error) {
         console.error('Turn resolution error:', error);
-        
-        // Try to notify real players
-        try {
-            const { models } = require('../database/setup');
-            
-            if (!battle.player1Id.startsWith('TEST_')) {
-                const player1 = await client.users.fetch(battle.player1Id);
-                await player1.send('❌ Error processing turn. Battle paused.');
-            }
-            if (battle.player2Id && !battle.player2Id.startsWith('TEST_')) {
-                const player2 = await client.users.fetch(battle.player2Id);
-                await player2.send('❌ Error processing turn. Battle paused.');
-            }
-        } catch (notifyError) {
-            console.error('Could not notify players of error:', notifyError);
-        }
+        throw error;
     }
 }
 
@@ -312,21 +270,51 @@ async function sendTurnResults(battle, battleTurn, narrative, combatResult, clie
 /**
  * Send briefings for next turn
  */
-async function sendNextTurnBriefings(battle, client) {
+async function sendNextTurnBriefings(battle, battleState, client) {
     try {
-        const briefingText = `\n⚡ **Turn ${battle.currentTurn} - Awaiting Orders**\n\n` +
-            `Send your tactical commands in natural language.\n` +
-            `Example: "advance infantry to center, archers provide covering fire"`;
+        const { filterBattleStateForPlayer } = require('../game/fogOfWar');
+        const { generateASCIIMap } = require('../game/maps/mapUtils');
         
-        // Skip TEST users
+        // Generate ASCII maps for each player
+        const p1State = filterBattleStateForPlayer(battleState, 'player1');
+        const p2State = filterBattleStateForPlayer(battleState, 'player2');
+        
+        const p1Map = generateASCIIMap({
+            terrain: battleState.terrain || {},
+            player1Units: p1State.yourForces.units,
+            player2Units: p1State.enemyForces.detectedUnits.map(e => ({ position: e.position }))
+        });
+        
+        const p2Map = generateASCIIMap({
+            terrain: battleState.terrain || {},
+            player1Units: p2State.enemyForces.detectedUnits.map(e => ({ position: e.position })),
+            player2Units: p2State.yourForces.units
+        });
+        
+        // Send to player 1
         if (!battle.player1Id.startsWith('TEST_')) {
             const player1 = await client.users.fetch(battle.player1Id);
-            await player1.send(briefingText);
+            await player1.send(
+                `\n⚡ **Turn ${battle.currentTurn} - Awaiting Orders**\n\n` +
+                `\`\`\`\n${p1Map}\n\`\`\`\n` +
+                `**Intelligence:** ${p1State.enemyForces.totalDetected} enemy unit(s) detected\n` +
+                `**Your Forces:** ${p1State.yourForces.units.length} unit(s)\n\n` +
+                `Send tactical commands or ask questions:\n` +
+                `- Orders: "advance to H11", "cavalry flank east"\n` +
+                `- Questions: "Marcus, where is the enemy?", "What do scouts see?"`
+            );
         }
         
+        // Send to player 2
         if (battle.player2Id && !battle.player2Id.startsWith('TEST_')) {
             const player2 = await client.users.fetch(battle.player2Id);
-            await player2.send(briefingText);
+            await player2.send(
+                `\n⚡ **Turn ${battle.currentTurn} - Awaiting Orders**\n\n` +
+                `\`\`\`\n${p2Map}\n\`\`\`\n` +
+                `**Intelligence:** ${p2State.enemyForces.totalDetected} enemy unit(s) detected\n` +
+                `**Your Forces:** ${p2State.yourForces.units.length} unit(s)\n\n` +
+                `Send tactical commands or ask questions.`
+            );
         }
         
     } catch (error) {
@@ -356,27 +344,27 @@ async function loadBattleContext(battle) {
         terrain: typeof battle.terrain === 'object' ? battle.terrain.primary : (battle.terrain || 'plains'),  // Extract primary terrain
         
         player1: {
-            id: battle.player1Id,
-            culture: player1Commander.culture,
-            army: [],
-            morale: 100
+        id: battle.player1Id,
+        culture: player1Commander.culture,
+        army: battle.battleState?.player1?.army?.units || [],  // Extract units array
+        morale: battle.battleState?.player1?.morale || 100
         },
-        
+
         player2: {
             id: battle.player2Id,
             culture: player2Commander.culture,
-            army: [],
-            morale: 100
+            army: battle.battleState?.player2?.army?.units || [],  // Extract units array
+            morale: battle.battleState?.player2?.morale || 100
         }
-    };
-}
+            };
+        }
 
 /**
  * Build combat force from battle context and orders
  */
 function buildCombatForce(playerData, parsedOrders) {
     return {
-        units: [],
+        units: playerData.army || [],  // Now it's already the units array
         culture: playerData.culture,
         formation: parsedOrders.validatedOrders?.commands[0]?.formation?.type || 'standard',
         equipment: {},

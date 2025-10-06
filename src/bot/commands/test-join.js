@@ -10,6 +10,7 @@ module.exports = {
         try {
             const { models } = require('../../database/setup');
             const { Battle, Commander } = models;
+            const { RIVER_CROSSING_MAP, initializeDeployment } = require('../../game/maps/riverCrossing');
             
             await interaction.deferReply({ ephemeral: true });
             
@@ -31,7 +32,7 @@ module.exports = {
                 console.log('All battles in database:', allBattles.length);
                 
                 return interaction.editReply({
-                    content: `❌ No waiting battle found.\n\n` +
+                    content: `No waiting battle found.\n\n` +
                             `Create one first with \`/create-game\`\n` +
                             `(Found ${allBattles.length} total battles in database)`
                 });
@@ -42,7 +43,7 @@ module.exports = {
             
             if (!commander) {
                 return interaction.editReply({
-                    content: '❌ Commander not found. Build an army first.'
+                    content: 'Commander not found. Build an army first.'
                 });
             }
             
@@ -67,42 +68,67 @@ module.exports = {
                 console.log('Test commander created:', testPlayer2Id);
             }
             
-            // Update battle with test player
-            // Update battle with test player and their army
+            // Get current battle state
             const currentState = battle.battleState || {};
-
+            
+            // Initialize unit positions on the map
+            const p1Units = initializeDeployment(
+                'north', 
+                currentState.player1?.army?.units || []
+            );
+            
+            const p2Units = initializeDeployment(
+                'south',
+                commander.armyComposition?.units || []
+            );
+            
+            console.log(`Initialized positions: P1 ${p1Units.length} units, P2 ${p2Units.length} units`);
+            
+            // Update battle with test player and positions
             battle.player2Id = testPlayer2Id;
             battle.player2Culture = testCulture;
             battle.battleState = {
                 ...currentState,
-                player1: currentState.player1 || { army: {}, positions: {}, supplies: 100, morale: 100 },
+                player1: {
+                    ...currentState.player1,
+                    unitPositions: p1Units,
+                    visibleEnemyPositions: []
+                },
                 player2: {
                     army: commander.armyComposition || {},
                     positions: {},
                     supplies: 100,
-                    morale: 100
-                }
+                    morale: 100,
+                    unitPositions: p2Units,
+                    visibleEnemyPositions: []
+                },
+                terrain: RIVER_CROSSING_MAP.terrain,
+                weather: battle.weather,
+                currentTurn: battle.currentTurn
             };
             battle.status = 'in_progress';
-
+            
             await battle.save();
             
-            console.log(`Test-join: Battle ${battle.id} now active`);
+            console.log(`Test-join: Battle ${battle.id} now active with positioned units`);
             
             return interaction.editReply({
-                content: `✅ **Test Battle Started!**\n\n` +
+                content: `**Test Battle Started!**\n\n` +
                         `**Player 1:** ${battle.player1Culture} (You)\n` +
+                        `  - ${p1Units.length} units deployed in northern zone\n` +
+                        `  - Starting positions: ${p1Units.map(u => u.position).join(', ')}\n\n` +
                         `**Player 2 (TEST):** ${battle.player2Culture} (AI Opponent)\n` +
+                        `  - ${p2Units.length} units deployed in southern zone\n` +
+                        `  - Starting positions: ${p2Units.map(u => u.position).join(', ')}\n\n` +
                         `**Scenario:** ${battle.scenario}\n` +
-                        `**Status:** ${battle.status}\n\n` +
-                        `⚔️ Battle is now active!\n` +
-                        `(Next: DM briefings will be sent when turnManager is connected)`
+                        `**Map:** 15x15 grid (A1-O15)\n\n` +
+                        `Battle is active! Check your DMs for tactical briefing with map.`
             });
             
         } catch (error) {
             console.error('Test join error:', error);
             return interaction.editReply({
-                content: `❌ Test failed: ${error.message}\n\nCheck terminal for stack trace.`
+                content: `Test failed: ${error.message}\n\nCheck terminal for details.`
             });
         }
     }
@@ -110,8 +136,8 @@ module.exports = {
 
 function getRandomOpposingCulture(player1Culture) {
     const cultures = [
-        'Roman', 'Celtic', 'Han Chinese', 'Macedonian',
-        'Sarmatian', 'Berber', 'Spartan', 'Kingdom of Kush'
+        'Roman Republic', 'Celtic', 'Han Dynasty', 'Macedonian Kingdoms',
+        'Sarmatian Confederations', 'Berber Confederations', 'Spartan City-State', 'Kingdom of Kush'
     ];
     
     const available = cultures.filter(c => c !== player1Culture);
