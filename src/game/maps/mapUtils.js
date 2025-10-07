@@ -1,25 +1,23 @@
-// src/game/maps/mapUtils.js
-// Core utilities for grid-based tactical combat
+
 
 /**
  * Parse grid coordinate string to {row, col} object
- * @param {string} coord - Grid coordinate like "H11" or "A1"
- * @returns {Object} {row: number, col: number}
+ * Supports 20x20 maps (A1-T20)
  */
 function parseCoord(coord) {
     if (!coord || typeof coord !== 'string') {
         throw new Error(`Invalid coordinate: ${coord}`);
     }
     
-    const match = coord.match(/^([A-O])(\d+)$/);
+    const match = coord.match(/^([A-T])(\d+)$/);
     if (!match) {
-        throw new Error(`Invalid coordinate format: ${coord}. Expected A1-O15.`);
+        throw new Error(`Invalid coordinate format: ${coord}. Expected A1-T20.`);
     }
     
-    const col = match[1].charCodeAt(0) - 65; // A=0, B=1, ..., O=14
+    const col = match[1].charCodeAt(0) - 65; // A=0, B=1, ..., T=19
     const row = parseInt(match[2]) - 1; // 1-indexed to 0-indexed
     
-    if (row < 0 || row > 14 || col < 0 || col > 14) {
+    if (row < 0 || row > 19 || col < 0 || col > 19) {
         throw new Error(`Coordinate out of bounds: ${coord}`);
     }
     
@@ -28,21 +26,15 @@ function parseCoord(coord) {
 
 /**
  * Convert {row, col} object to grid coordinate string
- * @param {Object} pos - Position object with row and col
- * @returns {string} Grid coordinate like "H11"
  */
 function coordToString(pos) {
-    const col = String.fromCharCode(65 + pos.col); // 0=A, 1=B, ..., 14=O
+    const col = String.fromCharCode(65 + pos.col); // 0=A, 1=B, ..., 19=T
     const row = pos.row + 1; // 0-indexed to 1-indexed
     return `${col}${row}`;
 }
 
 /**
  * Calculate distance between two coordinates (Chebyshev distance)
- * Diagonal movement counts as 1 move (king's move in chess)
- * @param {string} from - Start coordinate
- * @param {string} to - End coordinate  
- * @returns {number} Number of moves required
  */
 function calculateDistance(from, to) {
     const fromPos = parseCoord(from);
@@ -51,15 +43,11 @@ function calculateDistance(from, to) {
     const dx = Math.abs(toPos.col - fromPos.col);
     const dy = Math.abs(toPos.row - fromPos.row);
     
-    // Chebyshev distance: diagonal counts as 1
     return Math.max(dx, dy);
 }
 
 /**
  * Calculate Euclidean distance for detection ranges
- * @param {string} from - Start coordinate
- * @param {string} to - End coordinate
- * @returns {number} Straight-line distance
  */
 function calculateEuclideanDistance(from, to) {
     const fromPos = parseCoord(from);
@@ -73,8 +61,6 @@ function calculateEuclideanDistance(from, to) {
 
 /**
  * Get all adjacent coordinates (8 directions)
- * @param {string} coord - Center coordinate
- * @returns {Array<string>} Array of adjacent coordinates
  */
 function getAdjacentCoords(coord) {
     const pos = parseCoord(coord);
@@ -82,12 +68,12 @@ function getAdjacentCoords(coord) {
     
     for (let dr = -1; dr <= 1; dr++) {
         for (let dc = -1; dc <= 1; dc++) {
-            if (dr === 0 && dc === 0) continue; // Skip center
+            if (dr === 0 && dc === 0) continue;
             
             const newRow = pos.row + dr;
             const newCol = pos.col + dc;
             
-            if (newRow >= 0 && newRow <= 14 && newCol >= 0 && newCol <= 14) {
+            if (newRow >= 0 && newRow <= 19 && newCol >= 0 && newCol <= 19) {
                 adjacent.push(coordToString({ row: newRow, col: newCol }));
             }
         }
@@ -97,17 +83,14 @@ function getAdjacentCoords(coord) {
 }
 
 /**
- * Get all coordinates within range (detection/movement)
- * @param {string} center - Center coordinate
- * @param {number} range - Range in tiles
- * @returns {Array<string>} All coordinates within range
+ * Get all coordinates within range
  */
 function getCoordsInRange(center, range) {
     const centerPos = parseCoord(center);
     const coords = [];
     
-    for (let row = 0; row <= 14; row++) {
-        for (let col = 0; col <= 14; col++) {
+    for (let row = 0; row <= 19; row++) {
+        for (let col = 0; col <= 19; col++) {
             const testCoord = coordToString({ row, col });
             const dist = calculateDistance(center, testCoord);
             
@@ -121,42 +104,124 @@ function getCoordsInRange(center, range) {
 }
 
 /**
- * Calculate movement path between two points
- * Returns array of coordinates for movement
- * @param {string} from - Start position
- * @param {string} to - Target position
- * @param {Object} terrainMap - Map terrain data for pathfinding
- * @returns {Array<string>} Path coordinates
+ * Simple straight-line path (legacy)
  */
 function calculatePath(from, to, terrainMap) {
     const start = parseCoord(from);
     const end = parseCoord(to);
     
-    // Simple straight-line path (can be upgraded to A* pathfinding later)
     const path = [from];
     let current = { ...start };
     
     while (current.row !== end.row || current.col !== end.col) {
-        // Move toward target (diagonal when possible)
         if (current.row < end.row) current.row++;
         else if (current.row > end.row) current.row--;
         
         if (current.col < end.col) current.col++;
         else if (current.col > end.col) current.col--;
         
-        const coord = coordToString(current);
-        path.push(coord);
+        path.push(coordToString(current));
     }
     
     return path;
 }
 
 /**
- * Calculate total movement cost for a path
- * @param {Array<string>} path - Array of coordinates
- * @param {Object} terrainCosts - Movement cost per terrain type
- * @param {Function} getTerrainType - Function to get terrain at coordinate
- * @returns {number} Total movement cost
+ * A* Pathfinding - finds optimal path around obstacles
+ */
+function findPathAStar(from, to, terrainMap, getTerrainType) {
+    const start = parseCoord(from);
+    const goal = parseCoord(to);
+    
+    const openSet = [{ coord: from, f: 0, g: 0, h: 0 }];
+    const closedSet = new Set();
+    const cameFrom = new Map();
+    const gScore = new Map();
+    gScore.set(from, 0);
+    
+    const movementCosts = terrainMap.movementCosts || {
+        plains: 1.0, road: 0.5, hill: 1.5, forest: 2.0,
+        marsh: 3.0, river: 999, ford: 1.5
+    };
+    
+    const heuristic = (coordStr) => {
+        const pos = parseCoord(coordStr);
+        return Math.abs(goal.col - pos.col) + Math.abs(goal.row - pos.row);
+    };
+    
+    while (openSet.length > 0) {
+        openSet.sort((a, b) => a.f - b.f);
+        const current = openSet.shift();
+        
+        if (current.coord === to) {
+            return reconstructPath(cameFrom, current.coord, from);
+        }
+        
+        closedSet.add(current.coord);
+        
+        const neighbors = getAdjacentCoords(current.coord);
+        
+        for (const neighbor of neighbors) {
+            if (closedSet.has(neighbor)) continue;
+            
+            const terrain = getTerrainType(neighbor);
+            const terrainCost = movementCosts[terrain] || 1.0;
+            
+            if (terrainCost >= 999) {
+                closedSet.add(neighbor);
+                continue;
+            }
+            
+            const tentativeG = gScore.get(current.coord) + terrainCost;
+            
+            if (!gScore.has(neighbor) || tentativeG < gScore.get(neighbor)) {
+                cameFrom.set(neighbor, current.coord);
+                gScore.set(neighbor, tentativeG);
+                
+                const h = heuristic(neighbor);
+                const f = tentativeG + h;
+                
+                const existing = openSet.find(n => n.coord === neighbor);
+                if (existing) {
+                    existing.g = tentativeG;
+                    existing.h = h;
+                    existing.f = f;
+                } else {
+                    openSet.push({ coord: neighbor, g: tentativeG, h, f });
+                }
+            }
+        }
+    }
+    
+    return {
+        path: [],
+        cost: Infinity,
+        valid: false,
+        reason: 'No valid path exists to target'
+    };
+}
+
+/**
+ * Reconstruct path from A* came-from map
+ */
+function reconstructPath(cameFrom, current, start) {
+    const path = [current];
+    
+    while (current !== start) {
+        current = cameFrom.get(current);
+        if (!current) break;
+        path.unshift(current);
+    }
+    
+    return {
+        path,
+        cost: path.length - 1,
+        valid: true
+    };
+}
+
+/**
+ * Calculate path cost
  */
 function calculatePathCost(path, terrainCosts, getTerrainType) {
     let totalCost = 0;
@@ -171,26 +236,22 @@ function calculatePathCost(path, terrainCosts, getTerrainType) {
 }
 
 /**
- * Check if coordinate is on the map
- * @param {string} coord - Coordinate to check
- * @returns {boolean} True if valid
+ * Check if coordinate is valid
  */
 function isValidCoord(coord) {
     try {
         const pos = parseCoord(coord);
-        return pos.row >= 0 && pos.row <= 14 && pos.col >= 0 && pos.col <= 14;
+        return pos.row >= 0 && pos.row <= 19 && pos.col >= 0 && pos.col <= 19;
     } catch {
         return false;
     }
 }
 
 /**
- * Generate ASCII map representation for debugging/AI
- * @param {Object} mapData - Map terrain and unit positions
- * @returns {string} ASCII art map
+ * Generate ASCII map - 20x20 version
  */
 function generateASCIIMap(mapData) {
-    const grid = Array(15).fill(null).map(() => Array(15).fill('.'));
+    const grid = Array(20).fill(null).map(() => Array(20).fill('.'));
     
     // Mark terrain
     if (mapData.terrain.river) {
@@ -201,7 +262,8 @@ function generateASCIIMap(mapData) {
     }
     
     if (mapData.terrain.fords) {
-        mapData.terrain.fords.forEach(coord => {
+        mapData.terrain.fords.forEach(ford => {
+            const coord = typeof ford === 'string' ? ford : ford.coord;
             const pos = parseCoord(coord);
             grid[pos.row][pos.col] = '=';
         });
@@ -237,53 +299,53 @@ function generateASCIIMap(mapData) {
         });
     }
     
-    console.log('DEBUG generateASCIIMap input:');
-    console.log('  player1Units type:', typeof mapData.player1Units, 'isArray:', Array.isArray(mapData.player1Units));
-    console.log('  player1Units length:', mapData.player1Units?.length);
-    console.log('  player2Units type:', typeof mapData.player2Units, 'isArray:', Array.isArray(mapData.player2Units));
-    console.log('  player2Units length:', mapData.player2Units?.length);
-    
-    // Mark player units
-    if (mapData.player1Units) {
-        console.log('  Iterating player1Units...');
+    // Mark units
+    if (mapData.player1Units && Array.isArray(mapData.player1Units)) {
         mapData.player1Units.forEach((unit, index) => {
-            console.log(`    Unit ${index}:`, typeof unit, 'has position?', !!unit.position, 'position value:', unit.position);
-            const pos = parseCoord(unit.position);
-            grid[pos.row][pos.col] = '1';
+            try {
+                const position = typeof unit === 'string' ? unit : unit.position;
+                if (!position || typeof position !== 'string') return;
+                
+                const pos = parseCoord(position);
+                grid[pos.row][pos.col] = '1';
+            } catch (err) {
+                console.error(`Error placing P1 unit ${index}:`, err.message);
+            }
         });
     }
     
-    if (mapData.player2Units) {
-        mapData.player2Units.forEach(unit => {
-            const pos = parseCoord(unit.position);
-            grid[pos.row][pos.col] = '2';
+    if (mapData.player2Units && Array.isArray(mapData.player2Units)) {
+        mapData.player2Units.forEach((unit, index) => {
+            try {
+                const position = typeof unit === 'string' ? unit : unit.position;
+                if (!position || typeof position !== 'string') return;
+                
+                const pos = parseCoord(position);
+                grid[pos.row][pos.col] = '2';
+            } catch (err) {
+                console.error(`Error placing P2 unit ${index}:`, err.message);
+            }
         });
     }
     
-    // Build ASCII string
-    let ascii = '    A B C D E F G H I J K L M N O\n';
-    ascii += '   ' + '─'.repeat(31) + '\n';
+    // Build ASCII - 20x20
+    let ascii = '    A B C D E F G H I J K L M N O P Q R S T\n';
+    ascii += '   ' + '─'.repeat(41) + '\n';
     
-    for (let row = 0; row < 15; row++) {
+    for (let row = 0; row < 20; row++) {
         const rowNum = (row + 1).toString().padStart(2, ' ');
         ascii += `${rowNum} │`;
         ascii += grid[row].join(' ');
         ascii += `│ ${rowNum}\n`;
     }
     
-    ascii += '   ' + '─'.repeat(31) + '\n';
-    ascii += '    A B C D E F G H I J K L M N O\n\n';
+    ascii += '   ' + '─'.repeat(41) + '\n';
+    ascii += '    A B C D E F G H I J K L M N O P Q R S T\n\n';
     ascii += 'Legend: . plains, ~ river, = ford, ^ hill, % marsh, # road, T forest, 1 P1, 2 P2';
     
     return ascii;
 }
 
-/**
- * Get direction from one coordinate to another
- * @param {string} from - Start coordinate
- * @param {string} to - Target coordinate
- * @returns {string} Cardinal/intercardinal direction
- */
 function getDirection(from, to) {
     const fromPos = parseCoord(from);
     const toPos = parseCoord(to);
@@ -291,13 +353,11 @@ function getDirection(from, to) {
     const dx = toPos.col - fromPos.col;
     const dy = toPos.row - fromPos.row;
     
-    // Cardinal directions
     if (dx === 0 && dy < 0) return 'north';
     if (dx === 0 && dy > 0) return 'south';
     if (dx > 0 && dy === 0) return 'east';
     if (dx < 0 && dy === 0) return 'west';
     
-    // Intercardinal directions
     if (dx > 0 && dy < 0) return 'northeast';
     if (dx > 0 && dy > 0) return 'southeast';
     if (dx < 0 && dy < 0) return 'northwest';
@@ -317,5 +377,7 @@ module.exports = {
     calculatePathCost,
     isValidCoord,
     generateASCIIMap,
-    getDirection
+    getDirection,
+    findPathAStar,  // New A* function
+    reconstructPath  // Helper for A*
 };

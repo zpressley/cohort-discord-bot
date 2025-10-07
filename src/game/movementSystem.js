@@ -1,66 +1,53 @@
 // src/game/movementSystem.js
 // Movement validation and execution system
 
-const { parseCoord, calculateDistance, calculatePath, isValidCoord } = require('./maps/mapUtils');
+// Update validateMovement in src/game/movementSystem.js
+// Replace the pathfinding section
 
-/**
- * Validate and execute movement order
- * @param {Object} unit - Unit attempting to move
- * @param {string} targetPosition - Target coordinate
- * @param {Object} map - Map data with terrain
- * @returns {Object} Movement result with validation and new position
- */
+const { findPathAStar, calculatePathCost } = require('./maps/mapUtils');
+
 function validateMovement(unit, targetPosition, map) {
-    // Check if target is valid coordinate
-    if (!isValidCoord(targetPosition)) {
+    const { getTerrainType } = require('./maps/riverCrossing');
+    
+    // Find path using A* pathfinding
+    const pathResult = findPathAStar(
+        unit.position,
+        targetPosition,
+        map,
+        getTerrainType
+    );
+    
+    if (!pathResult.valid) {
         return {
             valid: false,
-            error: 'Invalid target coordinate',
-            reason: `${targetPosition} is not on the map`
+            error: 'No valid path to target',
+            reason: pathResult.reason || 'River or impassable terrain blocks the way'
         };
     }
     
-    // Calculate path
-    const path = calculatePath(unit.position, targetPosition, map);
-    
-    // Calculate movement cost
-    let totalCost = 0;
-    for (let i = 1; i < path.length; i++) {
-        const terrain = getTerrainType(path[i], map);
-        const cost = map.movementCosts[terrain] || 1;
-        
-        // Check for impassable terrain
-        if (cost >= 999) {
-            return {
-                valid: false,
-                error: 'Impassable terrain',
-                reason: `Cannot cross ${terrain} at ${path[i]}. Use a ford to cross rivers.`,
-                blockedAt: path[i]
-            };
-        }
-        
-        totalCost += cost;
-    }
+    const path = pathResult.path;
+    const movementCost = pathResult.cost;
     
     // Check if unit has enough movement
-    const maxMovement = unit.movementRemaining || unit.maxMovement || 3;
+    const maxMovement = unit.movementRemaining || (unit.mounted ? 5 : 3);
     
-    if (totalCost > maxMovement) {
+    if (movementCost > maxMovement) {
         return {
             valid: false,
-            error: 'Insufficient movement',
-            reason: `Movement costs ${totalCost.toFixed(1)} points, unit has ${maxMovement} available`,
-            shortfall: totalCost - maxMovement
+            error: `Target too far: requires ${movementCost.toFixed(1)} movement, you have ${maxMovement}`,
+            reason: 'insufficient_movement',
+            path: path,
+            cost: movementCost
         };
     }
     
-    // Movement is valid
+    // Valid movement!
     return {
         valid: true,
         path: path,
-        movementCost: totalCost,
-        finalPosition: targetPosition,
-        movementRemaining: maxMovement - totalCost
+        cost: movementCost,
+        movementRemaining: maxMovement - movementCost,
+        targetTerrain: getTerrainType(targetPosition)
     };
 }
 

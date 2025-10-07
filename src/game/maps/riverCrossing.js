@@ -1,136 +1,118 @@
 // src/game/maps/riverCrossing.js
-// River Crossing scenario - 15x15 grid tactical map
+// Snake River Crossing - 20x20 Tactical Battlefield
 
 const { generateASCIIMap } = require('./mapUtils');
 
 const RIVER_CROSSING_MAP = {
     name: 'Snake River Crossing',
-    size: { rows: 15, cols: 15 },
+    size: { rows: 20, cols: 20 },
     
-    // Terrain definitions by coordinate
     terrain: {
-        // Snake River running diagonally across map
+        // River with fords included
         river: [
-            'E3','F3','F4','G4','G5','H5','H6','I6','I7','H7','H8',
-            'G8','G9','F9','F10','E10','E11','D11','D12','C12','C13','B13'
+            'L1','M1','N1','O1','L2','M2','N2','J4','K4','L4',
+            'J5','K5','I6','J6','H7','I7','J7','H8','I8','H9',
+            'I9','J9','I10','J10','J12','K12','J13','K13','I14','J14',
+            'I15','J15','I16','I18','J18','I19','J19','K19','J20','K20',
+            'L3','J11','I17'  // Fords are in the river
         ],
         
-        // Crossing points (fords where river can be crossed)
         fords: [
-            { coord: 'F11', name: 'Bridge Ford', width: 1 }, // Southern ford near bridge
-            { coord: 'H11', name: 'Northern Ford', width: 1 } // Northern ford
+            { coord: 'L3', name: 'Northern Crossing', width: 1 },
+            { coord: 'J11', name: 'Central Bridge', width: 1 },
+            { coord: 'I17', name: 'Southern Crossing', width: 1 }
         ],
         
-        // Hill providing elevation advantage
-        hill: ['B5', 'B6', 'C5', 'C6'], // Northwestern hill
+        hill: [
+            'H1','I1','J1','Q1','R1','S1','T1','H2','I2','J2',
+            'P2','Q2','R2','S2','Q3','R3','A10','B10','A11','B11'
+        ],
         
-        // Marsh terrain (movement penalty)
         marsh: [
-            'M13','M14','M15','N13','N14','N15','O13','O14','O15',
-            'L14','L15'
+            'P1','O2','T2','S3','R4','S4','R5','Q6','R6','Q7',
+            'P8','Q8','P9','P10','Q10','P12','Q12','Q13','R13','R14',
+            'S14','T14','H15','K15','L15','R15','S15','T15','H16','J16',
+            'K16','L16','S16','T16','S17','T17','K18','L18','S18','T18',
+            'S19','T19','O20','R20','S20','T20'
         ],
         
-        // Main road (faster movement)
         road: [
-            'H1','H2','H3','H4','H5','H6','H7','H8','H9','H10',
-            'H11','H12','H13','H14','H15'
+            'E6','E7','E8','E9','T9','E10','S10','T10','E11','H11',
+            'I11','K11','L11','M11','N11','O11','P11','Q11','R11','S11',
+            'E12','F12','G12','H12','N12','E13','N13','O13','E14','O14',
+            'E15','O15','P15','E16','D17','E17','A18','B18','C18','P20'
         ],
         
-        // Light forest (cover bonus)
         forest: [
-            'I2','I3','J2','J3','K2','K3', // Eastern woods
-            'A8','A9','B8','B9','A10','B10' // Western woods
+            'A1','B1','C1','D1','F1','G1','A2','B2','A3','B3',
+            'T3','A4','B4','T4','A5','B5','C5','H5','I5','N5',
+            'S5','T5','A6','B6','C6','G6','H6','K6','N6','S6',
+            'T6','A7','B7','C7','G7','K7','L7','A8','B8','C8',
+            'G8','J8','K8','L8','F9','G9','K9','L9','F10','G10',
+            'H10','K10','L10','A15','B15','C15','D15','A16','B16','C16',
+            'D16','A17','B17','C17','D18','E18','G18','H18','A19','B19',
+            'C19','D19','E19','H19','A20','B20','C20','D20','E20','H20','I20'
         ]
     },
     
-    // Starting deployment zones for each side
     deployment: {
         north: {
-            name: 'North Army Deployment',
-            coords: ['B1','C1','D1','E1','B2','C2','D2','E2','B3','C3','D3'],
-            description: 'Northern approach to the Snake River'
+            coords: [
+                'E1','C2','D2','E2','F2','G2','C3','D3','E3','F3',
+                'G3','D4','E4','F4','E5'
+            ],
+            description: 'Northern army near western forest'
         },
         south: {
-            name: 'South Army Deployment',
-            coords: ['K9','L9','M9','N9','K10','L10','M10','N10','L11','M11'],
-            description: 'Southern highlands near the marsh'
+            coords: [
+                'P16','Q16','R16','O17','P17','Q17','R17','O18','P18','Q18',
+                'R18','O19','P19','Q19','R19'
+            ],
+            description: 'Southern army approaching from southeast marsh'
         }
     },
     
-    // Movement costs per terrain type
     movementCosts: {
-        plains: 1.0,      // Standard movement
-        road: 0.5,        // 2x speed on road
-        hill: 1.5,        // Slower uphill
-        forest: 2.0,      // Dense vegetation
-        marsh: 3.0,       // Very slow through swamp
-        river: 999        // Impassable except at fords
+        plains: 1.0,
+        road: 0.5,
+        hill: 1.5,
+        forest: 2.0,
+        marsh: 3.0,
+        river: 999,
+        ford: 1.5
     },
     
-    // Tactical modifiers based on terrain
     combatModifiers: {
-        hill: { 
-            defense: +2,      // High ground advantage
-            missileRange: +1  // Better shooting from elevation
-        },
-        forest: {
-            defense: +2,           // Cover bonus
-            ambushBonus: +4,       // Ambush attacks
-            formationPenalty: -3,  // Can't maintain formations
-            cavalryPenalty: -4     // Horses ineffective
-        },
-        marsh: {
-            movementPenalty: -3,   // Slow movement
-            formationPenalty: -3,  // Unstable ground
-            heavyArmorPenalty: -2  // Sinking
-        },
-        ford: {
-            crossingPenalty: -4,   // Vulnerable during crossing
-            defenderBonus: +3,     // Defender advantage
-            maxWidth: 3            // Only 3 units can fight
-        },
-        road: {
-            formationBonus: +1,    // Easy coordination
-            noMovementPenalty: true
-        }
+        hill: { defense: +2, missileRange: +1 },
+        forest: { defense: +2, ambushBonus: +4, formationPenalty: -3, cavalryPenalty: -4 },
+        marsh: { movementPenalty: -3, formationPenalty: -3, heavyArmorPenalty: -2 },
+        ford: { crossingPenalty: -4, defenderBonus: +3, maxWidth: 3 },
+        road: { formationBonus: +1 }
     },
     
-    // Victory conditions specific to this scenario
     objectives: {
-        primary: 'Control both fords for 3 consecutive turns OR destroy enemy army',
-        secondary: 'Control the hill for artillery advantage',
+        primary: 'Control two of three fords for 3 consecutive turns OR destroy enemy army',
+        secondary: 'Control hill positions for artillery advantage',
         
         controlPoints: [
-            { coord: 'F11', name: 'Bridge Ford', controlRadius: 1 },
-            { coord: 'H11', name: 'Northern Ford', controlRadius: 1 },
-            { coord: 'B5', name: 'Hill Summit', controlRadius: 2 }
+            { coord: 'L3', name: 'Northern Crossing', controlRadius: 1 },
+            { coord: 'J11', name: 'Central Bridge', controlRadius: 1 },
+            { coord: 'I17', name: 'Southern Crossing', controlRadius: 1 },
+            { coord: 'H1', name: 'Northern Heights', controlRadius: 2 },
+            { coord: 'A10', name: 'Western Ridge', controlRadius: 2 }
         ]
     },
     
-    // Scenario-specific special rules
     specialRules: {
-        riverLevel: 'normal', // Can change with weather (heavy rain raises level)
-        fordCrossable: true,  // Fords can become impassable in storms
-        maxTurns: 12,
-        
-        weatherEffects: {
-            heavy_rain: {
-                riverLevel: 'high',
-                fordCrossable: false,
-                marshExpansion: ['L13','K14'] // Marsh spreads
-            }
-        }
+        riverLevel: 'normal',
+        fordCrossable: true,
+        maxTurns: 15
     }
 };
 
-/**
- * Get terrain type at specific coordinate
- * @param {string} coord - Grid coordinate
- * @returns {string} Terrain type
- */
 function getTerrainAt(coord) {
-    if (RIVER_CROSSING_MAP.terrain.river.includes(coord)) return 'river';
     if (RIVER_CROSSING_MAP.terrain.fords.some(f => f.coord === coord)) return 'ford';
+    if (RIVER_CROSSING_MAP.terrain.river.includes(coord)) return 'river';
     if (RIVER_CROSSING_MAP.terrain.hill.includes(coord)) return 'hill';
     if (RIVER_CROSSING_MAP.terrain.marsh.includes(coord)) return 'marsh';
     if (RIVER_CROSSING_MAP.terrain.road.includes(coord)) return 'road';
@@ -138,39 +120,22 @@ function getTerrainAt(coord) {
     return 'plains';
 }
 
-/**
- * Check if coordinate is a valid ford crossing
- * @param {string} coord - Coordinate to check
- * @returns {boolean} True if fordable
- */
 function isFord(coord) {
     return RIVER_CROSSING_MAP.terrain.fords.some(f => f.coord === coord);
 }
 
-/**
- * Check if movement crosses river illegally
- * @param {string} from - Start coordinate
- * @param {string} to - End coordinate
- * @returns {boolean} True if illegal crossing attempted
- */
 function crossesRiverIllegally(from, to) {
     const { calculatePath } = require('./mapUtils');
     const path = calculatePath(from, to, RIVER_CROSSING_MAP);
     
     for (const coord of path) {
         const terrain = getTerrainAt(coord);
-        if (terrain === 'river') return true; // Crossed river not at ford
+        if (terrain === 'river') return true;
     }
     
     return false;
 }
 
-/**
- * Initialize unit positions at battle start
- * @param {string} side - 'north' or 'south'
- * @param {Array} units - Array of unit objects
- * @returns {Array} Units with assigned starting positions
- */
 function initializeDeployment(side, units) {
     const deploymentZone = RIVER_CROSSING_MAP.deployment[side];
     const availablePositions = [...deploymentZone.coords];
@@ -181,8 +146,8 @@ function initializeDeployment(side, units) {
             ...unit,
             unitId: `${side}_unit_${index}`,
             position: position,
-            currentStrength: unit.quality?.size || 100,  // ← ADD THIS LINE
-            maxStrength: unit.quality?.size || 100,      // ← ADD THIS LINE
+            currentStrength: unit.quality?.size || 100,
+            maxStrength: unit.quality?.size || 100,
             movementRemaining: getUnitMovementRange(unit),
             detectRange: getUnitDetectRange(unit),
             canMove: true
@@ -190,30 +155,19 @@ function initializeDeployment(side, units) {
     });
 }
 
-/**
- * Get unit movement range based on type
- */
 function getUnitMovementRange(unit) {
     if (unit.qualityType === 'scout') return 6;
     if (unit.mounted) return 5;
     if (unit.qualityType === 'levy') return 4;
-    return 3; // Standard infantry
+    return 3;
 }
 
-/**
- * Get unit detection range
- */
 function getUnitDetectRange(unit) {
     if (unit.qualityType === 'scout') return 5;
     if (unit.mounted) return 3;
-    return 2; // Standard
+    return 2;
 }
 
-/**
- * Generate ASCII representation of current battle
- * @param {Object} battleState - Current battle state with unit positions
- * @returns {string} ASCII map
- */
 function generateBattleMap(battleState) {
     const mapData = {
         terrain: RIVER_CROSSING_MAP.terrain,
