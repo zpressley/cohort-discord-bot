@@ -18,6 +18,23 @@ const { resolveCombat } = require('./battleEngine');
 async function processTurn(battle, player1Order, player2Order, map) {
     const battleState = battle.battleState;
     
+    // Reset movement for all units at turn start
+    if (battleState.player1?.unitPositions) {
+        battleState.player1.unitPositions.forEach(unit => {
+            unit.movementRemaining = unit.mounted ? 5 : 3;
+            unit.canMove = true;
+            unit.hasMoved = false;
+        });
+    }
+    
+    if (battleState.player2?.unitPositions) {
+        battleState.player2.unitPositions.forEach(unit => {
+            unit.movementRemaining = unit.mounted ? 5 : 3;
+            unit.canMove = true;
+            unit.hasMoved = false;
+        });
+    }
+    
     console.log(`\n🎲 TURN ${battle.currentTurn} ORCHESTRATION`);
     console.log(`P1 Order: "${player1Order}"`);
     console.log(`P2 Order: "${player2Order}"`);
@@ -112,7 +129,21 @@ async function processTurn(battle, player1Order, player2Order, map) {
             battleState,
             battle.currentTurn
         );
-        
+        // DEBUG: Check what we're returning
+        const newBattleState = {
+            ...battleState,
+            player1: {
+                ...battleState.player1,
+                unitPositions: updatedPositions.player1,
+                visibleEnemyPositions: p1Visibility.visibleEnemyPositions
+            },
+            player2: {
+                ...battleState.player2,
+                unitPositions: updatedPositions.player2,
+                visibleEnemyPositions: p2Visibility.visibleEnemyPositions
+            }
+        };
+
         return {
             success: true,
             newBattleState: {
@@ -173,6 +204,11 @@ function buildForceFromUnit(unitData, battleState) {
  * Apply casualties from combat to unit positions
  */
 function applyCasualties(positions, combatResults) {
+    console.log('DEBUG applyCasualties INPUT:');
+    console.log('  positions.player1:', positions.player1?.length || 0);
+    console.log('  positions.player2:', positions.player2?.length || 0);
+    console.log('  combatResults:', combatResults.length);
+    
     const updated = {
         player1: [...positions.player1],
         player2: [...positions.player2]
@@ -203,10 +239,11 @@ function applyCasualties(positions, combatResults) {
             }
         });
     });
-    
+
     // Remove destroyed units (≤0 strength)
     updated.player1 = updated.player1.filter(u => u.currentStrength > 0);
     updated.player2 = updated.player2.filter(u => u.currentStrength > 0);
+
     
     return updated;
 }

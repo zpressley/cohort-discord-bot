@@ -31,34 +31,47 @@ async function interpretOrders(orderText, battleState, playerSide, map) {
     // Call AI (placeholder - will connect to aiManager)
     const aiResponse = await callAIForOrderParsing(prompt);
     
+    console.log('DEBUG interpretOrders:');
+    console.log('  AI returned actions:', aiResponse.actions.length);
+    if (aiResponse.actions.length > 0) {
+        console.log('  Action[0]:', aiResponse.actions[0].unitId, '→', aiResponse.actions[0].targetPosition);
+    }
+
     // Validate AI-suggested actions against rules
     const validatedActions = [];
     const errors = [];
     
     for (const action of aiResponse.actions) {
-        if (action.type === 'move') {
-            const unit = playerUnits.find(u => u.unitId === action.unitId);
-            if (!unit) {
-                errors.push(`Unit ${action.unitId} not found`);
-                continue;
-            }
-            
-            const validation = validateMovement(unit, action.targetPosition, map);
-            
-            if (validation.valid) {
-                validatedActions.push({
-                    ...action,
-                    validation,
-                    unitId: unit.unitId
-                });
-            } else {
-                errors.push({
-                    unit: unit.unitId,
-                    error: validation.error,
-                    reason: validation.reason
-                });
-            }
+    console.log('  Validating action:', action.type, action.unitId, '→', action.targetPosition);
+    
+    if (action.type === 'move') {
+        const unit = playerUnits.find(u => u.unitId === action.unitId);
+        console.log('  Unit found:', !!unit);
+        
+        if (!unit) {
+            errors.push(`Unit ${action.unitId} not found`);
+            continue;
         }
+        
+        const validation = validateMovement(unit, action.targetPosition, map);
+        console.log('  Validation result:', validation.valid);
+        
+        if (validation.valid) {
+            validatedActions.push({
+                ...action,
+                validation,
+                unitId: unit.unitId
+            });
+            console.log('  ✅ Action added to validatedActions');
+        } else {
+            console.log('  ❌ Validation failed:', validation.error);
+            errors.push({
+                unit: unit.unitId,
+                error: validation.error,
+                reason: validation.reason
+            });
+        }
+    }
         
         if (action.type === 'formation') {
             validatedActions.push(action); // Formation changes always valid
@@ -146,22 +159,34 @@ Return ONLY valid JSON, no other text.`;
  * Call AI for order parsing (placeholder for real AI integration)
  */
 async function callAIForOrderParsing(prompt) {
-    // Extract context from prompt (temporary until real AI connected)
     const yourUnits = JSON.parse(prompt.match(/Your Units: (\[.*?\])/s)?.[1] || '[]');
     const orderText = prompt.match(/\*\*PLAYER ORDER:\*\* "(.*?)"/)?.[1] || '';
     
     if (yourUnits.length === 0) {
+        return { actions: [], validation: { isValid: true, errors: [], warnings: [] }, officerComment: 'No units available.' };
+    }
+    
+    const unit = yourUnits[0];
+    const lowerOrder = orderText.toLowerCase();
+    
+    // FIRST: Check for explicit coordinates in order
+    const coordMatch = orderText.match(/\b([A-O]\d{1,2})\b/i);
+    if (coordMatch) {
+        const targetPosition = coordMatch[1].toUpperCase();
         return {
-            actions: [],
+            actions: [{
+                type: 'move',
+                unitId: unit.id,
+                currentPosition: unit.position,
+                targetPosition: targetPosition,
+                reasoning: `Moving to explicit coordinate ${targetPosition}`
+            }],
             validation: { isValid: true, errors: [], warnings: [] },
-            officerComment: 'No units available to command.'
+            officerComment: `Moving to ${targetPosition}.`
         };
     }
     
-    // Simple movement parsing for testing
-    const lowerOrder = orderText.toLowerCase();
-    const unit = yourUnits[0]; // Command first unit
-    
+    // THEN: Fall back to direction/keyword parsing
     let targetPosition = unit.position; // Default: hold position
     
     // Parse direction

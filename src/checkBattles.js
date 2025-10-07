@@ -1,26 +1,29 @@
 const { models } = require('./database/setup');
 
-async function fix() {
-    // Delete the stuck battle
-    await models.Battle.destroy({
-        where: {
-            id: 'c2180a7b-6a05-43d0-87cd-c7e7b82c8c47'
-        }
-    });
-    
-    console.log('✅ Deleted stuck battle');
-    
-    // Show remaining battles
+async function check() {
     const battles = await models.Battle.findAll({
-        where: { player1Id: '664280448788201522' }
+        where: { player1Id: '664280448788201522' },
+        order: [['createdAt', 'DESC']],
+        limit: 3
     });
     
-    console.log(`\nRemaining battles: ${battles.length}`);
+    if (battles.length === 0) {
+        console.log('No battles found');
+        process.exit(0);
+    }
+    
+    console.log(`\nLast ${battles.length} battles:\n`);
+    
     battles.forEach(b => {
-        console.log(`${b.id.substring(0, 8)} - ${b.status}`);
+        console.log(`Battle ${b.id.substring(0, 8)}`);
+        console.log(`  Status: ${b.status}`);
+        console.log(`  Turn: ${b.currentTurn}`);
+        console.log(`  Winner: ${b.winner || 'none'}`);
+        console.log(`  P1 units: ${b.battleState?.player1?.unitPositions?.length || 0}`);
+        console.log(`  P2 units: ${b.battleState?.player2?.unitPositions?.length || 0}\n`);
     });
     
     process.exit(0);
 }
 
-fix();
+check();

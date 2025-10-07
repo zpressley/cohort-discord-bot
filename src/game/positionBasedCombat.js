@@ -215,9 +215,24 @@ function buildCombatContext(combat, battleState, map) {
  * @returns {Object} New positions and combat triggers
  */
 function processMovementPhase(player1Movements, player2Movements, battleState, map) {
+    console.log('DEBUG processMovementPhase INPUT:');
+    console.log('  P1 movements to execute:', player1Movements.length);
+    console.log('  P2 movements to execute:', player2Movements.length);
+    console.log('  P1 units in battleState:', battleState.player1?.unitPositions?.length || 0);
+    console.log('  P2 units in battleState:', battleState.player2?.unitPositions?.length || 0);
+    
+    if (player1Movements.length > 0) {
+        console.log('  P1 movement[0] unitId:', player1Movements[0].unitId);
+        console.log('  P1 movement[0] target:', player1Movements[0].targetPosition);
+    }
+    if (battleState.player1?.unitPositions?.[0]) {
+        console.log('  P1 battleState unit[0] id:', battleState.player1.unitPositions[0].unitId);
+    }
+    
     // Execute all movements
     const newPlayer1Positions = battleState.player1.unitPositions.map(unit => {
         const movement = player1Movements.find(m => m.unitId === unit.unitId);
+        console.log(`  Checking unit ${unit.unitId}: movement found = ${!!movement}`);
         if (movement && movement.validation.valid) {
             return {
                 ...unit,

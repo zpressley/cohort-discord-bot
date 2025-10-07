@@ -181,6 +181,8 @@ function initializeDeployment(side, units) {
             ...unit,
             unitId: `${side}_unit_${index}`,
             position: position,
+            currentStrength: unit.quality?.size || 100,  // ← ADD THIS LINE
+            maxStrength: unit.quality?.size || 100,      // ← ADD THIS LINE
             movementRemaining: getUnitMovementRange(unit),
             detectRange: getUnitDetectRange(unit),
             canMove: true

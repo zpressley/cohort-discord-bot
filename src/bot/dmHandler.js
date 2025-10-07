@@ -166,22 +166,14 @@ async function processTurnResolution(battle, battleTurn, client) {
         console.log(`   Combat engagements: ${turnResult.turnResults.combats}`);
         console.log(`   Casualties: P1 ${turnResult.turnResults.casualties.player1}, P2 ${turnResult.turnResults.casualties.player2}`);
         
-        // Update battle state - force JSON update with changed() flag
-        battle.battleState = turnResult.newBattleState;
-        battle.currentTurn += 1;
+        // Update battle state - deep clone to force Sequelize to detect change
+        const newState = JSON.parse(JSON.stringify(turnResult.newBattleState));
 
-        // Mark as changed to force Sequelize to save JSON field
-        battle.changed('battleState', true);
-        
-        // Store turn results
-        battleTurn.aiResolution = turnResult.narrative.mainNarrative.fullNarrative;
-        battleTurn.combatResults = JSON.stringify(turnResult.turnResults);
-        battleTurn.isResolved = true;
-        
-        await battle.save();
-        const reloaded = await models.Battle.findByPk(battle.id);
-        console.log(`Saved state - P1 units: ${reloaded.battleState?.player1?.unitPositions?.length || 0}`);
-        console.log(`Saved state - P2 units: ${reloaded.battleState?.player2?.unitPositions?.length || 0}`);    
+        await battle.update({
+            battleState: newState,
+            currentTurn: battle.currentTurn + 1
+        });
+        const reloaded = await models.Battle.findByPk(battle.id);   
 
         await battleTurn.save();
         
@@ -278,61 +270,21 @@ async function sendTurnResults(battle, battleTurn, narrative, turnResults, clien
  */
 async function sendNextTurnBriefings(battle, battleState, client) {
     try {
-        const { filterBattleStateForPlayer } = require('../game/fogOfWar');
-        const { generateASCIIMap } = require('../game/maps/mapUtils');
+        const briefing = `⚡ **Turn ${battle.currentTurn} - Awaiting Orders**\n\n` +
+            `Your units are positioned. Enemy contact status unknown.\n\n` +
+            `Send orders: "move south", "advance to ford", etc.`;
         
-        // Generate ASCII maps for each player
-        const p1State = filterBattleStateForPlayer(battleState, 'player1');
-        const p2State = filterBattleStateForPlayer(battleState, 'player2');
-        
-        const p1Map = generateASCIIMap({
-            terrain: battle.battleState.terrain || {},
-            player1Units: (p1State.yourForces.units || []).map(u => ({ 
-                position: u.position 
-            })),
-            player2Units: (p1State.enemyForces.detectedUnits || []).map(e => ({ 
-                position: e.position 
-            }))
-        });
-
-        const p2Map = generateASCIIMap({
-            terrain: battle.battleState.terrain || {},
-            player1Units: (p2State.enemyForces.detectedUnits || []).map(e => ({ 
-                position: e.position 
-            })),
-            player2Units: (p2State.yourForces.units || []).map(u => ({ 
-                position: u.position 
-            }))
-        });
-        
-        // Send to player 1
         if (!battle.player1Id.startsWith('TEST_')) {
             const player1 = await client.users.fetch(battle.player1Id);
-            await player1.send(
-                `\n⚡ **Turn ${battle.currentTurn} - Awaiting Orders**\n\n` +
-                `\`\`\`\n${p1Map}\n\`\`\`\n` +
-                `**Intelligence:** ${p1State.enemyForces.totalDetected} enemy unit(s) detected\n` +
-                `**Your Forces:** ${p1State.yourForces.units.length} unit(s)\n\n` +
-                `Send tactical commands or ask questions:\n` +
-                `- Orders: "advance to H11", "cavalry flank east"\n` +
-                `- Questions: "Marcus, where is the enemy?", "What do scouts see?"`
-            );
+            await player1.send(briefing);
         }
         
-        // Send to player 2
         if (battle.player2Id && !battle.player2Id.startsWith('TEST_')) {
             const player2 = await client.users.fetch(battle.player2Id);
-            await player2.send(
-                `\n⚡ **Turn ${battle.currentTurn} - Awaiting Orders**\n\n` +
-                `\`\`\`\n${p2Map}\n\`\`\`\n` +
-                `**Intelligence:** ${p2State.enemyForces.totalDetected} enemy unit(s) detected\n` +
-                `**Your Forces:** ${p2State.yourForces.units.length} unit(s)\n\n` +
-                `Send tactical commands or ask questions.`
-            );
+            await player2.send(briefing);
         }
-        
     } catch (error) {
-        console.error('Error sending next turn briefings:', error);
+        console.error('Error sending briefings:', error);
     }
 }
 
