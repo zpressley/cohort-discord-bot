@@ -36,7 +36,12 @@ async function processTurn(battle, player1Order, player2Order, map) {
             battleState,
             map
         );
-        
+        console.log('P1 new positions:', movementResults.newPositions.player1.map(u => 
+            `${u.unitId} at ${u.position}`
+        ));
+        console.log('P2 new positions:', movementResults.newPositions.player2.map(u => 
+            `${u.unitId} at ${u.position}`
+        ));
         // PHASE 3: Update visibility (fog of war)
         console.log('\n👁️ Phase 3: Updating intelligence...');
         const p1Visibility = calculateVisibility(
@@ -210,7 +215,12 @@ function applyCasualties(positions, combatResults) {
  * Check victory conditions
  */
 function checkVictoryConditions(positions, turnNumber, objectives) {
-    // Calculate total strength remaining
+    // Don't end battle in first 3 turns unless complete annihilation
+    if (turnNumber < 3) {
+        return { achieved: false };
+    }
+    
+    // Rest of function...
     const p1Strength = positions.player1.reduce((sum, u) => sum + u.currentStrength, 0);
     const p2Strength = positions.player2.reduce((sum, u) => sum + u.currentStrength, 0);
     

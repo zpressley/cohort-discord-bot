@@ -146,23 +146,43 @@ Return ONLY valid JSON, no other text.`;
  * Call AI for order parsing (placeholder for real AI integration)
  */
 async function callAIForOrderParsing(prompt) {
-    // TODO: Connect to aiManager.generateContent()
-    // For now, return structured template
+    // Extract context from prompt (temporary until real AI connected)
+    const yourUnits = JSON.parse(prompt.match(/Your Units: (\[.*?\])/s)?.[1] || '[]');
+    const orderText = prompt.match(/\*\*PLAYER ORDER:\*\* "(.*?)"/)?.[1] || '';
     
-    // This will be replaced with:
-    // const aiManager = require('./aiManager');
-    // const response = await aiManager.generateContent(prompt, 'gpt-4o-mini');
-    // return JSON.parse(response);
+    if (yourUnits.length === 0) {
+        return {
+            actions: [],
+            validation: { isValid: true, errors: [], warnings: [] },
+            officerComment: 'No units available to command.'
+        };
+    }
+    
+    // Simple movement parsing for testing
+    const lowerOrder = orderText.toLowerCase();
+    const unit = yourUnits[0]; // Command first unit
+    
+    let targetPosition = unit.position; // Default: hold position
+    
+    // Parse direction
+    if (lowerOrder.includes('south')) targetPosition = moveInDirection(unit.position, 'south', 3);
+    if (lowerOrder.includes('north')) targetPosition = moveInDirection(unit.position, 'north', 3);
+    if (lowerOrder.includes('east')) targetPosition = moveInDirection(unit.position, 'east', 3);
+    if (lowerOrder.includes('west')) targetPosition = moveInDirection(unit.position, 'west', 3);
+    
+    // Parse specific targets
+    if (lowerOrder.includes('river')) targetPosition = 'F11'; // Move toward ford
+    if (lowerOrder.includes('ford')) targetPosition = 'F11';
+    if (lowerOrder.includes('hill')) targetPosition = 'B5';
     
     return {
-        actions: [
-            {
-                type: 'move',
-                unitId: 'player1_unit_0',
-                targetPosition: 'H11',
-                reasoning: 'Template response - AI not connected yet'
-            }
-        ],
+        actions: [{
+            type: 'move',
+            unitId: unit.id,
+            currentPosition: unit.position,
+            targetPosition: targetPosition,
+            reasoning: `Moving toward ${targetPosition}`
+        }],
         validation: {
             isValid: true,
             errors: [],
@@ -170,6 +190,24 @@ async function callAIForOrderParsing(prompt) {
         },
         officerComment: 'Orders acknowledged.'
     };
+}
+
+function moveInDirection(fromCoord, direction, distance) {
+    const { parseCoord, coordToString } = require('../game/maps/mapUtils');
+    const pos = parseCoord(fromCoord);
+    
+    const vectors = {
+        north: { row: -distance, col: 0 },
+        south: { row: +distance, col: 0 },
+        east: { row: 0, col: +distance },
+        west: { row: 0, col: -distance }
+    };
+    
+    const vec = vectors[direction] || { row: 0, col: 0 };
+    const newRow = Math.max(0, Math.min(14, pos.row + vec.row));
+    const newCol = Math.max(0, Math.min(14, pos.col + vec.col));
+    
+    return coordToString({ row: newRow, col: newCol });
 }
 
 /**

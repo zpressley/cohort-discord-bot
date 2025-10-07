@@ -166,9 +166,12 @@ async function processTurnResolution(battle, battleTurn, client) {
         console.log(`   Combat engagements: ${turnResult.turnResults.combats}`);
         console.log(`   Casualties: P1 ${turnResult.turnResults.casualties.player1}, P2 ${turnResult.turnResults.casualties.player2}`);
         
-        // Update battle state in database
+        // Update battle state - force JSON update with changed() flag
         battle.battleState = turnResult.newBattleState;
         battle.currentTurn += 1;
+
+        // Mark as changed to force Sequelize to save JSON field
+        battle.changed('battleState', true);
         
         // Store turn results
         battleTurn.aiResolution = turnResult.narrative.mainNarrative.fullNarrative;
@@ -176,6 +179,10 @@ async function processTurnResolution(battle, battleTurn, client) {
         battleTurn.isResolved = true;
         
         await battle.save();
+        const reloaded = await models.Battle.findByPk(battle.id);
+        console.log(`Saved state - P1 units: ${reloaded.battleState?.player1?.unitPositions?.length || 0}`);
+        console.log(`Saved state - P2 units: ${reloaded.battleState?.player2?.unitPositions?.length || 0}`);    
+
         await battleTurn.save();
         
         // Send results to both players
@@ -197,67 +204,66 @@ async function processTurnResolution(battle, battleTurn, client) {
 /**
  * Send turn results to both players via DM
  */
-async function sendTurnResults(battle, battleTurn, narrative, combatResult, client) {
+async function sendTurnResults(battle, battleTurn, narrative, turnResults, client) {
     try {
         const narrativeText = narrative?.mainNarrative?.fullNarrative || 
-                             `Combat resolved: ${combatResult.combatResult.result}`;
+                             `Turn ${battleTurn.turnNumber} processed.\n\n` +
+                             `Movements: ${turnResults.movements?.player1Moves || 0} vs ${turnResults.movements?.player2Moves || 0}\n` +
+                             `Combat engagements: ${turnResults.combats || 0}\n` +
+                             `Casualties: P1 ${turnResults.casualties?.player1 || 0}, P2 ${turnResults.casualties?.player2 || 0}`;
         
-        // Only send to real Discord users, skip TEST users
+        // Send to player 1 (skip TEST users)
         if (!battle.player1Id.startsWith('TEST_')) {
             const player1 = await client.users.fetch(battle.player1Id);
             const p1Embed = new EmbedBuilder()
                 .setColor(0x8B0000)
                 .setTitle(`⚔️ Turn ${battleTurn.turnNumber} - Battle Resolution`)
                 .setDescription(narrativeText)
-                .addFields({
-                    name: '📊 Combat Summary',
-                    value: `Result: ${combatResult.combatResult.result}\nIntensity: ${combatResult.combatResult.intensity}`,
-                    inline: true
-                })
-                .setFooter({ text: 'Send your next orders for Turn ' + (battle.currentTurn + 1) });
+                .addFields(
+                    {
+                        name: '📊 Turn Summary',
+                        value: `Movements: ${turnResults.movements?.player1Moves || 0}\n` +
+                               `Combats: ${turnResults.combats || 0}\n` +
+                               `Your Casualties: ${turnResults.casualties?.player1 || 0}`,
+                        inline: true
+                    },
+                    {
+                        name: '🎯 Intelligence',
+                        value: `Enemy units detected: ${turnResults.intelligence?.player1Detected || 0}`,
+                        inline: true
+                    }
+                )
+                .setFooter({ text: `Awaiting orders for Turn ${battle.currentTurn}` });
             
             await player1.send({ embeds: [p1Embed] });
             console.log('Results sent to player 1');
-        } else {
-            console.log('Skipped TEST user for player 1 results');
         }
         
+        // Send to player 2 (skip TEST users)
         if (battle.player2Id && !battle.player2Id.startsWith('TEST_')) {
             const player2 = await client.users.fetch(battle.player2Id);
             const p2Embed = new EmbedBuilder()
                 .setColor(0x00008B)
                 .setTitle(`⚔️ Turn ${battleTurn.turnNumber} - Battle Resolution`)
                 .setDescription(narrativeText)
-                .addFields({
-                    name: '📊 Combat Summary',
-                    value: `Result: ${combatResult.combatResult.result}\nIntensity: ${combatResult.combatResult.intensity}`,
-                    inline: true
-                })
-                .setFooter({ text: 'Send your next orders for Turn ' + (battle.currentTurn + 1) });
+                .addFields(
+                    {
+                        name: '📊 Turn Summary',
+                        value: `Movements: ${turnResults.movements?.player2Moves || 0}\n` +
+                               `Combats: ${turnResults.combats || 0}\n` +
+                               `Your Casualties: ${turnResults.casualties?.player2 || 0}`,
+                        inline: true
+                    },
+                    {
+                        name: '🎯 Intelligence',
+                        value: `Enemy units detected: ${turnResults.intelligence?.player2Detected || 0}`,
+                        inline: true
+                    }
+                )
+                .setFooter({ text: `Awaiting orders for Turn ${battle.currentTurn}` });
             
             await player2.send({ embeds: [p2Embed] });
             console.log('Results sent to player 2');
-        } else {
-            console.log('Skipped TEST user for player 2 results');
-        }
-        
-        if (battle.player2Id && !battle.player2Id.startsWith('TEST_')) {
-            const player2 = await client.users.fetch(battle.player2Id);
-            const p2Embed = new EmbedBuilder()
-                .setColor(0x00008B)
-                .setTitle(`⚔️ Turn ${battleTurn.turnNumber} - Battle Resolution`)
-                .setDescription(narrative.mainNarrative.fullNarrative)
-                .addFields({
-                    name: '📊 Combat Summary',
-                    value: `Result: ${combatResult.combatResult.result}\nIntensity: ${combatResult.combatResult.intensity}`,
-                    inline: true
-                })
-                .setFooter({ text: 'Send your next orders for Turn ' + (battle.currentTurn + 1) });
-            
-            await player2.send({ embeds: [p2Embed] });
-            console.log('Results sent to player 2');
-        } else {
-            console.log('Skipped TEST user for player 2 results');
         }
         
         console.log(`Turn ${battleTurn.turnNumber} results processing complete`);
@@ -280,15 +286,23 @@ async function sendNextTurnBriefings(battle, battleState, client) {
         const p2State = filterBattleStateForPlayer(battleState, 'player2');
         
         const p1Map = generateASCIIMap({
-            terrain: battleState.terrain || {},
-            player1Units: p1State.yourForces.units,
-            player2Units: p1State.enemyForces.detectedUnits.map(e => ({ position: e.position }))
+            terrain: battle.battleState.terrain || {},
+            player1Units: (p1State.yourForces.units || []).map(u => ({ 
+                position: u.position 
+            })),
+            player2Units: (p1State.enemyForces.detectedUnits || []).map(e => ({ 
+                position: e.position 
+            }))
         });
-        
+
         const p2Map = generateASCIIMap({
-            terrain: battleState.terrain || {},
-            player1Units: p2State.enemyForces.detectedUnits.map(e => ({ position: e.position })),
-            player2Units: p2State.yourForces.units
+            terrain: battle.battleState.terrain || {},
+            player1Units: (p2State.enemyForces.detectedUnits || []).map(e => ({ 
+                position: e.position 
+            })),
+            player2Units: (p2State.yourForces.units || []).map(u => ({ 
+                position: u.position 
+            }))
         });
         
         // Send to player 1
