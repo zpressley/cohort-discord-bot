@@ -106,8 +106,9 @@ async function processTurn(battle, player1Order, player2Order, map) {
         console.log('\n💀 Phase 5: Applying casualties...');
         const updatedPositions = applyCasualties(
             movementResults.newPositions,
-            combatResults
-        );
+            combatResults,
+            movementResults
+        )
         
         // PHASE 6: Check victory conditions
         console.log('\n🏆 Phase 6: Checking victory conditions...');
@@ -202,51 +203,93 @@ function buildForceFromUnit(unitData, battleState) {
 
 /**
  * Apply casualties from combat to unit positions
+ * FIXED: Uses combat engagement data which has the unit references
  */
-function applyCasualties(positions, combatResults) {
-    console.log('DEBUG applyCasualties INPUT:');
-    console.log('  positions.player1:', positions.player1?.length || 0);
-    console.log('  positions.player2:', positions.player2?.length || 0);
-    console.log('  combatResults:', combatResults.length);
-    
+function applyCasualties(positions, combatResults, movementResults) {
     const updated = {
         player1: [...positions.player1],
         player2: [...positions.player2]
     };
     
-    combatResults.forEach(combat => {
-        // Find units involved
-        const attackerSide = combat.result.casualties.attacker[0]?.side || 'player1';
+    // Track total casualties for logging
+    let p1TotalCasualties = 0;
+    let p2TotalCasualties = 0;
+    
+    combatResults.forEach((combat, combatIndex) => {
+        const casualties = combat.result.casualties;
+        
+        // Get the original engagement which has unit data
+        const engagement = movementResults?.combatEngagements?.[combatIndex];
+        
+        if (!engagement) {
+            console.log(`   ⚠️  Combat ${combatIndex}: No matching engagement found`);
+            return;
+        }
+        
+        // Determine sides from unitId prefixes in the engagement
+        const attackerUnitId = engagement.attacker.unit.unitId;
+        const defenderUnitId = engagement.defender.unit.unitId;
+        
+        const attackerSide = attackerUnitId.startsWith('north') ? 'player1' : 'player2';
         const defenderSide = attackerSide === 'player1' ? 'player2' : 'player1';
         
+        console.log(`   Combat at ${combat.location}: ${attackerSide} ${attackerUnitId} vs ${defenderSide} ${defenderUnitId}`);
+        
         // Apply attacker casualties
-        combat.result.casualties.attacker.forEach(cas => {
+        const attackerCasualties = casualties.attacker[0]?.casualties || 0;
+        if (attackerCasualties > 0) {
             const unitIndex = updated[attackerSide].findIndex(u => 
-                u.position === combat.location
+                u.unitId === attackerUnitId
             );
+            
             if (unitIndex >= 0) {
-                updated[attackerSide][unitIndex].currentStrength -= cas.casualties;
+                const unit = updated[attackerSide][unitIndex];
+                const oldStrength = unit.currentStrength;
+                unit.currentStrength = Math.max(0, oldStrength - attackerCasualties);
+                
+                console.log(`   ${attackerSide} ${attackerUnitId}: ${oldStrength} → ${unit.currentStrength} (-${attackerCasualties})`);
+                
+                if (attackerSide === 'player1') p1TotalCasualties += attackerCasualties;
+                else p2TotalCasualties += attackerCasualties;
             }
-        });
+        }
         
         // Apply defender casualties
-        combat.result.casualties.defender.forEach(cas => {
+        const defenderCasualties = casualties.defender[0]?.casualties || 0;
+        if (defenderCasualties > 0) {
             const unitIndex = updated[defenderSide].findIndex(u => 
-                u.position === combat.location
+                u.unitId === defenderUnitId
             );
+            
             if (unitIndex >= 0) {
-                updated[defenderSide][unitIndex].currentStrength -= cas.casualties;
+                const unit = updated[defenderSide][unitIndex];
+                const oldStrength = unit.currentStrength;
+                unit.currentStrength = Math.max(0, oldStrength - defenderCasualties);
+                
+                console.log(`   ${defenderSide} ${defenderUnitId}: ${oldStrength} → ${unit.currentStrength} (-${defenderCasualties})`);
+                
+                if (defenderSide === 'player1') p1TotalCasualties += defenderCasualties;
+                else p2TotalCasualties += defenderCasualties;
             }
-        });
+        }
     });
 
     // Remove destroyed units (≤0 strength)
+    const p1Before = updated.player1.length;
+    const p2Before = updated.player2.length;
+    
     updated.player1 = updated.player1.filter(u => u.currentStrength > 0);
     updated.player2 = updated.player2.filter(u => u.currentStrength > 0);
-
+    
+    const p1Destroyed = p1Before - updated.player1.length;
+    const p2Destroyed = p2Before - updated.player2.length;
+    
+    console.log(`✅ Casualties applied: P1 -${p1TotalCasualties} (${p1Destroyed} units destroyed), P2 -${p2TotalCasualties} (${p2Destroyed} units destroyed)`);
+    console.log(`   Remaining: P1 ${updated.player1.length} units, P2 ${updated.player2.length} units`);
     
     return updated;
 }
+
 
 /**
  * Check victory conditions

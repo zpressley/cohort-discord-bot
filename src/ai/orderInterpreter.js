@@ -30,12 +30,6 @@ async function interpretOrders(orderText, battleState, playerSide, map) {
     
     // Call AI (placeholder - will connect to aiManager)
     const aiResponse = await callAIForOrderParsing(prompt);
-    
-    console.log('DEBUG interpretOrders:');
-    console.log('  AI returned actions:', aiResponse.actions.length);
-    if (aiResponse.actions.length > 0) {
-        console.log('  Action[0]:', aiResponse.actions[0].unitId, '→', aiResponse.actions[0].targetPosition);
-    }
 
     // Validate AI-suggested actions against rules
     const validatedActions = [];
