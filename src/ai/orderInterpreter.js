@@ -36,36 +36,30 @@ async function interpretOrders(orderText, battleState, playerSide, map) {
     const errors = [];
     
     for (const action of aiResponse.actions) {
-    console.log('  Validating action:', action.type, action.unitId, '→', action.targetPosition);
-    
-    if (action.type === 'move') {
-        const unit = playerUnits.find(u => u.unitId === action.unitId);
-        console.log('  Unit found:', !!unit);
-        
-        if (!unit) {
-            errors.push(`Unit ${action.unitId} not found`);
-            continue;
+        if (action.type === 'move') {
+            const unit = playerUnits.find(u => u.unitId === action.unitId);
+            
+            if (!unit) {
+                errors.push(`Unit ${action.unitId} not found`);
+                continue;
+            }
+            
+            const validation = validateMovement(unit, action.targetPosition, map);
+            
+            if (validation.valid) {
+                validatedActions.push({
+                    ...action,
+                    validation,
+                    unitId: unit.unitId
+                });
+            } else {
+                errors.push({
+                    unit: unit.unitId,
+                    error: validation.error,
+                    reason: validation.reason
+                });
+            }
         }
-        
-        const validation = validateMovement(unit, action.targetPosition, map);
-        console.log('  Validation result:', validation.valid);
-        
-        if (validation.valid) {
-            validatedActions.push({
-                ...action,
-                validation,
-                unitId: unit.unitId
-            });
-            console.log('  ✅ Action added to validatedActions');
-        } else {
-            console.log('  ❌ Validation failed:', validation.error);
-            errors.push({
-                unit: unit.unitId,
-                error: validation.error,
-                reason: validation.reason
-            });
-        }
-    }
         
         if (action.type === 'formation') {
             validatedActions.push(action); // Formation changes always valid

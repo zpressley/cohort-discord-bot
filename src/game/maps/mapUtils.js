@@ -237,9 +237,17 @@ function generateASCIIMap(mapData) {
         });
     }
     
+    console.log('DEBUG generateASCIIMap input:');
+    console.log('  player1Units type:', typeof mapData.player1Units, 'isArray:', Array.isArray(mapData.player1Units));
+    console.log('  player1Units length:', mapData.player1Units?.length);
+    console.log('  player2Units type:', typeof mapData.player2Units, 'isArray:', Array.isArray(mapData.player2Units));
+    console.log('  player2Units length:', mapData.player2Units?.length);
+    
     // Mark player units
     if (mapData.player1Units) {
-        mapData.player1Units.forEach(unit => {
+        console.log('  Iterating player1Units...');
+        mapData.player1Units.forEach((unit, index) => {
+            console.log(`    Unit ${index}:`, typeof unit, 'has position?', !!unit.position, 'position value:', unit.position);
             const pos = parseCoord(unit.position);
             grid[pos.row][pos.col] = '1';
         });

@@ -265,26 +265,125 @@ async function sendTurnResults(battle, battleTurn, narrative, turnResults, clien
     }
 }
 
+
 /**
- * Send briefings for next turn
+ * Send briefings for next turn with ASCII map
  */
 async function sendNextTurnBriefings(battle, battleState, client) {
     try {
-        const briefing = `⚡ **Turn ${battle.currentTurn} - Awaiting Orders**\n\n` +
-            `Your units are positioned. Enemy contact status unknown.\n\n` +
-            `Send orders: "move south", "advance to ford", etc.`;
+        const { generateASCIIMap } = require('../game/maps/mapUtils');
+        const { RIVER_CROSSING_MAP } = require('../game/maps/riverCrossing');
+        const { calculateVisibility } = require('../game/fogOfWar');
         
+        // Get the map for this scenario
+        const scenarioMaps = {
+            'river_crossing': RIVER_CROSSING_MAP,
+            'bridge_control': RIVER_CROSSING_MAP,
+            'forest_ambush': RIVER_CROSSING_MAP,
+            'hill_fort_assault': RIVER_CROSSING_MAP,
+            'desert_oasis': RIVER_CROSSING_MAP
+        };
+        
+        const map = scenarioMaps[battle.scenario] || RIVER_CROSSING_MAP;
+        
+        // Send to Player 1
         if (!battle.player1Id.startsWith('TEST_')) {
+            // Calculate what P1 can see
+            const p1Visibility = calculateVisibility(
+                battleState.player1.unitPositions || [],
+                battleState.player2.unitPositions || [],
+                map.terrain
+            );
+            
+            // Build map data for P1 with fog of war
+            console.log('DEBUG MAP-013 P1 Units:');
+            (battleState.player1.unitPositions || []).forEach((u, i) => {
+                console.log(`  Unit ${i}:`, {
+                    unitId: u.unitId,
+                    position: u.position,
+                    positionType: typeof u.position
+                });
+            });
+            
+            const p1MapData = {
+                terrain: map.terrain,
+                player1Units: battleState.player1.unitPositions || [],
+                player2Units: (p1Visibility.visibleEnemyPositions || []).map(pos => {
+                    console.log('  Enemy pos:', pos, 'type:', typeof pos);
+                    return { position: typeof pos === 'string' ? pos : pos.position };
+                })
+            };
+            
+            console.log('DEBUG Calling generateASCIIMap with:');
+            console.log('  player1Units length:', p1MapData.player1Units.length);
+            console.log('  player2Units length:', p1MapData.player2Units.length);
+            console.log('  First p1 unit sample:', p1MapData.player1Units[0]?.unitId, 'at', p1MapData.player1Units[0]?.position);
+            
+            const p1Map = generateASCIIMap(p1MapData);
+            
+            const briefing = `⚡ **Turn ${battle.currentTurn} - Awaiting Orders**\n\n` +
+                `**Tactical Situation:**\n` +
+                `Your units: ${battleState.player1.unitPositions?.length || 0}\n` +
+                `Detected enemies: ${p1Visibility.visibleEnemyPositions.length}\n\n` +
+                `\`\`\`\n${p1Map}\n\`\`\`\n\n` +
+                `Send orders: "move south", "advance to ford", "hold position", etc.`;
+            
             const player1 = await client.users.fetch(battle.player1Id);
             await player1.send(briefing);
         }
         
+        // Send to Player 2
         if (battle.player2Id && !battle.player2Id.startsWith('TEST_')) {
+            // Calculate what P2 can see
+            const p2Visibility = calculateVisibility(
+                battleState.player2.unitPositions || [],
+                battleState.player1.unitPositions || [],
+                map.terrain
+            );
+            
+            // Build map data for P2 with fog of war
+            const p2MapData = {
+                terrain: map.terrain,
+                player1Units: (p2Visibility.visibleEnemyPositions || []).map(pos => ({
+                    position: typeof pos === 'string' ? pos : pos.position
+                })),
+                player2Units: battleState.player2.unitPositions || []
+            };
+            
+            const p2Map = generateASCIIMap(p2MapData);
+            
+            const briefing = `⚡ **Turn ${battle.currentTurn} - Awaiting Orders**\n\n` +
+                `**Tactical Situation:**\n` +
+                `Your units: ${battleState.player2.unitPositions?.length || 0}\n` +
+                `Detected enemies: ${p2Visibility.visibleEnemyPositions.length}\n\n` +
+                `\`\`\`\n${p2Map}\n\`\`\`\n\n` +
+                `Send orders: "move south", "advance to ford", "hold position", etc.`;
+            
             const player2 = await client.users.fetch(battle.player2Id);
             await player2.send(briefing);
         }
+        
     } catch (error) {
         console.error('Error sending briefings:', error);
+        console.error('Full error:', error.stack);
+        
+        // Fallback to simple briefing without map
+        const simpleBriefing = `⚡ **Turn ${battle.currentTurn} - Awaiting Orders**\n\n` +
+            `Your units are positioned. Send your orders.`;
+        
+        try {
+            if (!battle.player1Id.startsWith('TEST_')) {
+                const player1 = await client.users.fetch(battle.player1Id);
+                await player1.send(simpleBriefing);
+            }
+            
+            if (battle.player2Id && !battle.player2Id.startsWith('TEST_')) {
+                const player2 = await client.users.fetch(battle.player2Id);
+                await player2.send(simpleBriefing);
+            }
+        } catch (fallbackError) {
+            console.error('Even fallback briefing failed:', fallbackError);
+        }
     }
 }
 
