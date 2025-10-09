@@ -1,349 +1,217 @@
-// src/game/positionBasedCombat.js
-// Combat resolution with tactical positioning modifiers
+// src/game/movementSystem.js - COMPLETE FILE WITH MISSIONS
+// Movement validation, execution, and mission tracking
 
-const { calculateDistance, getAdjacentCoords } = require('./maps/mapUtils');
+const { findPathAStar, calculateDistance, coordToString, parseCoord } = require('./maps/mapUtils');
 
 /**
- * Detect combat triggers based on unit positions
- * @param {Array} player1Units - Player 1 unit positions
- * @param {Array} player2Units - Player 2 unit positions
- * @returns {Array} Array of combat engagements
+ * Validate movement with partial movement support
  */
-function detectCombatTriggers(player1Units, player2Units) {
-    const combats = [];
+function validateMovement(unit, targetPosition, map) {
+    const { getTerrainAt: getTerrainType } = require('./maps/riverCrossing');
     
-    player1Units.forEach(p1Unit => {
-        player2Units.forEach(p2Unit => {
-            const distance = calculateDistance(p1Unit.position, p2Unit.position);
-            
-            // Adjacent units trigger combat
-            if (distance <= 1) {
-                combats.push({
-                    location: p1Unit.position,
-                    attacker: p1Unit,
-                    defender: p2Unit,
-                    type: 'melee',
-                    distance: distance
-                });
-            }
-            
-            // Ranged combat within 3 tiles
-            if (distance > 1 && distance <= 3) {
-                if (p1Unit.hasRanged || p2Unit.hasRanged) {
-                    combats.push({
-                        location: p1Unit.position,
-                        attacker: p1Unit,
-                        defender: p2Unit,
-                        type: 'ranged',
-                        distance: distance
-                    });
-                }
-            }
-        });
-    });
+    // Find path using A* pathfinding
+    const pathResult = findPathAStar(
+        unit.position,
+        targetPosition,
+        map,
+        getTerrainType
+    );
     
-    return combats;
+    if (!pathResult.valid) {
+        return {
+            valid: false,
+            error: 'No valid path to target',
+            reason: pathResult.reason || 'River or impassable terrain blocks the way'
+        };
+    }
+    
+    const fullPath = pathResult.path;
+    const fullCost = pathResult.cost;
+    const maxMovement = unit.movementRemaining || (unit.mounted ? 5 : 3);
+    
+    // If target too far, move as far as possible along path
+    if (fullCost > maxMovement) {
+        let reachableIndex = 1;
+        let costSoFar = 0;
+        
+        for (let i = 1; i < fullPath.length; i++) {
+            const stepCost = 1; // Simplified
+            costSoFar += stepCost;
+            
+            if (costSoFar <= maxMovement) {
+                reachableIndex = i;
+            } else {
+                break;
+            }
+        }
+        
+        const partialPath = fullPath.slice(0, reachableIndex + 1);
+        const reachablePosition = fullPath[reachableIndex];
+        
+        return {
+            valid: true,
+            path: partialPath,
+            cost: maxMovement,
+            movementRemaining: 0,
+            targetTerrain: getTerrainType(reachablePosition),
+            partialMovement: true,
+            finalPosition: reachablePosition,
+            originalTarget: targetPosition,
+            message: `Moving toward ${targetPosition}, reached ${reachablePosition}`
+        };
+    }
+    
+    // Target reachable in one turn
+    return {
+        valid: true,
+        path: fullPath,
+        cost: fullCost,
+        movementRemaining: maxMovement - fullCost,
+        targetTerrain: getTerrainType(targetPosition),
+        finalPosition: targetPosition,
+        partialMovement: false
+    };
 }
 
 /**
- * Calculate tactical position modifiers for combat
- * @param {Object} attacker - Attacking unit with position
- * @param {Object} defender - Defending unit with position
- * @param {Object} allUnits - All units on battlefield
- * @param {Object} map - Map terrain data
- * @returns {Object} Combat modifiers from positioning
+ * Create mission from movement order
  */
-function calculatePositionalModifiers(attacker, defender, allUnits, map) {
-    const modifiers = {
-        attacker: { attack: 0, defense: 0 },
-        defender: { attack: 0, defense: 0 },
-        description: []
+function createMission(unit, targetPosition, currentTurn, contingencies = []) {
+    return {
+        type: 'move_to_destination',
+        target: targetPosition,
+        startTurn: currentTurn,
+        status: 'active',
+        contingencies: contingencies,
+        progress: {
+            startPosition: unit.position,
+            lastReportTurn: currentTurn
+        }
     };
+}
+
+/**
+ * Check if unit should continue mission
+ */
+function shouldContinueMission(unit, battleState) {
+    if (!unit.activeMission) return false;
+    if (unit.activeMission.status !== 'active') return false;
+    if (unit.position === unit.activeMission.target) return false;
+    return true;
+}
+
+/**
+ * Execute mission turn - move toward destination
+ */
+function executeMissionTurn(unit, map, getTerrainType) {
+    const mission = unit.activeMission;
     
-    // Flanking bonus - check if friendly units attack from multiple sides
-    const flankingBonus = calculateFlankingBonus(attacker, defender, allUnits);
-    if (flankingBonus > 0) {
-        modifiers.attacker.attack += flankingBonus;
-        modifiers.description.push(`Flanking attack: +${flankingBonus} attack`);
+    const pathResult = findPathAStar(
+        unit.position,
+        mission.target,
+        map,
+        getTerrainType
+    );
+    
+    if (!pathResult.valid) {
+        return {
+            type: 'mission_blocked',
+            missionTarget: mission.target,
+            reason: pathResult.reason,
+            action: 'request_new_orders',
+            officerReport: `Commander, cannot reach ${mission.target}. ${pathResult.reason}`
+        };
     }
     
-    // High ground advantage
-    const elevationMod = calculateElevationAdvantage(attacker.position, defender.position, map);
-    if (elevationMod.defender > 0) {
-        modifiers.defender.defense += elevationMod.defender;
-        modifiers.description.push(`High ground defense: +${elevationMod.defender}`);
-    }
-    if (elevationMod.attacker > 0) {
-        modifiers.attacker.attack += elevationMod.attacker;
-        modifiers.description.push(`Downhill attack: +${elevationMod.attacker}`);
-    }
+    const fullPath = pathResult.path;
+    const maxMovement = unit.movementRemaining || (unit.mounted ? 5 : 3);
     
-    // River crossing penalty
-    if (isCrossingRiver(attacker.position, defender.position, map)) {
-        modifiers.attacker.attack -= 4;
-        modifiers.defender.defense += 3;
-        modifiers.description.push('Attacking across ford: -4 attack, defender +3 defense');
-    }
+    let reachableIndex = 1;
+    let costSoFar = 0;
     
-    // Forest combat modifiers
-    const defenderTerrain = getTerrainType(defender.position, map);
-    if (defenderTerrain === 'forest') {
-        modifiers.defender.defense += 2;
-        modifiers.description.push('Forest cover: +2 defense');
+    for (let i = 1; i < fullPath.length; i++) {
+        const stepCost = 1;
+        costSoFar += stepCost;
         
-        if (attacker.mounted) {
-            modifiers.attacker.attack -= 4;
-            modifiers.description.push('Cavalry in forest: -4 attack');
+        if (costSoFar <= maxMovement) {
+            reachableIndex = i;
+        } else {
+            break;
         }
     }
     
-    // Marsh penalties
-    if (defenderTerrain === 'marsh') {
-        modifiers.defender.defense -= 2;
-        modifiers.attacker.attack -= 2;
-        modifiers.description.push('Fighting in marsh: both sides -2');
-    }
-    
-    return modifiers;
-}
-
-/**
- * Calculate flanking bonus from friendly units
- */
-function calculateFlankingBonus(attacker, defender, allUnits) {
-    const defenderPos = defender.position;
-    const adjacent = getAdjacentCoords(defenderPos);
-    
-    // Count friendly units adjacent to defender
-    const friendlyUnitsAttacking = allUnits.filter(unit => 
-        unit.side === attacker.side &&
-        unit.unitId !== attacker.unitId &&
-        adjacent.includes(unit.position)
-    );
-    
-    if (friendlyUnitsAttacking.length === 0) return 0;
-    if (friendlyUnitsAttacking.length === 1) return +2; // 2-sided attack
-    if (friendlyUnitsAttacking.length >= 2) return +4; // 3+ sided attack (surrounded)
-    
-    return 0;
-}
-
-/**
- * Calculate elevation advantage
- */
-function calculateElevationAdvantage(attackerPos, defenderPos, map) {
-    const { getTerrainType } = require('./movementSystem');
-    
-    const attackerTerrain = getTerrainType(attackerPos, map);
-    const defenderTerrain = getTerrainType(defenderPos, map);
-    
-    const attackerElevation = attackerTerrain === 'hill' ? 1 : 0;
-    const defenderElevation = defenderTerrain === 'hill' ? 1 : 0;
-    
-    if (defenderElevation > attackerElevation) {
-        return { defender: +2, attacker: 0 }; // Defender on high ground
-    }
-    if (attackerElevation > defenderElevation) {
-        return { attacker: +2, defender: 0 }; // Attacker on high ground (rare)
-    }
-    
-    return { attacker: 0, defender: 0 };
-}
-
-/**
- * Check if attacker is crossing river to attack
- */
-function isCrossingRiver(attackerPos, defenderPos, map) {
-    const { getTerrainType } = require('./movementSystem');
-    const { isFord } = require('./maps/riverCrossing');
-    
-    // Check if defender is at a ford
-    if (!isFord(defenderPos)) return false;
-    
-    // Check if attacker is on opposite side of river
-    const distance = calculateDistance(attackerPos, defenderPos);
-    if (distance !== 1) return false; // Must be adjacent
-    
-    // If attacker is not at ford but defender is, attacker is crossing
-    return !isFord(attackerPos);
-}
-
-/**
- * Build combat context with positional data
- * @param {Object} combat - Combat engagement from detectCombatTriggers
- * @param {Object} battleState - Full battle state
- * @param {Object} map - Map data
- * @returns {Object} Enhanced combat context for battle engine
- */
-function buildCombatContext(combat, battleState, map) {
-    const allUnits = [
-        ...(battleState.player1.unitPositions || []).map(u => ({...u, side: 'player1'})),
-        ...(battleState.player2.unitPositions || []).map(u => ({...u, side: 'player2'}))
-    ];
-    
-    const positionMods = calculatePositionalModifiers(
-        combat.attacker,
-        combat.defender,
-        allUnits,
-        map
-    );
+    const reachedPosition = fullPath[reachableIndex];
+    const remainingDistance = fullPath.length - reachableIndex - 1;
+    const missionComplete = reachedPosition === mission.target;
     
     return {
-        attacker: {
-            unit: combat.attacker,
-            positionModifiers: positionMods.attacker,
-            position: combat.attacker.position
+        type: 'move',
+        unitId: unit.unitId,
+        targetPosition: reachedPosition,
+        missionContinues: !missionComplete,
+        missionProgress: {
+            target: mission.target,
+            current: reachedPosition,
+            remaining: remainingDistance,
+            complete: missionComplete
         },
-        defender: {
-            unit: combat.defender,
-            positionModifiers: positionMods.defender,
-            position: combat.defender.position
-        },
-        location: combat.location,
-        terrain: getTerrainType(combat.location, map),
-        combatType: combat.type,
-        tacticalSituation: positionMods.description
+        officerReport: missionComplete 
+            ? `${mission.target} reached, sir. Holding position.`
+            : `Advancing to ${mission.target}, ${remainingDistance} tiles remaining.`
     };
 }
 
 /**
- * Process movement phase and detect all combat triggers
- * @param {Array} player1Movements - Validated movement actions for P1
- * @param {Array} player2Movements - Validated movement actions for P2
- * @param {Object} battleState - Current state
- * @param {Object} map - Map data
- * @returns {Object} New positions and combat triggers
+ * Complete mission
  */
+function completeMission(unit, reason = 'destination_reached') {
+    return {
+        ...unit,
+        activeMission: {
+            ...unit.activeMission,
+            status: 'complete',
+            completionReason: reason
+        }
+    };
+}
 
-function processMovementPhase(player1Movements, player2Movements, battleState, map) {
-    // Debug logging...
-    if (player1Movements.length > 0) {
-        console.log('  P1 movement[0]:');
-        console.log('    unitId:', player1Movements[0].unitId);
-        console.log('    target:', player1Movements[0].targetPosition);
-        console.log('    isMission:', player1Movements[0].missionAction);
-        console.log('    hasNewMission:', !!player1Movements[0].newMission);
-    }
-    
-    // Execute all movements WITH mission storage
-    const newPlayer1Positions = battleState.player1.unitPositions.map(unit => {
-        const movement = player1Movements.find(m => m.unitId === unit.unitId);
-        
-        if (movement && movement.validation.valid) {
-            console.log(`    ✅ Moving ${unit.unitId} to ${movement.finalPosition || movement.targetPosition}`);
-            
-            // Build updated unit
-            const updatedUnit = {
-                ...unit,
-                position: movement.finalPosition || movement.targetPosition,
-                movementRemaining: movement.validation.movementRemaining,
-                hasMoved: true
-            };
-            
-            // Handle mission state
-            if (movement.newMission) {
-                // New mission created (partial movement)
-                updatedUnit.activeMission = movement.newMission;
-                console.log(`    📋 Mission created: ${movement.newMission.target}`);
-            } else if (movement.missionAction) {
-                // Continuing existing mission
-                if (movement.missionProgress && movement.missionProgress.complete) {
-                    // Mission complete!
-                    updatedUnit.activeMission = null; // Clear completed mission
-                    console.log(`    ✅ Mission complete: reached ${movement.missionProgress.target}`);
-                } else if (movement.missionProgress && !movement.missionProgress.complete) {
-                    // Mission continues - preserve existing mission with updated progress
-                    updatedUnit.activeMission = unit.activeMission ? {
-                        ...unit.activeMission,
-                        progress: {
-                            ...unit.activeMission.progress,
-                            currentPosition: updatedUnit.position,
-                            lastReportTurn: battleState.currentTurn
-                        }
-                    } : null;
-                    console.log(`    🔄 Mission continuing: ${movement.missionProgress.remaining} tiles remaining`);
-                }
-            }
-            
-            return updatedUnit;
-        }
-        
-        return unit;
-    });
-    
-    const newPlayer2Positions = battleState.player2.unitPositions.map(unit => {
-        const movement = player2Movements.find(m => m.unitId === unit.unitId);
-        
-        if (movement && movement.validation.valid) {
-            const updatedUnit = {
-                ...unit,
-                position: movement.finalPosition || movement.targetPosition,
-                movementRemaining: movement.validation.movementRemaining,
-                hasMoved: true
-            };
-            
-            // Same mission handling for P2
-            if (movement.newMission) {
-                updatedUnit.activeMission = movement.newMission;
-            } else if (movement.missionAction) {
-                if (movement.missionProgress && movement.missionProgress.complete) {
-                    updatedUnit.activeMission = null; // Clear completed mission
-                } else if (movement.missionProgress && !movement.missionProgress.complete) {
-                    updatedUnit.activeMission = unit.activeMission ? {
-                        ...unit.activeMission,
-                        progress: {
-                            ...unit.activeMission.progress,
-                            currentPosition: updatedUnit.position,
-                            lastReportTurn: battleState.currentTurn
-                        }
-                    } : null;
-                }
-            }
-            
-            return updatedUnit;
-        }
-        
-        return unit;
-    });
-    
-    // Rest of function (combat detection, etc.) stays the same...
-    const combatTriggers = detectCombatTriggers(newPlayer1Positions, newPlayer2Positions);
-    
-    const combatContexts = combatTriggers.map(combat => 
-        buildCombatContext(combat, {
-            ...battleState,
-            player1: { ...battleState.player1, unitPositions: newPlayer1Positions },
-            player2: { ...battleState.player2, unitPositions: newPlayer2Positions }
-        }, map)
-    );
+/**
+ * Cancel mission
+ */
+function cancelMission(unit, newOrder) {
+    const mission = unit.activeMission;
     
     return {
-        newPositions: {
-            player1: newPlayer1Positions,
-            player2: newPlayer2Positions
-        },
-        combatEngagements: combatContexts,
-        movementSummary: {
-            player1Moves: player1Movements.filter(m => m.validation?.valid).length,
-            player2Moves: player2Movements.filter(m => m.validation?.valid).length
+        canceled: true,
+        previousTarget: mission.target,
+        officerConfirmation: `Canceling advance to ${mission.target}. New orders: "${newOrder}"`,
+        updatedUnit: {
+            ...unit,
+            activeMission: null
         }
     };
 }
 
-/**
- * Helper to get terrain type (imported from movementSystem)
- */
 function getTerrainType(coord, map) {
-    const { getTerrainType: getTerrain } = require('./movementSystem');
-    return getTerrain(coord, map);
+    if (map.terrain.river && map.terrain.river.includes(coord)) {
+        if (map.terrain.fords && map.terrain.fords.some(f => f.coord === coord)) {
+            return 'ford';
+        }
+        return 'river';
+    }
+    if (map.terrain.hill && map.terrain.hill.includes(coord)) return 'hill';
+    if (map.terrain.marsh && map.terrain.marsh.includes(coord)) return 'marsh';
+    if (map.terrain.road && map.terrain.road.includes(coord)) return 'road';
+    if (map.terrain.forest && map.terrain.forest.includes(coord)) return 'forest';
+    return 'plains';
 }
 
 module.exports = {
-    detectCombatTriggers,
-    calculatePositionalModifiers,
-    buildCombatContext,
-    processMovementPhase,
-    calculateFlankingBonus,
-    calculateElevationAdvantage,
-    isCrossingRiver
+    validateMovement,
+    getTerrainType,
+    createMission,
+    shouldContinueMission,
+    executeMissionTurn,
+    completeMission,
+    cancelMission
 };
