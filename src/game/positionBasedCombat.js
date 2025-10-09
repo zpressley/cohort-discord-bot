@@ -282,25 +282,21 @@ function processMovementPhase(player1Movements, player2Movements, battleState, m
                 hasMoved: true
             };
             
-            // Same mission handling for P2
+             // Same mission handling for P2
             if (movement.newMission) {
                 updatedUnit.activeMission = movement.newMission;
-            } else if (movement.missionAction && movement.missionProgress) {
-                if (movement.missionProgress.complete) {
-                    updatedUnit.activeMission = {
-                        ...unit.activeMission,
-                        status: 'complete',
-                        completedTurn: battleState.currentTurn
-                    };
-                } else {
-                    updatedUnit.activeMission = {
+            } else if (movement.missionAction) {
+                if (movement.missionProgress && movement.missionProgress.complete) {
+                    updatedUnit.activeMission = null; // Clear completed mission
+                } else if (movement.missionProgress && !movement.missionProgress.complete) {
+                    updatedUnit.activeMission = unit.activeMission ? {
                         ...unit.activeMission,
                         progress: {
                             ...unit.activeMission.progress,
                             currentPosition: updatedUnit.position,
                             lastReportTurn: battleState.currentTurn
                         }
-                    };
+                    } : null;
                 }
             }
             
