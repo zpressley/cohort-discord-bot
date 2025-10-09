@@ -7,7 +7,7 @@
 const { findPathAStar, calculatePathCost } = require('./maps/mapUtils');
 
 function validateMovement(unit, targetPosition, map) {
-    const { getTerrainType } = require('./maps/riverCrossing');
+    const { getTerrainAt: getTerrainType } = require('./maps/riverCrossing');
     
     // Find path using A* pathfinding
     const pathResult = findPathAStar(
@@ -284,11 +284,187 @@ function applyMovementModifiers(baseMovement, terrain, modifiers = {}) {
 // Import coordToString
 const { coordToString } = require('./maps/mapUtils');
 
+// Add to movementSystem.js - Mission tracking and execution
+
+/**
+ * Create mission from movement order
+ * @param {Object} unit - Unit receiving mission
+ * @param {string} targetPosition - Final destination
+ * @param {number} currentTurn - When mission started
+ * @param {Array} contingencies - Optional contingency orders
+ * @returns {Object} Mission object
+ */
+function createMission(unit, targetPosition, currentTurn, contingencies = []) {
+    return {
+        type: 'move_to_destination',
+        target: targetPosition,
+        startTurn: currentTurn,
+        status: 'active',
+        contingencies: contingencies,
+        progress: {
+            startPosition: unit.position,
+            lastReportTurn: currentTurn
+        }
+    };
+}
+
+/**
+ * Check if unit should continue mission
+ * @param {Object} unit - Unit with possible active mission
+ * @param {Object} battleState - Current battle state
+ * @returns {boolean} True if mission should continue
+ */
+function shouldContinueMission(unit, battleState) {
+    if (!unit.activeMission) return false;
+    if (unit.activeMission.status !== 'active') return false;
+    if (unit.position === unit.activeMission.target) {
+        // Mission complete!
+        return false;
+    }
+    return true;
+}
+
+/**
+ * Execute mission turn - move toward destination
+ * @param {Object} unit - Unit on mission
+ * @param {Object} map - Map data
+ * @param {Function} getTerrainType - Terrain lookup function
+ * @returns {Object} Movement action for this turn
+ */
+function executeMissionTurn(unit, map, getTerrainType) {
+    const mission = unit.activeMission;
+    
+    // Calculate path to destination
+    const { findPathAStar } = require('./maps/mapUtils');
+    const pathResult = findPathAStar(
+        unit.position,
+        mission.target,
+        map,
+        getTerrainType
+    );
+    
+    if (!pathResult.valid) {
+        // Mission blocked - cannot reach destination
+        return {
+            type: 'mission_blocked',
+            missionTarget: mission.target,
+            reason: pathResult.reason,
+            action: 'request_new_orders',
+            officerReport: `Commander, cannot reach ${mission.target}. ${pathResult.reason}`
+        };
+    }
+    
+    const fullPath = pathResult.path;
+    const maxMovement = unit.movementRemaining || (unit.mounted ? 5 : 3);
+    
+    // Find furthest reachable point along path
+    let reachableIndex = 1;
+    let costSoFar = 0;
+    
+    for (let i = 1; i < fullPath.length; i++) {
+        const stepCost = 1; // Simplified for now
+        costSoFar += stepCost;
+        
+        if (costSoFar <= maxMovement) {
+            reachableIndex = i;
+        } else {
+            break;
+        }
+    }
+    
+    const reachedPosition = fullPath[reachableIndex];
+    const remainingDistance = fullPath.length - reachableIndex - 1;
+    
+    // Check if mission complete
+    const missionComplete = reachedPosition === mission.target;
+    
+    return {
+        type: 'move',
+        unitId: unit.unitId,
+        targetPosition: reachedPosition,
+        missionContinues: !missionComplete,
+        missionProgress: {
+            target: mission.target,
+            current: reachedPosition,
+            remaining: remainingDistance,
+            complete: missionComplete
+        },
+        officerReport: missionComplete 
+            ? `${mission.target} reached, sir. Holding position and awaiting orders.`
+            : `Advancing to ${mission.target}, ${remainingDistance} tiles remaining.`
+    };
+}
+
+/**
+ * Complete or cancel mission
+ * @param {Object} unit - Unit with mission
+ * @param {string} reason - Why mission ended
+ * @returns {Object} Updated unit
+ */
+function completeMission(unit, reason = 'destination_reached') {
+    const mission = unit.activeMission;
+    
+    return {
+        ...unit,
+        activeMission: {
+            ...mission,
+            status: 'complete',
+            endTurn: mission.currentTurn,
+            completionReason: reason
+        },
+        // Store in history
+        missionHistory: [
+            ...(unit.missionHistory || []),
+            {
+                target: mission.target,
+                startTurn: mission.startTurn,
+                endTurn: mission.currentTurn,
+                result: reason
+            }
+        ]
+    };
+}
+
+/**
+ * Cancel mission with new orders
+ * @param {Object} unit - Unit with active mission
+ * @param {string} newOrder - New order text
+ * @returns {Object} Cancellation confirmation
+ */
+function cancelMission(unit, newOrder) {
+    const mission = unit.activeMission;
+    
+    return {
+        canceled: true,
+        previousTarget: mission.target,
+        officerConfirmation: `Canceling advance to ${mission.target}. Executing new orders: "${newOrder}"`,
+        updatedUnit: {
+            ...unit,
+            activeMission: null,
+            missionHistory: [
+                ...(unit.missionHistory || []),
+                {
+                    target: mission.target,
+                    startTurn: mission.startTurn,
+                    endTurn: 'canceled',
+                    result: 'new_orders_received'
+                }
+            ]
+        }
+    };
+}
+
+
 module.exports = {
     validateMovement,
     executeMovement,
     parseMovementOrder,
     checkCollision,
     applyMovementModifiers,
-    getTerrainType
+    getTerrainType,
+    createMission,
+    shouldContinueMission,
+    executeMissionTurn,
+    completeMission,
+    cancelMission
 };

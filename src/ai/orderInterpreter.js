@@ -12,11 +12,50 @@ const { parseCoord } = require('../game/maps/mapUtils');
  * @param {Object} map - Map data for validation
  * @returns {Object} Validated actions to execute
  */
+// Update interpretOrders in orderInterpreter.js to handle missions
+
 async function interpretOrders(orderText, battleState, playerSide, map) {
     const playerUnits = battleState[playerSide].unitPositions || [];
-    const playerArmy = battleState[playerSide].army || {};
+    const { createMission, shouldContinueMission, executeMissionTurn, cancelMission } = require('../game/movementSystem');
+    const { getTerrainAt: getTerrainType } = require('../game/maps/riverCrossing');
     
-    // Build context for AI
+    const validatedActions = [];
+    const errors = [];
+    const missionReports = [];
+    
+    // FIRST: Check units with active missions
+    for (const unit of playerUnits) {
+        if (shouldContinueMission(unit, battleState)) {
+            // Execute mission turn
+            const missionAction = executeMissionTurn(unit, map, getTerrainType);
+            
+            if (missionAction.type === 'move') {
+                // Validate the mission movement
+                const validation = validateMovement(unit, missionAction.targetPosition, map);
+                
+                if (validation.valid) {
+                    validatedActions.push({
+                        type: 'move',
+                        unitId: unit.unitId,
+                        targetPosition: validation.finalPosition || missionAction.targetPosition,
+                        validation: validation,
+                        missionAction: true,
+                        missionProgress: missionAction.missionProgress
+                    });
+                    
+                    missionReports.push(missionAction.officerReport);
+                }
+            } else if (missionAction.type === 'mission_blocked') {
+                errors.push({
+                    unit: unit.unitId,
+                    error: missionAction.officerReport,
+                    reason: 'mission_blocked'
+                });
+            }
+        }
+    }
+    
+    // SECOND: Process new orders (only for units without active missions or new orders override)
     const context = {
         currentTurn: battleState.currentTurn,
         yourUnits: playerUnits,
@@ -25,15 +64,8 @@ async function interpretOrders(orderText, battleState, playerSide, map) {
         culture: battleState[playerSide].culture
     };
     
-    // Generate AI prompt
     const prompt = buildOrderInterpretationPrompt(orderText, context);
-    
-    // Call AI (placeholder - will connect to aiManager)
     const aiResponse = await callAIForOrderParsing(prompt);
-
-    // Validate AI-suggested actions against rules
-    const validatedActions = [];
-    const errors = [];
     
     for (const action of aiResponse.actions) {
         if (action.type === 'move') {
@@ -44,14 +76,36 @@ async function interpretOrders(orderText, battleState, playerSide, map) {
                 continue;
             }
             
+            // If unit has active mission, this new order cancels it
+            if (unit.activeMission) {
+                const cancellation = cancelMission(unit, orderText);
+                missionReports.push(cancellation.officerConfirmation);
+                // Update unit to remove mission
+                unit.activeMission = null;
+            }
+            
             const validation = validateMovement(unit, action.targetPosition, map);
             
             if (validation.valid) {
+                // Check if this creates a new mission (partial movement)
+                const newMission = validation.partialMovement 
+                    ? createMission(unit, action.targetPosition, battleState.currentTurn)
+                    : null;
+                
                 validatedActions.push({
                     ...action,
                     validation,
-                    unitId: unit.unitId
+                    unitId: unit.unitId,
+                    newMission: newMission,
+                    finalPosition: validation.finalPosition || action.targetPosition
                 });
+                
+                if (newMission) {
+                    missionReports.push(
+                        `${unit.unitId} begins mission to ${action.targetPosition}. ` +
+                        `Estimated ${Math.ceil(validation.cost / (unit.mounted ? 5 : 3))} turns to arrival.`
+                    );
+                }
             } else {
                 errors.push({
                     unit: unit.unitId,
@@ -62,17 +116,18 @@ async function interpretOrders(orderText, battleState, playerSide, map) {
         }
         
         if (action.type === 'formation') {
-            validatedActions.push(action); // Formation changes always valid
+            validatedActions.push(action);
         }
         
         if (action.type === 'scout') {
-            validatedActions.push(action); // Scout orders validated separately
+            validatedActions.push(action);
         }
     }
     
     return {
         validatedActions,
         errors,
+        missionReports,
         officerComment: aiResponse.officerComment || generateDefaultComment(context.culture),
         rawAIResponse: aiResponse
     };
@@ -146,6 +201,7 @@ Return ONLY valid JSON, no other text.`;
 /**
  * Call AI for order parsing (placeholder for real AI integration)
  */
+
 async function callAIForOrderParsing(prompt) {
     const yourUnits = JSON.parse(prompt.match(/Your Units: (\[.*?\])/s)?.[1] || '[]');
     const orderText = prompt.match(/\*\*PLAYER ORDER:\*\* "(.*?)"/)?.[1] || '';
@@ -155,10 +211,11 @@ async function callAIForOrderParsing(prompt) {
     }
     
     const unit = yourUnits[0];
+    const unitId = unit.id;
     const lowerOrder = orderText.toLowerCase();
     
-    // FIRST: Check for explicit coordinates in order
-    const coordMatch = orderText.match(/\b([A-O]\d{1,2})\b/i);
+    // FIRST: Check for explicit coordinates
+    const coordMatch = orderText.match(/\b([A-T]\d{1,2})\b/i);
     if (coordMatch) {
         const targetPosition = coordMatch[1].toUpperCase();
         return {
@@ -174,24 +231,66 @@ async function callAIForOrderParsing(prompt) {
         };
     }
     
-    // THEN: Fall back to direction/keyword parsing
     let targetPosition = unit.position; // Default: hold position
     
-    // Parse direction
-    if (lowerOrder.includes('south')) targetPosition = moveInDirection(unit.position, 'south', 3);
-    if (lowerOrder.includes('north')) targetPosition = moveInDirection(unit.position, 'north', 3);
-    if (lowerOrder.includes('east')) targetPosition = moveInDirection(unit.position, 'east', 3);
-    if (lowerOrder.includes('west')) targetPosition = moveInDirection(unit.position, 'west', 3);
+    // SECOND: Check for named locations (before directional parsing!)
+    if (lowerOrder.includes('ford')) {
+        // Distinguish between different fords
+        if (lowerOrder.includes('northern') || lowerOrder.includes('north ford')) {
+            targetPosition = 'L3';  // Northern Crossing from your map
+        } else if (lowerOrder.includes('southern') || lowerOrder.includes('south ford')) {
+            targetPosition = 'I17';  // Southern Crossing from your map
+        } else if (lowerOrder.includes('central') || lowerOrder.includes('bridge')) {
+            targetPosition = 'J11';  // Central Bridge
+        } else {
+            // Default to closest ford (will improve with AI)
+            targetPosition = 'J11';  // Central ford as default
+        }
+        
+        return {
+            actions: [{
+                type: 'move',
+                unitId: unitId,  // ← Use extracted unitId
+                currentPosition: unit.position,
+                targetPosition: targetPosition,
+                reasoning: `Moving to ford at ${targetPosition}`
+            }],
+            validation: { isValid: true, errors: [], warnings: [] },
+            officerComment: `Advancing to the ford.`
+        };
+    }
     
-    // Parse specific targets
-    if (lowerOrder.includes('river')) targetPosition = 'F11'; // Move toward ford
-    if (lowerOrder.includes('ford')) targetPosition = 'F11';
-    if (lowerOrder.includes('hill')) targetPosition = 'B5';
+    if (lowerOrder.includes('hill')) {
+        targetPosition = 'H1';  // Hill from your map
+        
+        return {
+            actions: [{
+                type: 'move',
+                unitId: unitId,  // ← Use extracted unitId
+                currentPosition: unit.position,
+                targetPosition: targetPosition,
+                reasoning: `Moving to hill`
+            }],
+            validation: { isValid: true, errors: [], warnings: [] },
+            officerComment: `Advancing to high ground.`
+        };
+    }
+    
+    // THIRD: Parse cardinal directions (only if no named location found)
+    if (lowerOrder.includes('south') && !lowerOrder.includes('southern')) {
+        targetPosition = moveInDirection(unit.position, 'south', 3);
+    } else if (lowerOrder.includes('north') && !lowerOrder.includes('northern')) {
+        targetPosition = moveInDirection(unit.position, 'north', 3);
+    } else if (lowerOrder.includes('east') && !lowerOrder.includes('eastern')) {
+        targetPosition = moveInDirection(unit.position, 'east', 3);
+    } else if (lowerOrder.includes('west') && !lowerOrder.includes('western')) {
+        targetPosition = moveInDirection(unit.position, 'west', 3);
+    }
     
     return {
         actions: [{
             type: 'move',
-            unitId: unit.id,
+            unitId: unitId,  // ← Use extracted unitId
             currentPosition: unit.position,
             targetPosition: targetPosition,
             reasoning: `Moving toward ${targetPosition}`

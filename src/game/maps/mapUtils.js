@@ -1,4 +1,5 @@
-
+// src/game/maps/mapUtils.js - COMPLETE FILE
+// 20x20 grid with A* pathfinding
 
 /**
  * Parse grid coordinate string to {row, col} object

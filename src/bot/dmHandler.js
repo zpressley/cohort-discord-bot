@@ -517,6 +517,33 @@ async function endBattle(battle, victory, client) {
     }
 }
 
+/**
+ * Generate mission status report for briefing
+ */
+function generateMissionReport(units) {
+    const reports = [];
+    
+    units.forEach(unit => {
+        if (unit.activeMission && unit.activeMission.status === 'active') {
+            const mission = unit.activeMission;
+            const distance = calculateDistance(unit.position, mission.target);
+            
+            reports.push(
+                `📋 **${unit.unitType || 'Unit'} - Mission Active**\n` +
+                `   Target: ${mission.target}\n` +
+                `   Current: ${unit.position}\n` +
+                `   Remaining: ~${distance} tiles\n` +
+                `   *Continuing automatically next turn...*`
+            );
+        }
+    });
+    
+    return reports.length > 0 
+        ? reports.join('\n\n')
+        : '';
+}
+
+
 module.exports = {
     handleDMCommand,
     processTurnResolution

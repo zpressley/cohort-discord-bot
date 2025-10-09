@@ -214,40 +214,109 @@ function buildCombatContext(combat, battleState, map) {
  * @param {Object} map - Map data
  * @returns {Object} New positions and combat triggers
  */
+
 function processMovementPhase(player1Movements, player2Movements, battleState, map) {
+    // Debug logging...
+    if (player1Movements.length > 0) {
+        console.log('  P1 movement[0]:');
+        console.log('    unitId:', player1Movements[0].unitId);
+        console.log('    target:', player1Movements[0].targetPosition);
+        console.log('    isMission:', player1Movements[0].missionAction);
+        console.log('    hasNewMission:', !!player1Movements[0].newMission);
+    }
     
-    // Execute all movements
+    // Execute all movements WITH mission storage
     const newPlayer1Positions = battleState.player1.unitPositions.map(unit => {
         const movement = player1Movements.find(m => m.unitId === unit.unitId);
-        console.log(`  Checking unit ${unit.unitId}: movement found = ${!!movement}`);
+        
         if (movement && movement.validation.valid) {
-            return {
+            console.log(`    ✅ Moving ${unit.unitId} to ${movement.finalPosition || movement.targetPosition}`);
+            
+            // Build updated unit
+            const updatedUnit = {
                 ...unit,
-                position: movement.targetPosition,
+                position: movement.finalPosition || movement.targetPosition,
                 movementRemaining: movement.validation.movementRemaining,
                 hasMoved: true
             };
+            
+            // Handle mission state
+            if (movement.newMission) {
+                // New mission created (partial movement)
+                updatedUnit.activeMission = movement.newMission;
+                console.log(`    📋 Mission created: ${movement.newMission.target}`);
+            } else if (movement.missionAction) {
+                // Continuing existing mission
+                if (movement.missionProgress.complete) {
+                    // Mission complete!
+                    updatedUnit.activeMission = {
+                        ...unit.activeMission,
+                        status: 'complete',
+                        completedTurn: battleState.currentTurn
+                    };
+                    console.log(`    ✅ Mission complete: ${unit.activeMission.target}`);
+                } else {
+                    // Mission continues
+                    updatedUnit.activeMission = {
+                        ...unit.activeMission,
+                        progress: {
+                            ...unit.activeMission.progress,
+                            currentPosition: updatedUnit.position,
+                            lastReportTurn: battleState.currentTurn
+                        }
+                    };
+                    console.log(`    🔄 Mission continuing: ${movement.missionProgress.remaining} tiles remaining`);
+                }
+            }
+            
+            return updatedUnit;
         }
+        
         return unit;
     });
     
     const newPlayer2Positions = battleState.player2.unitPositions.map(unit => {
         const movement = player2Movements.find(m => m.unitId === unit.unitId);
+        
         if (movement && movement.validation.valid) {
-            return {
+            const updatedUnit = {
                 ...unit,
-                position: movement.targetPosition,
+                position: movement.finalPosition || movement.targetPosition,
                 movementRemaining: movement.validation.movementRemaining,
                 hasMoved: true
             };
+            
+            // Same mission handling for P2
+            if (movement.newMission) {
+                updatedUnit.activeMission = movement.newMission;
+            } else if (movement.missionAction && movement.missionProgress) {
+                if (movement.missionProgress.complete) {
+                    updatedUnit.activeMission = {
+                        ...unit.activeMission,
+                        status: 'complete',
+                        completedTurn: battleState.currentTurn
+                    };
+                } else {
+                    updatedUnit.activeMission = {
+                        ...unit.activeMission,
+                        progress: {
+                            ...unit.activeMission.progress,
+                            currentPosition: updatedUnit.position,
+                            lastReportTurn: battleState.currentTurn
+                        }
+                    };
+                }
+            }
+            
+            return updatedUnit;
         }
+        
         return unit;
     });
     
-    // Detect combat triggers with new positions
+    // Rest of function (combat detection, etc.) stays the same...
     const combatTriggers = detectCombatTriggers(newPlayer1Positions, newPlayer2Positions);
     
-    // Build combat contexts
     const combatContexts = combatTriggers.map(combat => 
         buildCombatContext(combat, {
             ...battleState,
@@ -263,8 +332,8 @@ function processMovementPhase(player1Movements, player2Movements, battleState, m
         },
         combatEngagements: combatContexts,
         movementSummary: {
-            player1Moves: player1Movements.filter(m => m.validation.valid).length,
-            player2Moves: player2Movements.filter(m => m.validation.valid).length
+            player1Moves: player1Movements.filter(m => m.validation?.valid).length,
+            player2Moves: player2Movements.filter(m => m.validation?.valid).length
         }
     };
 }

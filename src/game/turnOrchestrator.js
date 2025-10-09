@@ -42,14 +42,38 @@ async function processTurn(battle, player1Order, player2Order, map) {
     try {
         // PHASE 1: Interpret orders (AI parses natural language)
         console.log('\n📝 Phase 1: Interpreting orders...');
+        // Add debug in turnOrchestrator.js after interpretOrders calls (line ~46-47)
+
         const p1Interpretation = await interpretOrders(player1Order, battleState, 'player1', map);
         const p2Interpretation = await interpretOrders(player2Order, battleState, 'player2', map);
         
+        // DEBUG: Check what interpretOrders returned
+        console.log('DEBUG P1 Interpretation:');
+        console.log('  validatedActions:', p1Interpretation.validatedActions.length);
+        console.log('  errors:', p1Interpretation.errors.length);
+        if (p1Interpretation.validatedActions.length > 0) {
+            console.log('  First action:', p1Interpretation.validatedActions[0]);
+        }
+        if (p1Interpretation.errors.length > 0) {
+            console.log('  Errors:', p1Interpretation.errors);
+        }
+        
+        console.log('DEBUG P2 Interpretation:');
+        console.log('  validatedActions:', p2Interpretation.validatedActions.length);
+        if (p2Interpretation.validatedActions.length > 0) {
+            console.log('  First action:', p2Interpretation.validatedActions[0]);
+        }
+        
         // PHASE 2: Execute movements
         console.log('\n🚶 Phase 2: Processing movement...');
+        const p1Moves = p1Interpretation.validatedActions.filter(a => a.type === 'move');
+        const p2Moves = p2Interpretation.validatedActions.filter(a => a.type === 'move');
+        console.log('  Filtered P1 moves:', p1Moves.length);
+        console.log('  Filtered P2 moves:', p2Moves.length);
+        
         const movementResults = processMovementPhase(
-            p1Interpretation.validatedActions.filter(a => a.type === 'move'),
-            p2Interpretation.validatedActions.filter(a => a.type === 'move'),
+            p1Moves,
+            p2Moves,
             battleState,
             map
         );
