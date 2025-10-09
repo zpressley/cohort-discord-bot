@@ -3,7 +3,7 @@
 
 const { validateMovement } = require('../game/movementSystem');
 const { parseCoord } = require('../game/maps/mapUtils');
-const { calculateDistance } = require('./maps/mapUtils');
+const { calculateDistance } = require('../game/maps/mapUtils');
 
 /**
  * Interpret player orders using AI and validate against game rules
