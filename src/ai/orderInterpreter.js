@@ -13,7 +13,6 @@ const { calculateDistance } = require('../game/maps/mapUtils');
  * @param {Object} map - Map data for validation
  * @returns {Object} Validated actions to execute
  */
-// Update interpretOrders in orderInterpreter.js to handle missions
 
 async function interpretOrders(orderText, battleState, playerSide, map) {
     const playerUnits = battleState[playerSide].unitPositions || [];
@@ -30,68 +29,8 @@ async function interpretOrders(orderText, battleState, playerSide, map) {
             // Execute mission turn
             const missionAction = executeMissionTurn(unit, map, getTerrainType);
             
-            // Check for interruptions
-            const interruption = checkMissionInterruptions(unit, missionAction, battleState, playerSide);
-            
-            if (interruption.interrupted) {
-                if (interruption.contingencyCheck.hasContingency) {
-                    // Execute contingency plan
-                    const contingencyAction = executeContingency(
-                        unit,
-                        interruption.contingencyCheck,
-                        battleState,
-                        map
-                    );
-                    
-                    missionReports.push(
-                        `📋 ${unit.unitId}: ${interruption.contingencyCheck.message}`
-                    );
-                    
-                    // Convert contingency to movement action if needed
-                    if (contingencyAction.type === 'move') {
-                        const validation = validateMovement(unit, contingencyAction.targetPosition, map);
-                        if (validation.valid) {
-                            validatedActions.push({
-                                type: 'move',
-                                unitId: unit.unitId,
-                                targetPosition: validation.finalPosition || contingencyAction.targetPosition,
-                                validation: validation,
-                                contingencyAction: true
-                            });
-                        }
-                    }
-                    
-                } else if (interruption.reason === 'enemy_contact') {
-                    // No contingency - ask commander
-                    errors.push({
-                        unit: unit.unitId,
-                        type: 'mission_interrupted',
-                        question: interruption.officerQuestion.question,
-                        situation: interruption.officerQuestion.situation,
-                        requiresResponse: true
-                    });
-                    
-                    // Unit holds position while waiting for orders
-                    missionReports.push(
-                        `⚠️ ${unit.unitId}: ${interruption.officerQuestion.question}`
-                    );
-                    
-                } else if (interruption.requiresNewOrders) {
-                    // Path blocked - report and wait
-                    errors.push({
-                        unit: unit.unitId,
-                        type: 'mission_blocked',
-                        message: interruption.officerReport
-                    });
-                    
-                    missionReports.push(`🚫 ${unit.unitId}: ${interruption.officerReport}`);
-                }
-                
-                continue; // Don't execute normal mission movement
-            }
-            
-            // No interruption - continue mission normally
             if (missionAction.type === 'move') {
+                // Validate the mission movement
                 const validation = validateMovement(unit, missionAction.targetPosition, map);
                 
                 if (validation.valid) {
@@ -104,12 +43,14 @@ async function interpretOrders(orderText, battleState, playerSide, map) {
                         missionProgress: missionAction.missionProgress
                     });
                     
-                    if (missionAction.missionProgress.complete) {
-                        missionReports.push(`✅ ${unit.unitId}: ${missionAction.officerReport}`);
-                    } else {
-                        missionReports.push(`🔄 ${unit.unitId}: ${missionAction.officerReport}`);
-                    }
+                    missionReports.push(missionAction.officerReport);
                 }
+            } else if (missionAction.type === 'mission_blocked') {
+                errors.push({
+                    unit: unit.unitId,
+                    error: missionAction.officerReport,
+                    reason: 'mission_blocked'
+                });
             }
         }
     }

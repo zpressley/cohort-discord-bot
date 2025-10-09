@@ -184,7 +184,7 @@ async function processTurnResolution(battle, battleTurn, client) {
         if (turnResult.victory.achieved) {
             await endBattle(battle, turnResult.victory, client);
         } else {
-            await sendNextTurnBriefings(battle, turnResult.newBattleState, client);
+            await sendNextTurnBriefings(battle, turnResult.newBattleState, turnResult, client);
         }
         
     } catch (error) {
@@ -266,27 +266,35 @@ async function sendTurnResults(battle, battleTurn, narrative, turnResults, clien
 }
 
 
-// Replace sendNextTurnBriefings in dmHandler.js
-// This version provides RICH tactical data, not generic "send orders" text
+// COMPLETE sendNextTurnBriefings for dmHandler.js
+// Replace entire function (find it around line 262)
 
-async function sendNextTurnBriefings(battle, battleState, client) {
+async function sendNextTurnBriefings(battle, battleState, turnResult, client) {
     try {
-        const { generateASCIIMap } = require('../game/maps/mapUtils');
+        const { generateASCIIMap, calculateDistance } = require('../game/maps/mapUtils');
         const { RIVER_CROSSING_MAP } = require('../game/maps/riverCrossing');
-        const { calculateVisibility } = require('../game/fogOfWar');
-        const { generateIntelligenceReport } = require('../game/fogOfWar');
+        const { calculateVisibility, generateIntelligenceReport } = require('../game/fogOfWar');
         
-        const scenarioMaps = {
-            'river_crossing': RIVER_CROSSING_MAP,
-            'bridge_control': RIVER_CROSSING_MAP,
-            'forest_ambush': RIVER_CROSSING_MAP,
-            'hill_fort_assault': RIVER_CROSSING_MAP,
-            'desert_oasis': RIVER_CROSSING_MAP
-        };
+        const map = RIVER_CROSSING_MAP;
         
-        const map = scenarioMaps[battle.scenario] || RIVER_CROSSING_MAP;
+        // Helper functions
+        function generateOfficerQuestions(errors) {
+            if (!errors || errors.length === 0) return '';
+            const questions = errors.filter(e => e.type === 'mission_interrupted_enemy' || e.requiresResponse);
+            if (questions.length === 0) return '';
+            
+            return `\n**⚠️ OFFICERS REQUEST GUIDANCE:**\n` +
+                questions.map(q => 
+                    `❓ Unit at ${q.position}: ${q.question}\n` +
+                    `   ${q.situation ? `Enemy ~${q.situation.estimatedStrength} vs Our ${q.situation.ourStrength}` : ''}`
+                ).join('\n') + '\n';
+        }
         
-        // Send to Player 1
+        function generateMissionReports(reports) {
+            return reports && reports.length > 0 ? `\n**📋 MISSIONS:**\n${reports.join('\n')}\n` : '';
+        }
+        
+        // Player 1 Briefing
         if (!battle.player1Id.startsWith('TEST_')) {
             const p1Visibility = calculateVisibility(
                 battleState.player1.unitPositions || [],
@@ -294,38 +302,35 @@ async function sendNextTurnBriefings(battle, battleState, client) {
                 map.terrain
             );
             
-            const p1MapData = {
+            const p1Map = generateASCIIMap({
                 terrain: map.terrain,
                 player1Units: battleState.player1.unitPositions || [],
-                player2Units: (p1Visibility.visibleEnemyPositions || []).map(pos => ({
-                    position: typeof pos === 'string' ? pos : pos.position
-                }))
-            };
+                player2Units: (p1Visibility.visibleEnemyPositions || []).map(pos => ({ position: pos }))
+            });
             
-            const p1Map = generateASCIIMap(p1MapData);
             const intelReport = generateIntelligenceReport(p1Visibility, battleState.player1.culture);
             
-            // Build unit status report
             const unitStatus = (battleState.player1.unitPositions || []).map(u => {
-                const strength = u.currentStrength || 100;
-                const maxStrength = u.maxStrength || 100;
-                const percentage = Math.round((strength / maxStrength) * 100);
-                const statusIcon = percentage > 75 ? '🟢' : percentage > 50 ? '🟡' : percentage > 25 ? '🟠' : '🔴';
-                
-                return `${statusIcon} **${u.unitType || 'Unit'}** at ${u.position} - ${strength}/${maxStrength} (${percentage}%)`;
+                const pct = Math.round(((u.currentStrength || 100) / (u.maxStrength || 100)) * 100);
+                const icon = pct > 75 ? '🟢' : pct > 50 ? '🟡' : pct > 25 ? '🟠' : '🔴';
+                const mission = u.activeMission?.status === 'active' ? 
+                    ` → ${u.activeMission.target} (~${calculateDistance(u.position, u.activeMission.target)} tiles)` : '';
+                return `${icon} **${u.unitType || 'Unit'}** at ${u.position} - ${u.currentStrength}/${u.maxStrength} (${pct}%)${mission}`;
             }).join('\n');
             
-            const briefing = `🏺 **WAR COUNCIL - Turn ${battle.currentTurn}**\n\n` +
-                `**YOUR FORCES:**\n${unitStatus}\n\n` +
-                `**INTELLIGENCE REPORT:**\n${intelReport}\n\n` +
-                `**BATTLEFIELD MAP:**\n\`\`\`\n${p1Map}\n\`\`\`\n\n` +
-                `**AWAITING YOUR ORDERS, COMMANDER**`;
+            const questions = generateOfficerQuestions(turnResult.p1Interpretation?.errors);
+            const missions = generateMissionReports(turnResult.p1Interpretation?.missionReports);
             
-            const player1 = await client.users.fetch(battle.player1Id);
-            await player1.send(briefing);
+            const briefing = `🏺 **WAR COUNCIL - Turn ${battle.currentTurn}**\n\n` +
+                `**YOUR FORCES:**\n${unitStatus}\n${missions}${questions}` +
+                `\n**INTELLIGENCE:**\n${intelReport}\n\n` +
+                `**MAP:**\n\`\`\`\n${p1Map}\n\`\`\`\n\n` +
+                `**AWAITING ORDERS**`;
+            
+            await (await client.users.fetch(battle.player1Id)).send(briefing);
         }
         
-        // Send to Player 2
+        // Player 2 Briefing (same structure)
         if (battle.player2Id && !battle.player2Id.startsWith('TEST_')) {
             const p2Visibility = calculateVisibility(
                 battleState.player2.unitPositions || [],
@@ -333,34 +338,32 @@ async function sendNextTurnBriefings(battle, battleState, client) {
                 map.terrain
             );
             
-            const p2MapData = {
+            const p2Map = generateASCIIMap({
                 terrain: map.terrain,
-                player1Units: (p2Visibility.visibleEnemyPositions || []).map(pos => ({
-                    position: typeof pos === 'string' ? pos : pos.position
-                })),
+                player1Units: (p2Visibility.visibleEnemyPositions || []).map(pos => ({ position: pos })),
                 player2Units: battleState.player2.unitPositions || []
-            };
+            });
             
-            const p2Map = generateASCIIMap(p2MapData);
             const intelReport = generateIntelligenceReport(p2Visibility, battleState.player2.culture);
             
             const unitStatus = (battleState.player2.unitPositions || []).map(u => {
-                const strength = u.currentStrength || 100;
-                const maxStrength = u.maxStrength || 100;
-                const percentage = Math.round((strength / maxStrength) * 100);
-                const statusIcon = percentage > 75 ? '🟢' : percentage > 50 ? '🟡' : percentage > 25 ? '🟠' : '🔴';
-                
-                return `${statusIcon} **${u.unitType || 'Unit'}** at ${u.position} - ${strength}/${maxStrength} (${percentage}%)`;
+                const pct = Math.round(((u.currentStrength || 100) / (u.maxStrength || 100)) * 100);
+                const icon = pct > 75 ? '🟢' : pct > 50 ? '🟡' : pct > 25 ? '🟠' : '🔴';
+                const mission = u.activeMission?.status === 'active' ? 
+                    ` → ${u.activeMission.target} (~${calculateDistance(u.position, u.activeMission.target)} tiles)` : '';
+                return `${icon} **${u.unitType || 'Unit'}** at ${u.position} - ${u.currentStrength}/${u.maxStrength} (${pct}%)${mission}`;
             }).join('\n');
             
-            const briefing = `🏺 **WAR COUNCIL - Turn ${battle.currentTurn}**\n\n` +
-                `**YOUR FORCES:**\n${unitStatus}\n\n` +
-                `**INTELLIGENCE REPORT:**\n${intelReport}\n\n` +
-                `**BATTLEFIELD MAP:**\n\`\`\`\n${p2Map}\n\`\`\`\n\n` +
-                `**AWAITING YOUR ORDERS, COMMANDER**`;
+            const questions = generateOfficerQuestions(turnResult.p2Interpretation?.errors);
+            const missions = generateMissionReports(turnResult.p2Interpretation?.missionReports);
             
-            const player2 = await client.users.fetch(battle.player2Id);
-            await player2.send(briefing);
+            const briefing = `🏺 **WAR COUNCIL - Turn ${battle.currentTurn}**\n\n` +
+                `**YOUR FORCES:**\n${unitStatus}\n${missions}${questions}` +
+                `\n**INTELLIGENCE:**\n${intelReport}\n\n` +
+                `**MAP:**\n\`\`\`\n${p2Map}\n\`\`\`\n\n` +
+                `**AWAITING ORDERS**`;
+            
+            await (await client.users.fetch(battle.player2Id)).send(briefing);
         }
         
     } catch (error) {
@@ -368,16 +371,13 @@ async function sendNextTurnBriefings(battle, battleState, client) {
         console.error('Full error:', error.stack);
         
         // Fallback
-        const simpleBriefing = `⚡ Turn ${battle.currentTurn} - Orders required`;
-        
+        const simple = `⚡ Turn ${battle.currentTurn} - Orders required`;
         try {
             if (!battle.player1Id.startsWith('TEST_')) {
-                const player1 = await client.users.fetch(battle.player1Id);
-                await player1.send(simpleBriefing);
+                await (await client.users.fetch(battle.player1Id)).send(simple);
             }
             if (battle.player2Id && !battle.player2Id.startsWith('TEST_')) {
-                const player2 = await client.users.fetch(battle.player2Id);
-                await player2.send(simpleBriefing);
+                await (await client.users.fetch(battle.player2Id)).send(simple);
             }
         } catch (fallbackError) {
             console.error('Fallback failed:', fallbackError);
@@ -543,6 +543,42 @@ function generateMissionReport(units) {
         : '';
 }
 
+/**
+ * Generate officer questions section for briefing
+ */
+function generateOfficerQuestions(interpretation) {
+    if (!interpretation.errors || interpretation.errors.length === 0) {
+        return '';
+    }
+    
+    const questions = interpretation.errors.filter(e => 
+        e.type === 'mission_interrupted_enemy' || e.requiresResponse
+    );
+    
+    if (questions.length === 0) return '';
+    
+    const questionText = questions.map(q => {
+        const strengthAssessment = q.situation ? 
+            `\n   Enemy strength: ~${q.situation.estimatedStrength} vs our ${q.situation.ourStrength}` : '';
+        
+        return `❓ **${q.unit} at ${q.position}**\n` +
+               `   ${q.question}${strengthAssessment}\n` +
+               `   *Awaiting your orders...*`;
+    }).join('\n\n');
+    
+    return `\n**⚠️ OFFICERS REQUEST GUIDANCE:**\n${questionText}\n`;
+}
+
+/**
+ * Generate mission reports section
+ */
+function generateMissionReports(interpretation) {
+    if (!interpretation.missionReports || interpretation.missionReports.length === 0) {
+        return '';
+    }
+    
+    return `\n**📋 MISSION STATUS:**\n${interpretation.missionReports.join('\n')}\n`;
+}
 
 module.exports = {
     handleDMCommand,
