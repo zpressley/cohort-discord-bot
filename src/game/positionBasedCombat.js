@@ -247,24 +247,20 @@ function processMovementPhase(player1Movements, player2Movements, battleState, m
                 console.log(`    📋 Mission created: ${movement.newMission.target}`);
             } else if (movement.missionAction) {
                 // Continuing existing mission
-                if (movement.missionProgress.complete) {
+                if (movement.missionProgress && movement.missionProgress.complete) {
                     // Mission complete!
-                    updatedUnit.activeMission = {
-                        ...unit.activeMission,
-                        status: 'complete',
-                        completedTurn: battleState.currentTurn
-                    };
-                    console.log(`    ✅ Mission complete: ${unit.activeMission.target}`);
-                } else {
-                    // Mission continues
-                    updatedUnit.activeMission = {
+                    updatedUnit.activeMission = null; // Clear completed mission
+                    console.log(`    ✅ Mission complete: reached ${movement.missionProgress.target}`);
+                } else if (movement.missionProgress && !movement.missionProgress.complete) {
+                    // Mission continues - preserve existing mission with updated progress
+                    updatedUnit.activeMission = unit.activeMission ? {
                         ...unit.activeMission,
                         progress: {
                             ...unit.activeMission.progress,
                             currentPosition: updatedUnit.position,
                             lastReportTurn: battleState.currentTurn
                         }
-                    };
+                    } : null;
                     console.log(`    🔄 Mission continuing: ${movement.missionProgress.remaining} tiles remaining`);
                 }
             }
@@ -289,22 +285,18 @@ function processMovementPhase(player1Movements, player2Movements, battleState, m
             // Same mission handling for P2
             if (movement.newMission) {
                 updatedUnit.activeMission = movement.newMission;
-            } else if (movement.missionAction && movement.missionProgress) {
-                if (movement.missionProgress.complete) {
-                    updatedUnit.activeMission = {
-                        ...unit.activeMission,
-                        status: 'complete',
-                        completedTurn: battleState.currentTurn
-                    };
-                } else {
-                    updatedUnit.activeMission = {
+            } else if (movement.missionAction) {
+                if (movement.missionProgress && movement.missionProgress.complete) {
+                    updatedUnit.activeMission = null; // Clear completed mission
+                } else if (movement.missionProgress && !movement.missionProgress.complete) {
+                    updatedUnit.activeMission = unit.activeMission ? {
                         ...unit.activeMission,
                         progress: {
                             ...unit.activeMission.progress,
                             currentPosition: updatedUnit.position,
                             lastReportTurn: battleState.currentTurn
                         }
-                    };
+                    } : null;
                 }
             }
             
