@@ -241,54 +241,53 @@ function processMovementPhase(player1Movements, player2Movements, battleState, m
     
     // Execute all movements
     const newPlayer1Positions = battleState.player1.unitPositions.map(unit => {
-        const movement = player1Movements.find(m => {
-            const matches = m.unitId === unit.unitId;
-            console.log(`    Comparing P1: "${m.unitId}" === "${unit.unitId}" ? ${matches}`);
-            return matches;
-        });
-        console.log(`  P1 unit ${unit.unitId}: movement found = ${!!movement}`);
+        const movement = player1Movements.find(m => m.unitId === unit.unitId);
+        console.log(`  Checking unit ${unit.unitId}: movement found = ${!!movement}`);
         
         if (movement && movement.validation.valid) {
-            console.log(`    ✅ Moving ${unit.unitId} to ${movement.validation.finalPosition || movement.targetPosition}`);
-            return {
+            const updatedUnit = {
                 ...unit,
-                position: movement.validation.finalPosition || movement.targetPosition,
+                position: movement.finalPosition || movement.targetPosition,
                 movementRemaining: movement.validation.movementRemaining,
                 hasMoved: true
             };
-        // Handle mission storage
-        if (movement.newMission) {
-            updatedUnit.activeMission = movement.newMission;
-            console.log(`    📋 New mission assigned: ${movement.newMission.target}`);
-        } else if (unit.activeMission) {
-            // Keep existing mission if no new one
-            updatedUnit.activeMission = unit.activeMission;
-        }
-        
-        return updatedUnit;
+            
+            // Handle mission storage
+            if (movement.newMission) {
+                updatedUnit.activeMission = movement.newMission;
+                console.log(`    📋 New mission assigned: ${movement.newMission.target}`);
+            } else if (unit.activeMission) {
+                // Keep existing mission if no new one
+                updatedUnit.activeMission = unit.activeMission;
+            }
+            
+            console.log(`    ✅ Moving ${unit.unitId} to ${updatedUnit.position}`);
+            return updatedUnit;
         }
         return unit;
     });
     
     const newPlayer2Positions = battleState.player2.unitPositions.map(unit => {
         const movement = player2Movements.find(m => m.unitId === unit.unitId);
+    
         if (movement && movement.validation.valid) {
-            return {
+            const updatedUnit = {
                 ...unit,
-                position: movement.targetPosition,
+                position: movement.finalPosition || movement.targetPosition,
                 movementRemaining: movement.validation.movementRemaining,
                 hasMoved: true
             };
-        // Handle mission storage
-        if (movement.newMission) {
-            updatedUnit.activeMission = movement.newMission;
-            console.log(`    📋 New mission assigned: ${movement.newMission.target}`);
-        } else if (unit.activeMission) {
-            // Keep existing mission if no new one
-            updatedUnit.activeMission = unit.activeMission;
-        }
-        
-        return updatedUnit;
+            
+            // Handle mission storage
+            if (movement.newMission) {
+                updatedUnit.activeMission = movement.newMission;
+                console.log(`    📋 New mission assigned: ${movement.newMission.target}`);
+            } else if (unit.activeMission) {
+                // Keep existing mission if no new one
+                updatedUnit.activeMission = unit.activeMission;
+            }
+            
+            return updatedUnit;
         }
         return unit;
     });

@@ -1,11 +1,12 @@
-// src/game/briefingGenerator.js
-// Generate officer briefings with intelligence reports
+// src/game/briefingGenerator.js - FIXED VERSION
+// Remove map from embed to avoid 1024 character limit
 
 const { EmbedBuilder } = require('discord.js');
-const { renderAsciiMap } = require('./maps/mapUtils');
+const { generateASCIIMap } = require('./maps/mapUtils');
+const { calculateDistance } = require('./maps/mapUtils');
 
 /**
- * Generate turn briefing embed with officer commentary
+ * Generate turn briefing embed WITHOUT map (send map separately)
  */
 async function generateBriefingEmbed(battleState, playerSide, commander, eliteUnit, turnNumber) {
     const playerData = battleState[playerSide];
@@ -24,13 +25,6 @@ async function generateBriefingEmbed(battleState, playerSide, commander, eliteUn
         officerName
     );
     
-    // Generate ASCII map
-    const mapView = renderAsciiMap(
-        battleState.map || require('./maps/riverCrossing').RIVER_CROSSING_MAP,
-        playerData.unitPositions,
-        playerData.visibleEnemyPositions || []
-    );
-    
     const embed = new EmbedBuilder()
         .setColor(playerSide === 'player1' ? 0x8B0000 : 0x00008B)
         .setTitle(`🎖️ WAR COUNCIL - Turn ${turnNumber}`)
@@ -45,16 +39,26 @@ async function generateBriefingEmbed(battleState, playerSide, commander, eliteUn
                 name: `🎖️ ${officerName} reports:`,
                 value: officerComment,
                 inline: false
-            },
-            {
-                name: '🗺️ MAP:',
-                value: `\`\`\`\n${mapView}\n\`\`\``,
-                inline: false
             }
         )
         .setFooter({ text: 'Send your orders to continue the battle' });
     
     return embed;
+}
+
+/**
+ * Generate ASCII map separately (as code block message)
+ */
+function generateMapMessage(battleState, playerSide) {
+    const playerData = battleState[playerSide];
+    
+    const mapView = generateASCIIMap({
+        terrain: battleState.map?.terrain || require('./maps/riverCrossing').RIVER_CROSSING_MAP.terrain,
+        player1Units: playerSide === 'player1' ? playerData.unitPositions : [],
+        player2Units: playerSide === 'player1' ? (playerData.visibleEnemyPositions || []) : playerData.unitPositions
+    });
+    
+    return `**MAP:**\n\`\`\`\n${mapView}\n\`\`\``;
 }
 
 /**
@@ -64,16 +68,16 @@ function generateIntelligenceReport(playerData, battleState) {
     const visibleEnemies = playerData.visibleEnemyPositions || [];
     
     if (visibleEnemies.length === 0) {
-        return '👁️ No enemy contact\n' +
+        return '👁️ **No enemy contact**\n' +
                'No enemy forces detected. They may be beyond visual range or concealed.';
     }
     
     const reports = visibleEnemies.map(enemy => {
-        const distance = Math.abs(
-            parseInt(enemy.position[0]) - parseInt(playerData.unitPositions[0].position[0])
-        );
+        const friendlyPos = playerData.unitPositions[0]?.position;
+        const distance = friendlyPos ? calculateDistance(friendlyPos, enemy.position) : '?';
         
         return `👁️ **Enemy Spotted at ${enemy.position}**\n` +
+               `   Distance: ${distance} tiles\n` +
                `   Estimated: ~${enemy.estimatedStrength || 100} troops\n` +
                `   Confidence: ${enemy.confidence || 'MEDIUM'}`;
     });
@@ -120,13 +124,18 @@ function formatUnitList(units) {
         const health = Math.round((unit.currentStrength / (unit.maxStrength || 100)) * 100);
         const healthBar = '🟩'.repeat(Math.floor(health / 20)) + '⬜'.repeat(5 - Math.floor(health / 20));
         
-        return `🔵 **Unit at ${unit.position}** - ${unit.currentStrength}/${unit.maxStrength || 100} (${health}%)\n` +
+        // Show active mission if exists
+        const mission = unit.activeMission?.status === 'active' ? 
+            ` → Mission: ${unit.activeMission.target}` : '';
+        
+        return `🔵 **Unit at ${unit.position}** - ${unit.currentStrength}/${unit.maxStrength || 100} (${health}%)${mission}\n` +
                `   ${healthBar}`;
     }).join('\n');
 }
 
 module.exports = {
     generateBriefingEmbed,
+    generateMapMessage,
     generateIntelligenceReport,
     generateOfficerComment
 };
