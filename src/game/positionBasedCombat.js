@@ -256,6 +256,16 @@ function processMovementPhase(player1Movements, player2Movements, battleState, m
                 movementRemaining: movement.validation.movementRemaining,
                 hasMoved: true
             };
+        // Handle mission storage
+        if (movement.newMission) {
+            updatedUnit.activeMission = movement.newMission;
+            console.log(`    📋 New mission assigned: ${movement.newMission.target}`);
+        } else if (unit.activeMission) {
+            // Keep existing mission if no new one
+            updatedUnit.activeMission = unit.activeMission;
+        }
+        
+        return updatedUnit;
         }
         return unit;
     });
@@ -269,6 +279,16 @@ function processMovementPhase(player1Movements, player2Movements, battleState, m
                 movementRemaining: movement.validation.movementRemaining,
                 hasMoved: true
             };
+        // Handle mission storage
+        if (movement.newMission) {
+            updatedUnit.activeMission = movement.newMission;
+            console.log(`    📋 New mission assigned: ${movement.newMission.target}`);
+        } else if (unit.activeMission) {
+            // Keep existing mission if no new one
+            updatedUnit.activeMission = unit.activeMission;
+        }
+        
+        return updatedUnit;
         }
         return unit;
     });
