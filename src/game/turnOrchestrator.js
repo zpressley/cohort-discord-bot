@@ -18,6 +18,11 @@ const { resolveCombat } = require('./battleEngine');
 async function processTurn(battle, player1Order, player2Order, map) {
     const battleState = battle.battleState;
     
+    // DEBUG: Check if missions loaded from database
+    console.log('DEBUG Loaded from DB:');
+    console.log('  P1 unit 0 mission:', battleState.player1?.unitPositions?.[0]?.activeMission);
+    console.log('  P2 unit 0 mission:', battleState.player2?.unitPositions?.[0]?.activeMission);
+    
     // Reset movement for all units at turn start
     if (battleState.player1?.unitPositions) {
         battleState.player1.unitPositions.forEach(unit => {
@@ -168,6 +173,11 @@ async function processTurn(battle, player1Order, player2Order, map) {
                 visibleEnemyPositions: p2Visibility.visibleEnemyPositions
             }
         };
+        
+         // DEBUG: Check if missions are being saved  ← ADD HERE
+        console.log('DEBUG Missions before save:');
+        console.log('  P1 unit 0 mission:', updatedPositions.player1[0]?.activeMission);
+        console.log('  P2 unit 0 mission:', updatedPositions.player2[0]?.activeMission);
 
         return {
             success: true,
