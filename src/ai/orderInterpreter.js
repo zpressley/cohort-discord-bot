@@ -29,8 +29,68 @@ async function interpretOrders(orderText, battleState, playerSide, map) {
             // Execute mission turn
             const missionAction = executeMissionTurn(unit, map, getTerrainType);
             
+            // Check for interruptions
+            const interruption = checkMissionInterruptions(unit, missionAction, battleState, playerSide);
+            
+            if (interruption.interrupted) {
+                if (interruption.contingencyCheck.hasContingency) {
+                    // Execute contingency plan
+                    const contingencyAction = executeContingency(
+                        unit,
+                        interruption.contingencyCheck,
+                        battleState,
+                        map
+                    );
+                    
+                    missionReports.push(
+                        `📋 ${unit.unitId}: ${interruption.contingencyCheck.message}`
+                    );
+                    
+                    // Convert contingency to movement action if needed
+                    if (contingencyAction.type === 'move') {
+                        const validation = validateMovement(unit, contingencyAction.targetPosition, map);
+                        if (validation.valid) {
+                            validatedActions.push({
+                                type: 'move',
+                                unitId: unit.unitId,
+                                targetPosition: validation.finalPosition || contingencyAction.targetPosition,
+                                validation: validation,
+                                contingencyAction: true
+                            });
+                        }
+                    }
+                    
+                } else if (interruption.reason === 'enemy_contact') {
+                    // No contingency - ask commander
+                    errors.push({
+                        unit: unit.unitId,
+                        type: 'mission_interrupted',
+                        question: interruption.officerQuestion.question,
+                        situation: interruption.officerQuestion.situation,
+                        requiresResponse: true
+                    });
+                    
+                    // Unit holds position while waiting for orders
+                    missionReports.push(
+                        `⚠️ ${unit.unitId}: ${interruption.officerQuestion.question}`
+                    );
+                    
+                } else if (interruption.requiresNewOrders) {
+                    // Path blocked - report and wait
+                    errors.push({
+                        unit: unit.unitId,
+                        type: 'mission_blocked',
+                        message: interruption.officerReport
+                    });
+                    
+                    missionReports.push(`🚫 ${unit.unitId}: ${interruption.officerReport}`);
+                }
+                
+                continue; // Don't execute normal mission movement
+            }
+            
+            // No interruption - continue mission normally
             if (missionAction.type === 'move') {
-                // Validate the mission movement
                 const validation = validateMovement(unit, missionAction.targetPosition, map);
                 
                 if (validation.valid) {
@@ -43,14 +103,12 @@ async function interpretOrders(orderText, battleState, playerSide, map) {
                         missionProgress: missionAction.missionProgress
                     });
                     
-                    missionReports.push(missionAction.officerReport);
+                    if (missionAction.missionProgress.complete) {
+                        missionReports.push(`✅ ${unit.unitId}: ${missionAction.officerReport}`);
+                    } else {
+                        missionReports.push(`🔄 ${unit.unitId}: ${missionAction.officerReport}`);
+                    }
                 }
-            } else if (missionAction.type === 'mission_blocked') {
-                errors.push({
-                    unit: unit.unitId,
-                    error: missionAction.officerReport,
-                    reason: 'mission_blocked'
-                });
             }
         }
     }
@@ -362,9 +420,159 @@ function isQuestion(text) {
     return false;
 }
 
+/**
+ * Check for mission interruptions (enemy contact, blocked paths)
+ * Called during mission execution in interpretOrders
+ */
+function checkMissionInterruptions(unit, missionAction, battleState, playerSide) {
+    const opponentSide = playerSide === 'player1' ? 'player2' : 'player1';
+    const enemyUnits = battleState[opponentSide].unitPositions || [];
+    
+    // Check for enemy contact along path
+    const enemiesNearPath = enemyUnits.filter(enemy => {
+        const distanceToUnit = calculateDistance(unit.position, enemy.position);
+        return distanceToUnit <= 3; // Within detection range
+    });
+    
+    if (enemiesNearPath.length > 0) {
+        return {
+            interrupted: true,
+            reason: 'enemy_contact',
+            enemyPositions: enemiesNearPath.map(e => e.position),
+            contingencyCheck: checkContingencies(unit.activeMission, 'enemy_contact'),
+            officerQuestion: generateEnemyContactQuestion(unit, enemiesNearPath, unit.activeMission.target)
+        };
+    }
+    
+    // Check if path is blocked
+    if (missionAction.type === 'mission_blocked') {
+        return {
+            interrupted: true,
+            reason: 'path_blocked',
+            blockageReason: missionAction.reason,
+            officerReport: missionAction.officerReport,
+            requiresNewOrders: true
+        };
+    }
+    
+    return { interrupted: false };
+}
+
+/**
+ * Check if mission has contingency for this situation
+ */
+function checkContingencies(mission, situationType) {
+    if (!mission.contingencies || mission.contingencies.length === 0) {
+        return { hasContingency: false };
+    }
+    
+    // Check for matching contingency
+    const contingency = mission.contingencies.find(c => 
+        c.trigger === situationType || c.trigger === 'any_enemy'
+    );
+    
+    if (contingency) {
+        return {
+            hasContingency: true,
+            action: contingency.action,
+            message: `Executing contingency: ${contingency.action}`
+        };
+    }
+    
+    return { hasContingency: false };
+}
+
+/**
+ * Generate officer question for enemy contact
+ */
+function generateEnemyContactQuestion(unit, enemies, missionTarget) {
+    const enemyCount = enemies.length;
+    const enemyStrength = enemies.reduce((sum, e) => sum + (e.currentStrength || 100), 0);
+    const ourStrength = unit.currentStrength || 100;
+    const strengthRatio = enemyStrength / ourStrength;
+    
+    let tacticalAssessment = '';
+    if (strengthRatio > 2) {
+        tacticalAssessment = 'significantly outnumber us';
+    } else if (strengthRatio > 1.3) {
+        tacticalAssessment = 'have numerical advantage';
+    } else if (strengthRatio < 0.7) {
+        tacticalAssessment = 'appear weaker than us';
+    } else {
+        tacticalAssessment = 'seem evenly matched';
+    }
+    
+    return {
+        question: `Commander, enemy forces detected near ${missionTarget}. ` +
+                 `Spotted ${enemyCount} unit${enemyCount > 1 ? 's' : ''} - they ${tacticalAssessment}. ` +
+                 `Continue to ${missionTarget} or await new orders?`,
+        situation: {
+            enemyCount,
+            estimatedStrength: enemyStrength,
+            ourStrength,
+            recommendedAction: strengthRatio > 1.5 ? 'withdraw' : strengthRatio < 0.8 ? 'engage' : 'request_orders'
+        }
+    };
+}
+
+/**
+ * Process contingency action
+ */
+function executeContingency(unit, contingency, battleState, map) {
+    const actions = {
+        'retreat': () => {
+            // Find safe position toward commander
+            const commanderPos = findCommanderPosition(battleState, unit.side);
+            return {
+                type: 'move',
+                targetPosition: commanderPos,
+                reasoning: 'Contingency: Retreating from enemy contact'
+            };
+        },
+        
+        'report_and_hold': () => {
+            return {
+                type: 'hold',
+                message: 'Contingency: Holding position, sending runner to report enemy contact',
+                messengerSent: true
+            };
+        },
+        
+        'engage': () => {
+            return {
+                type: 'attack',
+                reasoning: 'Contingency: Engaging enemy as ordered'
+            };
+        },
+        
+        'bypass': () => {
+            // Try to find alternate route
+            return {
+                type: 'find_alternate_route',
+                reasoning: 'Contingency: Seeking alternate path to avoid enemy'
+            };
+        }
+    };
+    
+    const handler = actions[contingency.action];
+    return handler ? handler() : { type: 'request_orders', reason: 'unknown_contingency' };
+}
+
+/**
+ * Find commander position (placeholder - will use actual commander tracking)
+ */
+function findCommanderPosition(battleState, side) {
+    // For now, assume commander with elite unit in deployment zone
+    // Will be replaced with actual commander tracking in CMD-001
+    const units = battleState[side].unitPositions || [];
+    return units[0]?.position || 'A1';
+}
+
 module.exports = {
     interpretOrders,
     buildOrderInterpretationPrompt,
     isQuestion,
-    generateDefaultComment
+    generateDefaultComment,
+    checkMissionInterruptions,  // New
+    executeContingency  // New
 };
