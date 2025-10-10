@@ -134,10 +134,28 @@ async function interpretOrders(orderText, battleState, playerSide, map) {
             const validation = validateMovement(unit, action.targetPosition, map);
             
             if (validation.valid) {
+                // Create mission if partial movement (destination not reached)
+                let newMission = null;
+                if (validation.partialMovement && validation.originalTarget) {
+                    newMission = {
+                        type: 'move_to_destination',
+                        target: validation.originalTarget,
+                        startTurn: battleState.currentTurn,
+                        status: 'active',
+                        contingencies: [],
+                        progress: { 
+                            startPosition: unit.position, 
+                            lastReportTurn: battleState.currentTurn 
+                        }
+                    };
+                }
+                
                 validatedActions.push({
                     ...action,
                     validation,
-                    unitId: unit.unitId
+                    unitId: unit.unitId,
+                    newMission: newMission,
+                    finalPosition: validation.finalPosition || action.targetPosition
                 });
             } else {
                 errors.push({

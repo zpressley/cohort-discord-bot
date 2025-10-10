@@ -326,26 +326,39 @@ async function sendNextTurnBriefings(battle, battleState, turnResult, client) {
                 // Officer comment - enemy spotted!
                 const culture = p1Commander?.culture || 'default';
                 const nearestEnemy = visibleEnemies[0];
-                console.log('DEBUG nearestEnemy:', nearestEnemy, 'type:', typeof nearestEnemy);
                 const friendlyPos = p1Data.unitPositions[0]?.position;
                 const distance = friendlyPos ? calculateDistance(friendlyPos, nearestEnemy) : '?';
                 
                 const comments = {
-                    'Roman Republic': `"Sir, enemy forces spotted ahead at ${nearestEnemy.position}! Distance: ${distance} tiles. The legion stands ready. Recommend we maintain formation and advance cautiously."`,
-                    'Celtic': `"Enemy ahead at ${nearestEnemy.position}, Chief! ${distance} tiles away. The lads are eager for battle. Give the word and we'll smash their lines!"`,
-                    'Han Dynasty': `"Commander, enemy forces detected at ${nearestEnemy.position}, ${distance} tiles distant. Recommend coordinated advance with crossbow support."`,
-                    'Spartan City-State': `"Enemy at ${nearestEnemy.position}. ${distance} tiles. Spartans do not retreat."`,
-                    'default': `"Commander, enemy forces ahead at ${nearestEnemy.position}, ${distance} tiles away. Awaiting your tactical orders."`
+                    'Roman Republic': `"Sir, enemy forces spotted ahead at ${nearestEnemy}! Distance: ${distance} tiles. The legion stands ready. Recommend we maintain formation and advance cautiously."`,
+                    'Celtic': `"Enemy ahead at ${nearestEnemy}, Chief! ${distance} tiles away. The lads are eager for battle. Give the word and we'll smash their lines!"`,
+                    'Han Dynasty': `"Commander, enemy forces detected at ${nearestEnemy}, ${distance} tiles distant. Recommend coordinated advance with crossbow support."`,
+                    'Spartan City-State': `"Enemy at ${nearestEnemy}. ${distance} tiles. Spartans do not retreat."`,
+                    'default': `"Commander, enemy forces ahead at ${nearestEnemy}, ${distance} tiles away. Awaiting your tactical orders."`
                 };
                 
                 officerComment = `\n🎖️ **Unit Commander reports:**\n${comments[culture] || comments['default']}`;
             }
             
-            const briefing = `🏺 **WAR COUNCIL - Turn ${battle.currentTurn}**\n\n` +
-                `**YOUR FORCES:**\n${unitStatus}\n\n` +
-                `**INTELLIGENCE:**\n${intelReport}${officerComment}\n\n` +
-                `**MAP:**\n\`\`\`\n${p1Map}\n\`\`\`\n\n` +
-                `**AWAITING ORDERS**`;
+            // Check for mission interruptions
+                let questionSection = '';
+                if (turnResult && turnResult.p1Interpretation && turnResult.p1Interpretation.missionInterruptions) {
+                    const interruptions = turnResult.p1Interpretation.missionInterruptions;
+                    if (interruptions.length > 0) {
+                        questionSection = '\n\n**⚠️ OFFICER REQUESTS GUIDANCE:**\n';
+                        interruptions.forEach(int => {
+                            questionSection += `\n🎖️ **${int.unit}:**\n`;
+                            questionSection += `"${int.question}"\n`;
+                        });
+                    }
+                }
+
+                // Update briefing to include questions
+                const briefing = `🏺 **WAR COUNCIL - Turn ${battle.currentTurn}**\n\n` +
+                    `**YOUR FORCES:**\n${unitStatus}\n\n` +
+                    `**INTELLIGENCE:**\n${intelReport}${officerComment}${questionSection}\n\n` +
+                    `**MAP:**\n\`\`\`\n${p1Map}\n\`\`\`\n\n` +
+                    `**AWAITING ORDERS**`;
             
             await (await client.users.fetch(battle.player1Id)).send(briefing);
         }
@@ -402,25 +415,38 @@ async function sendNextTurnBriefings(battle, battleState, turnResult, client) {
                 // Officer comment - enemy spotted!
                 const culture = p2Commander?.culture || 'default';
                 const nearestEnemy = visibleEnemies[0];
-                console.log('DEBUG nearestEnemy:', nearestEnemy, 'type:', typeof nearestEnemy);// This is already a position string
                 const friendlyPos = p1Data.unitPositions[0]?.position;
                 const distance = friendlyPos ? calculateDistance(friendlyPos, nearestEnemy) : '?';
                 
                 const comments = {
-                    'Roman Republic': `"Sir, enemy forces spotted ahead at ${nearestEnemy.position}! Distance: ${distance} tiles. The legion stands ready. Recommend we maintain formation and advance cautiously."`,
-                    'Celtic': `"Enemy ahead at ${nearestEnemy.position}, Chief! ${distance} tiles away. The lads are eager for battle. Give the word and we'll smash their lines!"`,
-                    'Han Dynasty': `"Commander, enemy forces detected at ${nearestEnemy.position}, ${distance} tiles distant. Recommend coordinated advance with crossbow support."`,
-                    'Spartan City-State': `"Enemy at ${nearestEnemy.position}. ${distance} tiles. Spartans do not retreat."`,
-                    'default': `"Commander, enemy forces ahead at ${nearestEnemy.position}, ${distance} tiles away. Awaiting your tactical orders."`
+                    'Roman Republic': `"Sir, enemy forces spotted ahead at ${nearestEnemy}! Distance: ${distance} tiles. The legion stands ready. Recommend we maintain formation and advance cautiously."`,
+                    'Celtic': `"Enemy ahead at ${nearestEnemy}, Chief! ${distance} tiles away. The lads are eager for battle. Give the word and we'll smash their lines!"`,
+                    'Han Dynasty': `"Commander, enemy forces detected at ${nearestEnemy}, ${distance} tiles distant. Recommend coordinated advance with crossbow support."`,
+                    'Spartan City-State': `"Enemy at ${nearestEnemy}. ${distance} tiles. Spartans do not retreat."`,
+                    'default': `"Commander, enemy forces ahead at ${nearestEnemy}, ${distance} tiles away. Awaiting your tactical orders."`
                 };
                 
                 officerComment = `\n🎖️ **Unit Commander reports:**\n${comments[culture] || comments['default']}`;
             }
             
+            // Check for mission interruptions
+            let questionSection = '';
+            if (turnResult && turnResult.p1Interpretation && turnResult.p1Interpretation.missionInterruptions) {
+                const interruptions = turnResult.p1Interpretation.missionInterruptions;
+                if (interruptions.length > 0) {
+                    questionSection = '\n\n**⚠️ OFFICER REQUESTS GUIDANCE:**\n';
+                    interruptions.forEach(int => {
+                        questionSection += `\n🎖️ **${int.unit}:**\n`;
+                        questionSection += `"${int.question}"\n`;
+                    });
+                }
+            }
+
+            // Update briefing to include questions
             const briefing = `🏺 **WAR COUNCIL - Turn ${battle.currentTurn}**\n\n` +
                 `**YOUR FORCES:**\n${unitStatus}\n\n` +
-                `**INTELLIGENCE:**\n${intelReport}${officerComment}\n\n` +
-                `**MAP:**\n\`\`\`\n${p2Map}\n\`\`\`\n\n` +
+                `**INTELLIGENCE:**\n${intelReport}${officerComment}${questionSection}\n\n` +
+                `**MAP:**\n\`\`\`\n${p1Map}\n\`\`\`\n\n` +
                 `**AWAITING ORDERS**`;
             
             await (await client.users.fetch(battle.player2Id)).send(briefing);
