@@ -205,7 +205,6 @@ async function processTurn(battle, player1Order, player2Order, map) {
             narrative,
             victory: victoryCheck,
             phase: 'complete',
-            // ADD THESE TWO LINES:
             p1Interpretation: p1Interpretation,  
             p2Interpretation: p2Interpretation
         };
