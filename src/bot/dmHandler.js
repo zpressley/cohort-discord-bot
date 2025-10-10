@@ -314,21 +314,20 @@ async function sendNextTurnBriefings(battle, battleState, turnResult, client) {
                 officerComment = `\n🎖️ **Unit Commander reports:**\n${comments[culture] || comments['default']}`;
                 
             } else {
-                // Enemies spotted!
-                intelReport = visibleEnemies.map(enemy => {
+                intelReport = visibleEnemies.map(enemyPos => {
                     const friendlyPos = p1Data.unitPositions[0]?.position;
-                    const distance = friendlyPos ? calculateDistance(friendlyPos, enemy.position) : '?';
+                    const distance = friendlyPos ? calculateDistance(friendlyPos, enemyPos) : '?';
                     
-                    return `👁️ **Enemy Spotted at ${enemy.position}**\n` +
-                           `   Estimated: ~${enemy.estimatedStrength || 100} troops\n` +
-                           `   Confidence: ${enemy.confidence || 'MEDIUM'}`;
+                    return `👁️ **Enemy Spotted at ${enemyPos}**\n` +
+                        `   Estimated: ~100 troops\n` +
+                        `   Confidence: MEDIUM`;
                 }).join('\n');
                 
                 // Officer comment - enemy spotted!
                 const culture = p1Commander?.culture || 'default';
-                const nearestEnemy = visibleEnemies[0];
+                const nearestEnemy = visibleEnemies[0]; // This is already a position string
                 const friendlyPos = p1Data.unitPositions[0]?.position;
-                const distance = friendlyPos ? calculateDistance(friendlyPos, nearestEnemy.position) : '?';
+                const distance = friendlyPos ? calculateDistance(friendlyPos, nearestEnemy) : '?';
                 
                 const comments = {
                     'Roman Republic': `"Sir, enemy forces spotted ahead at ${nearestEnemy.position}! Distance: ${distance} tiles. The legion stands ready. Recommend we maintain formation and advance cautiously."`,
@@ -390,20 +389,20 @@ async function sendNextTurnBriefings(battle, battleState, turnResult, client) {
                 
             } else {
                 // Enemies spotted!
-                intelReport = visibleEnemies.map(enemy => {
-                    const friendlyPos = p2Data.unitPositions[0]?.position;
-                    const distance = friendlyPos ? calculateDistance(friendlyPos, enemy.position) : '?';
+                intelReport = visibleEnemies.map(enemyPos => {
+                    const friendlyPos = p1Data.unitPositions[0]?.position;
+                    const distance = friendlyPos ? calculateDistance(friendlyPos, enemyPos) : '?';
                     
-                    return `👁️ **Enemy Spotted at ${enemy.position}**\n` +
-                           `   Estimated: ~${enemy.estimatedStrength || 100} troops\n` +
-                           `   Confidence: ${enemy.confidence || 'MEDIUM'}`;
+                    return `👁️ **Enemy Spotted at ${enemyPos}**\n` +
+                        `   Estimated: ~100 troops\n` +
+                        `   Confidence: MEDIUM`;
                 }).join('\n');
                 
                 // Officer comment - enemy spotted!
                 const culture = p2Commander?.culture || 'default';
-                const nearestEnemy = visibleEnemies[0];
-                const friendlyPos = p2Data.unitPositions[0]?.position;
-                const distance = friendlyPos ? calculateDistance(friendlyPos, nearestEnemy.position) : '?';
+                const nearestEnemy = visibleEnemies[0]; // This is already a position string
+                const friendlyPos = p1Data.unitPositions[0]?.position;
+                const distance = friendlyPos ? calculateDistance(friendlyPos, nearestEnemy) : '?';
                 
                 const comments = {
                     'Roman Republic': `"Sir, enemy forces spotted ahead at ${nearestEnemy.position}! Distance: ${distance} tiles. The legion stands ready. Recommend we maintain formation and advance cautiously."`,
