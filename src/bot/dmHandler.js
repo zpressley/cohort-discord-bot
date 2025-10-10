@@ -325,7 +325,8 @@ async function sendNextTurnBriefings(battle, battleState, turnResult, client) {
                 
                 // Officer comment - enemy spotted!
                 const culture = p1Commander?.culture || 'default';
-                const nearestEnemy = visibleEnemies[0]; // This is already a position string
+                const nearestEnemy = visibleEnemies[0];
+                console.log('DEBUG nearestEnemy:', nearestEnemy, 'type:', typeof nearestEnemy);
                 const friendlyPos = p1Data.unitPositions[0]?.position;
                 const distance = friendlyPos ? calculateDistance(friendlyPos, nearestEnemy) : '?';
                 
@@ -400,7 +401,8 @@ async function sendNextTurnBriefings(battle, battleState, turnResult, client) {
                 
                 // Officer comment - enemy spotted!
                 const culture = p2Commander?.culture || 'default';
-                const nearestEnemy = visibleEnemies[0]; // This is already a position string
+                const nearestEnemy = visibleEnemies[0];
+                console.log('DEBUG nearestEnemy:', nearestEnemy, 'type:', typeof nearestEnemy);// This is already a position string
                 const friendlyPos = p1Data.unitPositions[0]?.position;
                 const distance = friendlyPos ? calculateDistance(friendlyPos, nearestEnemy) : '?';
                 

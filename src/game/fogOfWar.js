@@ -2,6 +2,7 @@
 // Fog of War and Intelligence Gathering System
 
 const { calculateEuclideanDistance } = require('./maps/mapUtils');
+
 const DETECTION_RANGES = {
     // Base spotting (clear weather, ground level)
     standard: 8,      // 400m - can see movement
@@ -114,12 +115,7 @@ function calculateVisibility(playerUnits, enemyUnits, terrain, weather = 'clear'
     return {
         visibleEnemyPositions: Array.from(visibleEnemyPositions),
         intelligence,
-        totalEnemiesDetected: visibleEnemyPositions.size,
-        detectionRanges: {
-            spotting: Math.max(1, effectiveSpotRange),
-            identify: Math.max(1, effectiveIdentifyRange),
-            detail: Math.max(1, effectiveDetailRange)
-        }
+        totalEnemiesDetected: visibleEnemyPositions.size
     };
 }
 
@@ -134,6 +130,55 @@ function getUnitTerrain(position, terrain) {
 }
 
 /**
+ * Get terrain modifier for detection range
+ * Hills increase range, forests decrease
+ */
+function getTerrainDetectionModifier(position, terrain) {
+    if (terrain.hill && terrain.hill.includes(position)) return DETECTION_RANGES.elevated;
+    const unitTerrain = getUnitTerrain(position, terrain);
+    return DETECTION_RANGES.terrainModifiers[unitTerrain] || 0;
+}
+
+/**
+ * Filter battle state for a specific player (apply fog of war)
+ */
+function filterBattleStateForPlayer(battleState, playerSide) {
+    const opponentSide = playerSide === 'player1' ? 'player2' : 'player1';
+    
+    const playerData = battleState[playerSide];
+    const opponentData = battleState[opponentSide];
+    
+    const visibility = calculateVisibility(
+        playerData.unitPositions || [],
+        opponentData.unitPositions || [],
+        battleState.terrain,
+        battleState.weather || 'clear'
+    );
+    
+    return {
+        yourForces: {
+            units: playerData.unitPositions,
+            army: playerData.army,
+            supplies: playerData.supplies,
+            morale: playerData.morale
+        },
+        
+        enemyForces: {
+            detectedUnits: visibility.intelligence.detailed,
+            estimatedUnits: visibility.intelligence.identified,
+            suspectedActivity: visibility.intelligence.spotted,
+            totalDetected: visibility.totalEnemiesDetected,
+            unknownForces: opponentData.unitPositions.length - visibility.totalEnemiesDetected
+        },
+        
+        terrain: battleState.terrain,
+        weather: battleState.weather,
+        turnNumber: battleState.currentTurn,
+        objectives: battleState.objectives
+    };
+}
+
+/**
  * Generate intelligence report with tiered information
  */
 function generateIntelligenceReport(visibility, culture) {
@@ -143,7 +188,7 @@ function generateIntelligenceReport(visibility, culture) {
     if (visibility.intelligence.detailed.length > 0) {
         visibility.intelligence.detailed.forEach(contact => {
             reports.push(
-                `📍 **CONFIRMED: ${contact.unitType.toUpperCase()} at ${contact.position}**\n` +
+                `📍 **CONFIRMED: ${(contact.unitType || 'UNIT').toUpperCase()} at ${contact.position}**\n` +
                 `   Exact strength: ${contact.exactStrength} warriors\n` +
                 `   Formation: ${contact.formation}\n` +
                 `   Distance: ${contact.distance} tiles (${contact.distance * 50}m)\n` +
@@ -156,7 +201,7 @@ function generateIntelligenceReport(visibility, culture) {
     if (visibility.intelligence.identified.length > 0) {
         visibility.intelligence.identified.forEach(contact => {
             reports.push(
-                `👁️ **${contact.unitType.toUpperCase()} SPOTTED at ${contact.position}**\n` +
+                `👁️ **${(contact.unitType || 'FORCES').toUpperCase()} SPOTTED at ${contact.position}**\n` +
                 `   Estimated: ~${contact.estimatedStrength} troops\n` +
                 `   Distance: ${contact.distance} tiles (${contact.distance * 50}m)\n` +
                 `   Confidence: ${contact.confidence}`
@@ -183,148 +228,38 @@ function generateIntelligenceReport(visibility, culture) {
     return reports.join('\n\n');
 }
 
-
-/**
- * Get terrain modifier for detection range
- * Hills increase range, forests decrease
- */
-function getTerrainDetectionModifier(position, terrain) {
-    if (terrain.hill && terrain.hill.includes(position)) return +2;
-    if (terrain.forest && terrain.forest.includes(position)) return -1;
-    return 0;
-}
-
-/**
- * Filter battle state for a specific player (apply fog of war)
- * @param {Object} battleState - Complete battle state
- * @param {string} playerSide - 'player1' or 'player2'
- * @returns {Object} Filtered state with only visible information
- */
-function filterBattleStateForPlayer(battleState, playerSide) {
-    const opponentSide = playerSide === 'player1' ? 'player2' : 'player1';
-    
-    const playerData = battleState[playerSide];
-    const opponentData = battleState[opponentSide];
-    
-    // Calculate what this player can see
-    const visibility = calculateVisibility(
-        playerData.unitPositions || [],
-        opponentData.unitPositions || [],
-        battleState.terrain
-    );
-    
-    // Return filtered state
-    return {
-        // Full data for your own forces
-        yourForces: {
-            units: playerData.unitPositions,
-            army: playerData.army,
-            supplies: playerData.supplies,
-            morale: playerData.morale
-        },
-        
-        // Limited data for enemy forces
-        enemyForces: {
-            detectedUnits: visibility.intelligence.confirmed,
-            estimatedUnits: visibility.intelligence.estimated,
-            suspectedActivity: visibility.intelligence.suspected,
-            totalDetected: visibility.totalEnemiesDetected,
-            unknownForces: opponentData.unitPositions.length - visibility.totalEnemiesDetected
-        },
-        
-        // Terrain always visible
-        terrain: battleState.terrain,
-        weather: battleState.weather,
-        
-        // Battle info
-        turnNumber: battleState.currentTurn,
-        objectives: battleState.objectives
-    };
-}
-
-/**
- * Generate intelligence report for player
- * @param {Object} visibility - Visibility calculation results
- * @param {string} culture - Player's culture for officer voice
- * @returns {string} Formatted intelligence report
- */
-function generateIntelligenceReport(visibility, culture) {
-    const reports = [];
-    
-    // Confirmed sightings
-    if (visibility.intelligence.confirmed.length > 0) {
-        visibility.intelligence.confirmed.forEach(contact => {
-            reports.push(
-                `📍 **Confirmed Contact at ${contact.position}**\n` +
-                `Type: ${contact.unitType}\n` +
-                `Strength: ~${contact.estimatedStrength} warriors\n` +
-                `Confidence: HIGH`
-            );
-        });
-    }
-    
-    // Estimated sightings  
-    if (visibility.intelligence.estimated.length > 0) {
-        visibility.intelligence.estimated.forEach(contact => {
-            reports.push(
-                `👁️ **Enemy Spotted at ${contact.position}**\n` +
-                `Estimated: ~${contact.estimatedStrength} troops\n` +
-                `Confidence: MEDIUM`
-            );
-        });
-    }
-    
-    // Suspected activity
-    if (visibility.intelligence.suspected.length > 0) {
-        const positions = visibility.intelligence.suspected.map(s => s.position).join(', ');
-        reports.push(
-            `⚠️ **Possible Activity**\n` +
-            `Locations: ${positions}\n` +
-            `Details unclear - send scouts for confirmation`
-        );
-    }
-    
-    // No contact
-    if (reports.length === 0) {
-        reports.push('🔍 **No Enemy Contact**\n\nNo enemy forces detected within current observation range.');
-    }
-    
-    return reports.join('\n\n');
-}
-
 /**
  * Check if unit can see specific coordinate
- * @param {Object} unit - Unit with position and detectRange
- * @param {string} targetCoord - Coordinate to check
- * @param {Object} terrain - Terrain data
- * @returns {boolean} True if visible
  */
-function canSeeCoordinate(unit, targetCoord, terrain) {
+function canSeeCoordinate(unit, targetCoord, terrain, weather = 'clear') {
     const distance = calculateEuclideanDistance(unit.position, targetCoord);
-    const terrainMod = getTerrainDetectionModifier(unit.position, terrain);
-    const effectiveRange = (unit.detectRange || 2) + terrainMod;
     
-    return distance <= effectiveRange;
+    const isScout = unit.unitType?.toLowerCase().includes('scout');
+    const isElevated = terrain.hill && terrain.hill.includes(unit.position);
+    const unitTerrain = getUnitTerrain(unit.position, terrain);
+    
+    const baseSpotRange = isScout ? DETECTION_RANGES.scouts : DETECTION_RANGES.standard;
+    const elevationBonus = isElevated ? DETECTION_RANGES.elevated : 0;
+    const weatherPenalty = DETECTION_RANGES.weatherModifiers[weather] || 0;
+    const terrainPenalty = DETECTION_RANGES.terrainModifiers[unitTerrain] || 0;
+    
+    const effectiveRange = baseSpotRange + elevationBonus + weatherPenalty + terrainPenalty;
+    
+    return distance <= Math.max(1, effectiveRange);
 }
 
 /**
  * Process scout orders and update intelligence
- * @param {Object} scoutUnit - Scout unit being ordered
- * @param {string} targetArea - Where to scout (coordinate or description)
- * @param {Object} battleState - Current battle state
- * @returns {Object} Scout mission results
  */
 function processScoutMission(scoutUnit, targetArea, battleState) {
     const opponentSide = battleState.currentPlayerSide === 'player1' ? 'player2' : 'player1';
     const enemyUnits = battleState[opponentSide].unitPositions || [];
     
-    // Scout moves to target area
-    const scoutPosition = targetArea; // Assume AI has parsed to coordinate
+    const scoutPosition = targetArea;
     
-    // Check what scout detects
     const detected = enemyUnits.filter(enemy => {
         const distance = calculateEuclideanDistance(scoutPosition, enemy.position);
-        return distance <= 5; // Scouts have 5-tile range
+        return distance <= DETECTION_RANGES.scouts;
     });
     
     return {
@@ -344,16 +279,15 @@ function processScoutMission(scoutUnit, targetArea, battleState) {
  * Check if scout survives mission (can be intercepted)
  */
 function checkScoutSurvival(scoutPos, enemyUnits) {
-    // Scout killed if enemy within 1 tile
     const nearby = enemyUnits.filter(e => 
         calculateEuclideanDistance(scoutPos, e.position) <= 1
     );
     
     if (nearby.length > 0) {
-        return Math.random() > 0.5; // 50% chance to escape
+        return Math.random() > 0.5;
     }
     
-    return true; // Safe if no enemies nearby
+    return true;
 }
 
 module.exports = {
@@ -366,4 +300,3 @@ module.exports = {
     DETECTION_RANGES,
     getUnitTerrain
 };
-
