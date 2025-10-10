@@ -272,7 +272,7 @@ async function sendTurnResults(battle, battleTurn, narrative, turnResults, clien
 /**
  * Send briefings for next turn with intelligence and officer reports
  */
-async function sendNextTurnBriefings(battle, battleState, client) {
+async function sendNextTurnBriefings(battle, battleState, turnResult, client) {
     try {
         const { generateBriefingEmbed } = require('../game/briefingGenerator');
         const { models } = require('../database/setup');

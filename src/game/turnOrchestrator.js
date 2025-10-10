@@ -178,7 +178,6 @@ async function processTurn(battle, player1Order, player2Order, map) {
         console.log('DEBUG Missions before save:');
         console.log('  P1 unit 0 mission:', updatedPositions.player1[0]?.activeMission);
         console.log('  P2 unit 0 mission:', updatedPositions.player2[0]?.activeMission);
-
         return {
             success: true,
             newBattleState: {
@@ -205,7 +204,10 @@ async function processTurn(battle, player1Order, player2Order, map) {
             },
             narrative,
             victory: victoryCheck,
-            phase: 'complete'
+            phase: 'complete',
+            // ADD THESE TWO LINES:
+            p1Interpretation: p1Interpretation,  
+            p2Interpretation: p2Interpretation
         };
         
     } catch (error) {
