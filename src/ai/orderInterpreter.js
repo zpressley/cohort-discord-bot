@@ -123,6 +123,43 @@ async function interpretOrders(orderText, battleState, playerSide, map) {
     const errors = [];
     
     for (const action of aiResponse.actions) {
+        // Handle mission continuation
+        if (action.type === 'continue_mission') {
+            const unit = playerUnits.find(u => u.unitId === action.unitId);
+            
+            if (!unit || !unit.activeMission) {
+                errors.push({ 
+                    unit: action.unitId, 
+                    error: 'No active mission to continue',
+                    reason: 'no_mission'
+                });
+                continue;
+            }
+            
+            // Execute movement toward mission target
+            const validation = validateMovement(unit, unit.activeMission.target, map);
+            
+            if (validation.valid) {
+                validatedActions.push({
+                    type: 'move',
+                    unitId: unit.unitId,
+                    currentPosition: unit.position,
+                    targetPosition: unit.activeMission.target,
+                    validation,
+                    missionAction: true, // Flag this as mission continuation
+                    finalPosition: validation.finalPosition || unit.activeMission.target,
+                    reasoning: `Continuing mission to ${unit.activeMission.target}`
+                });
+            } else {
+                errors.push({
+                    unit: unit.unitId,
+                    error: `Cannot continue mission: ${validation.error}`,
+                    reason: validation.reason
+                });
+            }
+            continue;
+        }
+        
         if (action.type === 'move') {
             const unit = playerUnits.find(u => u.unitId === action.unitId);
             
