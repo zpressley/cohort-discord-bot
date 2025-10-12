@@ -244,6 +244,90 @@ function getStackedEmoji(units, side) {
 }
 
 /**
+ * Generate ASCII map (legacy/fallback version)
+ */
+function generateASCIIMap(mapData) {
+    const grid = Array(20).fill(null).map(() => Array(20).fill('.'));
+    
+    // Mark terrain
+    if (mapData.terrain.river) {
+        mapData.terrain.river.forEach(coord => {
+            const pos = parseCoord(coord);
+            grid[pos.row][pos.col] = '~';
+        });
+    }
+    
+    if (mapData.terrain.fords) {
+        mapData.terrain.fords.forEach(coord => {
+            const pos = parseCoord(coord);
+            grid[pos.row][pos.col] = '=';
+        });
+    }
+    
+    if (mapData.terrain.hill) {
+        mapData.terrain.hill.forEach(coord => {
+            const pos = parseCoord(coord);
+            grid[pos.row][pos.col] = '^';
+        });
+    }
+    
+    if (mapData.terrain.marsh) {
+        mapData.terrain.marsh.forEach(coord => {
+            const pos = parseCoord(coord);
+            grid[pos.row][pos.col] = '%';
+        });
+    }
+    
+    if (mapData.terrain.road) {
+        mapData.terrain.road.forEach(coord => {
+            const pos = parseCoord(coord);
+            if (grid[pos.row][pos.col] === '.') {
+                grid[pos.row][pos.col] = '#';
+            }
+        });
+    }
+    
+    if (mapData.terrain.forest) {
+        mapData.terrain.forest.forEach(coord => {
+            const pos = parseCoord(coord);
+            grid[pos.row][pos.col] = 'T';
+        });
+    }
+    
+    // Mark player units as simple numbers
+    if (mapData.player1Units) {
+        mapData.player1Units.forEach(unit => {
+            const pos = parseCoord(unit.position);
+            grid[pos.row][pos.col] = '1';
+        });
+    }
+    
+    if (mapData.player2Units) {
+        mapData.player2Units.forEach(unit => {
+            const pos = parseCoord(unit.position);
+            grid[pos.row][pos.col] = '2';
+        });
+    }
+    
+    // Build map string
+    let ascii = '    A B C D E F G H I J K L M N O P Q R S T\n';
+    ascii += '   ──────────────────────────────────────────\n';
+    
+    for (let row = 0; row < 20; row++) {
+        const rowNum = (row + 1).toString().padStart(2, ' ');
+        ascii += `${rowNum} │`;
+        ascii += grid[row].join(' ');
+        ascii += `│ ${rowNum}\n`;
+    }
+    
+    ascii += '   ──────────────────────────────────────────\n';
+    ascii += '    A B C D E F G H I J K L M N O P Q R S T\n\n';
+    ascii += 'Legend: . plains, ~ river, = ford, ^ hill, % marsh, # road, T forest, 1 P1, 2 P2';
+    
+    return ascii;
+}
+
+/**
  * Generate emoji-based map
  */
 function generateEmojiMap(mapData) {
