@@ -285,15 +285,11 @@ Return ONLY valid JSON, no other text.`;
 
 /**
  * Call AI for order parsing (placeholder for real AI integration)
- * Creates missions automatically when partial movement occurs
- * Recognizes mission continuation commands
  */
 async function callAIForOrderParsing(prompt) {
     const yourUnits = JSON.parse(prompt.match(/Your Units: (\[.*?\])/s)?.[1] || '[]');
     const orderText = prompt.match(/\*\*PLAYER ORDER:\*\* "(.*?)"/)?.[1] || '';
     
-     console.log('  🔍 Parsing order:', orderText); // ADD THIS
-
     if (yourUnits.length === 0) {
         return { 
             actions: [], 
@@ -303,26 +299,7 @@ async function callAIForOrderParsing(prompt) {
     }
     
     const unit = yourUnits[0];
-    const lowerOrder = orderText.toLowerCase().trim();
-    
-    // Check for mission continuation commands FIRST
-    const continueKeywords = ['continue', 'resume', 'proceed', 'carry on', 'keep going'];
-    const hasContinue = continueKeywords.some(keyword => lowerOrder.includes(keyword));
-    const hasMission = lowerOrder.includes('mission') || lowerOrder.includes('advance') || lowerOrder === 'continue';
-    
-    if (hasContinue || lowerOrder === 'yes' || lowerOrder === 'proceed') {
-        console.log('  🔄 Mission continuation command detected');
-        return {
-            actions: [{
-                type: 'continue_mission',
-                unitId: unit.id,
-                currentPosition: unit.position,
-                reasoning: 'Commander orders mission continuation'
-            }],
-            validation: { isValid: true, errors: [], warnings: [] },
-            officerComment: 'Resuming mission as ordered, sir.'
-        };
-    }
+    const lowerOrder = orderText.toLowerCase();
     
     // Check for explicit coordinates (e.g., "move to N17")
     const coordMatch = orderText.match(/\b([A-T]\d{1,2})\b/i);
@@ -341,20 +318,16 @@ async function callAIForOrderParsing(prompt) {
         };
     }
     
-    // Fall back to direction/keyword parsing
+    // Fallback to direction parsing
     let targetPosition = unit.position; // Default: hold position
     
-    // Parse directions
     if (lowerOrder.includes('south')) targetPosition = moveInDirection(unit.position, 'south', 3);
     if (lowerOrder.includes('north')) targetPosition = moveInDirection(unit.position, 'north', 3);
     if (lowerOrder.includes('east')) targetPosition = moveInDirection(unit.position, 'east', 3);
     if (lowerOrder.includes('west')) targetPosition = moveInDirection(unit.position, 'west', 3);
     
-    // Parse landmarks
     if (lowerOrder.includes('ford')) targetPosition = 'I11'; // Central ford
     if (lowerOrder.includes('hill')) targetPosition = 'B5';
-    if (lowerOrder.includes('marsh')) targetPosition = 'O15';
-    if (lowerOrder.includes('forest')) targetPosition = 'B1';
     
     return {
         actions: [{
