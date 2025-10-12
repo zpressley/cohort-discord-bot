@@ -1,9 +1,22 @@
-// src/game/maps/mapUtils.js - COMPLETE FILE
-// 20x20 grid with A* pathfinding
+// src/game/maps/mapUtils.js
+// Core utilities for grid-based tactical combat
+
+const UNIT_EMOJIS = {
+    friendly: {
+        infantry: '🟦',    // Blue square
+        cavalry: '🔵',     // Blue circle
+        commander: '🔷'    // Blue diamond (commander/elite)
+    },
+    
+    enemy: {
+        infantry: '🟧',    // Orange square
+        cavalry: '🟠',     // Orange circle
+        commander: '🔶'    // Orange diamond
+    }
+};
 
 /**
  * Parse grid coordinate string to {row, col} object
- * Supports 20x20 maps (A1-T20)
  */
 function parseCoord(coord) {
     if (!coord || typeof coord !== 'string') {
@@ -105,7 +118,7 @@ function getCoordsInRange(center, range) {
 }
 
 /**
- * Simple straight-line path (legacy)
+ * Calculate movement path between two points
  */
 function calculatePath(from, to, terrainMap) {
     const start = parseCoord(from);
@@ -121,108 +134,15 @@ function calculatePath(from, to, terrainMap) {
         if (current.col < end.col) current.col++;
         else if (current.col > end.col) current.col--;
         
-        path.push(coordToString(current));
+        const coord = coordToString(current);
+        path.push(coord);
     }
     
     return path;
 }
 
 /**
- * A* Pathfinding - finds optimal path around obstacles
- */
-function findPathAStar(from, to, terrainMap, getTerrainType) {
-    const start = parseCoord(from);
-    const goal = parseCoord(to);
-    
-    const openSet = [{ coord: from, f: 0, g: 0, h: 0 }];
-    const closedSet = new Set();
-    const cameFrom = new Map();
-    const gScore = new Map();
-    gScore.set(from, 0);
-    
-    const movementCosts = terrainMap.movementCosts || {
-        plains: 1.0, road: 0.5, hill: 1.5, forest: 2.0,
-        marsh: 3.0, river: 999, ford: 1.5
-    };
-    
-    const heuristic = (coordStr) => {
-        const pos = parseCoord(coordStr);
-        return Math.abs(goal.col - pos.col) + Math.abs(goal.row - pos.row);
-    };
-    
-    while (openSet.length > 0) {
-        openSet.sort((a, b) => a.f - b.f);
-        const current = openSet.shift();
-        
-        if (current.coord === to) {
-            return reconstructPath(cameFrom, current.coord, from);
-        }
-        
-        closedSet.add(current.coord);
-        
-        const neighbors = getAdjacentCoords(current.coord);
-        
-        for (const neighbor of neighbors) {
-            if (closedSet.has(neighbor)) continue;
-            
-            const terrain = getTerrainType(neighbor);
-            const terrainCost = movementCosts[terrain] || 1.0;
-            
-            if (terrainCost >= 999) {
-                closedSet.add(neighbor);
-                continue;
-            }
-            
-            const tentativeG = gScore.get(current.coord) + terrainCost;
-            
-            if (!gScore.has(neighbor) || tentativeG < gScore.get(neighbor)) {
-                cameFrom.set(neighbor, current.coord);
-                gScore.set(neighbor, tentativeG);
-                
-                const h = heuristic(neighbor);
-                const f = tentativeG + h;
-                
-                const existing = openSet.find(n => n.coord === neighbor);
-                if (existing) {
-                    existing.g = tentativeG;
-                    existing.h = h;
-                    existing.f = f;
-                } else {
-                    openSet.push({ coord: neighbor, g: tentativeG, h, f });
-                }
-            }
-        }
-    }
-    
-    return {
-        path: [],
-        cost: Infinity,
-        valid: false,
-        reason: 'No valid path exists to target'
-    };
-}
-
-/**
- * Reconstruct path from A* came-from map
- */
-function reconstructPath(cameFrom, current, start) {
-    const path = [current];
-    
-    while (current !== start) {
-        current = cameFrom.get(current);
-        if (!current) break;
-        path.unshift(current);
-    }
-    
-    return {
-        path,
-        cost: path.length - 1,
-        valid: true
-    };
-}
-
-/**
- * Calculate path cost
+ * Calculate total movement cost for a path
  */
 function calculatePathCost(path, terrainCosts, getTerrainType) {
     let totalCost = 0;
@@ -237,7 +157,7 @@ function calculatePathCost(path, terrainCosts, getTerrainType) {
 }
 
 /**
- * Check if coordinate is valid
+ * Check if coordinate is on the map
  */
 function isValidCoord(coord) {
     try {
@@ -249,9 +169,84 @@ function isValidCoord(coord) {
 }
 
 /**
- * Generate ASCII map - 20x20 version
+ * Get direction from one coordinate to another
  */
-function generateASCIIMap(mapData) {
+function getDirection(from, to) {
+    const fromPos = parseCoord(from);
+    const toPos = parseCoord(to);
+    
+    const dx = toPos.col - fromPos.col;
+    const dy = toPos.row - fromPos.row;
+    
+    if (dx === 0 && dy < 0) return 'north';
+    if (dx === 0 && dy > 0) return 'south';
+    if (dx > 0 && dy === 0) return 'east';
+    if (dx < 0 && dy === 0) return 'west';
+    
+    if (dx > 0 && dy < 0) return 'northeast';
+    if (dx > 0 && dy > 0) return 'southeast';
+    if (dx < 0 && dy < 0) return 'northwest';
+    if (dx < 0 && dy > 0) return 'southwest';
+    
+    return 'same position';
+}
+
+/**
+ * Determine unit emoji based on type and side
+ */
+function getUnitEmoji(unit, side = 'friendly') {
+    const emojis = UNIT_EMOJIS[side];
+    
+    // Commander/Elite always diamond
+    if (unit.isCommander || unit.isElite) {
+        return emojis.commander;
+    }
+    
+    const type = (unit.unitType || '').toLowerCase();
+    
+    // Cavalry = circle
+    if (type.includes('cavalry') || type.includes('mounted') || type.includes('horse')) {
+        return emojis.cavalry;
+    }
+    
+    // Default: Infantry = square
+    return emojis.infantry;
+}
+
+/**
+ * Get emoji for stacked units (shows dominant type)
+ */
+function getStackedEmoji(units, side) {
+    // Commander present = always show commander diamond
+    const commander = units.find(u => u.isCommander || u.isElite);
+    if (commander) {
+        return UNIT_EMOJIS[side].commander;
+    }
+    
+    // Find dominant type by strength
+    const typeTotals = { cavalry: 0, infantry: 0 };
+    
+    units.forEach(unit => {
+        const type = (unit.unitType || '').toLowerCase();
+        const strength = unit.currentStrength || 0;
+        
+        if (type.includes('cavalry') || type.includes('mounted')) {
+            typeTotals.cavalry += strength;
+        } else {
+            typeTotals.infantry += strength;
+        }
+    });
+    
+    // Return dominant type
+    return typeTotals.cavalry > typeTotals.infantry 
+        ? UNIT_EMOJIS[side].cavalry 
+        : UNIT_EMOJIS[side].infantry;
+}
+
+/**
+ * Generate emoji-based map
+ */
+function generateEmojiMap(mapData) {
     const grid = Array(20).fill(null).map(() => Array(20).fill('.'));
     
     // Mark terrain
@@ -263,8 +258,7 @@ function generateASCIIMap(mapData) {
     }
     
     if (mapData.terrain.fords) {
-        mapData.terrain.fords.forEach(ford => {
-            const coord = typeof ford === 'string' ? ford : ford.coord;
+        mapData.terrain.fords.forEach(coord => {
             const pos = parseCoord(coord);
             grid[pos.row][pos.col] = '=';
         });
@@ -300,38 +294,43 @@ function generateASCIIMap(mapData) {
         });
     }
     
-    // Mark units
-    if (mapData.player1Units && Array.isArray(mapData.player1Units)) {
-        mapData.player1Units.forEach((unit, index) => {
-            try {
-                const position = typeof unit === 'string' ? unit : unit.position;
-                if (!position || typeof position !== 'string') return;
-                
-                const pos = parseCoord(position);
-                grid[pos.row][pos.col] = '1';
-            } catch (err) {
-                console.error(`Error placing P1 unit ${index}:`, err.message);
+    // Group units by position
+    const tileUnits = new Map();
+    
+    if (mapData.player2Units) {
+        mapData.player2Units.forEach(unit => {
+            if (!tileUnits.has(unit.position)) {
+                tileUnits.set(unit.position, { friendly: [], enemy: [] });
             }
+            tileUnits.get(unit.position).enemy.push(unit);
         });
     }
     
-    if (mapData.player2Units && Array.isArray(mapData.player2Units)) {
-        mapData.player2Units.forEach((unit, index) => {
-            try {
-                const position = typeof unit === 'string' ? unit : unit.position;
-                if (!position || typeof position !== 'string') return;
-                
-                const pos = parseCoord(position);
-                grid[pos.row][pos.col] = '2';
-            } catch (err) {
-                console.error(`Error placing P2 unit ${index}:`, err.message);
+    if (mapData.player1Units) {
+        mapData.player1Units.forEach(unit => {
+            if (!tileUnits.has(unit.position)) {
+                tileUnits.set(unit.position, { friendly: [], enemy: [] });
             }
+            tileUnits.get(unit.position).friendly.push(unit);
         });
     }
     
-    // Build ASCII - 20x20
+    // Place emojis (friendly overwrites enemy)
+    tileUnits.forEach((units, position) => {
+        const pos = parseCoord(position);
+        
+        if (units.enemy.length > 0 && units.friendly.length === 0) {
+            grid[pos.row][pos.col] = getStackedEmoji(units.enemy, 'enemy');
+        }
+        
+        if (units.friendly.length > 0) {
+            grid[pos.row][pos.col] = getStackedEmoji(units.friendly, 'friendly');
+        }
+    });
+    
+    // Build map string
     let ascii = '    A B C D E F G H I J K L M N O P Q R S T\n';
-    ascii += '   ' + '─'.repeat(41) + '\n';
+    ascii += '   ──────────────────────────────────────────\n';
     
     for (let row = 0; row < 20; row++) {
         const rowNum = (row + 1).toString().padStart(2, ' ');
@@ -340,31 +339,11 @@ function generateASCIIMap(mapData) {
         ascii += `│ ${rowNum}\n`;
     }
     
-    ascii += '   ' + '─'.repeat(41) + '\n';
+    ascii += '   ──────────────────────────────────────────\n';
     ascii += '    A B C D E F G H I J K L M N O P Q R S T\n\n';
-    ascii += 'Legend: . plains, ~ river, = ford, ^ hill, % marsh, # road, T forest, 1 P1, 2 P2';
+    ascii += 'Terrain: . plains, ~ river, = ford, ^ hill, % marsh, # road, T forest';
     
     return ascii;
-}
-
-function getDirection(from, to) {
-    const fromPos = parseCoord(from);
-    const toPos = parseCoord(to);
-    
-    const dx = toPos.col - fromPos.col;
-    const dy = toPos.row - fromPos.row;
-    
-    if (dx === 0 && dy < 0) return 'north';
-    if (dx === 0 && dy > 0) return 'south';
-    if (dx > 0 && dy === 0) return 'east';
-    if (dx < 0 && dy === 0) return 'west';
-    
-    if (dx > 0 && dy < 0) return 'northeast';
-    if (dx > 0 && dy > 0) return 'southeast';
-    if (dx < 0 && dy < 0) return 'northwest';
-    if (dx < 0 && dy > 0) return 'southwest';
-    
-    return 'same position';
 }
 
 module.exports = {
@@ -378,7 +357,9 @@ module.exports = {
     calculatePathCost,
     isValidCoord,
     generateASCIIMap,
+    generateEmojiMap,
+    getUnitEmoji,
+    getStackedEmoji,
     getDirection,
-    findPathAStar,  // New A* function
-    reconstructPath  // Helper for A*
+    UNIT_EMOJIS
 };
