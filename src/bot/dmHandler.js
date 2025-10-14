@@ -8,6 +8,29 @@ const { Op } = require('sequelize');
 const processedMessages = new Set();
 
 /**
+ * Generate unit description from properties
+ */
+function getUnitDescription(unit) {
+    let desc = '';
+    
+    if (unit.mounted) {
+        desc = `${unit.quality?.name || 'Professional'} ${unit.mount?.name || 'Cavalry'}`;
+    } else {
+        desc = `${unit.quality?.name || 'Professional'} Infantry`;
+    }
+    
+    if (unit.primaryWeapon?.name && !unit.primaryWeapon.name.includes('Standard')) {
+        desc += ` (${unit.primaryWeapon.name})`;
+    }
+    
+    if (unit.isElite) {
+        desc = 'Elite ' + desc;
+    }
+    
+    return desc;
+}
+
+/**
  * Handle DM commands during active battles
  */
 async function handleDMCommand(message, client) {
@@ -266,6 +289,9 @@ async function sendTurnResults(battle, battleTurn, narrative, turnResults, clien
 }
 
 
+/**
+ * Send clean 4-section briefings
+ */
 async function sendNextTurnBriefings(battle, battleState, turnResult, client) {
     try {
         const { generateEmojiMap, getUnitEmoji } = require('../game/maps/mapUtils');
@@ -280,82 +306,93 @@ async function sendNextTurnBriefings(battle, battleState, turnResult, client) {
             const p1Data = battleState.player1;
             const p1Commander = await models.Commander.findByPk(battle.player1Id);
             
-            // Generate emoji map
-            const p1Map = generateEmojiMap({
-                terrain: map.terrain,
-                player1Units: p1Data.unitPositions || [],
-                player2Units: p1Data.visibleEnemyPositions || []
-            });
-            
-            // Format unit list with emojis
+            // 1. UNIT LIST
             const unitList = (p1Data.unitPositions || []).map(u => {
                 const emoji = getUnitEmoji(u, 'friendly');
-                const desc = u.unitType || 'Unit';
+                const desc = getUnitDescription(u);
                 return `[${u.position}] ${emoji} ${desc} (${u.currentStrength})`;
             }).join('\n');
             
-            // Intelligence report
+            // 2. INTELLIGENCE
             const visibleEnemies = p1Data.visibleEnemyPositions || [];
-            let intelReport = '';
-            let officerComment = '';
+            let intelligence = '';
             
             if (visibleEnemies.length === 0) {
-                intelReport = '👁️ **No enemy contact**\nNo enemy forces detected. They may be beyond visual range or concealed.';
-                
-                const culture = p1Commander?.culture || 'default';
-                const comments = {
-                    'Roman Republic': '"No contact yet, Commander. The men are alert and in good order."',
-                    'Celtic': '"Quiet out there, Chief. Too quiet. The spirits whisper of coming battle."',
-                    'Han Dynasty': '"All quiet, Commander. The men maintain discipline and await your orders."',
-                    'Spartan City-State': '"We wait."',
-                    'default': '"All clear, Commander. Units ready for orders."'
-                };
-                officerComment = `\n🎖️ **Unit Commander reports:**\n${comments[culture] || comments['default']}`;
-                
+                intelligence = '👁️ No enemy contact';
             } else {
-                intelReport = visibleEnemies.map(enemyPos => {
-                    const friendlyPos = p1Data.unitPositions[0]?.position;
-                    const distance = friendlyPos ? calculateDistance(friendlyPos, enemyPos) : '?';
-                    
-                    return `👁️ **Enemy Spotted at ${enemyPos}**\n` +
-                           `   Estimated: ~100 troops\n` +
-                           `   Confidence: MEDIUM`;
+                intelligence = visibleEnemies.map(enemyPos => {
+                    const distance = p1Data.unitPositions[0]?.position 
+                        ? calculateDistance(p1Data.unitPositions[0].position, enemyPos) 
+                        : '?';
+                    return `👁️ Enemy at ${enemyPos} (${distance} tiles)`;
                 }).join('\n');
-                
-                const culture = p1Commander?.culture || 'default';
-                const nearestEnemy = visibleEnemies[0];
-                const friendlyPos = p1Data.unitPositions[0]?.position;
-                const distance = friendlyPos ? calculateDistance(friendlyPos, nearestEnemy) : '?';
-                
-                const comments = {
-                    'Roman Republic': `"Sir, enemy forces spotted ahead at ${nearestEnemy}! Distance: ${distance} tiles. The legion stands ready. Recommend we maintain formation and advance cautiously."`,
-                    'Celtic': `"Enemy ahead at ${nearestEnemy}, Chief! ${distance} tiles away. The lads are eager for battle. Give the word and we'll smash their lines!"`,
-                    'Han Dynasty': `"Commander, enemy forces detected at ${nearestEnemy}, ${distance} tiles distant. Recommend coordinated advance with crossbow support."`,
-                    'Spartan City-State': `"Enemy at ${nearestEnemy}. ${distance} tiles. Spartans do not retreat."`,
-                    'default': `"Commander, enemy forces ahead at ${nearestEnemy}, ${distance} tiles away. Awaiting your tactical orders."`
+            }
+            
+            // 3. OFFICER REPORT
+            const culture = p1Commander?.culture || 'Roman Republic';
+            let officerReport = '';
+            
+            if (visibleEnemies.length === 0) {
+                const noContactComments = {
+                    'Roman Republic': '"All quiet, Commander. The men stand ready."',
+                    'Celtic': '"No sign of them yet, Chief. The lads grow restless."',
+                    'Han Dynasty': '"No enemy detected. Maintaining discipline."',
+                    'Spartan City-State': '"We wait."',
+                    'default': '"No contact. Units ready."'
                 };
+                officerReport = noContactComments[culture] || noContactComments['default'];
+            } else {
+                const nearestEnemy = visibleEnemies[0];
+                const distance = p1Data.unitPositions[0]?.position 
+                    ? calculateDistance(p1Data.unitPositions[0].position, nearestEnemy) 
+                    : '?';
                 
-                officerComment = `\n🎖️ **Unit Commander reports:**\n${comments[culture] || comments['default']}`;
+                const enemyComments = {
+                    'Roman Republic': `"Enemy at ${nearestEnemy}, ${distance} tiles. Legion stands ready."`,
+                    'Celtic': `"Enemy spotted at ${nearestEnemy}! ${distance} tiles. Ready to charge!"`,
+                    'Han Dynasty': `"Forces detected at ${nearestEnemy}. ${distance} tiles distant."`,
+                    'Spartan City-State': `"Enemy at ${nearestEnemy}. We do not retreat."`,
+                    'default': `"Enemy at ${nearestEnemy}, ${distance} tiles away."`
+                };
+                officerReport = enemyComments[culture] || enemyComments['default'];
             }
             
-            // Check for mission interruptions
-            let questionSection = '';
-            if (turnResult && turnResult.p1Interpretation && turnResult.p1Interpretation.missionInterruptions) {
-                const interruptions = turnResult.p1Interpretation.missionInterruptions;
-                if (interruptions.length > 0) {
-                    questionSection = '\n\n**⚠️ OFFICER REQUESTS GUIDANCE:**\n';
-                    interruptions.forEach(int => {
-                        questionSection += `\n🎖️ **${int.unit}:**\n`;
-                        questionSection += `"${int.question}"\n`;
-                    });
-                }
+            // Add mission interruption questions if any
+            if (turnResult?.p1Interpretation?.missionInterruptions?.length > 0) {
+                const interruption = turnResult.p1Interpretation.missionInterruptions[0];
+                officerReport += `\n\n⚠️ "${interruption.question}"`;
             }
             
-            const briefing = `🏺 **WAR COUNCIL - Turn ${battle.currentTurn}**\n\n` +
-                `**YOUR FORCES:**\n${unitList}\n\n` +
-                `**INTELLIGENCE:**\n${intelReport}${officerComment}${questionSection}\n\n` +
-                `**MAP:**\n\`\`\`\n${p1Map}\n\`\`\`\n\n` +
-                `**AWAITING ORDERS**`;
+            // 4. MAP
+            const p1Map = generateEmojiMap({
+                terrain: map.terrain,
+                player1Units: p1Data.unitPositions || [],
+                player2Units: (p1Data.visibleEnemyPositions || []).map(pos => ({
+                    position: pos,
+                    currentStrength: 100,
+                    unitType: 'unknown'
+                }))
+            });
+            
+            // Assemble briefing
+            const briefing = 
+`🏺 **WAR COUNCIL - Turn ${battle.currentTurn}**
+
+**YOUR FORCES:**
+${unitList}
+
+**INTELLIGENCE:**
+${intelligence}
+
+**OFFICER REPORT:**
+${officerReport}
+
+**MAP:**
+\`\`\`
+${p1Map}
+\`\`\`
+
+**AWAITING ORDERS**`;
             
             await (await client.users.fetch(battle.player1Id)).send(briefing);
         }
@@ -365,78 +402,87 @@ async function sendNextTurnBriefings(battle, battleState, turnResult, client) {
             const p2Data = battleState.player2;
             const p2Commander = await models.Commander.findByPk(battle.player2Id);
             
-            const p2Map = generateEmojiMap({
-                terrain: map.terrain,
-                player1Units: p2Data.visibleEnemyPositions || [],
-                player2Units: p2Data.unitPositions || []
-            });
-            
             const unitList = (p2Data.unitPositions || []).map(u => {
                 const emoji = getUnitEmoji(u, 'friendly');
-                const desc = u.unitType || 'Unit';
+                const desc = getUnitDescription(u);
                 return `[${u.position}] ${emoji} ${desc} (${u.currentStrength})`;
             }).join('\n');
             
             const visibleEnemies = p2Data.visibleEnemyPositions || [];
-            let intelReport = '';
-            let officerComment = '';
+            let intelligence = '';
             
             if (visibleEnemies.length === 0) {
-                intelReport = '👁️ **No enemy contact**\nNo enemy forces detected. They may be beyond visual range or concealed.';
-                
-                const culture = p2Commander?.culture || 'default';
-                const comments = {
-                    'Roman Republic': '"No contact yet, Commander. The men are alert and in good order."',
-                    'Celtic': '"Quiet out there, Chief. Too quiet. The spirits whisper of coming battle."',
-                    'Han Dynasty': '"All quiet, Commander. The men maintain discipline and await your orders."',
-                    'Spartan City-State': '"We wait."',
-                    'default': '"All clear, Commander. Units ready for orders."'
-                };
-                officerComment = `\n🎖️ **Unit Commander reports:**\n${comments[culture] || comments['default']}`;
-                
+                intelligence = '👁️ No enemy contact';
             } else {
-                intelReport = visibleEnemies.map(enemyPos => {
-                    const friendlyPos = p2Data.unitPositions[0]?.position;
-                    const distance = friendlyPos ? calculateDistance(friendlyPos, enemyPos) : '?';
-                    
-                    return `👁️ **Enemy Spotted at ${enemyPos}**\n` +
-                           `   Estimated: ~100 troops\n` +
-                           `   Confidence: MEDIUM`;
+                intelligence = visibleEnemies.map(enemyPos => {
+                    const distance = p2Data.unitPositions[0]?.position 
+                        ? calculateDistance(p2Data.unitPositions[0].position, enemyPos) 
+                        : '?';
+                    return `👁️ Enemy at ${enemyPos} (${distance} tiles)`;
                 }).join('\n');
-                
-                const culture = p2Commander?.culture || 'default';
-                const nearestEnemy = visibleEnemies[0];
-                const friendlyPos = p2Data.unitPositions[0]?.position;
-                const distance = friendlyPos ? calculateDistance(friendlyPos, nearestEnemy) : '?';
-                
-                const comments = {
-                    'Roman Republic': `"Sir, enemy forces spotted ahead at ${nearestEnemy}! Distance: ${distance} tiles. The legion stands ready. Recommend we maintain formation and advance cautiously."`,
-                    'Celtic': `"Enemy ahead at ${nearestEnemy}, Chief! ${distance} tiles away. The lads are eager for battle. Give the word and we'll smash their lines!"`,
-                    'Han Dynasty': `"Commander, enemy forces detected at ${nearestEnemy}, ${distance} tiles distant. Recommend coordinated advance with crossbow support."`,
-                    'Spartan City-State': `"Enemy at ${nearestEnemy}. ${distance} tiles. Spartans do not retreat."`,
-                    'default': `"Commander, enemy forces ahead at ${nearestEnemy}, ${distance} tiles away. Awaiting your tactical orders."`
+            }
+            
+            const culture = p2Commander?.culture || 'Roman Republic';
+            let officerReport = '';
+            
+            if (visibleEnemies.length === 0) {
+                const noContactComments = {
+                    'Roman Republic': '"All quiet, Commander. The men stand ready."',
+                    'Celtic': '"No sign of them yet, Chief. The lads grow restless."',
+                    'Han Dynasty': '"No enemy detected. Maintaining discipline."',
+                    'Spartan City-State': '"We wait."',
+                    'default': '"No contact. Units ready."'
                 };
+                officerReport = noContactComments[culture] || noContactComments['default'];
+            } else {
+                const nearestEnemy = visibleEnemies[0];
+                const distance = p2Data.unitPositions[0]?.position 
+                    ? calculateDistance(p2Data.unitPositions[0].position, nearestEnemy) 
+                    : '?';
                 
-                officerComment = `\n🎖️ **Unit Commander reports:**\n${comments[culture] || comments['default']}`;
+                const enemyComments = {
+                    'Roman Republic': `"Enemy at ${nearestEnemy}, ${distance} tiles. Legion stands ready."`,
+                    'Celtic': `"Enemy spotted at ${nearestEnemy}! ${distance} tiles. Ready to charge!"`,
+                    'Han Dynasty': `"Forces detected at ${nearestEnemy}. ${distance} tiles distant."`,
+                    'Spartan City-State': `"Enemy at ${nearestEnemy}. We do not retreat."`,
+                    'default': `"Enemy at ${nearestEnemy}, ${distance} tiles away."`
+                };
+                officerReport = enemyComments[culture] || enemyComments['default'];
             }
             
-            let questionSection = '';
-            if (turnResult && turnResult.p2Interpretation && turnResult.p2Interpretation.missionInterruptions) {
-                const interruptions = turnResult.p2Interpretation.missionInterruptions;
-                if (interruptions.length > 0) {
-                    questionSection = '\n\n**⚠️ OFFICER REQUESTS GUIDANCE:**\n';
-                    interruptions.forEach(int => {
-                        questionSection += `\n🎖️ **${int.unit}:**\n`;
-                        questionSection += `"${int.question}"\n`;
-                    });
-                }
+            if (turnResult?.p2Interpretation?.missionInterruptions?.length > 0) {
+                const interruption = turnResult.p2Interpretation.missionInterruptions[0];
+                officerReport += `\n\n⚠️ "${interruption.question}"`;
             }
             
-            const briefing = `🏺 **WAR COUNCIL - Turn ${battle.currentTurn}**\n\n` +
-                `**YOUR FORCES:**\n${unitList}\n\n` +
-                `**INTELLIGENCE:**\n${intelReport}${officerComment}${questionSection}\n\n` +
-                `**MAP:**\n\`\`\`\n${p2Map}\n\`\`\`\n\n` +
-                `**AWAITING ORDERS**`;
+            const p2Map = generateEmojiMap({
+                terrain: map.terrain,
+                player1Units: (p2Data.visibleEnemyPositions || []).map(pos => ({
+                    position: pos,
+                    currentStrength: 100,
+                    unitType: 'unknown'
+                })),
+                player2Units: p2Data.unitPositions || []
+            });
+            
+            const briefing = 
+`🏺 **WAR COUNCIL - Turn ${battle.currentTurn}**
+
+**YOUR FORCES:**
+${unitList}
+
+**INTELLIGENCE:**
+${intelligence}
+
+**OFFICER REPORT:**
+${officerReport}
+
+**MAP:**
+\`\`\`
+${p2Map}
+\`\`\`
+
+**AWAITING ORDERS**`;
             
             await (await client.users.fetch(battle.player2Id)).send(briefing);
         }

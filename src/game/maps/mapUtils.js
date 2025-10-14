@@ -118,7 +118,7 @@ function getCoordsInRange(center, range) {
 }
 
 /**
- * Calculate movement path between two points
+ * Calculate movement path between two points (simple straight-line)
  */
 function calculatePath(from, to, terrainMap) {
     const start = parseCoord(from);
@@ -191,25 +191,26 @@ function getDirection(from, to) {
     return 'same position';
 }
 
-/**
- * Determine unit emoji based on type and side
- */
+// In mapUtils.js, update getUnitEmoji:
+
 function getUnitEmoji(unit, side = 'friendly') {
     const emojis = UNIT_EMOJIS[side];
     
-    // Commander/Elite always diamond
     if (unit.isCommander || unit.isElite) {
         return emojis.commander;
     }
     
-    const type = (unit.unitType || '').toLowerCase();
-    
-    // Cavalry = circle
-    if (type.includes('cavalry') || type.includes('mounted') || type.includes('horse')) {
+    // Check mounted property FIRST
+    if (unit.mounted === true) {
         return emojis.cavalry;
     }
     
-    // Default: Infantry = square
+    const type = (unit.unitType || '').toLowerCase();
+    
+    if (type.includes('cavalry') || type.includes('horse')) {
+        return emojis.cavalry;
+    }
+    
     return emojis.infantry;
 }
 
@@ -217,13 +218,11 @@ function getUnitEmoji(unit, side = 'friendly') {
  * Get emoji for stacked units (shows dominant type)
  */
 function getStackedEmoji(units, side) {
-    // Commander present = always show commander diamond
     const commander = units.find(u => u.isCommander || u.isElite);
     if (commander) {
         return UNIT_EMOJIS[side].commander;
     }
     
-    // Find dominant type by strength
     const typeTotals = { cavalry: 0, infantry: 0 };
     
     units.forEach(unit => {
@@ -237,7 +236,6 @@ function getStackedEmoji(units, side) {
         }
     });
     
-    // Return dominant type
     return typeTotals.cavalry > typeTotals.infantry 
         ? UNIT_EMOJIS[side].cavalry 
         : UNIT_EMOJIS[side].infantry;
@@ -258,8 +256,9 @@ function generateASCIIMap(mapData) {
     }
     
     if (mapData.terrain.fords) {
-        mapData.terrain.fords.forEach(coord => {
-            const pos = parseCoord(coord);
+        mapData.terrain.fords.forEach(ford => {
+            const coordStr = typeof ford === 'string' ? ford : ford.coord;
+            const pos = parseCoord(coordStr);
             grid[pos.row][pos.col] = '=';
         });
     }
@@ -294,7 +293,7 @@ function generateASCIIMap(mapData) {
         });
     }
     
-    // Mark player units as simple numbers
+    // Mark units
     if (mapData.player1Units) {
         mapData.player1Units.forEach(unit => {
             const pos = parseCoord(unit.position);
@@ -309,7 +308,7 @@ function generateASCIIMap(mapData) {
         });
     }
     
-    // Build map string
+    // Build map
     let ascii = '    A B C D E F G H I J K L M N O P Q R S T\n';
     ascii += '   ──────────────────────────────────────────\n';
     
@@ -405,6 +404,9 @@ function findPathAStar(from, to, terrainMap, getTerrainType) {
     };
 }
 
+/**
+ * Reconstruct path from A* cameFrom map
+ */
 function reconstructPath(cameFrom, current) {
     const path = [current];
     while (cameFrom.has(current)) {
@@ -429,8 +431,10 @@ function generateEmojiMap(mapData) {
     }
     
     if (mapData.terrain.fords) {
-        mapData.terrain.fords.forEach(coord => {
-            const pos = parseCoord(coord);
+        mapData.terrain.fords.forEach(ford => {
+            // Handle both string and object formats
+            const coordStr = typeof ford === 'string' ? ford : ford.coord;
+            const pos = parseCoord(coordStr);
             grid[pos.row][pos.col] = '=';
         });
     }
@@ -499,7 +503,7 @@ function generateEmojiMap(mapData) {
         }
     });
     
-    // Build map string
+    // Build map
     let ascii = '    A B C D E F G H I J K L M N O P Q R S T\n';
     ascii += '   ──────────────────────────────────────────\n';
     
@@ -525,6 +529,8 @@ module.exports = {
     getAdjacentCoords,
     getCoordsInRange,
     calculatePath,
+    findPathAStar,
+    reconstructPath,
     calculatePathCost,
     isValidCoord,
     generateASCIIMap,
