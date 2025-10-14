@@ -328,6 +328,93 @@ function generateASCIIMap(mapData) {
 }
 
 /**
+ * A* Pathfinding - finds optimal path around obstacles
+ */
+function findPathAStar(from, to, terrainMap, getTerrainType) {
+    const start = parseCoord(from);
+    const goal = parseCoord(to);
+    
+    const openSet = [{ coord: from, f: 0, g: 0, h: 0 }];
+    const closedSet = new Set();
+    const cameFrom = new Map();
+    const gScore = new Map();
+    gScore.set(from, 0);
+    
+    const movementCosts = terrainMap.movementCosts || {
+        plains: 1.0,
+        road: 0.5,
+        hill: 1.5,
+        forest: 2.0,
+        marsh: 3.0,
+        river: 999,
+        ford: 1.5
+    };
+    
+    const heuristic = (coordStr) => {
+        const pos = parseCoord(coordStr);
+        return Math.abs(goal.col - pos.col) + Math.abs(goal.row - pos.row);
+    };
+    
+    while (openSet.length > 0) {
+        openSet.sort((a, b) => a.f - b.f);
+        const current = openSet.shift();
+        
+        if (current.coord === to) {
+            const path = reconstructPath(cameFrom, current.coord);
+            const cost = gScore.get(current.coord);
+            return { path, cost, valid: true };
+        }
+        
+        closedSet.add(current.coord);
+        const neighbors = getAdjacentCoords(current.coord);
+        
+        for (const neighbor of neighbors) {
+            if (closedSet.has(neighbor)) continue;
+            
+            const terrain = getTerrainType(neighbor, terrainMap);
+            const moveCost = movementCosts[terrain] || 1.0;
+            
+            if (moveCost >= 999) continue;
+            
+            const tentativeG = gScore.get(current.coord) + moveCost;
+            
+            if (!gScore.has(neighbor) || tentativeG < gScore.get(neighbor)) {
+                cameFrom.set(neighbor, current.coord);
+                gScore.set(neighbor, tentativeG);
+                
+                const h = heuristic(neighbor);
+                const f = tentativeG + h;
+                
+                const existingNode = openSet.find(n => n.coord === neighbor);
+                if (existingNode) {
+                    existingNode.g = tentativeG;
+                    existingNode.h = h;
+                    existingNode.f = f;
+                } else {
+                    openSet.push({ coord: neighbor, g: tentativeG, h: h, f: f });
+                }
+            }
+        }
+    }
+    
+    return { 
+        path: [from], 
+        cost: 0, 
+        valid: false, 
+        reason: 'No path found - impassable terrain blocks all routes' 
+    };
+}
+
+function reconstructPath(cameFrom, current) {
+    const path = [current];
+    while (cameFrom.has(current)) {
+        current = cameFrom.get(current);
+        path.unshift(current);
+    }
+    return path;
+}
+
+/**
  * Generate emoji-based map
  */
 function generateEmojiMap(mapData) {
