@@ -52,24 +52,69 @@ async function processTurn(battle, player1Order, player2Order, map) {
         const p1Interpretation = await interpretOrders(player1Order, battleState, 'player1', map);
         const p2Interpretation = await interpretOrders(player2Order, battleState, 'player2', map);
         
-        // DEBUG: Check what interpretOrders returned
-        console.log('DEBUG P1 Interpretation:');
-        console.log('  validatedActions:', p1Interpretation.validatedActions.length);
-        console.log('  errors:', p1Interpretation.errors.length);
-        if (p1Interpretation.validatedActions.length > 0) {
-            console.log('  First action:', p1Interpretation.validatedActions[0]);
-        }
-        if (p1Interpretation.errors.length > 0) {
-            console.log('  Errors:', p1Interpretation.errors);
+        // PHASE 1.5: Mission Continuation (add this entire block)
+        console.log('\n🔄 Phase 1.5: Checking active missions...');
+        
+        // Helper to continue missions
+        const continueMission = (unit, map) => {
+            if (!unit.activeMission || unit.activeMission.status !== 'active') {
+                return null;
+            }
+            
+            const target = unit.activeMission.target;
+            
+            // Check if already at destination
+            if (unit.position === target) {
+                console.log(`  ✅ ${unit.unitId} reached ${target} (mission complete)`);
+                unit.activeMission.status = 'complete';
+                return null;
+            }
+            
+            // Continue toward target
+            console.log(`  🔄 ${unit.unitId} auto-continuing to ${target}`);
+            
+            const validation = validateMovement(unit, target, map);
+            
+            if (validation.valid) {
+                return {
+                    type: 'move',
+                    unitId: unit.unitId,
+                    currentPosition: unit.position,
+                    targetPosition: target,
+                    reasoning: `Continuing mission to ${target}`,
+                    validation,
+                    finalPosition: validation.finalPosition,
+                    isMissionContinuation: true
+                };
+            }
+            
+            return null;
+        };
+        
+        // Check P1 units for mission continuation
+        for (const unit of battleState.player1?.unitPositions || []) {
+            // Skip if explicit order given
+            const hasOrder = p1Interpretation.validatedActions.some(a => a.unitId === unit.unitId);
+            if (hasOrder) continue;
+            
+            const continuation = continueMission(unit, map);
+            if (continuation) {
+                p1Interpretation.validatedActions.push(continuation);
+            }
         }
         
-        console.log('DEBUG P2 Interpretation:');
-        console.log('  validatedActions:', p2Interpretation.validatedActions.length);
-        if (p2Interpretation.validatedActions.length > 0) {
-            console.log('  First action:', p2Interpretation.validatedActions[0]);
+        // Check P2 units for mission continuation
+        for (const unit of battleState.player2?.unitPositions || []) {
+            const hasOrder = p2Interpretation.validatedActions.some(a => a.unitId === unit.unitId);
+            if (hasOrder) continue;
+            
+            const continuation = continueMission(unit, map);
+            if (continuation) {
+                p2Interpretation.validatedActions.push(continuation);
+            }
         }
         
-        // PHASE 2: Execute movements
+        // PHASE 2: Execute movements (existing code continues here)
         console.log('\n🚶 Phase 2: Processing movement...');
         const p1Moves = p1Interpretation.validatedActions.filter(a => a.type === 'move');
         const p2Moves = p2Interpretation.validatedActions.filter(a => a.type === 'move');

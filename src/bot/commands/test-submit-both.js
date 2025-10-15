@@ -36,7 +36,20 @@ module.exports = {
                     content: 'No active battle found. Create one and use /test-join first.'
                 });
             }
-            
+            const battleState = battle.battleState;
+
+            console.log("\n=== UNIT STRUCTURE DEBUG ===");
+            console.log("P1 Units:");
+            battleState.player1.unitPositions.forEach((unit, i) => {
+            console.log(`  Unit ${i}:`, JSON.stringify({
+                unitId: unit.unitId,
+                position: unit.position,
+                type: unit.type,
+                unitType: unit.unitType,
+                mounted: unit.mounted,
+                allKeys: Object.keys(unit)
+            }, null, 2));
+            });
             const player1Order = interaction.options.getString('player1-order');
             const player2Order = interaction.options.getString('player2-order');
             
