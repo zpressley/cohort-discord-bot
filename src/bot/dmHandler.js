@@ -289,6 +289,109 @@ async function sendTurnResults(battle, battleTurn, narrative, turnResults, clien
 }
 
 
+// Clean briefing structure in dmHandler.js
+// Four sections: Units → Intelligence → Officer → Map
+
+/**
+ * Get terrain name for coordinate
+ */
+function getTerrainName(position, map) {
+    const terrain = map.terrain;
+    
+    if (terrain.fords?.some(f => (typeof f === 'string' ? f : f.coord) === position)) {
+        return 'ford';
+    }
+    if (terrain.river?.includes(position)) return 'river';
+    if (terrain.hill?.includes(position)) return 'hill';
+    if (terrain.marsh?.includes(position)) return 'marsh';
+    if (terrain.forest?.includes(position)) return 'forest';
+    if (terrain.road?.includes(position)) return 'road';
+    
+    return 'plains';
+}
+
+/**
+ * Get terrain description with context
+ */
+function getTerrainDescription(position, map) {
+    const mainTerrain = getTerrainName(position, map);
+    const adjacent = [];
+    
+    // Check adjacent notable terrain
+    const { getAdjacentCoords } = require('../game/maps/mapUtils');
+    const neighbors = getAdjacentCoords(position);
+    
+    if (neighbors.some(n => map.terrain.river?.includes(n))) {
+        adjacent.push('near river');
+    }
+    if (neighbors.some(n => map.terrain.hill?.includes(n))) {
+        adjacent.push('near hills');
+    }
+    if (neighbors.some(n => map.terrain.forest?.includes(n))) {
+        adjacent.push('near forest');
+    }
+    
+    let desc = `on ${mainTerrain}`;
+    if (adjacent.length > 0) {
+        desc += ` ${adjacent[0]}`;
+    }
+    
+    return desc;
+}
+
+/**
+ * Get intelligence detail level based on distance
+ */
+function getIntelDetail(distance) {
+    if (distance <= 3) return 'detailed';      // Full intel
+    if (distance <= 5) return 'identified';    // Know type
+    return 'spotted';                          // Movement only
+}
+
+/**
+ * Format enemy intelligence report
+ */
+function formatEnemyIntel(enemyPos, playerPos, map, detailLevel = 'identified') {
+    const distance = playerPos ? calculateDistance(playerPos, enemyPos) : '?';
+    const terrainDesc = getTerrainDescription(enemyPos, map);
+    
+    // Detail level determines what we know
+    if (detailLevel === 'detailed' || distance <= 3) {
+        // Close range - full intel
+        return `👁️ Enemy infantry ~100 strong ${terrainDesc} [${enemyPos}] (${distance} tiles)`;
+    } else if (detailLevel === 'identified' || distance <= 5) {
+        // Medium range - unit type known
+        return `👁️ Enemy forces ${terrainDesc} [${enemyPos}] (${distance} tiles)`;
+    } else {
+        // Long range - movement only
+        return `👁️ Enemy movement detected [${enemyPos}] (${distance} tiles)`;
+    }
+}
+
+/**
+ * Generate unit description from properties
+ */
+function getUnitDescription(unit) {
+    let desc = '';
+    
+    if (unit.mounted) {
+        desc = `${unit.quality?.name || 'Professional'} ${unit.mount?.name || 'Cavalry'}`;
+    } else {
+        desc = `${unit.quality?.name || 'Professional'} Infantry`;
+    }
+    
+    if (unit.primaryWeapon?.name && !unit.primaryWeapon.name.includes('Standard')) {
+        const weaponName = unit.primaryWeapon.name.replace(/\s*\(.*?\)/g, '');
+        desc += ` (${weaponName})`;
+    }
+    
+    if (unit.isElite) {
+        desc = 'Elite ' + desc;
+    }
+    
+    return desc;
+}
+
 /**
  * Send clean 4-section briefings
  */
@@ -310,7 +413,8 @@ async function sendNextTurnBriefings(battle, battleState, turnResult, client) {
             const unitList = (p1Data.unitPositions || []).map(u => {
                 const emoji = getUnitEmoji(u, 'friendly');
                 const desc = getUnitDescription(u);
-                return `[${u.position}] ${emoji} ${desc} (${u.currentStrength})`;
+                const terrainDesc = getTerrainDescription(u.position, map);
+                return `[${u.position}] ${emoji} ${desc} (${u.currentStrength}) - ${terrainDesc}`;
             }).join('\n');
             
             // 2. INTELLIGENCE
@@ -320,11 +424,10 @@ async function sendNextTurnBriefings(battle, battleState, turnResult, client) {
             if (visibleEnemies.length === 0) {
                 intelligence = '👁️ No enemy contact';
             } else {
+                const playerPos = p1Data.unitPositions[0]?.position;
                 intelligence = visibleEnemies.map(enemyPos => {
-                    const distance = p1Data.unitPositions[0]?.position 
-                        ? calculateDistance(p1Data.unitPositions[0].position, enemyPos) 
-                        : '?';
-                    return `👁️ Enemy at ${enemyPos} (${distance} tiles)`;
+                    const distance = playerPos ? calculateDistance(playerPos, enemyPos) : '?';
+                    return formatEnemyIntel(enemyPos, playerPos, map);
                 }).join('\n');
             }
             
@@ -405,7 +508,8 @@ ${p1Map}
             const unitList = (p2Data.unitPositions || []).map(u => {
                 const emoji = getUnitEmoji(u, 'friendly');
                 const desc = getUnitDescription(u);
-                return `[${u.position}] ${emoji} ${desc} (${u.currentStrength})`;
+                const terrainDesc = getTerrainDescription(u.position, map);
+                return `[${u.position}] ${emoji} ${desc} (${u.currentStrength}) - ${terrainDesc}`;
             }).join('\n');
             
             const visibleEnemies = p2Data.visibleEnemyPositions || [];
@@ -414,11 +518,9 @@ ${p1Map}
             if (visibleEnemies.length === 0) {
                 intelligence = '👁️ No enemy contact';
             } else {
+                const playerPos = p2Data.unitPositions[0]?.position;
                 intelligence = visibleEnemies.map(enemyPos => {
-                    const distance = p2Data.unitPositions[0]?.position 
-                        ? calculateDistance(p2Data.unitPositions[0].position, enemyPos) 
-                        : '?';
-                    return `👁️ Enemy at ${enemyPos} (${distance} tiles)`;
+                    return formatEnemyIntel(enemyPos, playerPos, map);
                 }).join('\n');
             }
             

@@ -214,22 +214,26 @@ function getUnitEmoji(unit, side = 'friendly') {
     return emojis.infantry;
 }
 
-/**
- * Get emoji for stacked units (shows dominant type)
- */
 function getStackedEmoji(units, side) {
+    // Commander present = always show commander diamond
     const commander = units.find(u => u.isCommander || u.isElite);
     if (commander) {
         return UNIT_EMOJIS[side].commander;
     }
     
+    // Check if any unit is mounted
+    const hasCavalry = units.some(u => u.mounted === true);
+    if (hasCavalry) {
+        return UNIT_EMOJIS[side].cavalry;
+    }
+    
+    // Find dominant type by strength (fallback)
     const typeTotals = { cavalry: 0, infantry: 0 };
     
     units.forEach(unit => {
-        const type = (unit.unitType || '').toLowerCase();
         const strength = unit.currentStrength || 0;
         
-        if (type.includes('cavalry') || type.includes('mounted')) {
+        if (unit.mounted) {
             typeTotals.cavalry += strength;
         } else {
             typeTotals.infantry += strength;
