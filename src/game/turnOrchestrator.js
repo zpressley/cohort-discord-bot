@@ -5,6 +5,7 @@ const { interpretOrders } = require('../ai/orderInterpreter');
 const { processMovementPhase } = require('./positionBasedCombat');
 const { calculateVisibility } = require('./fogOfWar');
 const { resolveCombat } = require('./battleEngine');
+const { validateMovement } = require('./movementSystem');
 
 /**
  * Process complete turn with both players' orders
@@ -47,7 +48,6 @@ async function processTurn(battle, player1Order, player2Order, map) {
     try {
         // PHASE 1: Interpret orders (AI parses natural language)
         console.log('\n📝 Phase 1: Interpreting orders...');
-        // Add debug in turnOrchestrator.js after interpretOrders calls (line ~46-47)
 
         const p1Interpretation = await interpretOrders(player1Order, battleState, 'player1', map);
         const p2Interpretation = await interpretOrders(player2Order, battleState, 'player2', map);
@@ -219,10 +219,6 @@ async function processTurn(battle, player1Order, player2Order, map) {
             }
         };
         
-         // DEBUG: Check if missions are being saved  ← ADD HERE
-        console.log('DEBUG Missions before save:');
-        console.log('  P1 unit 0 mission:', updatedPositions.player1[0]?.activeMission);
-        console.log('  P2 unit 0 mission:', updatedPositions.player2[0]?.activeMission);
         return {
             success: true,
             newBattleState: {

@@ -465,7 +465,7 @@ async function callAIForOrderParsing(prompt) {
     }
     
     // Check for mission continuation keywords
-    const continueKeywords = ['continue', 'resume', 'proceed', 'carry on'];
+    const continueKeywords = ['continue', 'hold','resume', 'proceed', 'carry on'];
     const hasContinue = continueKeywords.some(kw => lowerOrder.includes(kw));
     
     if (hasContinue || lowerOrder === 'yes') {
