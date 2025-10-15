@@ -3,6 +3,7 @@
 
 const { EmbedBuilder } = require('discord.js');
 const { Op } = require('sequelize');
+const { calculateDistance, getAdjacentCoords } = require('../game/maps/mapUtils');
 
 // Track processed messages to prevent duplicates
 const processedMessages = new Set();
