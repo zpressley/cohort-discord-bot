@@ -284,7 +284,77 @@ Return ONLY valid JSON, no other text.`;
 }
 
 /**
- * Enhanced callAIForOrderParsing - handles multiple units
+ * Determine which units an order targets
+ * @param {string} orderText - The order string
+ * @param {Array} yourUnits - All available units
+ * @returns {Array} Filtered units
+ */
+function determineTargetUnits(orderText, yourUnits) {
+    const lowerOrder = orderText.toLowerCase();
+    
+    console.log(`  👥 Targeting: `, { end: '' });
+    
+    // Check for "all units" keyword
+    if (lowerOrder.includes('all units') || lowerOrder.includes('everyone')) {
+        console.log('ALL units');
+        return yourUnits;
+    }
+    
+    // Check for cavalry/mounted keyword
+    if (lowerOrder.includes('cavalry') || lowerOrder.includes('horse')) {
+        const cavalry = yourUnits.filter(u => u.mounted === true);
+        console.log(`Cavalry (${cavalry.length} units)`);
+        return cavalry.length > 0 ? cavalry : yourUnits;
+    }
+    
+    // Check for infantry keyword
+    if (lowerOrder.includes('infantry') || lowerOrder.includes('foot')) {
+        const infantry = yourUnits.filter(u => !u.mounted);
+        console.log(`Infantry (${infantry.length} units)`);
+        return infantry.length > 0 ? infantry : yourUnits;
+    }
+    
+    // Check for position-based "unit at X"
+    const posMatch = orderText.match(/unit at ([A-T]\d{1,2})/i);
+    if (posMatch) {
+        const pos = posMatch[1].toUpperCase();
+        const filtered = yourUnits.filter(u => u.position.toUpperCase() === pos);
+        console.log(`Unit at ${pos}`);
+        return filtered.length > 0 ? filtered : yourUnits;
+    }
+    
+    // Check for "northern/southern/eastern/western unit"
+    if (lowerOrder.includes('northern unit') || lowerOrder.includes('northernmost')) {
+        // Find unit with LOWEST row number (northernmost)
+        const { parseCoord } = require('../game/maps/mapUtils');
+        const northernmost = yourUnits.reduce((north, u) => {
+            const uCoord = parseCoord(u.position);
+            const nCoord = parseCoord(north.position);
+            return uCoord.row < nCoord.row ? u : north;
+        });
+        console.log(`Northern unit (${northernmost.id})`);
+        return [northernmost];
+    }
+    
+    if (lowerOrder.includes('southern unit') || lowerOrder.includes('southernmost')) {
+        // Find unit with HIGHEST row number (southernmost)
+        const { parseCoord } = require('../game/maps/mapUtils');
+        const southernmost = yourUnits.reduce((south, u) => {
+            const uCoord = parseCoord(u.position);
+            const sCoord = parseCoord(south.position);
+            return uCoord.row > sCoord.row ? u : south;
+        });
+        console.log(`Southern unit (${southernmost.id})`);
+        return [southernmost];
+    }
+    
+    // Default: first unit only
+    console.log('Default (first unit)');
+    return [yourUnits[0]];
+}
+
+/**
+ * Enhanced callAIForOrderParsing - handles multiple units, position filters, and overrides
  */
 async function callAIForOrderParsing(prompt) {
     const yourUnits = JSON.parse(prompt.match(/Your Units: (\[.*?\])/s)?.[1] || '[]');
@@ -303,7 +373,38 @@ async function callAIForOrderParsing(prompt) {
     const lowerOrder = orderText.toLowerCase().trim();
     
     // Determine which units this order targets
-    const targetUnits = determineTargetUnits(orderText, yourUnits);
+    let targetUnits = determineTargetUnits(orderText, yourUnits);
+    
+    // Check for overrides (e.g., "all units move south, northern unit hold")
+    const overrideMatch = orderText.match(/,\s*(.+?)\s+(hold|stay|wait)/i);
+    if (overrideMatch && targetUnits.length > 1) {
+        const overridePhrase = overrideMatch[1].toLowerCase();
+        console.log(`  🚫 Override detected: "${overridePhrase} ${overrideMatch[2]}"`);
+        
+        // Determine which unit to EXCLUDE from the main order
+        let excludeUnit = null;
+        
+        if (overridePhrase.includes('northern')) {
+            const { parseCoord } = require('../game/maps/mapUtils');
+            excludeUnit = targetUnits.reduce((north, u) => {
+                const uCoord = parseCoord(u.position);
+                const nCoord = parseCoord(north.position);
+                return uCoord.row < nCoord.row ? u : north;
+            });
+        } else if (overridePhrase.includes('southern')) {
+            const { parseCoord } = require('../game/maps/mapUtils');
+            excludeUnit = targetUnits.reduce((south, u) => {
+                const uCoord = parseCoord(u.position);
+                const sCoord = parseCoord(south.position);
+                return uCoord.row > sCoord.row ? u : south;
+            });
+        }
+        
+        if (excludeUnit) {
+            console.log(`    Excluding ${excludeUnit.id} from movement`);
+            targetUnits = targetUnits.filter(u => u.id !== excludeUnit.id);
+        }
+    }
     
     // Check for mission continuation (applies to units with active missions)
     const continueKeywords = ['continue', 'resume', 'proceed', 'carry on'];
@@ -327,7 +428,63 @@ async function callAIForOrderParsing(prompt) {
         };
     }
     
-    // Check for explicit coordinates
+    // Check for position-filtered orders (e.g., "unit at F5 move to M5")
+    const positionFilter = orderText.match(/unit at ([A-T]\d{1,2})/i);
+    
+    if (positionFilter) {
+        const filterPos = positionFilter[1].toUpperCase();
+        console.log(`  📍 Position filter detected: ${filterPos}`);
+        
+        // Find the unit at this position
+        const filteredUnit = yourUnits.find(u => u.position.toUpperCase() === filterPos);
+        
+        if (!filteredUnit) {
+            return {
+                actions: [],
+                validation: { isValid: false, errors: [`No unit found at ${filterPos}`], warnings: [] },
+                officerComment: `No unit at position ${filterPos}.`
+            };
+        }
+        
+        // Look for destination AFTER the filter phrase
+        const afterFilter = orderText.substring(
+            orderText.indexOf(positionFilter[0]) + positionFilter[0].length
+        );
+        
+        let targetPosition = null;
+        
+        // Check for coordinate after filter
+        const destMatch = afterFilter.match(/\b([A-T]\d{1,2})\b/i);
+        if (destMatch) {
+            targetPosition = destMatch[1].toUpperCase();
+            console.log(`  🎯 Destination found: ${targetPosition}`);
+        } else {
+            // Check for direction after filter
+            const afterLower = afterFilter.toLowerCase();
+            if (afterLower.includes('east')) targetPosition = moveInDirection(filterPos, 'east', 3);
+            else if (afterLower.includes('west')) targetPosition = moveInDirection(filterPos, 'west', 3);
+            else if (afterLower.includes('north')) targetPosition = moveInDirection(filterPos, 'north', 3);
+            else if (afterLower.includes('south')) targetPosition = moveInDirection(filterPos, 'south', 3);
+            else {
+                // No clear destination - hold position
+                targetPosition = filterPos;
+            }
+        }
+        
+        return {
+            actions: [{
+                type: 'move',
+                unitId: filteredUnit.id,
+                currentPosition: filteredUnit.position,
+                targetPosition: targetPosition,
+                reasoning: `Unit at ${filterPos} moving to ${targetPosition}`
+            }],
+            validation: { isValid: true, errors: [], warnings: [] },
+            officerComment: `Unit moving from ${filterPos} to ${targetPosition}.`
+        };
+    }
+    
+    // Check for explicit coordinates (no position filter)
     const coordMatch = orderText.match(/\b([A-T]\d{1,2})\b/i);
     if (coordMatch) {
         const targetPosition = coordMatch[1].toUpperCase();
@@ -351,9 +508,9 @@ async function callAIForOrderParsing(prompt) {
     // Direction-based movement
     let direction = null;
     if (lowerOrder.includes('south')) direction = 'south';
-    if (lowerOrder.includes('north')) direction = 'north';
-    if (lowerOrder.includes('east')) direction = 'east';
-    if (lowerOrder.includes('west')) direction = 'west';
+    else if (lowerOrder.includes('north')) direction = 'north';
+    else if (lowerOrder.includes('east')) direction = 'east';
+    else if (lowerOrder.includes('west')) direction = 'west';
     
     if (direction) {
         const actions = targetUnits.map(unit => ({
@@ -408,26 +565,30 @@ async function callAIForOrderParsing(prompt) {
     };
 }
 
-/**
- * Helper: Move coordinate in direction
- */
 function moveInDirection(fromCoord, direction, distance) {
     const { parseCoord, coordToString } = require('../game/maps/mapUtils');
     const pos = parseCoord(fromCoord);
     
+    // GRID LAYOUT: A1 (top-left) to T20 (bottom-right)
+    // Row numbers INCREASE going DOWN (south)
+    // Column letters INCREASE going RIGHT (east)
+    
     const vectors = {
-        north: { row: -distance, col: 0 },
-        south: { row: +distance, col: 0 },
-        east: { row: 0, col: +distance },
-        west: { row: 0, col: -distance }
+        north: { row: -distance, col: 0 },   // UP = decrease row (K5 → K2)
+        south: { row: +distance, col: 0 },   // DOWN = increase row (K2 → K5)  
+        east: { row: 0, col: +distance },    // RIGHT = increase column (F5 → I5)
+        west: { row: 0, col: -distance }     // LEFT = decrease column (I5 → F5)
     };
     
     const vec = vectors[direction] || { row: 0, col: 0 };
-    const newRow = Math.max(0, Math.min(19, pos.row + vec.row)); // 20x20 grid
+    
+    // parseCoord returns {row: 0-19, col: 0-19}
+    const newRow = Math.max(0, Math.min(19, pos.row + vec.row));
     const newCol = Math.max(0, Math.min(19, pos.col + vec.col));
     
     return coordToString({ row: newRow, col: newCol });
 }
+
 
 /**
  * Generate default officer comment by culture
