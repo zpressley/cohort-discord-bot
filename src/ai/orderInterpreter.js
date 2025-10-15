@@ -284,11 +284,13 @@ Return ONLY valid JSON, no other text.`;
 }
 
 /**
- * Call AI for order parsing (placeholder for real AI integration)
+ * Enhanced callAIForOrderParsing - handles multiple units
  */
 async function callAIForOrderParsing(prompt) {
     const yourUnits = JSON.parse(prompt.match(/Your Units: (\[.*?\])/s)?.[1] || '[]');
     const orderText = prompt.match(/\*\*PLAYER ORDER:\*\* "(.*?)"/)?.[1] || '';
+    
+    console.log('  🔍 Parsing order:', orderText);
     
     if (yourUnits.length === 0) {
         return { 
@@ -298,47 +300,111 @@ async function callAIForOrderParsing(prompt) {
         };
     }
     
-    const unit = yourUnits[0];
-    const lowerOrder = orderText.toLowerCase();
+    const lowerOrder = orderText.toLowerCase().trim();
     
-    // Check for explicit coordinates (e.g., "move to N17")
-    const coordMatch = orderText.match(/\b([A-T]\d{1,2})\b/i);
-    if (coordMatch) {
-        const targetPosition = coordMatch[1].toUpperCase();
+    // Determine which units this order targets
+    const targetUnits = determineTargetUnits(orderText, yourUnits);
+    
+    // Check for mission continuation (applies to units with active missions)
+    const continueKeywords = ['continue', 'resume', 'proceed', 'carry on'];
+    const hasContinue = continueKeywords.some(keyword => lowerOrder.includes(keyword));
+    
+    if (hasContinue || lowerOrder === 'yes' || lowerOrder === 'proceed') {
+        console.log('  🔄 Mission continuation command detected');
+        
+        // Create continue_mission actions for each targeted unit
+        const actions = targetUnits.map(unit => ({
+            type: 'continue_mission',
+            unitId: unit.id,
+            currentPosition: unit.position,
+            reasoning: 'Commander orders mission continuation'
+        }));
+        
         return {
-            actions: [{
-                type: 'move',
-                unitId: unit.id,
-                currentPosition: unit.position,
-                targetPosition: targetPosition,
-                reasoning: `Moving to explicit coordinate ${targetPosition}`
-            }],
+            actions,
             validation: { isValid: true, errors: [], warnings: [] },
-            officerComment: `Moving to ${targetPosition}.`
+            officerComment: `${targetUnits.length} unit(s) resuming mission.`
         };
     }
     
-    // Fallback to direction parsing
-    let targetPosition = unit.position; // Default: hold position
-    
-    if (lowerOrder.includes('south')) targetPosition = moveInDirection(unit.position, 'south', 3);
-    if (lowerOrder.includes('north')) targetPosition = moveInDirection(unit.position, 'north', 3);
-    if (lowerOrder.includes('east')) targetPosition = moveInDirection(unit.position, 'east', 3);
-    if (lowerOrder.includes('west')) targetPosition = moveInDirection(unit.position, 'west', 3);
-    
-    if (lowerOrder.includes('ford')) targetPosition = 'I11'; // Central ford
-    if (lowerOrder.includes('hill')) targetPosition = 'B5';
-    
-    return {
-        actions: [{
+    // Check for explicit coordinates
+    const coordMatch = orderText.match(/\b([A-T]\d{1,2})\b/i);
+    if (coordMatch) {
+        const targetPosition = coordMatch[1].toUpperCase();
+        
+        // Create move actions for all targeted units
+        const actions = targetUnits.map(unit => ({
             type: 'move',
             unitId: unit.id,
             currentPosition: unit.position,
             targetPosition: targetPosition,
-            reasoning: `Moving toward ${targetPosition}`
-        }],
+            reasoning: `Moving to explicit coordinate ${targetPosition}`
+        }));
+        
+        return {
+            actions,
+            validation: { isValid: true, errors: [], warnings: [] },
+            officerComment: `${targetUnits.length} unit(s) moving to ${targetPosition}.`
+        };
+    }
+    
+    // Direction-based movement
+    let direction = null;
+    if (lowerOrder.includes('south')) direction = 'south';
+    if (lowerOrder.includes('north')) direction = 'north';
+    if (lowerOrder.includes('east')) direction = 'east';
+    if (lowerOrder.includes('west')) direction = 'west';
+    
+    if (direction) {
+        const actions = targetUnits.map(unit => ({
+            type: 'move',
+            unitId: unit.id,
+            currentPosition: unit.position,
+            targetPosition: moveInDirection(unit.position, direction, 3),
+            reasoning: `Moving ${direction}`
+        }));
+        
+        return {
+            actions,
+            validation: { isValid: true, errors: [], warnings: [] },
+            officerComment: `${targetUnits.length} unit(s) advancing ${direction}.`
+        };
+    }
+    
+    // Landmark-based
+    let landmark = null;
+    if (lowerOrder.includes('ford')) landmark = 'I11';
+    if (lowerOrder.includes('hill')) landmark = 'B5';
+    
+    if (landmark) {
+        const actions = targetUnits.map(unit => ({
+            type: 'move',
+            unitId: unit.id,
+            currentPosition: unit.position,
+            targetPosition: landmark,
+            reasoning: 'Moving to landmark'
+        }));
+        
+        return {
+            actions,
+            validation: { isValid: true, errors: [], warnings: [] },
+            officerComment: `${targetUnits.length} unit(s) moving to objective.`
+        };
+    }
+    
+    // Default: hold position
+    const actions = targetUnits.map(unit => ({
+        type: 'move',
+        unitId: unit.id,
+        currentPosition: unit.position,
+        targetPosition: unit.position,
+        reasoning: 'Holding position'
+    }));
+    
+    return {
+        actions,
         validation: { isValid: true, errors: [], warnings: [] },
-        officerComment: 'Orders acknowledged.'
+        officerComment: 'Holding position.'
     };
 }
 
@@ -396,6 +462,91 @@ function isQuestion(text) {
     if (lowerText.match(/^(do|does|is|are|will|have|has)\s/)) return true;
     
     return false;
+}
+
+/**
+ * Determine which units the order applies to
+ * Handles: "all units", "cavalry", "unit at M4", "northern unit", etc.
+ */
+function determineTargetUnits(orderText, allUnits) {
+    const lower = orderText.toLowerCase();
+    
+    // "all units" or "everyone" or "both"
+    if (lower.includes('all units') || 
+        lower.includes('all forces') ||
+        lower.includes('everyone') || 
+        lower.includes('both units')) {
+        console.log('  👥 Targeting: ALL units');
+        return allUnits;
+    }
+    
+    // "unit at M4" - specific position
+    const posMatch = orderText.match(/unit at ([A-T]\d{1,2})/i);
+    if (posMatch) {
+        const position = posMatch[1].toUpperCase();
+        const unit = allUnits.find(u => u.position === position);
+        console.log(`  👥 Targeting: Unit at ${position}`);
+        return unit ? [unit] : [];
+    }
+    
+    // "cavalry" or "mounted" - type-based
+    if ((lower.includes('cavalry') || lower.includes('mounted')) && 
+        !lower.includes('all')) {
+        const cavalry = allUnits.filter(u => u.mounted === true);
+        console.log(`  👥 Targeting: Cavalry (${cavalry.length} units)`);
+        return cavalry.length > 0 ? cavalry : [allUnits[0]];
+    }
+    
+    // "infantry" - type-based
+    if (lower.includes('infantry') && !lower.includes('cavalry') && !lower.includes('all')) {
+        const infantry = allUnits.filter(u => !u.mounted);
+        console.log(`  👥 Targeting: Infantry (${infantry.length} units)`);
+        return infantry.length > 0 ? infantry : [allUnits[0]];
+    }
+    
+    // "northern unit" or "north forces"
+    if (lower.includes('northern') || lower.includes('north unit')) {
+        // Find northernmost unit (lowest row number)
+        const sorted = [...allUnits].sort((a, b) => {
+            const aRow = parseInt(a.position.match(/\d+/)[0]);
+            const bRow = parseInt(b.position.match(/\d+/)[0]);
+            return aRow - bRow;
+        });
+        console.log(`  👥 Targeting: Northern unit at ${sorted[0]?.position}`);
+        return [sorted[0]];
+    }
+    
+    // "southern unit" or "south forces"
+    if (lower.includes('southern') || lower.includes('south unit')) {
+        const sorted = [...allUnits].sort((a, b) => {
+            const aRow = parseInt(a.position.match(/\d+/)[0]);
+            const bRow = parseInt(b.position.match(/\d+/)[0]);
+            return bRow - aRow;
+        });
+        console.log(`  👥 Targeting: Southern unit at ${sorted[0]?.position}`);
+        return [sorted[0]];
+    }
+    
+    // "first unit" or "second unit"
+    if (lower.includes('first unit')) {
+        console.log(`  👥 Targeting: First unit`);
+        return [allUnits[0]];
+    }
+    if (lower.includes('second unit') && allUnits.length > 1) {
+        console.log(`  👥 Targeting: Second unit`);
+        return [allUnits[1]];
+    }
+    
+    // "elite" or "commander" - elite unit only
+    if (lower.includes('elite') || lower.includes('commander')) {
+        const elite = allUnits.find(u => u.isElite || u.isCommander);
+        console.log(`  👥 Targeting: Elite unit`);
+        return elite ? [elite] : [allUnits[0]];
+    }
+    
+    // Default: first unit only (backwards compatible)
+    console.log(`  👥 Targeting: Default (first unit)`);
+    return [allUnits[0]];
 }
 
 module.exports = {
