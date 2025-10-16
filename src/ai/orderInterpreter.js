@@ -647,12 +647,18 @@ function moveInDirection(fromCoord, direction, distance) {
     const pos = parseCoord(fromCoord);
     
     // Grid: A1 (top-left) to T20 (bottom-right)
-    // Row increases going DOWN (south), col increases going RIGHT (east)
     const vectors = {
-        north: { row: -distance, col: 0 },   // Decrease row
-        south: { row: +distance, col: 0 },   // Increase row
-        east: { row: 0, col: +distance },    // Increase col
-        west: { row: 0, col: -distance }     // Decrease col
+        // Cardinals
+        north: { row: -distance, col: 0 },
+        south: { row: +distance, col: 0 },
+        east: { row: 0, col: +distance },
+        west: { row: 0, col: -distance },
+        
+        // Intercardinals (diagonal movement)
+        northeast: { row: -distance, col: +distance },
+        northwest: { row: -distance, col: -distance },
+        southeast: { row: +distance, col: +distance },
+        southwest: { row: +distance, col: -distance }
     };
     
     const vec = vectors[direction] || { row: 0, col: 0 };
