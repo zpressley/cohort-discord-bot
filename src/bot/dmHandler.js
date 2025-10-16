@@ -1,5 +1,6 @@
 // src/bot/dmHandler.js
 // Handle Direct Messages for Battle Commands
+// 10:47 AM 6/26/24
 
 const { EmbedBuilder } = require('discord.js');
 const { Op } = require('sequelize');
