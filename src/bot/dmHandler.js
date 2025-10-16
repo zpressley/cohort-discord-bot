@@ -1,6 +1,6 @@
 // src/bot/dmHandler.js
 // Handle Direct Messages for Battle Commands
-// 10:47 AM 6/26/24
+// 10:47
 
 const { EmbedBuilder } = require('discord.js');
 const { Op } = require('sequelize');
@@ -802,6 +802,151 @@ function generateMissionReports(interpretation) {
     }
     
     return `\n**📋 MISSION STATUS:**\n${interpretation.missionReports.join('\n')}\n`;
+}
+
+/**
+ * Get simple terrain description for friendly units
+ * Format: Just the terrain type, no fluff
+ */
+function getTerrainDescription(position, map) {
+    // Check terrain in priority order
+    if (map.terrain.fords?.some(f => (typeof f === 'string' ? f : f.coord) === position)) {
+        return 'ford';
+    }
+    if (map.terrain.hill?.includes(position)) return 'hill';
+    if (map.terrain.forest?.includes(position)) return 'forest';
+    if (map.terrain.marsh?.includes(position)) return 'marsh';
+    if (map.terrain.road?.includes(position)) return 'road';
+    if (map.terrain.river?.includes(position)) return 'river';
+    
+    return 'plains'; // Default
+}
+
+/**
+ * Get unit description (quality + type + weapon)
+ */
+function getUnitDescription(unit) {
+    const quality = unit.qualityType || 'Professional';
+    const type = unit.mounted ? 'Horses' : 'Infantry';
+    const weapon = unit.primaryWeaponKey ? `(${unit.primaryWeaponKey})` : '';
+    
+    return `${quality} ${type} ${weapon}`.trim();
+}
+
+/**
+ * Format enemy intelligence with natural language terrain context
+ * Scouts report what they see in descriptive terms
+ */
+function formatEnemyIntel(enemyPos, playerPos, map) {
+    const { parseCoord, calculateDistance } = require('../game/maps/mapUtils');
+    const distance = playerPos ? calculateDistance(playerPos, enemyPos) : '?';
+    
+    // Get terrain at enemy position
+    const terrain = getSimpleTerrain(enemyPos, map);
+    
+    // Get adjacent terrain features for context
+    const context = getNearbyTerrainContext(enemyPos, map);
+    
+    // Build natural language description
+    let location = '';
+    
+    if (terrain === 'ford') {
+        location = 'holding the ford crossing';
+    } else if (terrain === 'hill') {
+        location = 'positioned on the hilltop';
+    } else if (terrain === 'forest') {
+        location = 'concealed in the forest';
+    } else if (terrain === 'marsh') {
+        location = 'moving through the marshland';
+    } else if (terrain === 'road') {
+        location = 'advancing along the road';
+    } else {
+        // Plains - use nearby context
+        if (context.includes('river')) {
+            const direction = getRelativeDirection(enemyPos, findNearestRiverTile(enemyPos, map));
+            location = `on the ${direction} bank of the river`;
+        } else if (context.includes('hill')) {
+            location = 'at the base of the hills';
+        } else if (context.includes('forest')) {
+            location = 'at the forest edge';
+        } else {
+            location = 'on open ground';
+        }
+    }
+    
+    return `👁️ Enemy forces ${location} at ${enemyPos} (${distance} tiles away)`;
+}
+
+/**
+ * Get simple terrain type at position
+ */
+function getSimpleTerrain(position, map) {
+    if (map.terrain.fords?.includes(position)) return 'ford';
+    if (map.terrain.hill?.includes(position)) return 'hill';
+    if (map.terrain.forest?.includes(position)) return 'forest';
+    if (map.terrain.marsh?.includes(position)) return 'marsh';
+    if (map.terrain.road?.includes(position)) return 'road';
+    if (map.terrain.river?.includes(position)) return 'river';
+    return 'plains';
+}
+
+/**
+ * Get nearby terrain features for context
+ */
+function getNearbyTerrainContext(position, map) {
+    const { parseCoord, calculateDistance } = require('../game/maps/mapUtils');
+    const nearby = [];
+    
+    // Check adjacent tiles (1 tile away)
+    const allTerrainTypes = ['river', 'hill', 'forest', 'marsh'];
+    
+    for (const terrainType of allTerrainTypes) {
+        const tiles = map.terrain[terrainType] || [];
+        for (const tile of tiles) {
+            if (calculateDistance(position, tile) <= 1) {
+                if (!nearby.includes(terrainType)) {
+                    nearby.push(terrainType);
+                }
+            }
+        }
+    }
+    
+    return nearby;
+}
+
+/**
+ * Find nearest river tile to position
+ */
+function findNearestRiverTile(position, map) {
+    const { calculateDistance } = require('../game/maps/mapUtils');
+    const riverTiles = map.terrain.river || [];
+    
+    if (riverTiles.length === 0) return position;
+    
+    return riverTiles.reduce((nearest, tile) => {
+        const distToTile = calculateDistance(position, tile);
+        const distToNearest = calculateDistance(position, nearest);
+        return distToTile < distToNearest ? tile : nearest;
+    });
+}
+
+/**
+ * Get relative direction from position to target
+ */
+function getRelativeDirection(from, to) {
+    const { parseCoord } = require('../game/maps/mapUtils');
+    const fromPos = parseCoord(from);
+    const toPos = parseCoord(to);
+    
+    const dx = toPos.col - fromPos.col;
+    const dy = toPos.row - fromPos.row;
+    
+    // Determine primary direction
+    if (Math.abs(dx) > Math.abs(dy)) {
+        return dx > 0 ? 'western' : 'eastern';
+    } else {
+        return dy > 0 ? 'northern' : 'southern';
+    }
 }
 
 module.exports = {

@@ -295,7 +295,9 @@ function determineTargetUnits(orderText, yourUnits) {
     console.log(`  👥 Targeting: `, { end: '' });
     
     // Check for "all units" keyword
-    if (lowerOrder.includes('all units') || lowerOrder.includes('everyone')) {
+    if (lowerOrder.includes('all units') || 
+        lowerOrder.includes('everyone') ||
+        lowerOrder.match(/^units\s+/)) {  // MULTI-002: Recognize "units move to X"
         console.log('ALL units');
         return yourUnits;
     }

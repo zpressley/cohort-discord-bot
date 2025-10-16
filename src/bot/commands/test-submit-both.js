@@ -16,13 +16,19 @@ module.exports = {
                 .setDescription('Player 2 order (test opponent order)')
                 .setRequired(true)),
     
+    // In test-submit-both.js
+
     async execute(interaction) {
         try {
             const { models } = require('../../database/setup');
             
-            await interaction.deferReply({ ephemeral: true });
+            // DON'T defer - reply immediately with status
+            await interaction.reply({
+                content: `⚙️ Processing turn resolution...`,
+                ephemeral: true
+            });
             
-            // Find active battle for this player
+            // Find active battle
             const battle = await models.Battle.findOne({
                 where: {
                     player1Id: interaction.user.id,
@@ -36,20 +42,7 @@ module.exports = {
                     content: 'No active battle found. Create one and use /test-join first.'
                 });
             }
-            const battleState = battle.battleState;
-
-            console.log("\n=== UNIT STRUCTURE DEBUG ===");
-            console.log("P1 Units:");
-            battleState.player1.unitPositions.forEach((unit, i) => {
-            console.log(`  Unit ${i}:`, JSON.stringify({
-                unitId: unit.unitId,
-                position: unit.position,
-                type: unit.type,
-                unitType: unit.unitType,
-                mounted: unit.mounted,
-                allKeys: Object.keys(unit)
-            }, null, 2));
-            });
+            
             const player1Order = interaction.options.getString('player1-order');
             const player2Order = interaction.options.getString('player2-order');
             
@@ -59,7 +52,7 @@ module.exports = {
             console.log(`Player 1 Order: "${player1Order}"`);
             console.log(`Player 2 Order: "${player2Order}"`);
             
-            // Create turn record with both orders
+            // Create turn record
             const [battleTurn, created] = await models.BattleTurn.findOrCreate({
                 where: {
                     battleId: battle.id,
@@ -81,18 +74,23 @@ module.exports = {
             const { processTurnResolution } = require('../dmHandler');
             await processTurnResolution(battle, battleTurn, interaction.client);
             
+            // Edit with success message
             return interaction.editReply({
                 content: `✅ **Turn ${battle.currentTurn} Resolved!**\n\n` +
                         `Player 1: "${player1Order}"\n` +
                         `Player 2: "${player2Order}"\n\n` +
-                        `Check your DMs for battle results!`
+                        `Check console for results!`
             });
             
         } catch (error) {
             console.error('Test submit both error:', error);
-            return interaction.editReply({
-                content: `❌ Test failed: ${error.message}\n\nCheck terminal for details.`
-            });
+            try {
+                return interaction.editReply({
+                    content: `❌ Test failed: ${error.message}\n\nCheck terminal for details.`
+                });
+            } catch {
+                console.error('Could not edit reply - interaction expired');
+            }
         }
     }
 };
