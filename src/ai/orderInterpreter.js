@@ -435,7 +435,7 @@ async function callAIForOrderParsing(prompt) {
     // Check for overrides (e.g., "all units move south, northern unit hold")
     const overrideMatch = orderText.match(/,\s*(\w+)\s+unit\s+(hold|stay|wait)/i);
     if (overrideMatch && targetUnits.length > 1) {
-        const direction = overrideMatch[1].toLowerCase(); // "northern", "western", etc.
+        const direction = overrideMatch[1].toLowerCase();
         console.log(`  🚫 Override: ${direction} unit to ${overrideMatch[2]}`);
         
         let excludeUnit = null;
@@ -464,8 +464,17 @@ async function callAIForOrderParsing(prompt) {
         }
     }
     
+    // Check for explicit "hold" - return empty to let Phase 1.5 handle missions
+    if (lowerOrder === 'hold' || lowerOrder === 'wait' || lowerOrder === 'stay') {
+        return {
+            actions: [],
+            validation: { isValid: true, errors: [], warnings: [] },
+            officerComment: 'Standing by.'
+        };
+    }
+    
     // Check for mission continuation keywords
-    const continueKeywords = ['continue', 'hold','resume', 'proceed', 'carry on'];
+    const continueKeywords = ['continue', 'resume', 'proceed', 'carry on'];
     const hasContinue = continueKeywords.some(kw => lowerOrder.includes(kw));
     
     if (hasContinue || lowerOrder === 'yes') {
@@ -492,10 +501,10 @@ async function callAIForOrderParsing(prompt) {
         const filterPos = positionFilter[1].toUpperCase();
         console.log(`  📍 Position filter: ${filterPos}`);
         
-        // Find unit at this position within targetUnits
-        const filteredUnit = targetUnits.find(u => u.position.toUpperCase() === filterPos);
+        // Find ALL units at this position (handles stacked units)
+        const filteredUnits = targetUnits.filter(u => u.position.toUpperCase() === filterPos);
         
-        if (!filteredUnit) {
+        if (filteredUnits.length === 0) {
             return {
                 actions: [],
                 validation: { isValid: false, errors: [`No unit at ${filterPos}`], warnings: [] },
@@ -518,23 +527,26 @@ async function callAIForOrderParsing(prompt) {
         } else {
             // Check for direction after filter
             const afterLower = afterFilter.toLowerCase();
-            if (afterLower.includes('north')) targetPosition = moveInDirection(filteredUnit.position, 'north', 3);
-            else if (afterLower.includes('south')) targetPosition = moveInDirection(filteredUnit.position, 'south', 3);
-            else if (afterLower.includes('east')) targetPosition = moveInDirection(filteredUnit.position, 'east', 3);
-            else if (afterLower.includes('west')) targetPosition = moveInDirection(filteredUnit.position, 'west', 3);
-            else targetPosition = filteredUnit.position; // Hold
+            if (afterLower.includes('north')) targetPosition = moveInDirection(filteredUnits[0].position, 'north', 3);
+            else if (afterLower.includes('south')) targetPosition = moveInDirection(filteredUnits[0].position, 'south', 3);
+            else if (afterLower.includes('east')) targetPosition = moveInDirection(filteredUnits[0].position, 'east', 3);
+            else if (afterLower.includes('west')) targetPosition = moveInDirection(filteredUnits[0].position, 'west', 3);
+            else targetPosition = filteredUnits[0].position;
         }
         
+        // Create actions for ALL filtered units
+        const actions = filteredUnits.map(unit => ({
+            type: 'move',
+            unitId: unit.id,
+            currentPosition: unit.position,
+            targetPosition: targetPosition,
+            reasoning: `Unit at ${filterPos} → ${targetPosition}`
+        }));
+        
         return {
-            actions: [{
-                type: 'move',
-                unitId: filteredUnit.id,
-                currentPosition: filteredUnit.position,
-                targetPosition: targetPosition,
-                reasoning: `Unit at ${filterPos} → ${targetPosition}`
-            }],
+            actions,
             validation: { isValid: true, errors: [], warnings: [] },
-            officerComment: `Moving to ${targetPosition}.`
+            officerComment: `${filteredUnits.length} unit(s) at ${filterPos} → ${targetPosition}.`
         };
     }
     
@@ -614,7 +626,7 @@ async function callAIForOrderParsing(prompt) {
         };
     }
     
-    // Default: hold position
+    // Default: hold position for unrecognized orders
     const actions = targetUnits.map(unit => ({
         type: 'move',
         unitId: unit.id,
@@ -686,90 +698,6 @@ function isQuestion(text) {
     return false;
 }
 
-/**
- * Determine which units the order applies to
- * Handles: "all units", "cavalry", "unit at M4", "northern unit", etc.
- */
-function determineTargetUnits(orderText, allUnits) {
-    const lower = orderText.toLowerCase();
-    
-    // "all units" or "everyone" or "both"
-    if (lower.includes('all units') || 
-        lower.includes('all forces') ||
-        lower.includes('everyone') || 
-        lower.includes('both units')) {
-        console.log('  👥 Targeting: ALL units');
-        return allUnits;
-    }
-    
-    // "unit at M4" - specific position
-    const posMatch = orderText.match(/unit at ([A-T]\d{1,2})/i);
-    if (posMatch) {
-        const position = posMatch[1].toUpperCase();
-        const unit = allUnits.find(u => u.position === position);
-        console.log(`  👥 Targeting: Unit at ${position}`);
-        return unit ? [unit] : [];
-    }
-    
-    // "cavalry" or "mounted" - type-based
-    if ((lower.includes('cavalry') || lower.includes('mounted')) && 
-        !lower.includes('all')) {
-        const cavalry = allUnits.filter(u => u.mounted === true);
-        console.log(`  👥 Targeting: Cavalry (${cavalry.length} units)`);
-        return cavalry.length > 0 ? cavalry : [allUnits[0]];
-    }
-    
-    // "infantry" - type-based
-    if (lower.includes('infantry') && !lower.includes('cavalry') && !lower.includes('all')) {
-        const infantry = allUnits.filter(u => !u.mounted);
-        console.log(`  👥 Targeting: Infantry (${infantry.length} units)`);
-        return infantry.length > 0 ? infantry : [allUnits[0]];
-    }
-    
-    // "northern unit" or "north forces"
-    if (lower.includes('northern') || lower.includes('north unit')) {
-        // Find northernmost unit (lowest row number)
-        const sorted = [...allUnits].sort((a, b) => {
-            const aRow = parseInt(a.position.match(/\d+/)[0]);
-            const bRow = parseInt(b.position.match(/\d+/)[0]);
-            return aRow - bRow;
-        });
-        console.log(`  👥 Targeting: Northern unit at ${sorted[0]?.position}`);
-        return [sorted[0]];
-    }
-    
-    // "southern unit" or "south forces"
-    if (lower.includes('southern') || lower.includes('south unit')) {
-        const sorted = [...allUnits].sort((a, b) => {
-            const aRow = parseInt(a.position.match(/\d+/)[0]);
-            const bRow = parseInt(b.position.match(/\d+/)[0]);
-            return bRow - aRow;
-        });
-        console.log(`  👥 Targeting: Southern unit at ${sorted[0]?.position}`);
-        return [sorted[0]];
-    }
-    
-    // "first unit" or "second unit"
-    if (lower.includes('first unit')) {
-        console.log(`  👥 Targeting: First unit`);
-        return [allUnits[0]];
-    }
-    if (lower.includes('second unit') && allUnits.length > 1) {
-        console.log(`  👥 Targeting: Second unit`);
-        return [allUnits[1]];
-    }
-    
-    // "elite" or "commander" - elite unit only
-    if (lower.includes('elite') || lower.includes('commander')) {
-        const elite = allUnits.find(u => u.isElite || u.isCommander);
-        console.log(`  👥 Targeting: Elite unit`);
-        return elite ? [elite] : [allUnits[0]];
-    }
-    
-    // Default: first unit only (backwards compatible)
-    console.log(`  👥 Targeting: Default (first unit)`);
-    return [allUnits[0]];
-}
 
 module.exports = {
     interpretOrders,
