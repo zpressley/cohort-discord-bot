@@ -34,6 +34,16 @@ async function initializeBot() {
         console.log('⚔️ Loading battle commands...');
         await loadCommands(client);
         
+        // Scenario key alignment assertion
+        try {
+            const { assertScenarioKeys } = require('./game/validation/scenarioKeyAssert');
+            assertScenarioKeys();
+            console.log('🧭 Scenario keys aligned with map modules.');
+        } catch (e) {
+            console.error('❌ Scenario key assertion failed:', e.message);
+            process.exit(1);
+        }
+
         console.log('✅ Initialization complete!');
         
     } catch (error) {
@@ -84,44 +94,29 @@ client.on(Events.InteractionCreate, async (interaction) => {
         } else if (interaction.isButton()) {
             // Route buttons to appropriate handlers based on prefix
             if (interaction.customId.startsWith('lobby-')) {
-                // Main lobby buttons
                 const { handleLobbyInteractions } = require('./bot/lobbyInteractionHandler');
                 await handleLobbyInteractions(interaction);
-                
-            } else if (interaction.customId.startsWith('lobby-')) {
-                // Main lobby buttons
-                const { handleLobbyInteractions } = require('./bot/lobbyInteractionHandler');
-                await handleLobbyInteractions(interaction);
-                
             } else if (interaction.customId === 'select-culture') {
-                // Route culture selection to army handler
                 const { handleArmyInteractions } = require('./bot/armyInteractionHandler');
                 await handleArmyInteractions(interaction);
-                
             } else if (interaction.customId.startsWith('join-battle-') ||
-                        interaction.customId.startsWith('ready-for-battle-') ||
-                        interaction.customId.startsWith('abandon-battle-') ||
-                        interaction.customId === 'create-bridge-control' ||
-                        interaction.customId === 'create-hill-fort' ||
-                        interaction.customId === 'create-forest-ambush' ||
-                        interaction.customId === 'create-river-crossing' ||
-                        interaction.customId === 'create-desert-oasis' ||
-                        interaction.customId.startsWith('quick-')) {
-                // Game/battle related buttons
+                       interaction.customId.startsWith('ready-for-battle-') ||
+                       interaction.customId.startsWith('abandon-battle-') ||
+                       interaction.customId === 'create-bridge-control' ||
+                       interaction.customId === 'create-hill-fort' ||
+                       interaction.customId === 'create-forest-ambush' ||
+                       interaction.customId === 'create-river-crossing' ||
+                       interaction.customId === 'create-desert-oasis' ||
+                       interaction.customId.startsWith('quick-')) {
                 const { handleGameInteractions } = require('./bot/gameInteractionHandler');
                 await handleGameInteractions(interaction);
-                
             } else if (interaction.customId === 'back-to-lobby') {
-                // Back to lobby button - reload lobby
                 const { showMainLobby } = require('./bot/commands/lobby');
                 const { models } = require('./database/setup');
-                
                 const commander = await models.Commander.findByPk(interaction.user.id);
                 const isNewPlayer = !commander || !commander.culture;
                 await showMainLobby(interaction, commander, isNewPlayer);
-                
             } else {
-                // Army building buttons
                 const { handleArmyBuilderInteractions } = require('./bot/armyInteractionHandler');
                 await handleArmyBuilderInteractions(interaction);
             }
@@ -141,29 +136,16 @@ client.on(Events.InteractionCreate, async (interaction) => {
 
 
 
-// In src/index.js, add after the Events.InteractionCreate handler:
-
+// Unified DM handler (removes duplicates)
 client.on(Events.MessageCreate, async (message) => {
-    // Ignore bot messages
-    if (message.author.bot) return;
-    
-    // Only process DMs
-    if (!message.channel.isDMBased()) return;
-    
-    // Handle battle commands
-    const { handleDMCommand } = require('./bot/dmHandler');
-    await handleDMCommand(message, client);
-});
-
-// Handle messages (for natural language battle commands in DMs)
-client.on(Events.MessageCreate, async (message) => {
-    // Ignore bot messages
-    if (message.author.bot) return;
-    
-    // Handle DM battle commands
-    if (message.channel.type === 1) { // DM Channel
+    try {
+        if (message.author.bot) return;
+        if (!message.channel.isDMBased && typeof message.channel.isDMBased !== 'function') return;
+        if (!message.channel.isDMBased()) return;
         const { handleDMCommand } = require('./bot/dmHandler');
-        await handleDMCommand(message);
+        await handleDMCommand(message, client);
+    } catch (e) {
+        console.error('DM handler error:', e);
     }
 });
 
@@ -182,18 +164,6 @@ process.on('SIGINT', () => {
     process.exit(0);
 });
 
-// Handle Direct Messages for Battle Commands
-client.on(Events.MessageCreate, async (message) => {
-    // Ignore bot messages
-    if (message.author.bot) return;
-    
-    // Only process DMs
-    if (!message.channel.isDMBased()) return;
-    
-    // Handle battle commands
-    const { handleDMCommand } = require('./bot/dmHandler');
-    await handleDMCommand(message, client);
-});
 
 // Initialize and start bot
 initializeBot().then(() => {
