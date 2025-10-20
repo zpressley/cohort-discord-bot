@@ -116,7 +116,7 @@ async function interpretOrders(orderText, battleState, playerSide, map) {
     };
     
     const prompt = buildOrderInterpretationPrompt(orderText, context);
-    const aiResponse = await callAIForOrderParsing(prompt);
+    const aiResponse = await callAIForOrderParsing(prompt, playerUnits);
 
     // Validate AI-suggested actions against rules
     const validatedActions = [];
@@ -393,8 +393,9 @@ function splitMultipleOrders(orderText) {
 /**
  * Enhanced callAIForOrderParsing - handles multiple units and orders
  */
-async function callAIForOrderParsing(prompt) {
-    const yourUnits = JSON.parse(prompt.match(/Your Units: (\[.*?\])/s)?.[1] || '[]');
+async function callAIForOrderParsing(prompt, realBattleUnits = null) {
+    // Use real battle units if provided, otherwise parse from prompt
+    const yourUnits = realBattleUnits || JSON.parse(prompt.match(/Your Units: (\[.*?\])/s)?.[1] || '[]');
     const orderText = prompt.match(/\*\*PLAYER ORDER:\*\* "(.*?)"/)?.[1] || '';
     
     console.log('  🔍 Parsing order:', orderText);
@@ -417,7 +418,7 @@ async function callAIForOrderParsing(prompt) {
         const allActions = [];
         for (const singleOrder of orders) {
             const singlePrompt = prompt.replace(orderText, singleOrder);
-            const result = await callAIForOrderParsing(singlePrompt);
+            const result = await callAIForOrderParsing(singlePrompt, realBattleUnits);
             allActions.push(...result.actions);
         }
         
@@ -461,8 +462,8 @@ async function callAIForOrderParsing(prompt) {
         }
         
         if (excludeUnit) {
-            console.log(`    Excluding ${excludeUnit.id}`);
-            targetUnits = targetUnits.filter(u => u.id !== excludeUnit.id);
+            console.log(`    Excluding ${excludeUnit.unitId}`);
+            targetUnits = targetUnits.filter(u => u.unitId !== excludeUnit.unitId);
         }
     }
     
@@ -484,7 +485,7 @@ async function callAIForOrderParsing(prompt) {
         
         const actions = targetUnits.map(unit => ({
             type: 'continue_mission',
-            unitId: unit.id,
+            unitId: unit.unitId,
             currentPosition: unit.position,
             reasoning: 'Continuing mission as ordered'
         }));
@@ -539,7 +540,7 @@ async function callAIForOrderParsing(prompt) {
         // Create actions for ALL filtered units
         const actions = filteredUnits.map(unit => ({
             type: 'move',
-            unitId: unit.id,
+            unitId: unit.unitId,
             currentPosition: unit.position,
             targetPosition: targetPosition,
             reasoning: `Unit at ${filterPos} → ${targetPosition}`
@@ -559,7 +560,7 @@ async function callAIForOrderParsing(prompt) {
         
         const actions = targetUnits.map(unit => ({
             type: 'move',
-            unitId: unit.id,
+            unitId: unit.unitId,
             currentPosition: unit.position,
             targetPosition: targetPosition,
             reasoning: `Moving to ${targetPosition}`
@@ -582,7 +583,7 @@ async function callAIForOrderParsing(prompt) {
     if (direction) {
         const actions = targetUnits.map(unit => ({
             type: 'move',
-            unitId: unit.id,
+            unitId: unit.unitId,
             currentPosition: unit.position,
             targetPosition: moveInDirection(unit.position, direction, 3),
             reasoning: `Moving ${direction}`
@@ -599,7 +600,7 @@ async function callAIForOrderParsing(prompt) {
     if (lowerOrder.includes('ford')) {
         const actions = targetUnits.map(unit => ({
             type: 'move',
-            unitId: unit.id,
+            unitId: unit.unitId,
             currentPosition: unit.position,
             targetPosition: 'I11',
             reasoning: 'Moving to ford'
@@ -615,7 +616,7 @@ async function callAIForOrderParsing(prompt) {
     if (lowerOrder.includes('hill')) {
         const actions = targetUnits.map(unit => ({
             type: 'move',
-            unitId: unit.id,
+            unitId: unit.unitId,
             currentPosition: unit.position,
             targetPosition: 'B5',
             reasoning: 'Moving to hill'
@@ -631,7 +632,7 @@ async function callAIForOrderParsing(prompt) {
     // Default: hold position for unrecognized orders
     const actions = targetUnits.map(unit => ({
         type: 'move',
-        unitId: unit.id,
+        unitId: unit.unitId,
         currentPosition: unit.position,
         targetPosition: unit.position,
         reasoning: 'Holding position'

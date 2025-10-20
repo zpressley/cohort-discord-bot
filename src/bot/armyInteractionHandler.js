@@ -94,6 +94,8 @@ async function handleArmyBuilderInteractions(interaction) {
             await handleArmorSelection(interaction, composition);
         } else if (interaction.customId === 'shield-selection') {
             await handleShieldSelection(interaction, composition);
+        } else if (interaction.customId === 'training-selection') {
+            await handleTrainingSelection(interaction, composition);
         } else if (interaction.customId === 'support-selection') {
             await handlePurchase(interaction, composition);
         }
@@ -625,7 +627,7 @@ async function showShieldStep(interaction, composition) {
 
     const embed = new EmbedBuilder()
         .setColor(0x8B4513)
-        .setTitle('Step 5: Shield Selection (Final Step)')
+        .setTitle('Step 5: Shield Selection')
         .setDescription(`**Available SP:** ${availableSP}${restrictionText}\n\nChoose shield configuration:`)
         .addFields({
             name: 'Shield Options',
@@ -648,41 +650,7 @@ async function handleShieldSelection(interaction, composition) {
     unit.shields = SHIELD_OPTIONS[shieldType];
     unit.shieldType = shieldType;
     
-    // Calculate final unit cost
-    let totalCost = unit.quality.cost + unit.primaryWeapon.cost + unit.armor.cost + unit.shields.cost;
-    if (unit.mounted) totalCost += unit.mount.cost;
-    unit.secondaryWeapons.forEach(w => totalCost += w.cost);
-    unit.rangedWeapons.forEach(w => totalCost += w.cost);
-    
-    // Add completed unit to army
-    composition.units.push(unit);
-    composition.usedSP += totalCost;
-    
-    // Clean up
-    unitsInProgress.delete(interaction.user.id);
-    
-    // Build weapon summary
-    let weaponSummary = unit.primaryWeapon.name;
-    if (unit.secondaryWeapons.length > 0) {
-        weaponSummary += ` + ${unit.secondaryWeapons.map(w => w.name).join(', ')}`;
-    }
-    if (unit.rangedWeapons.length > 0) {
-        weaponSummary += ` + ${unit.rangedWeapons.map(w => w.name).join(', ')}`;
-    }
-    
-    const backButton = new ActionRowBuilder()
-        .addComponents(
-            new ButtonBuilder()
-                .setCustomId('back-to-main')
-                .setLabel('Back to Army Builder')
-                .setStyle(ButtonStyle.Primary)
-        );
-    
-    await interaction.update({
-        content: `**Unit Created Successfully!**\n\n**${unit.quality.name}**${unit.mounted ? ' (Cavalry)' : ''}\n**Weapons:** ${weaponSummary}\n**Armor:** ${unit.armor.name}\n**Shield:** ${unit.shields.name}\n\n**Total Cost:** ${totalCost} SP\n\nUnit added to your army!`,
-        embeds: [],
-        components: [backButton]
-    });
+    await showTrainingStep(interaction, composition);
 }
 
 // Support and utility functions
@@ -833,6 +801,192 @@ function getEliteUnitSize(culture) {
         'Mauryan Empire': 60
     };
     return sizes[culture] || 80;
+}
+
+// STEP 6: Training Selection
+async function showTrainingStep(interaction, composition) {
+    const unit = unitsInProgress.get(interaction.user.id);
+    let usedSP = unit.quality.cost + unit.primaryWeapon.cost + unit.armor.cost + unit.shields.cost;
+    if (unit.mounted) usedSP += unit.mount.cost;
+    unit.secondaryWeapons.forEach(w => usedSP += w.cost);
+    unit.rangedWeapons.forEach(w => usedSP += w.cost);
+    const availableSP = composition.totalSP - composition.usedSP - usedSP;
+    
+    // Get available training types based on unit weapons
+    const availableTraining = getAvailableTrainingTypes(unit, availableSP);
+    
+    const options = availableTraining.map(training => ({
+        label: training.name,
+        description: training.description,
+        value: training.value
+    }));
+    
+    const selectMenu = new ActionRowBuilder()
+        .addComponents(
+            new StringSelectMenuBuilder()
+                .setCustomId('training-selection')
+                .setPlaceholder('Step 6: Select Training Type...')
+                .addOptions(options)
+        );
+    
+    const embed = new EmbedBuilder()
+        .setColor(0x8B4513)
+        .setTitle('Step 6: Training Selection (Final Step)')
+        .setDescription(`**Available SP:** ${availableSP}\n\nChoose training specialization for your unit:`)
+        .addFields({
+            name: 'Training Levels',
+            value: '**None** (FREE): No specialized training\n**Basic** (+2 SP): Basic combat techniques\n**Technical** (+4 SP): Advanced tactical skills\n**Expert** (+6 SP): Elite professional training',
+            inline: false
+        });
+    
+    await interaction.update({
+        embeds: [embed],
+        components: [selectMenu, createBackButton()]
+    });
+}
+
+async function handleTrainingSelection(interaction, composition) {
+    const unit = unitsInProgress.get(interaction.user.id);
+    const [trainingType, trainingLevel] = interaction.values[0].split('-');
+    
+    // Set training data
+    unit.training = {
+        type: trainingType,
+        level: trainingLevel,
+        cost: getTrainingCost(trainingLevel)
+    };
+    
+    // Calculate final unit cost
+    let totalCost = unit.quality.cost + unit.primaryWeapon.cost + unit.armor.cost + unit.shields.cost + unit.training.cost;
+    if (unit.mounted) totalCost += unit.mount.cost;
+    unit.secondaryWeapons.forEach(w => totalCost += w.cost);
+    unit.rangedWeapons.forEach(w => totalCost += w.cost);
+    
+    // Add completed unit to army
+    composition.units.push(unit);
+    composition.usedSP += totalCost;
+    
+    // Clean up
+    unitsInProgress.delete(interaction.user.id);
+    
+    // Build weapon summary
+    let weaponSummary = unit.primaryWeapon.name;
+    if (unit.secondaryWeapons.length > 0) {
+        weaponSummary += ` + ${unit.secondaryWeapons.map(w => w.name).join(', ')}`;
+    }
+    if (unit.rangedWeapons.length > 0) {
+        weaponSummary += ` + ${unit.rangedWeapons.map(w => w.name).join(', ')}`;
+    }
+    
+    const trainingText = unit.training.level === 'none' ? 'None' : 
+        `${unit.training.type} (${unit.training.level})`;
+    
+    const backButton = new ActionRowBuilder()
+        .addComponents(
+            new ButtonBuilder()
+                .setCustomId('back-to-main')
+                .setLabel('Back to Army Builder')
+                .setStyle(ButtonStyle.Primary)
+        );
+    
+    await interaction.update({
+        content: `**Unit Created Successfully!**\n\n**${unit.quality.name}**${unit.mounted ? ' (Cavalry)' : ''}\n**Weapons:** ${weaponSummary}\n**Armor:** ${unit.armor.name}\n**Shield:** ${unit.shields.name}\n**Training:** ${trainingText}\n\n**Total Cost:** ${totalCost} SP\n\nUnit added to your army!`,
+        embeds: [],
+        components: [backButton]
+    });
+}
+
+function getAvailableTrainingTypes(unit, availableSP) {
+    const trainingTypes = [];
+    
+    // None is always available
+    trainingTypes.push({
+        name: 'None (FREE)',
+        description: 'No specialized training',
+        value: 'none-none'
+    });
+    
+    // Determine available training based on weapons and mount
+    const availableTypes = [];
+    
+    // Cavalry training - if mounted
+    if (unit.mounted) {
+        availableTypes.push('cavalry');
+    }
+    
+    // Archer training - if has ranged weapons
+    if (unit.rangedWeapons.length > 0) {
+        const hasProjectile = unit.rangedWeapons.some(w => 
+            w.name.toLowerCase().includes('bow') || 
+            w.name.toLowerCase().includes('javelin') ||
+            w.name.toLowerCase().includes('sling')
+        );
+        if (hasProjectile) {
+            availableTypes.push('archer');
+        }
+    }
+    
+    // Swordsman training - if has sword-type weapons
+    const allWeapons = [unit.primaryWeapon, ...unit.secondaryWeapons];
+    const hasSword = allWeapons.some(w => 
+        w && (w.name.toLowerCase().includes('sword') ||
+              w.name.toLowerCase().includes('gladius') ||
+              w.name.toLowerCase().includes('spatha'))
+    );
+    if (hasSword) {
+        availableTypes.push('swordsman');
+    }
+    
+    // Spear training - if has spear/pike weapons
+    const hasSpear = allWeapons.some(w => 
+        w && (w.name.toLowerCase().includes('spear') ||
+              w.name.toLowerCase().includes('pike') ||
+              w.name.toLowerCase().includes('sarissa'))
+    );
+    if (hasSpear) {
+        availableTypes.push('spear');
+    }
+    
+    // Add training levels for each available type
+    availableTypes.forEach(type => {
+        const typeName = type.charAt(0).toUpperCase() + type.slice(1);
+        
+        if (availableSP >= 2) {
+            trainingTypes.push({
+                name: `${typeName} - Basic (+2 SP)`,
+                description: `Basic ${type} combat training`,
+                value: `${type}-basic`
+            });
+        }
+        
+        if (availableSP >= 4) {
+            trainingTypes.push({
+                name: `${typeName} - Technical (+4 SP)`,
+                description: `Advanced ${type} tactical skills`,
+                value: `${type}-technical`
+            });
+        }
+        
+        if (availableSP >= 6) {
+            trainingTypes.push({
+                name: `${typeName} - Expert (+6 SP)`,
+                description: `Elite ${type} professional training`,
+                value: `${type}-expert`
+            });
+        }
+    });
+    
+    return trainingTypes;
+}
+
+function getTrainingCost(level) {
+    const costs = {
+        'none': 0,
+        'basic': 2,
+        'technical': 4,
+        'expert': 6
+    };
+    return costs[level] || 0;
 }
 
 module.exports = {

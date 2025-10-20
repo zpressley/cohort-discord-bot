@@ -59,7 +59,7 @@ const armyCompositions = new Map();
 module.exports = {
     data: new SlashCommandBuilder()
         .setName('build-army')
-        .setDescription('Build your ancient army using the 5-step Supply Point system'),
+        .setDescription('Build your ancient army using the 6-step Supply Point system'),
     
     async execute(interaction) {
         try {
@@ -143,7 +143,12 @@ async function showMainArmyBuilder(interaction, commander) {
             if (unit.primaryWeapon) {
                 const rangedText = unit.rangedWeapons && unit.rangedWeapons.length > 0 ? 
                     ` + ${unit.rangedWeapons.map(w => w.name).join(', ')}` : '';
-                unitsDisplay += `│   └── ${unit.primaryWeapon.name}${rangedText} + ${unit.armor.name} + ${unit.shields.name}\n`;
+                const trainingText = unit.training && unit.training.level !== 'none' ? 
+                    ` | ${unit.training.type} (${unit.training.level})` : '';
+                
+                // Split equipment display into multiple lines for better readability
+                unitsDisplay += `│   └── ${unit.primaryWeapon.name}${rangedText} + ${unit.armor.name} +\n`;
+                unitsDisplay += `│       ${unit.shields.name}${trainingText}\n`;
             }
         });
         unitsDisplay += '\n';
@@ -173,12 +178,12 @@ async function showMainArmyBuilder(interaction, commander) {
                 inline: false
             },
             {
-                name: '5-Step Unit Creation',
-                value: '1️⃣ Manpower (3-9 SP)\n2️⃣ Primary Weapon (+1-3 SP)\n3️⃣ Ranged Weapon (optional)\n4️⃣ Armor (+0-2 SP)\n5️⃣ Shields (+0-2 SP)',
+                name: '6-Step Unit Creation',
+                value: '1️⃣ Manpower (3-9 SP)\n2️⃣ Primary Weapon (+1-3 SP)\n3️⃣ Ranged Weapon (optional)\n4️⃣ Armor (+0-2 SP)\n5️⃣ Shields (+0-2 SP)\n6️⃣ Training (+2-6 SP)',
                 inline: false
             }
         )
-        .setFooter({ text: 'Create units using the 5-step process, then add support elements' });
+        .setFooter({ text: 'Create units using the 6-step process, then add support elements' });
 
     const buttons = new ActionRowBuilder()
         .addComponents(
@@ -222,6 +227,7 @@ function calculateUnitCost(unit) {
     }
     if (unit.armor) cost += unit.armor.cost;
     if (unit.shields) cost += unit.shields.cost;
+    if (unit.training) cost += unit.training.cost;
     return cost;
 }
 

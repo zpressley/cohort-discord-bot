@@ -1,0 +1,226 @@
+# Core 8 Ancient Civilizations - Initial Implementation
+
+**Priority cultures for launch with complete mechanical systems**
+
+---
+
+## 🦅 ROMAN REPUBLIC
+
+```
+⚔️ **PRAETORIAN GUARD** (80 elite legionnaires)
+├── Equipment: Lorica segmentata + Gladius + Scutum + Engineering tools
+├── Specialization: Tactical adaptability, siege warfare, professional discipline
+
+**Elite Personality:** Professional, adaptable, systematically methodical
+**Battle Cry:** "For Rome and the Eagle!"
+
+**Cultural Perks:**
+├── ✅ Engineering mastery - build field fortifications during battle
+├── ✅ Professional discipline - all troops start with higher morale and coordination
+
+**Adaptation Perk:**
+├── 🔄 Veteran auxiliary recruitment - hire defeated enemies as professional auxiliaries
+
+**Cultural Restrictions:**
+├── ❌ Heavy infantry reliance - minimum 50% of army must be heavy infantry
+├── ❌ Command structure dependency - units without officers suffer faster morale penalties
+```
+
+---
+
+## 🛡️ MACEDONIAN KINGDOMS
+
+```
+🛡️ **SILVER SHIELDS** (80 elite phalangites)
+├── Equipment: Sarissa OR standard spears + Bronze armor + Silver shields (flexible)
+├── Specialization: Veteran warfare experience, combined arms coordination
+
+**Elite Personality:** Battle-hardened professionals, Alexander-inspired, tactically flexible
+**Battle Cry:** "We who conquered the world!"
+
+**Cultural Perks:**
+├── ✅ Veterans of war - all Silver Shields start with 10-battle veteran status
+├── ✅ Equipment flexibility - can use sarissa pikes OR standard spears as situation demands
+
+**Adaptation Perk:**
+├── 🔄 Companion cavalry integration - recruit conquered cavalry as professional units
+
+**Cultural Restrictions:**
+├── ❌ Cannot hire militia forces - require professional training standards
+├── ❌ Higher unit costs - professional army maintenance expensive
+```
+
+---
+
+## ⚔️ CELTIC TRIBES (GALLIC/BRITISH)
+
+```
+⚔️ **THE FIANNA** (80 champion warriors)
+├── Equipment: Pattern-welded longswords + Lime-washed shields + Light mail + Torcs
+├── Specialization: Individual heroics, guerrilla warfare, single combat tradition
+
+**Elite Personality:** Honor-obsessed, poetic, fierce individualists
+**Battle Cry:** "By the gods of our fathers!"
+
+**Cultural Perks:**
+├── ✅ Berserker fury - ambushes and raids produce fear effects, increasing enemy break chances
+├── ✅ Guerrilla warfare - lightly armored troops get bonuses when flanking or ambushing
+├── ✅ Woodland mobility - no movement penalties in rough and wooded terrain
+
+**Adaptation Perk:**
+├── 🔄 Single combat challenges - captured enemy units can fight for freedom
+├── Celtic victory: Deploy enemy unit free in next battle (2 unit limit, cannot replace if lost)
+├── Enemy victory: Lose champion but gain enemy warrior in elite unit with tactical knowledge
+
+**Cultural Restrictions:**
+├── ❌ No mercy - cannot show mercy to captured prisoners (must kill or challenge)
+├── ❌ Poor archery tradition - cannot deploy professional+ archers, only captured ones
+```
+
+---
+
+## 🐉 HAN DYNASTY CHINA
+
+```
+🐉 **FEATHERED FOREST GUARD (YULIN)** (100 elite mixed troops)
+├── Equipment: Jian/Dao swords + Iron lamellar armor + Mixed cavalry/infantry + Imperial banners
+├── Specialization: Advanced technology deployment, massive population mobilization, cultural assimilation
+
+**Elite Personality:** Scholarly, disciplined, mandate-of-heaven believers
+**Battle Cry:** "For the Son of Heaven!"
+
+**Cultural Perks:**
+├── ✅ Advanced technology - can deploy crossbows, Cloud Ladders, and advanced catapults
+├── ✅ Han farming techniques - 1 block = 20% larger units (120 men vs 100), bigger armies possible
+
+**Adaptation Perk:**
+├── 🔄 Assimilation - conquered army units join Han forces with 50% of original perks retained
+├── Example: Defeated Scythian horse archers become "Han Flying Cavalry" with reduced mobility bonuses
+
+**Cultural Restrictions:**
+├── ❌ Complex administration - requires +2 administrator SP (leadership support staff)
+├── ❌ Administrative dependency - if administrators lost, entire army suffers coordination and supply penalties
+```
+
+---
+
+## 🐎 SARMATIAN CONFEDERATIONS
+
+```
+⚡ **IRON SCALE RIDERS** (80 heavy cavalry-archers)
+├── Equipment: Scale armor + Composite bows + Kontos lances + Armored horses
+├── Specialization: Heavy cavalry charges + mobile archery, dual-mode combat
+
+**Elite Personality:** Iron-hard, steppe-noble, dual-combat masters
+**Battle Cry:** "Iron scales and swift arrows!"
+
+**Cultural Perks:**
+├── ✅ Dual-mode combat mastery - switch between heavy cavalry and horse archery (1 turn to change)
+├── ✅ Master of feigned retreat - turn retreats into devastating ambushes (absorbed from Scythians)
+
+**Adaptation Perk:**
+├── 🔄 Tribal survival - unlock 1 unit type from every defeated enemy culture
+
+**Cultural Restrictions:**
+├── ❌ Must adapt to survive - no foot soldiers unless unlocked through adaptation
+├── ❌ Must maintain cavalry-focused army (minimum 70% mounted troops)
+```
+
+---
+
+## 🐘 MAURYAN EMPIRE (INDIA)
+
+```
+🐘 **GAJA VAHINI** (60 elephant masters + 6 war elephants)
+├── Equipment: Wootz steel weapons + Cotton armor + War elephants + Steel-tipped arrows
+├── Specialization: Combined-arms patti formations, superior metallurgy, diplomatic integration
+
+**Elite Personality:** Dharmic, organized, elephant-tactical masters
+**Battle Cry:** "By dharma and the royal elephant!"
+
+**Cultural Perks:**
+├── ✅ War elephant formations - elephants break enemy formations with tank-like charges (not just fear)
+├── ✅ Wootz steel mastery - expensive upgrade available to any unit, ignores 10% of enemy armor
+
+**Adaptation Perk:**
+├── 🔄 Diplomatic gifts - conquered elite units provide weapons/horses to Elephant Guard
+├── Result: Mixed infantry/cavalry/elephant guard with hybrid equipment and tactics
+
+**Cultural Restrictions:**
+├── ❌ Buddhist principles - cannot pursue routed enemies or cut down fleeing soldiers
+├── ❌ Diverse empire requirement - must field mixed patti formations (minimum 3 unit types)
+```
+
+---
+
+## 🏛️ SPARTAN CITY-STATE
+
+```
+🏛️ **LACEDAIMONIAN GUARDS** (40 elite warriors)
+├── Equipment: Hoplon shield + Dory spear + Bronze cuirass + Red cloak
+├── Specialization: Individual excellence within phalanx, never retreat
+
+**Elite Personality:** Honor-obsessed, warrior-bred, death-before-dishonor
+**Battle Cry:** "Come back with your shield or on it!"
+
+**Cultural Perks:**
+├── ✅ Fight to the last man - effective until 50% casualties
+├── ✅ Superior perioeci militia - non-citizen troops fight better than normal militia
+├── ✅ Allied Greek recruitment - can hire other Greek city-state units as allies
+
+**No Adaptation Perk:** Spartan warrior purity prevents learning from barbarians
+
+**Cultural Restrictions:**
+├── ❌ Cannot hire mercenaries - warrior purity ideology
+├── ❌ Perioeci dependency - supply staff costs +2 blocks but can fight if needed
+```
+
+---
+
+## 🏜️ BERBER CONFEDERATIONS
+
+```
+🏜️ **THE BLUE MEN** (80 desert cavalry)
+├── Equipment: Desert horses + Light spears + Blue-dyed cloth + Leather armor
+├── Specialization: Desert mobility, hit-and-run, survival warfare
+
+**Elite Personality:** Independent, desert-adapted, raid masters
+**Battle Cry:** "By the endless sands!"
+
+**Cultural Perks:**
+├── ✅ Desert navigation mastery - +4 bonus against desert environmental penalties
+├── ✅ Tribal confederation tactics - small unit effectiveness bonuses
+
+**Adaptation Perk:**
+├── 🔄 Master raiders - upgrade equipment mid-battle from captured supplies (light→heavy spears, etc.)
+
+**Cultural Restrictions:**
+├── ❌ Forest/swamp mobility penalties - reduced movement in dense terrain
+```
+
+---
+
+## 🎯 Implementation Priority Notes
+
+**Why These 8?**
+- Geographic diversity (Mediterranean, Africa, Asia, Steppe)
+- Tactical variety (heavy infantry, cavalry, elephants, archers)
+- Historical significance (major ancient powers)
+- Cultural distinctiveness (clear mechanical differences)
+- Player appeal (recognizable civilizations)
+
+**Launch Strategy:**
+- Master these 8 completely before expanding
+- Balance and polish based on player feedback
+- Remaining 12 cultures post-launch expansion
+- Each new culture adds unique tactical options
+
+**Development Focus:**
+- Complete cultural speech patterns for officers
+- Historical battle scenarios for each
+- Tutorial integration for all 8
+- Cross-cultural balance testing
+
+---
+
+**Total: 8 Ancient Civilizations** - Complete mechanical systems ready for implementation
