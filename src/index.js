@@ -64,89 +64,10 @@ client.once(Events.ClientReady, async (readyClient) => {
     });
 });
 
-// Handle all interactions (slash commands, buttons, select menus)
+// Handle all interactions via central router
 client.on(Events.InteractionCreate, async (interaction) => {
-    try {
-        if (interaction.isCommand()) {
-            // Handle slash commands
-            const command = client.commands.get(interaction.commandName);
-            if (!command) return;
-            
-            await command.execute(interaction);
-            
-        } else if (interaction.isStringSelectMenu()) {
-        if (interaction.customId === 'select-culture') {
-        // Route to army handler
-        const { handleArmyBuilderInteractions } = require('./bot/armyInteractionHandler');
-        await handleArmyBuilderInteractions(interaction);
-                
-            } else if (interaction.customId === 'scenario-selection') {
-                // Battle scenario selection
-                const { handleGameInteractions } = require('./bot/gameInteractionHandler');
-                await handleGameInteractions(interaction);
-                
-            } else {
-                // Army building select menus
-                const { handleArmyBuilderInteractions } = require('./bot/armyInteractionHandler');
-                await handleArmyBuilderInteractions(interaction);
-            }
-            
-        } else if (interaction.isButton()) {
-            // Route buttons to appropriate handlers based on prefix
-            if (interaction.customId.startsWith('lobby-')) {
-                const { handleLobbyInteractions } = require('./bot/lobbyInteractionHandler');
-                await handleLobbyInteractions(interaction);
-            } else if (interaction.customId === 'select-culture') {
-                const { handleArmyInteractions } = require('./bot/armyInteractionHandler');
-                await handleArmyInteractions(interaction);
-            } else if (interaction.customId.startsWith('join-battle-') ||
-                       interaction.customId.startsWith('ready-for-battle-') ||
-                       interaction.customId.startsWith('abandon-battle-') ||
-                       interaction.customId === 'create-bridge-control' ||
-                       interaction.customId === 'create-hill-fort' ||
-                       interaction.customId === 'create-forest-ambush' ||
-                       interaction.customId === 'create-river-crossing' ||
-                       interaction.customId === 'create-desert-oasis' ||
-                       interaction.customId.startsWith('quick-')) {
-                const { handleGameInteractions } = require('./bot/gameInteractionHandler');
-                await handleGameInteractions(interaction);
-            } else if (interaction.customId === 'back-to-lobby') {
-                const { showMainLobby } = require('./bot/commands/lobby');
-                const { models } = require('./database/setup');
-                const commander = await models.Commander.findByPk(interaction.user.id);
-                const isNewPlayer = !commander || !commander.culture;
-                await showMainLobby(interaction, commander, isNewPlayer);
-            } else {
-                const { handleArmyBuilderInteractions } = require('./bot/armyInteractionHandler');
-                await handleArmyBuilderInteractions(interaction);
-            }
-        }
-        
-    } catch (error) {
-        console.error('Interaction handler error:', error);
-        const errorMessage = 'There was an error processing this interaction!';
-        
-        if (interaction.replied || interaction.deferred) {
-            await interaction.followUp({ content: errorMessage, ephemeral: true });
-        } else {
-            await interaction.reply({ content: errorMessage, ephemeral: true });
-        }
-    }
-});
-
-
-
-// Unified DM handler (removes duplicates)
-client.on(Events.MessageCreate, async (message) => {
-    try {
-        if (message.author.bot) return;
-        if (!message.channel.isDMBased && typeof message.channel.isDMBased !== 'function') return;
-        if (!message.channel.isDMBased()) return;
-        const { handleDMCommand } = require('./bot/dmHandler');
-        await handleDMCommand(message, client);
-    } catch (e) {
-        console.error('DM handler error:', e);
-    }
+    const { handle } = require('./bot/interactionRouter');
+    await handle(interaction, client);
 });
 
 // Error handling

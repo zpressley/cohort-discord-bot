@@ -132,10 +132,16 @@ async function interpretOrders(orderText, battleState, playerSide, map, battleCo
         culture: battleState[playerSide].culture
     };
     
-    const prompt = buildOrderInterpretationPrompt(orderText, context);
-    const aiResponse = await callAIForOrderParsing(prompt, playerUnits);
+  const prompt = buildOrderInterpretationPrompt(orderText, context);
+  let aiResponse;
+  const AI_ENABLED = (process.env.AI_ENABLED || 'false').toLowerCase() === 'true';
+  if (AI_ENABLED) {
+    aiResponse = await callAIForOrderParsing(prompt, playerUnits);
+  } else {
+    aiResponse = { actions: simpleKeywordActions(orderText, playerUnits, map) };
+  }
 
-    // Validate AI-suggested actions against rules
+  // Validate AI-suggested actions against rules
     const validatedActions = [];
     const errors = [];
     
@@ -666,6 +672,47 @@ async function callAIForOrderParsing(prompt, realBattleUnits = null) {
         validation: { isValid: true, errors: [], warnings: [] },
         officerComment: 'Holding position.'
     };
+}
+
+function simpleKeywordActions(orderText, targetUnits, map) {
+  const lower = orderText.toLowerCase();
+  const actions = [];
+  // coordinate match
+  const coord = orderText.match(/\b([A-T]\d{1,2})\b/i)?.[1]?.toUpperCase();
+  if (coord) {
+    targetUnits.forEach(u => actions.push({ type: 'move', unitId: u.unitId, currentPosition: u.position, targetPosition: coord, reasoning: `Move to ${coord}` }));
+    return actions;
+  }
+  // landmarks
+  if (lower.includes('ford')) {
+    const dest = 'I11';
+    targetUnits.forEach(u => actions.push({ type: 'move', unitId: u.unitId, currentPosition: u.position, targetPosition: dest, reasoning: 'Move to ford' }));
+    return actions;
+  }
+  if (lower.includes('hill')) {
+    const dest = 'B5';
+    targetUnits.forEach(u => actions.push({ type: 'move', unitId: u.unitId, currentPosition: u.position, targetPosition: dest, reasoning: 'Move to hill' }));
+    return actions;
+  }
+  // directions (3 tiles)
+  let dir = null;
+  if (lower.includes('north')) dir = 'north';
+  else if (lower.includes('south')) dir = 'south';
+  else if (lower.includes('east')) dir = 'east';
+  else if (lower.includes('west')) dir = 'west';
+  if (dir) {
+    const { coordToString, parseCoord } = require('../game/maps/mapUtils');
+    targetUnits.forEach(u => {
+      const pos = parseCoord(u.position); let row = pos.row, col = pos.col;
+      if (dir==='north') row -= 3; if (dir==='south') row += 3; if (dir==='east') col += 3; if (dir==='west') col -= 3;
+      row = Math.max(0, Math.min(19, row)); col = Math.max(0, Math.min(19, col));
+      actions.push({ type: 'move', unitId: u.unitId, currentPosition: u.position, targetPosition: coordToString({row, col}), reasoning: `Move ${dir}` });
+    });
+    return actions;
+  }
+  // default hold
+  targetUnits.forEach(u => actions.push({ type: 'move', unitId: u.unitId, currentPosition: u.position, targetPosition: u.position, reasoning: 'Hold position' }));
+  return actions;
 }
 
 function moveInDirection(fromCoord, direction, distance) {
