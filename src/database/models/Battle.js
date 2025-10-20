@@ -23,15 +23,9 @@ module.exports = (sequelize) => {
                 key: 'discordId'
             }
         },
+        // Scenario key (slug), e.g., 'river_crossing', 'bridge_control'
         scenario: {
-            type: DataTypes.ENUM(
-                'Bridge Control',
-                'Hill Fort Assault',
-                'Forest Ambush', 
-                'River Crossing',
-                'Desert Oasis',
-                'Mountain Pass'
-            ),
+            type: DataTypes.STRING,
             allowNull: false
         },
         status: {
@@ -51,6 +45,15 @@ module.exports = (sequelize) => {
         maxTurns: {
             type: DataTypes.INTEGER,
             defaultValue: 12
+        },
+        // Player cultures (for cultural validation)
+        player1Culture: {
+            type: DataTypes.STRING,
+            allowNull: true
+        },
+        player2Culture: {
+            type: DataTypes.STRING,
+            allowNull: true
         },
         // Environmental conditions
         weather: {

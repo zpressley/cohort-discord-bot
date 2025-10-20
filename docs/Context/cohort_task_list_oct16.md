@@ -8,10 +8,15 @@
 
 ## 📌 Project Guide — current code Task List (Core-first, free-AI optional)
 
+### Priority Roadmap (remaining)
+- High: current code-017 (DB model alignment/migrations), current code-015 (central router), current code-009 (keyword-only orchestrator)
+- Medium: current code-020 (telemetry/replay), current code-025 (lint/typecheck finish), current code-024 (docs polish)
+- Optional: current code-029/030/031 (free AI provider)
+
 ### current code-002: Define Command Catalog and JSON Schemas
 - Priority: Critical
 - Estimate: 4-6 hours
-- Status: Not Started
+- Status: ✅ Complete
 - Description: Define strict, versioned schemas for deterministic commands (move, formation, attack, support, conditional) and build a validation helper.
 - Files to Create:
   - `src/game/schemas/command.move.json`, `src/game/schemas/command.formation.json`, ...
@@ -26,7 +31,7 @@
 ### current code-032: Align Existing Turn Engine To Schemas
 - Priority: Critical
 - Estimate: 4-6 hours
-- Status: Not Started
+- Status: ✅ Complete
 - Description: Add adapters so the existing turn engine only accepts validated commands; outputs normalized state diffs + metrics.
 - Files to Modify/Create:
   - `src/game/turnOrchestrator.js`, `src/game/battleEngine.js`
@@ -41,7 +46,7 @@
 ### current code-004: Scenario Maps and Terrain Modifiers
 - Priority: High
 - Estimate: 4-6 hours
-- Status: Not Started
+- Status: ✅ Complete
 - Description: Provide map modules for all scenarios; unify API with existing `riverCrossing.js`; include movement costs and LOS helpers.
 - Files to Create:
   - `src/game/maps/bridge_control.js`, `hill_fort_assault.js`, `forest_ambush.js`, `desert_oasis.js`
@@ -55,7 +60,7 @@
 ### current code-005: Transaction + Rollback Mechanism for State Updates
 - Priority: High
 - Estimate: 3-4 hours
-- Status: Not Started
+- Status: ✅ Complete
 - Description: Pre-turn snapshot; rollback on failure; persist audit diffs for replay.
 - Files to Modify/Create:
   - `src/game/turnOrchestrator.js` (snapshot/commit/rollback)
@@ -83,7 +88,7 @@
 ### current code-012: Turn Results: Structured Output + Narrative
 - Priority: High
 - Estimate: 3-4 hours
-- Status: Not Started
+- Status: ✅ Complete
 - Description: Standardize the per-turn outputs and build DM embeds; include deterministic narrative fallback hooks.
 - Files to Modify/Create:
   - `src/bot/dmHandler.js` (result packaging)
@@ -98,7 +103,7 @@
 ### current code-022: Unit and Property Tests for Core Engine
 - Priority: High
 - Estimate: 4-6 hours
-- Status: Not Started
+- Status: ✅ Complete
 - Description: Tests for movement legality, combat math invariants, idempotent diffs.
 - Files to Modify/Create:
   - `src/tests/**` (extend existing `tests/balance` and `game/combat/tests`)
@@ -112,7 +117,7 @@
 ### current code-014: Consolidate Duplicate MessageCreate Handlers
 - Priority: Medium
 - Estimate: 30-45 minutes
-- Status: Not Started
+- Status: ✅ Complete
 - Description: Unify to a single DM handler registration in `src/index.js`.
 - Files to Modify:
   - `src/index.js`
@@ -138,7 +143,7 @@
 ### current code-026: Quick Fix — Remove duplicated lobby branch in index.js
 - Priority: Medium
 - Estimate: 15-30 minutes
-- Status: Not Started
+- Status: ✅ Complete
 - Description: Eliminate repeated lobby branch in button handling.
 - Files to Modify:
   - `src/index.js`
@@ -164,7 +169,7 @@
 ### current code-011: Cultural Rules Validation Layer
 - Priority: Medium
 - Estimate: 2-3 hours
-- Status: Not Started
+- Status: ✅ Complete
 - Description: Apply culture constraints/bonuses post-parse and pre-exec; adjust confidence and warnings.
 - Files to Modify/Create:
   - `src/game/orderParser.js` (integration)
@@ -178,7 +183,7 @@
 ### current code-021: Safeguards: Confidence Thresholds and Sandbox “Dry‑Run”
 - Priority: Medium
 - Estimate: 2-3 hours
-- Status: Not Started
+- Status: ✅ Complete
 - Description: Simulate turn without commit and show diffs; require confirmation below thresholds.
 - Files to Modify/Create:
   - `src/bot/dmHandler.js` (dry-run and confirm)
@@ -192,7 +197,7 @@
 ### current code-019: Rate Limiting and DM Queueing
 - Priority: Medium
 - Estimate: 1-2 hours
-- Status: Not Started
+- Status: ✅ Complete
 - Description: Queue DMs with backoff to respect Discord limits; add telemetry for drops/retries.
 - Files to Create:
   - `src/bot/utils/dmQueue.js`
@@ -205,7 +210,7 @@
 ### current code-024: Help/Docs Surfaces and Error Copy
 - Priority: Low
 - Estimate: 1-2 hours
-- Status: Not Started
+- Status: ✅ Complete
 - Description: Add lobby help panel and /help; clear messages for ambiguity, cultural violations, and impossible moves.
 - Files to Modify/Create:
   - `src/bot/commands/lobby.js` (help panel)
@@ -219,7 +224,7 @@
 ### current code-025: Code Hygiene: Lint/Typecheck Scripts and CI
 - Priority: Low
 - Estimate: 1-2 hours
-- Status: Not Started
+- Status: In Progress
 - Description: Add npm scripts and CI workflow for lint/test; fix existing warnings.
 - Files to Modify/Create:
   - `package.json` scripts, `.github/workflows/ci.yml`
@@ -232,7 +237,7 @@
 ### current code-027: Scenario Key Alignment
 - Priority: Low
 - Estimate: 45-60 minutes
-- Status: Not Started
+- Status: ✅ Complete
 - Description: Assert scenario keys match map modules and DB values at startup.
 - Files to Modify/Create:
   - `src/bot/commands/create-game.js` (keys)
@@ -246,7 +251,7 @@
 ### current code-028: Narrative Fallback Implementation
 - Priority: Low
 - Estimate: 1-2 hours
-- Status: Not Started
+- Status: ✅ Complete
 - Description: Deterministic template narrative when AI is disabled/unavailable.
 - Files to Modify/Create:
   - `src/game/briefingGenerator.js` or `src/game/narratives/fallback.js`
@@ -257,7 +262,7 @@
 - Labels: narrative, fallback
 
 ### current code-020: Telemetry, Replay Logs, and Tracing
-- Priority: Low
+- Priority: Medium
 - Estimate: 3-4 hours
 - Status: Not Started
 - Description: Per-turn audit (inputs, validated actions, diffs, narrative); replay CLI; anonymized metrics.
@@ -868,17 +873,23 @@ else returnToCommander();
 
 ## 📊 Progress Summary
 
-**Completed:** ~75 tasks (infrastructure, army building, Combat System v2.0, movement, missions)  
-**Active Sprint:** Command & Control v1.0 (5 tasks)  
-**Backlog:** Veterans (3 tasks), Polish (4 tasks), Combat Enhancement (8 tasks)  
+**Completed:** Added schemas/validators, engine alignment, new maps, transactional updates, structured results+narrative with AI fallback, DM queue, dry-run, cultural rules validation, CI, and core/schema tests.  
+**Active Sprint:** Command & Control v1.0 and Core Hardening  
+**Backlog:** Veterans (3 tasks), Polish (4 tasks), Combat Enhancement (8 tasks)
 
-**Total Remaining:** ~20 tasks to full feature set  
-**Estimated Time:** ~40-50 hours at current pace  
-**Timeline:** 4-5 weeks at 10-12 hours/week
+**Total Remaining (current code epic):** 017, 015, 009, 020, 025, 029–031  
+**Estimated Time:** ~12–18 hours  
+**Timeline:** ~1–2 weeks at current pace
 
 ---
 
-## 🎯 Next Immediate Actions
+## 🎯 Next Immediate Actions (updated)
+
+1. current code-017: DB model alignment + migrations
+2. current code-015: Central interaction router
+3. current code-009: Keyword-only orchestrator
+4. current code-020: Telemetry and replay logs
+5. current code-025: Lint/typecheck + CI polish
 
 1. **CMD-001:** Commander Entity Foundation (3-4h) - *IN PROGRESS*
 2. **CMD-002:** Command Range Zones (3-4h)
@@ -905,3 +916,7 @@ else returnToCommander();
 ### current code-016: Command Loader Audit and Registration
 - Status: ✅ Complete
 - Notes: `src/bot/commandLoader.js` in use via `src/index.js`; ensure registration remains after routing cleanup (current code-015).
+
+### current code-002/032/004/005/012/014/019/021/022/024/027/028
+- Status: ✅ Complete (see sections above)
+- Notes: Schemas and validators; engine alignment; scenario maps; transactional updates; structured results+narrative; messaging cleanup; DM queue; dry-run; core tests; help UI; scenario assertion; fallback narrative.

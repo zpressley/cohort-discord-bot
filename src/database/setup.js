@@ -50,8 +50,9 @@ async function setupDatabase() {
             console.log('📝 Creating fresh database...');
             await sequelize.sync({ force: true });
         } else {
-            // Existing database with data - skip sync to avoid migration issues
+            // Existing database with data - minimal schema ensure (017)
             console.log('📂 Using existing database (no sync)...');
+            await ensureBattleSchema();
         }
         
         console.log('✅ Database tables ready.');
@@ -63,6 +64,23 @@ async function setupDatabase() {
     } catch (error) {
         console.error('❌ Unable to connect to database:', error);
         throw error;
+    }
+}
+
+async function ensureBattleSchema() {
+    try {
+        // SQLite pragma table info to detect columns
+        const [rows] = await sequelize.query("PRAGMA table_info('Battles')");
+        const cols = new Set(rows.map(r => r.name));
+        const toAdd = [];
+        if (!cols.has('player1Culture')) toAdd.push("ALTER TABLE Battles ADD COLUMN player1Culture VARCHAR(255)");
+        if (!cols.has('player2Culture')) toAdd.push("ALTER TABLE Battles ADD COLUMN player2Culture VARCHAR(255)");
+        for (const sql of toAdd) {
+            console.log('🛠️ Applying migration:', sql);
+            await sequelize.query(sql);
+        }
+    } catch (e) {
+        console.warn('Schema ensure skipped or failed:', e.message);
     }
 }
 
