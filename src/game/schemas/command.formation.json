@@ -1,0 +1,17 @@
+{
+  "$id": "cohort://schemas/action.formation.json",
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "FormationAction",
+  "type": "object",
+  "properties": {
+    "type": { "const": "formation" },
+    "unitId": { "type": "string", "minLength": 1 },
+    "formationType": { 
+      "type": "string",
+      "enum": ["phalanx", "testudo", "wedge", "line", "column", "loose", "standard"]
+    },
+    "reasoning": { "type": "string" }
+  },
+  "required": ["type", "unitId", "formationType"],
+  "additionalProperties": false
+}
