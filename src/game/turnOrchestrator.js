@@ -126,9 +126,14 @@ async function processTurn(battle, player1Order, player2Order, map) {
         // PHASE 2: Schema validation (gate deterministic core)
         const SCHEMA_STRICT = (process.env.SCHEMA_STRICT || 'true').toLowerCase() !== 'false';
         if (SCHEMA_STRICT) {
+            const { adjustActionsForCulture } = require('./culturalRules');
             const p1Val = validateActions(p1Interpretation.validatedActions);
             const p2Val = validateActions(p2Interpretation.validatedActions);
-            const hasErrors = !p1Val.valid || !p2Val.valid;
+            const p1Cult = battle.player1Culture || battle.battleState?.player1?.culture || null;
+            const p2Cult = battle.player2Culture || battle.battleState?.player2?.culture || null;
+            const p1CultCheck = adjustActionsForCulture(p1Interpretation.validatedActions, p1Cult);
+            const p2CultCheck = adjustActionsForCulture(p2Interpretation.validatedActions, p2Cult);
+            const hasErrors = !p1Val.valid || !p2Val.valid || (p1CultCheck.violations.length + p2CultCheck.violations.length) > 0;
             if (hasErrors) {
                 return {
                     success: false,
@@ -137,6 +142,10 @@ async function processTurn(battle, player1Order, player2Order, map) {
                     validationErrors: {
                         player1: p1Val.results,
                         player2: p2Val.results
+                    },
+                    culturalErrors: {
+                        player1: p1CultCheck,
+                        player2: p2CultCheck
                     }
                 };
             }

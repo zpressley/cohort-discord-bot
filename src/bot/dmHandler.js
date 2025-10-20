@@ -224,7 +224,7 @@ async function processTurnResolution(battle, battleTurn, client) {
         if (!turnResult.success) {
             // Surface validation errors to both players if available
             if (turnResult.phase === 'validation_failed' && turnResult.validationErrors) {
-                await notifyValidationErrors(battle, turnResult.validationErrors, client, battleTurn.turnNumber);
+                await notifyValidationErrors(battle, turnResult.validationErrors, client, battleTurn.turnNumber, turnResult.culturalErrors);
                 return; // do not advance turn
             }
             throw new Error(turnResult.error);
@@ -349,7 +349,7 @@ async function sendTurnResults(battle, battleTurn, narrative, turnResults, clien
 }
 
 
-async function notifyValidationErrors(battle, validationErrors, client, turnNumber) {
+async function notifyValidationErrors(battle, validationErrors, client, turnNumber, culturalErrors = null) {
     try {
         const summarize = (results) => {
             if (!Array.isArray(results)) return 'Unknown error';
@@ -363,10 +363,19 @@ async function notifyValidationErrors(battle, validationErrors, client, turnNumb
             return msgs.length ? msgs.join('\n') : 'No actionable errors';
         };
 
-        const p1Msg = summarize(validationErrors.player1);
-        const p2Msg = summarize(validationErrors.player2);
+        const p1Msg = summarize(validationErrors.player1) + formatCultural(culturalErrors?.player1);
+        const p2Msg = summarize(validationErrors.player2) + formatCultural(culturalErrors?.player2);
 
         const text = (who, msg) => `❌ Validation failed for your orders (Turn ${turnNumber}).\n\n${msg}\n\nPlease rephrase your command (e.g., specify target unit or position).`;
+        function formatCultural(c) {
+            if (!c || (!c.violations?.length && !c.warnings?.length)) return '';
+            const viol = (c.violations || []).map(v => `• ${v.message}`).join('\n');
+            const warn = (c.warnings || []).map(v => `• ${v.message}`).join('\n');
+            let out = '';
+            if (viol) out += `\n\nCultural restrictions:\n${viol}`;
+            if (warn) out += `\n\nCultural notes:\n${warn}`;
+            return out;
+        }
 
         if (!battle.player1Id.startsWith('TEST_')) {
             const p1 = await client.users.fetch(battle.player1Id);
