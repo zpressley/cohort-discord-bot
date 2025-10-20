@@ -183,6 +183,11 @@ async function processTurnResolution(battle, battleTurn, client) {
         );
         
         if (!turnResult.success) {
+            // Surface validation errors to both players if available
+            if (turnResult.phase === 'validation_failed' && turnResult.validationErrors) {
+                await notifyValidationErrors(battle, turnResult.validationErrors, client, battleTurn.turnNumber);
+                return; // do not advance turn
+            }
             throw new Error(turnResult.error);
         }
         
@@ -290,6 +295,38 @@ async function sendTurnResults(battle, battleTurn, narrative, turnResults, clien
     }
 }
 
+
+async function notifyValidationErrors(battle, validationErrors, client, turnNumber) {
+    try {
+        const summarize = (results) => {
+            if (!Array.isArray(results)) return 'Unknown error';
+            const msgs = [];
+            results.forEach((r, idx) => {
+                if (r && r.valid === false) {
+                    const errs = (r.errors || []).slice(0, 3).map(e => `${e.instancePath || ''} ${e.message}`).join('; ');
+                    msgs.push(`Action ${idx + 1}: ${errs || 'invalid'}`);
+                }
+            });
+            return msgs.length ? msgs.join('\n') : 'No actionable errors';
+        };
+
+        const p1Msg = summarize(validationErrors.player1);
+        const p2Msg = summarize(validationErrors.player2);
+
+        const text = (who, msg) => `❌ Validation failed for your orders (Turn ${turnNumber}).\n\n${msg}\n\nPlease rephrase your command (e.g., specify target unit or position).`;
+
+        if (!battle.player1Id.startsWith('TEST_')) {
+            const p1 = await client.users.fetch(battle.player1Id);
+            await p1.send(text('Player 1', p1Msg));
+        }
+        if (battle.player2Id && !battle.player2Id.startsWith('TEST_')) {
+            const p2 = await client.users.fetch(battle.player2Id);
+            await p2.send(text('Player 2', p2Msg));
+        }
+    } catch (e) {
+        console.error('Failed to notify validation errors:', e);
+    }
+}
 
 // Clean briefing structure in dmHandler.js
 // Four sections: Units → Intelligence → Officer → Map

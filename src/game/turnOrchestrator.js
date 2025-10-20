@@ -5,6 +5,7 @@ const { interpretOrders } = require('../ai/orderInterpreter');
 const { processMovementPhase } = require('./positionBasedCombat');
 const { calculateVisibility } = require('./fogOfWar');
 const { resolveCombat } = require('./battleEngine');
+const { validateActions } = require('./schemas');
 const { validateMovement } = require('./movementSystem');
 const { updateCommanderPosition, checkCommanderCaptureRisk } = require('./commandSystem/commanderManager');
 
@@ -122,7 +123,26 @@ async function processTurn(battle, player1Order, player2Order, map) {
             }
         }
         
-        // PHASE 2: Execute movements (existing code continues here)
+        // PHASE 2: Schema validation (gate deterministic core)
+        const SCHEMA_STRICT = (process.env.SCHEMA_STRICT || 'true').toLowerCase() !== 'false';
+        if (SCHEMA_STRICT) {
+            const p1Val = validateActions(p1Interpretation.validatedActions);
+            const p2Val = validateActions(p2Interpretation.validatedActions);
+            const hasErrors = !p1Val.valid || !p2Val.valid;
+            if (hasErrors) {
+                return {
+                    success: false,
+                    error: 'Action validation failed',
+                    phase: 'validation_failed',
+                    validationErrors: {
+                        player1: p1Val.results,
+                        player2: p2Val.results
+                    }
+                };
+            }
+        }
+
+        // PHASE 3: Execute movements (existing code continues here)
         console.log('\n🚶 Phase 2: Processing movement...');
         const p1Moves = p1Interpretation.validatedActions.filter(a => a.type === 'move');
         const p2Moves = p2Interpretation.validatedActions.filter(a => a.type === 'move');
