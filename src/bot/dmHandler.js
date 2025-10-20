@@ -102,7 +102,11 @@ async function handleDMCommand(message, client) {
 async function processPlayerOrder(message, battle, playerId, playerSide, client) {
     try {
         const { models } = require('../database/setup');
-        const orderText = message.content;
+        let orderText = message.content;
+        const simulate = /^\s*(simulate:|dry-run:)/i.test(orderText);
+        if (simulate) {
+            orderText = orderText.replace(/^\s*(simulate:|dry-run:)\s*/i, '');
+        }
         
         console.log(`Processing order for ${playerSide}: "${orderText}"`);
         
@@ -133,6 +137,38 @@ async function processPlayerOrder(message, battle, playerId, playerSide, client)
         
         await message.reply(confirmation);
         
+        // Simulation mode: process without committing turn/state
+        if (simulate) {
+            const { processTurn } = require('../game/turnOrchestrator');
+            const { RIVER_CROSSING_MAP } = require('../game/maps/riverCrossing');
+            const scenarioMaps = {
+                'river_crossing': RIVER_CROSSING_MAP
+            };
+            const map = scenarioMaps[battle.scenario] || RIVER_CROSSING_MAP;
+
+            const other = playerSide === 'player1' ? battleTurn.player2Command : battleTurn.player1Command;
+            const otherOrder = other || 'hold';
+            const p1 = playerSide === 'player1' ? orderText : otherOrder;
+            const p2 = playerSide === 'player2' ? orderText : otherOrder;
+            const result = await processTurn(battle, p1, p2, map);
+            try {
+                const { EmbedBuilder } = require('discord.js');
+                const embed = new EmbedBuilder()
+                  .setColor(0x888888)
+                  .setTitle(`🧪 SIMULATION — Turn ${battle.currentTurn}`)
+                  .setDescription(result?.narrative?.mainNarrative?.fullNarrative || 'Simulated.')
+                  .addFields(
+                    { name: 'Combats', value: String(result?.turnResults?.combats || 0), inline: true },
+                    { name: 'Your casualties (sim)', value: String(result?.turnResults?.casualties?.[playerSide] || 0), inline: true }
+                  )
+                  .setFooter({ text: 'No state was changed. Remove "simulate:" to execute.' });
+                await message.reply({ embeds: [embed] });
+            } catch (e) {
+                await message.reply('Simulation complete (no state changed).');
+            }
+            return;
+        }
+
         // Check if both players have submitted orders
         const bothReady = battleTurn.player1Command && battleTurn.player2Command;
         
@@ -280,8 +316,9 @@ async function sendTurnResults(battle, battleTurn, narrative, turnResults, clien
                 )
                 .setFooter({ text: `Awaiting orders for Turn ${battle.currentTurn}` });
             
-            await player1.send({ embeds: [p1Embed] });
-            console.log('Results sent to player 1');
+            const { queuedDM } = require('./utils/dmQueue');
+            queuedDM(battle.player1Id, { embeds: [p1Embed] }, client);
+            console.log('Results enqueued to player 1');
         }
         
         // Send to player 2 (skip TEST users)
@@ -299,8 +336,9 @@ async function sendTurnResults(battle, battleTurn, narrative, turnResults, clien
                 )
                 .setFooter({ text: `Awaiting orders for Turn ${battle.currentTurn}` });
             
-            await player2.send({ embeds: [p2Embed] });
-            console.log('Results sent to player 2');
+            const { queuedDM } = require('./utils/dmQueue');
+            queuedDM(battle.player2Id, { embeds: [p2Embed] }, client);
+            console.log('Results enqueued to player 2');
         }
         
         console.log(`Turn ${battleTurn.turnNumber} results processing complete`);
@@ -551,7 +589,8 @@ ${p1Map}
 
 **AWAITING ORDERS**`;
             
-            await (await client.users.fetch(battle.player1Id)).send(briefing);
+            const { queuedDM } = require('./utils/dmQueue');
+            queuedDM(battle.player1Id, { content: briefing }, client);
         }
         
         // ===== PLAYER 2 BRIEFING ===== (Same structure)
@@ -640,7 +679,8 @@ ${p2Map}
 
 **AWAITING ORDERS**`;
             
-            await (await client.users.fetch(battle.player2Id)).send(briefing);
+            const { queuedDM } = require('./utils/dmQueue');
+            queuedDM(battle.player2Id, { content: briefing }, client);
         }
         
     } catch (error) {
