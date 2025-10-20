@@ -12,6 +12,11 @@ This defines deterministic action schemas and a validator to gate execution.
 - Validator: src/game/schemas/index.js
   - Uses Ajv if installed (npm i ajv), else a minimal fallback.
 
+Environment
+
+- SCHEMA_STRICT=true (default) blocks execution on invalid actions and DMs concise errors.
+- Set SCHEMA_STRICT=false to bypass validation temporarily (not recommended).
+
 Usage
 
 ```js
