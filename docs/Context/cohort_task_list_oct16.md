@@ -1,189 +1,413 @@
 # Cohort Development Task List
 
-**Last Updated:** October 16, 2025  
-**Current Sprint:** Multi-001 Complete, Combat System v2.0 Next  
-**Version:** Game Core v0.2.0
+**Last Updated:** October 20, 2025  
+**Current Sprint:** Combat System v2.0 Complete, Command & Control v1.0 Next  
+**Version:** Game Core v0.3.0
 
 ---
 
-## 🎯 ACTIVE SPRINT - Combat System v2.0
+## 📌 Project Guide — current code Task List (Core-first, free-AI optional)
 
-### **CMB-001: Define Attack/Defense Rating Tables**
+### current code-002: Define Command Catalog and JSON Schemas
+- Priority: Critical
+- Estimate: 4-6 hours
+- Status: Not Started
+- Description: Define strict, versioned schemas for deterministic commands (move, formation, attack, support, conditional) and build a validation helper.
+- Files to Create:
+  - `src/game/schemas/command.move.json`, `src/game/schemas/command.formation.json`, ...
+  - `src/game/schemas/index.js` (validator factory using Ajv or similar)
+- Acceptance Criteria:
+  - [ ] Schemas published and versioned
+  - [ ] Validator returns structured errors (path, code, message)
+  - [ ] Unit tests for valid/invalid payloads
+- Dependencies: current code-001
+- Labels: core, schemas, deterministic
+
+### current code-032: Align Existing Turn Engine To Schemas
+- Priority: Critical
+- Estimate: 4-6 hours
+- Status: Not Started
+- Description: Add adapters so the existing turn engine only accepts validated commands; outputs normalized state diffs + metrics.
+- Files to Modify/Create:
+  - `src/game/turnOrchestrator.js`, `src/game/battleEngine.js`
+  - `src/game/engine/adapters/schemaAdapter.js`
+- Acceptance Criteria:
+  - [ ] Rejects malformed actions pre-exec with clear reasons
+  - [ ] Produces `{ newState, diffs, metrics }`
+  - [ ] Smoke test resolves a turn end-to-end using schema-valid input
+- Dependencies: current code-002
+- Labels: core, engine, adapters
+
+### current code-004: Scenario Maps and Terrain Modifiers
+- Priority: High
+- Estimate: 4-6 hours
+- Status: Not Started
+- Description: Provide map modules for all scenarios; unify API with existing `riverCrossing.js`; include movement costs and LOS helpers.
+- Files to Create:
+  - `src/game/maps/bridge_control.js`, `hill_fort_assault.js`, `forest_ambush.js`, `desert_oasis.js`
+  - Ensure parity with `src/game/maps/riverCrossing.js`
+- Acceptance Criteria:
+  - [ ] Common interface: `getTiles()`, `movementCost()`, `hasLOS(a,b)`
+  - [ ] Tests for movement and LOS edge-cases
+- Dependencies: current code-032
+- Labels: maps, movement, LOS
+
+### current code-005: Transaction + Rollback Mechanism for State Updates
+- Priority: High
+- Estimate: 3-4 hours
+- Status: Not Started
+- Description: Pre-turn snapshot; rollback on failure; persist audit diffs for replay.
+- Files to Modify/Create:
+  - `src/game/turnOrchestrator.js` (snapshot/commit/rollback)
+  - `src/database/models/BattleTurn.js` (diffs/metrics fields as needed)
+- Acceptance Criteria:
+  - [ ] Failed turn restores prior state
+  - [ ] Audit log persisted per turn
+- Dependencies: current code-032
+- Labels: reliability, audit, db
+
+### current code-017: Battle Model Alignment and Migrations
+- Priority: High
+- Estimate: 3-4 hours
+- Status: Not Started
+- Description: Ensure DB fields used in code exist; add/alter migrations and startup checks.
+- Files to Modify/Create:
+  - Sequelize migrations for `weather`, `terrain`, `victoryConditions`, `battleState.pendingOrders`, `messageId`
+  - Validation in `src/database/setup.js`
+- Acceptance Criteria:
+  - [ ] Migrations applied cleanly
+  - [ ] Startup asserts models match expectations
+- Dependencies: current code-004, current code-005
+- Labels: database, migrations
+
+### current code-012: Turn Results: Structured Output + Narrative
+- Priority: High
+- Estimate: 3-4 hours
+- Status: Not Started
+- Description: Standardize the per-turn outputs and build DM embeds; include deterministic narrative fallback hooks.
+- Files to Modify/Create:
+  - `src/bot/dmHandler.js` (result packaging)
+  - `src/game/briefingGenerator.js` or new `src/game/resultFormatters.js`
+- Acceptance Criteria:
+  - [ ] Result object includes movement, combat, casualties, intel
+  - [ ] Embeds respect Discord limits
+  - [ ] Fallback narrative used when AI disabled
+- Dependencies: current code-032
+- Labels: output, ux
+
+### current code-022: Unit and Property Tests for Core Engine
+- Priority: High
+- Estimate: 4-6 hours
+- Status: Not Started
+- Description: Tests for movement legality, combat math invariants, idempotent diffs.
+- Files to Modify/Create:
+  - `src/tests/**` (extend existing `tests/balance` and `game/combat/tests`)
+- Acceptance Criteria:
+  - [ ] Movement legality suite
+  - [ ] Combat invariants suite
+  - [ ] Diffs idempotency on reapply
+- Dependencies: current code-004, current code-012
+- Labels: tests, core
+
+### current code-014: Consolidate Duplicate MessageCreate Handlers
+- Priority: Medium
+- Estimate: 30-45 minutes
+- Status: Not Started
+- Description: Unify to a single DM handler registration in `src/index.js`.
+- Files to Modify:
+  - `src/index.js`
+- Acceptance Criteria:
+  - [ ] One MessageCreate listener
+  - [ ] DM flow test passes
+- Dependencies: None
+- Labels: cleanup, routing, quick-fix
+
+### current code-015: Refactor Interaction Routing To interactionHandler
+- Priority: Medium
+- Estimate: 1-2 hours
+- Status: Not Started
+- Description: Centralize routing and remove duplicated lobby branching.
+- Files to Modify:
+  - `src/index.js`, `src/bot/interactionHandler.js`
+- Acceptance Criteria:
+  - [ ] All prefixes mapped in one place
+  - [ ] Duplicates removed, covered by tests
+- Dependencies: current code-014
+- Labels: routing, cleanup
+
+### current code-026: Quick Fix — Remove duplicated lobby branch in index.js
+- Priority: Medium
+- Estimate: 15-30 minutes
+- Status: Not Started
+- Description: Eliminate repeated lobby branch in button handling.
+- Files to Modify:
+  - `src/index.js`
+- Acceptance Criteria:
+  - [ ] Single lobby branch remains
+  - [ ] Add a test to ensure route coverage
+- Dependencies: current code-015
+- Labels: quick-fix, cleanup
+
+### current code-009: Hybrid Orchestrator In dmHandler (Keyword-Only Phase)
+- Priority: Medium
+- Estimate: 2-3 hours
+- Status: Not Started
+- Description: Use keyword parser → validate against schemas → build execution plan → optional dry-run, no paid AI.
+- Files to Modify:
+  - `src/bot/dmHandler.js`
+- Acceptance Criteria:
+  - [ ] Low-confidence/invalid orders return actionable feedback
+  - [ ] Validated plan executes via turn orchestrator
+- Dependencies: current code-002, current code-007
+- Labels: parsing, orchestrator
+
+### current code-011: Cultural Rules Validation Layer
+- Priority: Medium
+- Estimate: 2-3 hours
+- Status: Not Started
+- Description: Apply culture constraints/bonuses post-parse and pre-exec; adjust confidence and warnings.
+- Files to Modify/Create:
+  - `src/game/orderParser.js` (integration)
+  - `src/game/culturalRules.js`
+- Acceptance Criteria:
+  - [ ] Restricted formations penalized or rejected per culture
+  - [ ] Preferred tactics increase confidence
+- Dependencies: current code-002, current code-009
+- Labels: culture, validation
+
+### current code-021: Safeguards: Confidence Thresholds and Sandbox “Dry‑Run”
+- Priority: Medium
+- Estimate: 2-3 hours
+- Status: Not Started
+- Description: Simulate turn without commit and show diffs; require confirmation below thresholds.
+- Files to Modify/Create:
+  - `src/bot/dmHandler.js` (dry-run and confirm)
+  - `src/game/turnOrchestrator.js` (simulate path)
+- Acceptance Criteria:
+  - [ ] Dry-run path returns deterministic results
+  - [ ] Confirmation flow blocks risky exec
+- Dependencies: current code-009, current code-012
+- Labels: safety, ux
+
+### current code-019: Rate Limiting and DM Queueing
+- Priority: Medium
+- Estimate: 1-2 hours
+- Status: Not Started
+- Description: Queue DMs with backoff to respect Discord limits; add telemetry for drops/retries.
+- Files to Create:
+  - `src/bot/utils/dmQueue.js`
+- Acceptance Criteria:
+  - [ ] No throttling errors during tests
+  - [ ] Retries logged and bounded
+- Dependencies: current code-015
+- Labels: reliability, discord
+
+### current code-024: Help/Docs Surfaces and Error Copy
+- Priority: Low
+- Estimate: 1-2 hours
+- Status: Not Started
+- Description: Add lobby help panel and /help; clear messages for ambiguity, cultural violations, and impossible moves.
+- Files to Modify/Create:
+  - `src/bot/commands/lobby.js` (help panel)
+  - `src/bot/commands/help.js`
+- Acceptance Criteria:
+  - [ ] Examples and tips visible from lobby
+  - [ ] Error copy concise and actionable
+- Dependencies: current code-011, current code-021
+- Labels: docs, ux
+
+### current code-025: Code Hygiene: Lint/Typecheck Scripts and CI
+- Priority: Low
+- Estimate: 1-2 hours
+- Status: Not Started
+- Description: Add npm scripts and CI workflow for lint/test; fix existing warnings.
+- Files to Modify/Create:
+  - `package.json` scripts, `.github/workflows/ci.yml`
+- Acceptance Criteria:
+  - [ ] `npm run lint` and `npm test` green
+  - [ ] CI required checks configured
+- Dependencies: None
+- Labels: ci, hygiene
+
+### current code-027: Scenario Key Alignment
+- Priority: Low
+- Estimate: 45-60 minutes
+- Status: Not Started
+- Description: Assert scenario keys match map modules and DB values at startup.
+- Files to Modify/Create:
+  - `src/bot/commands/create-game.js` (keys)
+  - `src/game/maps/**` (module names)
+  - Startup assertion util: `src/game/validation/scenarioKeyAssert.js`
+- Acceptance Criteria:
+  - [ ] Startup fails with clear guidance if mismatch
+- Dependencies: current code-004
+- Labels: validation, startup
+
+### current code-028: Narrative Fallback Implementation
+- Priority: Low
+- Estimate: 1-2 hours
+- Status: Not Started
+- Description: Deterministic template narrative when AI is disabled/unavailable.
+- Files to Modify/Create:
+  - `src/game/briefingGenerator.js` or `src/game/narratives/fallback.js`
+- Acceptance Criteria:
+  - [ ] Clear user notice when fallback used
+  - [ ] Logged in audit
+- Dependencies: current code-012
+- Labels: narrative, fallback
+
+### current code-020: Telemetry, Replay Logs, and Tracing
+- Priority: Low
+- Estimate: 3-4 hours
+- Status: Not Started
+- Description: Per-turn audit (inputs, validated actions, diffs, narrative); replay CLI; anonymized metrics.
+- Files to Modify/Create:
+  - `src/database/models/BattleTurn.js` (audit)
+  - `scripts/replayBattle.js`
+- Acceptance Criteria:
+  - [ ] Can replay a battle locally from logs
+  - [ ] PII-free metrics exported
+- Dependencies: current code-005, current code-012
+- Labels: telemetry, tooling
+
+### current code-029: Free AI Provider (Ollama) Adapter
+- Priority: Optional
+- Estimate: 2-3 hours
+- Status: Not Started
+- Description: Local provider adapter compatible with aiManager; models `llama3.2:3b` or `mistral:7b`.
+- Files to Create:
+  - `src/ai/providers/ollama.js`
+- Acceptance Criteria:
+  - [ ] Same interface as existing AI manager
+  - [ ] Timeouts/retries handled
+- Dependencies: None
+- Labels: ai, local
+
+### current code-030: Feature Flags and Provider Config
+- Priority: Optional
+- Estimate: 45-60 minutes
+- Status: Not Started
+- Description: Toggle AI via env; default disabled; provider selection.
+- Files to Modify/Create:
+  - `src/ai/aiManager.js` (flag gating)
+  - `.env.example` (AI_ENABLED, AI_PROVIDER)
+- Acceptance Criteria:
+  - [ ] Keyword-only mode works with AI disabled
+  - [ ] Provider switching documented
+- Dependencies: current code-029
+- Labels: config, flags
+
+### current code-031: Local Install/Run Docs For Free AI
+- Priority: Optional
+- Estimate: 45-60 minutes
+- Status: Not Started
+- Description: Setup guide for running Ollama locally and enabling the adapter.
+- Files to Create:
+  - `docs/ai/local_ollama.md`
+- Acceptance Criteria:
+  - [ ] Install steps, model pulls, env flags
+  - [ ] Troubleshooting section
+- Dependencies: current code-029, current code-030
+- Labels: docs, ai
+
+---
+
+## 🎯 ACTIVE SPRINT - Command & Control v1.0
+
+### **CMD-001: Commander Entity Foundation**
 - **Priority:** Critical
-- **Estimate:** 2-3 hours
-- **Status:** Not Started
-- **Description:** Create attack/defense value tables for all equipment, training, cultures
-- **Files to Create:**
-  - `src/game/combat/attackRatings.js`
-  - `src/game/combat/defenseRatings.js`
-  - `src/game/combat/culturalModifiers.js`
-- **Acceptance Criteria:**
-  - [ ] Weapon attack values defined (2-12 range)
-  - [ ] Armor defense values defined (0-10 range)
-  - [ ] Training bonuses (levy 0 → legendary 10)
-  - [ ] Formation bonuses/penalties
-  - [ ] Cultural modifiers for 20 civilizations
-- **Example:**
+- **Estimate:** 3-4 hours
+- **Status:** ✅ Complete
+- **Description:** Create commander as POV entity always attached to a unit
+- **Properties:**
 ```javascript
-WEAPONS = {
-  spear: 4,
-  sword: 5,
-  pike_sarissa: 8,
-  warElephant: 12
+commander = {
+  isUnit: false,
+  attachedTo: 'unit_id',
+  position: 'sameAsAttachedUnit',
+  isPOV: true,
+  captureRisk: true
 }
 ```
+- **Acceptance Criteria:**
+  - [x] Commander moves with attached unit (automatic)
+  - [x] Can move between adjacent units (1-tile limit)
+  - [x] Always starts with elite unit
+  - [x] Capture mechanics when elite <25% strength
+  - [x] Player choices: escape/die/surrender
+  - [x] Natural language commands: "I will move to the cavalry"
 - **Dependencies:** None
-- **Labels:** `combat`, `critical`, `data-tables`
+- **Labels:** `command-control`, `critical`, `✅ complete`
 
 ---
 
-### **CMB-002: Chaos Calculation System**
-- **Priority:** Critical  
+### **CMD-002: Command Range Zones**
+- **Priority:** High
 - **Estimate:** 3-4 hours
 - **Status:** Not Started
-- **Description:** Build chaos level calculator from battlefield conditions
+- **Description:** Three-tier command system based on distance
+- **Zones:**
+  - Instant (1-3 tiles): Same-turn execution
+  - Messenger (5-10 tiles): 1-turn delay
+  - Out of Contact (>10 tiles): 2-3 turn delay, autonomy AI
 - **Files to Create:**
-  - `src/game/combat/chaosCalculator.js`
-- **Acceptance Criteria:**
-  - [ ] Chaos level 0-10 from conditions (terrain, weather, density, etc.)
-  - [ ] Environmental factors: fog +3, forest +2, night +4
-  - [ ] Unit density: compressed = +3 chaos
-  - [ ] Combat situation: ambush +4, flanked +2
-- **Example:**
-```javascript
-chaosLevel = calculateChaos({
-  terrain: 'forest',     // +2
-  weather: 'fog',        // +3
-  density: 'compressed', // +3
-  situation: 'standard'  // 0
-}); // = 8
-```
-- **Dependencies:** None
-- **Labels:** `combat`, `critical`
+  - `src/game/commandSystem/commandRanges.js`
+- **Dependencies:** CMD-001
+- **Labels:** `command-control`, `high-priority`
 
 ---
 
-### **CMB-003: Preparation Modifier System**
-- **Priority:** Critical
-- **Estimate:** 2-3 hours
-- **Status:** Not Started
-- **Description:** Calculate unit preparation to negate chaos
-- **Files to Create:**
-  - `src/game/combat/preparationCalculator.js`
-- **Acceptance Criteria:**
-  - [ ] Formation bonuses (phalanx +6, testudo +4)
-  - [ ] Experience bonuses (veteran +3, legendary +5)
-  - [ ] Defensive position bonuses (fortified +4)
-  - [ ] Surprise penalties (ambushed -6)
-- **Example:**
-```javascript
-preparation = calculatePreparation({
-  formation: 'phalanx',      // +6
-  experience: 'veteran',     // +3
-  position: 'defensive',     // +2
-  surprised: false           // 0
-}); // = 11 (can negate chaos 8 + reduce by 3)
-```
-- **Dependencies:** CMB-001
-- **Labels:** `combat`, `critical`
-
----
-
-### **CMB-004: Combat Engine Rewrite**
-- **Priority:** Critical
-- **Estimate:** 4-6 hours
-- **Status:** Not Started
-- **Description:** Replace ratio system with chaos-modified attack/defense
-- **Files to Modify:**
-  - `src/game/battleEngine.js` - Complete rewrite of resolveCombat()
-- **New Formula:**
-```javascript
-// Base damage
-baseDamage = attacker.attack - defender.defense
-
-// Roll chaos (1d[chaosLevel])
-chaosRoll = random(1, chaosLevel)
-rawChaos = chaosRoll - (chaosLevel / 2)
-
-// Apply preparation
-attackerChaos = max(0, rawChaos - attacker.preparation)
-defenderChaos = max(0, rawChaos - defender.preparation)
-
-// Modified values
-effectiveAttack = attack - attackerChaos
-effectiveDefense = defense - defenderChaos
-
-// Final damage
-damage = effectiveAttack - effectiveDefense
-casualties = max(0, damage) * (strength/100) * 5
-```
-- **Acceptance Criteria:**
-  - [ ] Chaos-modified combat working
-  - [ ] Preparation properly reduces chaos impact
-  - [ ] Negative damage handled via accumulation
-  - [ ] Results stored in turn data
-- **Dependencies:** CMB-001, CMB-002, CMB-003
-- **Labels:** `combat`, `critical`, `core-rewrite`
-
----
-
-### **CMB-005: Damage Accumulation System**
+### **AUTO-001: Sun Tzu Autonomy AI**
 - **Priority:** High
-- **Estimate:** 2 hours
+- **Estimate:** 4-5 hours
 - **Status:** Not Started
-- **Description:** Handle negative damage via bucket overflow
-- **Files to Create:**
-  - `src/game/combat/damageAccumulation.js`
+- **Description:** Units act independently when out of command range
 - **Logic:**
 ```javascript
-// Turn 1: Attack 6, Defense 8 = -2 damage
-accumulatedDamage = -2 (stored on unit)
-
-// Turn 2: Attack 6, Defense 8 = -2 damage  
-accumulatedDamage = -4
-
-// Turn 3: Attack 10, Defense 8 = +2 damage
-net = accumulated(-4) + current(+2) = -2
-// Still no casualties, accumulation = -2
-
-// Turn 4: Attack 12, Defense 8 = +4 damage
-net = accumulated(-2) + current(+4) = +2
-// 2 damage * 5 = 10 casualties
+if (orders) execute();
+else if (canImprovise) improvise();
+else if (enemy) evaluateStrength();
+else returnToCommander();
 ```
-- **Acceptance Criteria:**
-  - [ ] Negative damage stored per unit
-  - [ ] Accumulation carries between turns
-  - [ ] Overflow triggers casualties
-  - [ ] Resets when positive damage dealt
-- **Dependencies:** CMB-004
-- **Labels:** `combat`, `high-priority`
+- **Strength Evaluation:**
+  - Enemy <70% → Attack aggressively
+  - Enemy 70-90% → Attack cautiously
+  - Enemy 90-130% → Defensive, request orders
+  - Enemy 130-200% → Fighting withdrawal
+  - Enemy >200% → Full retreat or last stand
+- **Dependencies:** CMD-002
+- **Labels:** `autonomy`, `ai`
 
 ---
 
-### **CMB-006: Combat Balance Testing**
-- **Priority:** High
-- **Estimate:** 4-6 hours
+### **MSG-001: Messenger System**
+- **Priority:** Medium
+- **Estimate:** 2-3 hours
 - **Status:** Not Started
-- **Description:** Test all combat scenarios for balance
-- **Test Scenarios:**
-  1. Plains battle, clear weather (Chaos 0)
-  2. Forest ambush (Chaos 6)
-  3. Night assault (Chaos 8)
-  4. Phalanx vs cavalry (formation effectiveness)
-  5. Veteran vs levy (experience matters)
-  6. Baldwin IV scenario (prepared underdog vs unprepared superior force)
-- **Acceptance Criteria:**
-  - [ ] Predictable outcomes in low chaos
-  - [ ] Preparation matters in high chaos
-  - [ ] Superior forces usually win
-  - [ ] Underdogs can win with good tactics
-  - [ ] No exploits or degenerate strategies
-- **Dependencies:** CMB-004, CMB-005
-- **Labels:** `testing`, `balance`
+- **Description:** Travel time for orders and reports
+- **Calculation:**
+  - 1 turn per 5 tiles distance
+  - Round trip = 2x travel time
+- **Dependencies:** CMD-002
+- **Labels:** `command-control`, `realism`
 
 ---
 
-### **CMB-007: Chaos Display in Combat Results**
+### **AUTO-002: Officer Questions**
+- **Priority:** Medium
+- **Estimate:** 2-3 hours
+- **Status:** Not Started
+- **Description:** Officers ask for clarification on ambiguous orders
+- **Examples:**
+  - Order: "Secure river crossing"
+  - Situation: 3 fords detected
+  - Question: "Commander, which ford? All three or split forces?"
+- **Dependencies:** AUTO-001
+- **Labels:** `autonomy`, `ai`
+
+---
+
+## 🟡 BACKLOG - Veterans & Progression
 - **Priority:** Medium
 - **Estimate:** 1 hour
 - **Status:** Not Started
@@ -570,13 +794,37 @@ else returnToCommander();
 
 ## ✅ COMPLETED EPICS
 
+### **Combat System v2.0 (CMB-001 through CMB-006)**
+- **CMB-001:** Attack/Defense Rating Tables ✅
+  - Created `attackRatings.js`, `defenseRatings.js`, `culturalModifiers.js`
+  - Weapon attack ratings (2-12 scale), armor defense (0-10 scale)
+  - Training bonuses, formation modifiers, cultural traits for 8 civilizations
+- **CMB-002:** Chaos Calculation System ✅
+  - Built `chaosCalculator.js` with 0-10 chaos scale
+  - Environmental factors (terrain, weather, density, tactical situation)
+- **CMB-003:** Preparation Calculator ✅
+  - Created `preparationCalculator.js` with formation/experience/position bonuses
+  - Added 6-step army building with training selection (basic/technical/expert)
+  - Training costs 2/4/6 SP, limited to unit weapon types
+- **CMB-004:** Combat Engine Rewrite ✅
+  - Replaced ratio system with chaos-modified attack/defense formula
+  - Integrated all combat modules with bucket damage accumulation
+  - Added range mechanics and ambush rules (Teutoburg Forest style)
+- **CMB-005:** Damage Accumulation ✅
+  - Implemented bucket system for negative damage storage
+  - Accumulation persists across turns until positive damage overflow
+- **CMB-006:** Combat Balance Testing ✅
+  - Created comprehensive balance test framework with 12+ scenarios
+  - Achieved ~80% competitive balance threshold
+  - Validated tactical realism (archers vs melee, ambush mechanics)
+
 ### **Infrastructure (CB-001 through CB-006)**
 - Database models, Sequelize setup, sync handling
 - Commander, Battle, BattleTurn, EliteUnit, VeteranOfficer models
 - No corruption, conditional sync working
 
 ### **Army Building (AB-001 through AB-007)**
-- 5-step SP-based builder
+- Enhanced to 6-step SP-based builder with training selection
 - 8 starting cultures with restrictions
 - Equipment compatibility validation
 - Visual progress bars and embeds
@@ -589,7 +837,7 @@ else returnToCommander();
 - Test infrastructure
 
 ### **Initial Combat (BS-001 through BS-011)**
-- Mathematical combat engine (ratio-based, to be replaced)
+- Mathematical combat engine (replaced with v2.0 system)
 - Formation matrices
 - Environmental effects
 - Natural language parsing
@@ -611,28 +859,49 @@ else returnToCommander();
 - Auto-continuation on "hold" ✅
 - Mission completion detection ✅
 
+### **Multi-Unit Recognition (MULTI-002)**
+- **MULTI-002:** "Units" keyword recognition ✅
+  - Added support for "units move to X" as "all units" command
+  - Enhanced natural language parsing in orderInterpreter.js
+
 ---
 
 ## 📊 Progress Summary
 
-**Completed:** ~60 tasks (infrastructure, army building, basic combat, movement, missions)  
-**Active Sprint:** Combat System v2.0 (14 tasks)  
-**Backlog:** Command & Control (6 tasks), Veterans (3 tasks), Polish (4 tasks)  
+**Completed:** ~75 tasks (infrastructure, army building, Combat System v2.0, movement, missions)  
+**Active Sprint:** Command & Control v1.0 (5 tasks)  
+**Backlog:** Veterans (3 tasks), Polish (4 tasks), Combat Enhancement (8 tasks)  
 
-**Total Remaining:** ~27 tasks to full feature set  
-**Estimated Time:** ~60-80 hours at current pace  
-**Timeline:** 6-8 weeks at 10-12 hours/week
+**Total Remaining:** ~20 tasks to full feature set  
+**Estimated Time:** ~40-50 hours at current pace  
+**Timeline:** 4-5 weeks at 10-12 hours/week
 
 ---
 
 ## 🎯 Next Immediate Actions
 
-1. **MULTI-002:** Add "units" keyword (15 min)
-2. **CMB-001:** Define attack/defense ratings (2-3h)
-3. **CMB-002:** Build chaos calculator (3-4h)
-4. **CMB-003:** Build preparation calculator (2-3h)
-5. **CMB-004:** Rewrite combat engine (4-6h)
+1. **CMD-001:** Commander Entity Foundation (3-4h) - *IN PROGRESS*
+2. **CMD-002:** Command Range Zones (3-4h)
+3. **AUTO-001:** Sun Tzu Autonomy AI (4-5h)
+4. **MSG-001:** Messenger System (2-3h)
+5. **AUTO-002:** Officer Questions (2-3h)
 
-**Estimated to Combat v2.0 Complete:** ~15-20 hours
+**Estimated to Command & Control v1.0 Complete:** ~15-20 hours
 
-**Current Status:** Mission system complete and working. Ready to revolutionize combat with chaos-modified attack/defense system that rewards tactical preparation while maintaining realistic unpredictability.
+**Current Status:** Combat System v2.0 complete with chaos-modified attack/defense, range mechanics, comprehensive balance testing, and 6-step army building with training. Ready to implement command and control system with commanders, autonomy AI, and realistic communication delays.
+
+---
+
+## ✅ Completed (current code)
+
+### current code-007: Keyword Parser (orderParser)
+- Status: ✅ Complete
+- Notes: `src/game/orderParser.js` present; to be integrated with schema validation (current code-002) and cultural rules (current code-011).
+
+### current code-008: AI Interpreter (orderInterpreter) + Provider Adapters
+- Status: ✅ Complete (present)
+- Notes: `src/ai/orderInterpreter.js` exists; will remain gated behind feature flags (current code-030) and optional local provider (current code-029).
+
+### current code-016: Command Loader Audit and Registration
+- Status: ✅ Complete
+- Notes: `src/bot/commandLoader.js` in use via `src/index.js`; ensure registration remains after routing cleanup (current code-015).

@@ -1,25 +1,24 @@
 // src/game/combat/damageAccumulation.js
 // Damage Accumulation System for Combat System v2.0
-// Handles negative damage via bucket overflow mechanics
+// Implements "Bucket Model" per combat_design_parameters.md
 // 
-// Last Updated: 2025-10-17
-// Version: 1.0.0
+// Last Updated: 2025-10-20
+// Version: 1.1.0 - Updated to match approved bucket system design
 // Part of: CMB-005 Implementation
 
 /**
- * Damage Accumulation System
+ * Damage Accumulation System - "Bucket" Model
  * 
- * Core Mechanic:
- * - Negative damage is stored as "accumulated damage" on units
- * - Accumulated damage carries between turns until it overflows
- * - When net damage becomes positive, casualties are calculated
- * - System prevents "chipping away" at heavily armored units
+ * Core Mechanic (from combat_design_parameters.md):
+ * - Defense acts like a cup/bucket that fills with incoming damage
+ * - When bucket overflows (accumulated >= 1.0), casualties occur
+ * - Remainder stays in bucket for next turn
+ * - Even weak attacks eventually cause casualties through accumulation
  * 
- * Example Flow:
- * Turn 1: Attack 6, Defense 8 = -2 damage → accumulate -2
- * Turn 2: Attack 6, Defense 8 = -2 damage → accumulate -4  
- * Turn 3: Attack 10, Defense 8 = +2 damage → net = -4 + 2 = -2 (still negative)
- * Turn 4: Attack 12, Defense 8 = +4 damage → net = -2 + 4 = +2 → 10 casualties
+ * Example Flow (Attack 4 vs Defense 6 = -2 damage):
+ * Turn 1: -2 damage → Fill bucket: 2.0 → Overflow! 2 damage = 10 casualties, remainder 0
+ * Turn 2: -2 damage → Fill bucket: 2.0 → Overflow! 2 damage = 10 casualties
+ * Turn 3: -2 damage → Fill bucket: 2.0 → Overflow! 2 damage = 10 casualties
  */
 
 /**
@@ -30,7 +29,7 @@
 function initializeDamageTracking(unit) {
     if (!unit.damageAccumulation) {
         unit.damageAccumulation = {
-            accumulated: 0,        // Running total of negative damage
+            accumulated: 0.0,      // Bucket level (0.0 to 1.0+)
             totalDamageReceived: 0, // Historical damage tracking
             turnsWithNegativeDamage: 0,
             lastPositiveDamage: 0,
@@ -41,9 +40,9 @@ function initializeDamageTracking(unit) {
 }
 
 /**
- * Apply damage to a unit using accumulation system
+ * Apply damage to a unit using accumulation system (Bucket Model)
  * @param {Object} unit - Target unit
- * @param {number} rawDamage - Raw damage value (can be negative)
+ * @param {number} rawDamage - Raw damage value (from effectiveAttack - effectiveDefense)
  * @param {number} turnNumber - Current turn number
  * @returns {Object} Damage application result
  */
@@ -54,7 +53,6 @@ function applyDamageWithAccumulation(unit, rawDamage, turnNumber = 1) {
     const result = {
         rawDamage,
         accumulatedBefore: unit.damageAccumulation.accumulated,
-        netDamage: 0,
         casualties: 0,
         accumulatedAfter: 0,
         overflow: false,
@@ -68,40 +66,51 @@ function applyDamageWithAccumulation(unit, rawDamage, turnNumber = 1) {
         accumulated: unit.damageAccumulation.accumulated
     });
     
-    if (rawDamage <= 0) {
-        // Negative or zero damage - add to accumulation
-        unit.damageAccumulation.accumulated += rawDamage;
+    if (rawDamage > 0) {
+        // POSITIVE DAMAGE: Immediate casualties, reset bucket
+        const casualties = calculateCasualtiesFromDamage(rawDamage);
+        
+        result.casualties = casualties;
+        result.accumulatedAfter = 0; // Reset bucket
+        result.overflow = true;
+        
+        // Reset unit accumulation
+        unit.damageAccumulation.accumulated = 0;
+        unit.damageAccumulation.lastPositiveDamage = rawDamage;
+        unit.damageAccumulation.totalDamageReceived += rawDamage;
+        
+        result.description = `Positive damage: ${rawDamage} = ${casualties} casualties. Bucket reset.`;
+        
+    } else if (rawDamage < 0) {
+        // NEGATIVE DAMAGE: Fill the bucket with absolute value
+        const damageAmount = Math.abs(rawDamage);
+        unit.damageAccumulation.accumulated += damageAmount;
         unit.damageAccumulation.turnsWithNegativeDamage++;
         
-        result.accumulatedAfter = unit.damageAccumulation.accumulated;
-        result.description = `Damage ${rawDamage} accumulated. Total: ${result.accumulatedAfter}`;
-        
-    } else {
-        // Positive damage - check for overflow
-        const netDamage = unit.damageAccumulation.accumulated + rawDamage;
-        
-        if (netDamage > 0) {
-            // Overflow! Calculate casualties
-            const casualties = calculateCasualtiesFromDamage(netDamage);
+        // Check if bucket overflows (>= 1.0)
+        if (unit.damageAccumulation.accumulated >= 1.0) {
+            // Overflow! Extract casualties
+            const overflowDamage = Math.floor(unit.damageAccumulation.accumulated);
+            const casualties = overflowDamage * 5; // 5 casualties per damage point
             
-            result.netDamage = netDamage;
+            // Keep remainder in bucket
+            unit.damageAccumulation.accumulated = unit.damageAccumulation.accumulated % 1.0;
+            unit.damageAccumulation.totalDamageReceived += overflowDamage;
+            
             result.casualties = casualties;
+            result.accumulatedAfter = unit.damageAccumulation.accumulated;
             result.overflow = true;
-            result.accumulatedAfter = 0; // Reset accumulation after overflow
             
-            // Reset unit accumulation
-            unit.damageAccumulation.accumulated = 0;
-            unit.damageAccumulation.lastPositiveDamage = rawDamage;
-            unit.damageAccumulation.totalDamageReceived += netDamage;
-            
-            result.description = `Damage overflow! ${rawDamage} damage + ${result.accumulatedBefore} accumulated = ${netDamage} net damage = ${casualties} casualties`;
-            
+            result.description = `Bucket overflow! ${damageAmount} added, ${overflowDamage} overflow = ${casualties} casualties. Remainder: ${result.accumulatedAfter.toFixed(1)}`;
         } else {
-            // Still negative overall - add to accumulation
-            unit.damageAccumulation.accumulated = netDamage;
-            result.accumulatedAfter = netDamage;
-            result.description = `Damage ${rawDamage} vs accumulation ${result.accumulatedBefore} = ${netDamage} total accumulated`;
+            // No overflow, damage accumulates in bucket
+            result.accumulatedAfter = unit.damageAccumulation.accumulated;
+            result.description = `Bucket filling: +${damageAmount} = ${result.accumulatedAfter.toFixed(1)}/1.0`;
         }
+    } else {
+        // Zero damage - no change
+        result.accumulatedAfter = unit.damageAccumulation.accumulated;
+        result.description = "No damage applied";
     }
     
     return result;
@@ -116,7 +125,8 @@ function calculateCasualtiesFromDamage(netDamage) {
     if (netDamage <= 0) return 0;
     
     // 5 casualties per point of net damage (from Combat System v2.0)
-    return Math.max(1, Math.round(netDamage * 5));
+    // Increase minimum to 2 to reduce excessive stalemates
+    return Math.max(2, Math.round(netDamage * 5));
 }
 
 /**
@@ -129,6 +139,7 @@ function getDamageAccumulationStatus(unit) {
         return {
             hasAccumulation: false,
             accumulated: 0,
+            bucketLevel: 0,
             turnsWithNegative: 0,
             description: "No damage accumulation"
         };
@@ -137,15 +148,17 @@ function getDamageAccumulationStatus(unit) {
     const acc = unit.damageAccumulation;
     
     return {
-        hasAccumulation: acc.accumulated < 0,
+        hasAccumulation: acc.accumulated > 0,
         accumulated: acc.accumulated,
+        bucketLevel: acc.accumulated,
+        bucketFull: acc.accumulated >= 1.0,
         turnsWithNegative: acc.turnsWithNegativeDamage,
         totalReceived: acc.totalDamageReceived,
         lastPositive: acc.lastPositiveDamage,
         historyLength: acc.damageHistory.length,
-        description: acc.accumulated < 0 ? 
-            `${Math.abs(acc.accumulated)} damage accumulated over ${acc.turnsWithNegativeDamage} turns` :
-            "No accumulated damage"
+        description: acc.accumulated > 0 ? 
+            `Bucket ${(acc.accumulated * 100).toFixed(1)}% full (${acc.accumulated.toFixed(2)}/1.0)` :
+            "Empty bucket"
     };
 }
 

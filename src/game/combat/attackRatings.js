@@ -129,15 +129,91 @@ const SITUATIONAL_ATTACK_MODIFIERS = {
     'rain_weather': -1,      // Slippery conditions
     'extreme_heat': -1,      // Exhaustion in armor
     'marsh_terrain': -2,     // Unstable footing
+    
+    // Range advantage
+    'closing_distance_bonus': 0,  // Calculated dynamically
 };
+
+/**
+ * Check if a weapon is ranged
+ * @param {string} weaponName - Name of the weapon
+ * @returns {boolean} True if weapon is ranged
+ */
+function isRangedWeapon(weaponName) {
+    const rangedWeapons = [
+        'compositeBow', 'bow', 'crossbow', 'sling', 'javelin', 'throwing_axe',
+        'han_chinese_crossbow', 'self_bow_professional', 'self_bow_basic',
+        'greek_composite_bow', 'persian_recurve_bow', 'parthian_horse_bow',
+        'sling_professional', 'javelin_heavy'
+    ];
+    return rangedWeapons.includes(weaponName);
+}
+
+/**
+ * Calculate closing distance bonus for ranged units
+ * @param {Object} attacker - Attacking unit
+ * @param {Object} defender - Defending unit  
+ * @param {Object} conditions - Battle conditions
+ * @param {boolean} isDefender - True if this unit is the defender
+ * @returns {number} Bonus attack rating from range advantage
+ */
+function calculateClosingDistanceBonus(attacker, defender, conditions = {}, isDefender = false) {
+    // Check if attacker has ranged weapons
+    const attackerRanged = attacker.weapons && attacker.weapons.some(w => isRangedWeapon(w));
+    const defenderRanged = defender.weapons && defender.weapons.some(w => isRangedWeapon(w));
+    
+    if (!attackerRanged) return 0; // No bonus if attacker isn't ranged
+    
+    // TEUTOBURG FOREST RULE: Ranged defenders lose range advantage when ambushed
+    // Melee attackers get so close that archers can't use their bows effectively
+    if (isDefender && conditions.combat_situation === 'ambush' && !defenderRanged) {
+        console.log(`Ambush negates range advantage - melee closed distance!`);
+        return 0; // No range bonus when surprised by melee
+    }
+    
+    // Base closing distance bonus
+    let closingBonus = 0;
+    
+    if (!defenderRanged) {
+        // Ranged vs Melee - Major advantage (6-7 minutes of free volleys)
+        closingBonus = 3;
+        
+        // Reduce bonus based on terrain (harder to maintain range)
+        if (conditions.terrain === 'forest') {
+            closingBonus = 2; // Trees block some shots, easier to close
+        } else if (conditions.terrain === 'urban') {
+            closingBonus = 1; // Buildings provide cover
+        } else if (conditions.terrain === 'marsh') {
+            closingBonus = 2; // Difficult terrain slows advance
+        }
+        
+        // Ambush amplifies advantage (defenders caught in open) - but only for attacker
+        if (conditions.combat_situation === 'ambush' && !isDefender) {
+            closingBonus += 1; // Reduce ambush bonus to prevent 100/0 outcomes
+        }
+        
+    } else {
+        // Ranged vs Ranged - Small advantage for attacker (first volley)
+        closingBonus = 1;
+        
+        if (conditions.combat_situation === 'ambush' && !isDefender) {
+            closingBonus += 1; // First shot advantage
+        }
+    }
+    
+    // Cap maximum closing distance bonus to prevent extreme outcomes
+    return Math.min(closingBonus, 4);
+}
 
 /**
  * Calculate total attack rating for a unit
  * @param {Object} unit - Unit with weapon, quality, formation data
  * @param {Object} situation - Combat situation modifiers
+ * @param {Object} targetUnit - Target unit for range calculations (optional)
+ * @param {boolean} isDefender - Whether this unit is the defender (optional)
  * @returns {number} Total attack rating
  */
-function calculateAttackRating(unit, situation = {}) {
+function calculateAttackRating(unit, situation = {}, targetUnit = null, isDefender = false) {
     let totalAttack = 0;
     
     // Base weapon attack
@@ -160,12 +236,32 @@ function calculateAttackRating(unit, situation = {}) {
         totalAttack += FORMATION_ATTACK_MODIFIERS[formation];
     }
     
+    // Cavalry vs infantry balance: reduce cavalry bonus vs formed infantry
+    if (unit.mounted && targetUnit && !targetUnit.mounted) {
+        const defenderFormation = targetUnit.formation || 'line';
+        // Well-formed infantry gets defensive bonus vs cavalry
+        if (['line', 'phalanx', 'square', 'shield_wall'].includes(defenderFormation)) {
+            totalAttack -= 2; // Further reduce cavalry dominance vs prepared infantry
+        } else {
+            totalAttack -= 1; // Even loose infantry has some anti-cavalry benefit
+        }
+    }
+    
     // Situational modifiers
     Object.keys(situation).forEach(modifier => {
         if (SITUATIONAL_ATTACK_MODIFIERS[modifier]) {
             totalAttack += SITUATIONAL_ATTACK_MODIFIERS[modifier];
         }
     });
+    
+    // Apply closing distance bonus if target unit provided
+    if (targetUnit) {
+        const closingBonus = calculateClosingDistanceBonus(unit, targetUnit, situation, isDefender);
+        if (closingBonus > 0) {
+            totalAttack += closingBonus;
+            console.log(`Closing distance bonus: +${closingBonus} (ranged advantage)`);
+        }
+    }
     
     // Ensure minimum attack of 1
     return Math.max(1, totalAttack);
@@ -208,5 +304,7 @@ module.exports = {
     FORMATION_ATTACK_MODIFIERS,
     SITUATIONAL_ATTACK_MODIFIERS,
     calculateAttackRating,
-    getAntiArmorBonus
+    getAntiArmorBonus,
+    isRangedWeapon,
+    calculateClosingDistanceBonus
 };

@@ -6,6 +6,7 @@ const { processMovementPhase } = require('./positionBasedCombat');
 const { calculateVisibility } = require('./fogOfWar');
 const { resolveCombat } = require('./battleEngine');
 const { validateMovement } = require('./movementSystem');
+const { updateCommanderPosition, checkCommanderCaptureRisk } = require('./commandSystem/commanderManager');
 
 /**
  * Process complete turn with both players' orders
@@ -49,8 +50,15 @@ async function processTurn(battle, player1Order, player2Order, map) {
         // PHASE 1: Interpret orders (AI parses natural language)
         console.log('\n📝 Phase 1: Interpreting orders...');
 
-        const p1Interpretation = await interpretOrders(player1Order, battleState, 'player1', map);
-        const p2Interpretation = await interpretOrders(player2Order, battleState, 'player2', map);
+        // Add battle context for commander actions
+        const battleContext = {
+            battleId: battle.id,
+            player1Id: battle.player1Id,
+            player2Id: battle.player2Id
+        };
+        
+        const p1Interpretation = await interpretOrders(player1Order, battleState, 'player1', map, battleContext);
+        const p2Interpretation = await interpretOrders(player2Order, battleState, 'player2', map, battleContext);
         
         // PHASE 1.5: Mission Continuation (add this entire block)
         console.log('\n🔄 Phase 1.5: Checking active missions...');
@@ -133,6 +141,23 @@ async function processTurn(battle, player1Order, player2Order, map) {
         console.log('P2 new positions:', movementResults.newPositions.player2.map(u => 
             `${u.unitId} at ${u.position}`
         ));
+        
+        // PHASE 2.5: Update commander positions
+        console.log('\n📍 Phase 2.5: Updating commander positions...');
+        try {
+            // Update P1 commanders
+            for (const unit of movementResults.newPositions.player1) {
+                await updateCommanderPosition(battle.id, battle.player1Id, unit.unitId, unit.position);
+            }
+            
+            // Update P2 commanders
+            for (const unit of movementResults.newPositions.player2) {
+                await updateCommanderPosition(battle.id, battle.player2Id, unit.unitId, unit.position);
+            }
+        } catch (commanderError) {
+            console.error('Warning - commander position update failed:', commanderError.message);
+            // Continue with battle - commander tracking is optional
+        }
         // PHASE 3: Update visibility (fog of war)
         console.log('\n👁️ Phase 3: Updating intelligence...');
         const p1Visibility = calculateVisibility(
@@ -362,6 +387,65 @@ function applyCasualties(positions, combatResults, movementResults) {
     
     console.log(`✅ Casualties applied: P1 -${p1TotalCasualties} (${p1Destroyed} units destroyed), P2 -${p2TotalCasualties} (${p2Destroyed} units destroyed)`);
     console.log(`   Remaining: P1 ${updated.player1.length} units, P2 ${updated.player2.length} units`);
+    
+    // Check commander capture risk for units that took casualties
+    const commandersAtRisk = [];
+    
+    combatResults.forEach((combat, combatIndex) => {
+        const casualties = combat.result.casualties;
+        const engagement = movementResults?.combatEngagements?.[combatIndex];
+        
+        if (!engagement) return;
+        
+        const attackerUnitId = engagement.attacker.unit.unitId;
+        const defenderUnitId = engagement.defender.unit.unitId;
+        const attackerSide = attackerUnitId.startsWith('north') ? 'player1' : 'player2';
+        const defenderSide = attackerSide === 'player1' ? 'player2' : 'player1';
+        
+        // Check attacker commander
+        const attackerCasualties = casualties.attacker[0]?.casualties || 0;
+        if (attackerCasualties > 0) {
+            const attackerUnit = updated[attackerSide].find(u => u.unitId === attackerUnitId);
+            if (attackerUnit) {
+                checkCommanderCaptureRisk(
+                    movementResults.battleId,
+                    attackerSide === 'player1' ? movementResults.player1Id : movementResults.player2Id,
+                    attackerUnitId,
+                    attackerUnit.currentStrength,
+                    attackerUnit.maxStrength || attackerUnit.currentStrength + attackerCasualties
+                ).then(commander => {
+                    if (commander) {
+                        commandersAtRisk.push({
+                            playerId: attackerSide === 'player1' ? movementResults.player1Id : movementResults.player2Id,
+                            commander: commander
+                        });
+                    }
+                }).catch(err => console.error('Commander capture risk check failed:', err));
+            }
+        }
+        
+        // Check defender commander
+        const defenderCasualties = casualties.defender[0]?.casualties || 0;
+        if (defenderCasualties > 0) {
+            const defenderUnit = updated[defenderSide].find(u => u.unitId === defenderUnitId);
+            if (defenderUnit) {
+                checkCommanderCaptureRisk(
+                    movementResults.battleId,
+                    defenderSide === 'player1' ? movementResults.player1Id : movementResults.player2Id,
+                    defenderUnitId,
+                    defenderUnit.currentStrength,
+                    defenderUnit.maxStrength || defenderUnit.currentStrength + defenderCasualties
+                ).then(commander => {
+                    if (commander) {
+                        commandersAtRisk.push({
+                            playerId: defenderSide === 'player1' ? movementResults.player1Id : movementResults.player2Id,
+                            commander: commander
+                        });
+                    }
+                }).catch(err => console.error('Commander capture risk check failed:', err));
+            }
+        }
+    });
     
     return updated;
 }

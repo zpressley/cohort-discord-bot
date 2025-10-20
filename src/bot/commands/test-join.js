@@ -11,6 +11,7 @@ module.exports = {
             const { models } = require('../../database/setup');
             const { Battle, Commander } = models;
             const { RIVER_CROSSING_MAP, initializeDeployment } = require('../../game/maps/riverCrossing');
+            const { createBattleCommander } = require('../../game/commandSystem/commanderManager');
             
             await interaction.deferReply({ ephemeral: true });
             
@@ -110,7 +111,42 @@ module.exports = {
             
             await battle.save();
             
-            console.log(`Test-join: Battle ${battle.id} now active with positioned units`);
+            // Create battle commanders for both players
+            try {
+                // Get player 1 culture from existing battle state
+                const p1Culture = currentState.player1?.army?.culture || 'Roman Republic';
+                
+                // Create commander for Player 1 (attached to first unit)
+                const p1FirstUnit = p1Units[0];
+                if (p1FirstUnit) {
+                    await createBattleCommander(
+                        battle.id,
+                        battle.player1Id,
+                        p1Culture,
+                        p1FirstUnit.unitId,
+                        p1FirstUnit.position
+                    );
+                }
+                
+                // Create commander for Player 2 (TEST) (attached to first unit)
+                const p2FirstUnit = p2Units[0];
+                if (p2FirstUnit) {
+                    await createBattleCommander(
+                        battle.id,
+                        testPlayer2Id,
+                        testCulture,
+                        p2FirstUnit.unitId,
+                        p2FirstUnit.position
+                    );
+                }
+                
+                console.log('✅ Battle commanders created for both players');
+            } catch (commanderError) {
+                console.error('Error creating battle commanders:', commanderError);
+                // Continue with battle - commanders are optional for now
+            }
+            
+            console.log(`Test-join: Battle ${battle.id} now active with positioned units and commanders`);
             
             return interaction.editReply({
                 content: `**Test Battle Started!**\n\n` +

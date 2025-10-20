@@ -14,6 +14,7 @@ const EliteUnit = require('./models/EliteUnit');
 const Battle = require('./models/Battle');
 const BattleTurn = require('./models/BattleTurn');
 const VeteranOfficer = require('./models/VeteranOfficer');
+const BattleCommander = require('./models/BattleCommander');
 
 // Initialize models
 const models = {
@@ -21,7 +22,8 @@ const models = {
     EliteUnit: EliteUnit(sequelize),
     Battle: Battle(sequelize),
     BattleTurn: BattleTurn(sequelize),
-    VeteranOfficer: VeteranOfficer(sequelize)
+    VeteranOfficer: VeteranOfficer(sequelize),
+    BattleCommander: BattleCommander(sequelize)
 };
 
 // Define associations

@@ -1,38 +1,133 @@
 // src/game/combat/preparationCalculator.js
 // Preparation calculation system for Combat System v2.0
-// Calculates unit preparation level (0-8) to reduce battlefield chaos
+// Calculates unit preparation level (1.0-4.0) as chaos divisor
 // 
-// Last Updated: 2025-10-17
-// Version: 1.0.0
+// Last Updated: 2025-10-20
+// Version: 2.0.0 - Chaos divisor system
 // Dependencies: culturalModifiers.js
 
 /**
- * Training level preparation bonuses
- * Based on new 6th step army building training system
+ * Time & Position preparation bonuses (+0.5 each)
+ * Did you set up properly?
  */
-const TRAINING_PREPARATION_BONUSES = {
-    // No training
-    'none': 0,
+const TIME_POSITION_BONUSES = {
+    'waitedOneTurn': 0.3,           // Spent turn preparing (not caught moving)
+    'defendingPreparedPosition': 0.3, // Pre-positioned defense
+    'highGround': 0.3,              // Claimed elevation advantage
+    'fortifiedPosition': 0.4        // Behind walls/earthworks (slightly higher)
+};
+
+/**
+ * Intelligence & Knowledge bonuses (+0.3 each)
+ * Do you know what's coming?
+ */
+const INTELLIGENCE_BONUSES = {
+    'scoutsDeployed': 0.3,          // Sent scouts, have intel
+    'foughtThisEnemyBefore': 0.3,   // Veterans remember their tactics
+    'identifiedEnemyType': 0.3,     // Know what unit type approaching
+    'anticipatedAttack': 0.3        // Expected this assault (not surprised)
+};
+
+/**
+ * Coordination & Command bonuses (+0.3 each)
+ * Is everyone working together?
+ */
+const COORDINATION_BONUSES = {
+    'commanderPresent': 0.3,        // Commander within 3 tiles
+    'coordinatedAttack': 0.3,       // Multiple units acting together
+    'formationIntact': 0.3,         // Formation hasn't been disrupted
+    'clearOrders': 0.3              // Unambiguous command received
+};
+
+/**
+ * Environmental Adaptation bonuses (+0.3 each)
+ * Did you adapt to conditions?
+ */
+const ENVIRONMENTAL_BONUSES = {
+    'weatherPreparation': 0.3,      // Torches for night, waxed strings for rain
+    'terrainSuited': 0.3,           // Right unit type for terrain
+    'environmentalAdvantage': 0.3,  // Wind at back, sun behind, etc.
+    'acclimated': 0.3               // Desert culture in desert, mountain culture in mountains
+};
+
+/**
+ * Tactical Advantage bonuses (+0.3 each)
+ * Do you have the right matchup?
+ */
+const TACTICAL_ADVANTAGE_BONUSES = {
+    'formationCountersEnemy': 0.3,  // Phalanx vs cavalry, testudo vs archers
+    'weaponAdvantage': 0.3,         // Longer reach, better penetration
+    'freshTroops': 0.3,             // Not exhausted from previous combat
+    'supplySecure': 0.3             // Baggage train protected, no supply worries
+};
+
+/**
+ * Morale & Readiness bonuses (+0.3 each)
+ * Are your troops mentally prepared?
+ */
+const MORALE_READINESS_BONUSES = {
+    'highMorale': 0.3,              // >80% morale
+    'inspiringLeader': 0.3,         // Legendary officer present
+    'culturalAdvantage': 0.3,       // Fighting for homeland, sacred ground, etc.
+    'recentVictory': 0.3            // Won last engagement (confidence)
+};
+
+/**
+ * Preparation penalties (negative modifiers)
+ * Things that reduce preparedness
+ */
+const PREPARATION_PENALTIES = {
+    // Caught unprepared
+    'surprised': -1.0,               // Didn't see it coming
+    'ambushed': -0.5,                // Partial surprise
+    'caughtMarching': -0.5,          // In column formation
     
-    // Archer Training (ranged combat preparation)
-    'archer_basic': 2,       // 2 SP - Basic archery drills
-    'archer_technical': 3,   // 4 SP - Advanced shooting techniques  
-    'archer_expert': 4,      // 6 SP - Master archer coordination
+    // Wrong conditions
+    'disadvantageousTerrain': -0.5,  // Forest cavalry, plains archers
+    'badWeatherUnprepared': -0.5,    // Rain with no prep, night with no torches
     
-    // Swordsman Training (melee combat preparation)
-    'swordsman_basic': 2,    // 2 SP - Basic sword drills
-    'swordsman_technical': 3, // 4 SP - Advanced sword techniques
-    'swordsman_expert': 4,   // 6 SP - Master swordsman skills
+    // Tactical disadvantage
+    'flanked': -0.5,                 // Attacked from side
+    'surrounded': -1.0,              // Encircled
+    'formationBroken': -0.5,         // Lost cohesion
+    'assaultingFortification': -0.5, // Attacking prepared defenses
     
-    // Spear Training (formation combat preparation)
-    'spear_basic': 2,        // 2 SP - Basic spear drills
-    'spear_technical': 3,    // 4 SP - Advanced spear techniques
-    'spear_expert': 4,       // 6 SP - Master spear formation work
+    // Knowledge gap
+    'unknownEnemy': -0.5,            // Never fought this culture
+    'noIntelligence': -0.5,          // Fighting blind
     
-    // Cavalry Training (mounted combat preparation)  
-    'cavalry_basic': 2,      // 2 SP - Basic riding and combat
-    'cavalry_technical': 3,  // 4 SP - Advanced mounted tactics
-    'cavalry_expert': 4      // 6 SP - Master cavalry coordination
+    // Exhaustion
+    'exhausted': -0.5,               // Multiple combats this turn
+    'lowSupplies': -0.5              // Baggage train lost/destroyed
+};
+
+/**
+ * ASYMMETRIC ATTACKER BONUSES
+ * Bonuses only attackers can get - represent initiative and momentum
+ * REBALANCED: Reduced from 0.5 to 0.3 each to prevent preparation dominance
+ */
+const ATTACKER_ASYMMETRIC_BONUSES = {
+    'initiativeAdvantage': 0.3,      // Attacker chooses timing of battle
+    'momentumCharge': 0.3,           // Forward momentum in assault
+    'chosenBattlefield': 0.3,        // Attacker picked engagement point
+    'concentratedAssault': 0.3,      // Can mass forces at breakthrough point
+    'tacticalSurprise': 0.3,         // Unexpected attack angle/timing
+    'ambushAdvantage': 1.2,          // Major advantage from ambush setup
+    'firstStrike': 0.8,              // Get first attack in surprise scenario
+    'teutoburg_ambush': 2.0          // Teutoburg Forest-style forest ambush bonus
+};
+
+/**
+ * ASYMMETRIC DEFENDER BONUSES  
+ * Bonuses only defenders can get - represent position and preparation
+ * REBALANCED: Reduced from 0.5 to 0.3 each to prevent preparation dominance
+ */
+const DEFENDER_ASYMMETRIC_BONUSES = {
+    'preparedPosition': 0.3,         // Had time to set up defenses
+    'terrainKnowledge': 0.3,         // Intimate knowledge of battlefield
+    'secureSupplies': 0.3,           // Protected baggage train
+    'defensiveOptimization': 0.3,    // Formations optimized for defense
+    'interiorLines': 0.3             // Shorter movement distances
 };
 
 /**
@@ -101,213 +196,269 @@ const POSITIONAL_PREPARATION_BONUSES = {
 };
 
 /**
- * Calculate total preparation for a unit
+ * Calculate total preparation for a unit (New 1.0-4.0 Divisor System)
  * @param {Object} unit - Unit with training, formation, experience data
- * @param {Object} position - Positional situation
- * @param {string} culture - Unit culture for cultural bonuses
+ * @param {Object} conditions - Battle conditions and context
  * @returns {Object} Preparation calculation breakdown
  */
-function calculatePreparation(unit, position = {}, culture = null) {
-    let totalPreparation = 0;
+function calculatePreparation(unit, conditions = {}) {
+    let totalPreparation = 1.0; // Start at 1.0 (no mitigation)
     const breakdown = {
-        training: 0,
-        formation: 0,
-        experience: 0,
-        position: 0,
-        cultural: 0,
+        timePosition: 0,
+        intelligence: 0,
+        coordination: 0,
+        environmental: 0,
+        tactical: 0,
+        morale: 0,
+        penalties: 0,
         factors: []
     };
 
-    // Training preparation bonus
-    const training = unit.training || 'none';
-    if (TRAINING_PREPARATION_BONUSES[training] !== undefined) {
-        const trainingBonus = TRAINING_PREPARATION_BONUSES[training];
-        totalPreparation += trainingBonus;
-        breakdown.training += trainingBonus;
-        if (trainingBonus > 0) {
-            breakdown.factors.push(`Training (${training}): +${trainingBonus}`);
-        }
-    }
-
-    // Formation preparation bonus
-    const formation = unit.formation || 'line';
-    if (FORMATION_PREPARATION_BONUSES[formation] !== undefined) {
-        const formationBonus = FORMATION_PREPARATION_BONUSES[formation];
-        totalPreparation += formationBonus;
-        breakdown.formation += formationBonus;
-        if (formationBonus !== 0) {
-            const sign = formationBonus > 0 ? '+' : '';
-            breakdown.factors.push(`Formation (${formation}): ${sign}${formationBonus}`);
-        }
-    }
-
-    // Experience preparation bonus
-    const experience = unit.veteranLevel || 'Recruit';
-    if (EXPERIENCE_PREPARATION_BONUSES[experience] !== undefined) {
-        const experienceBonus = EXPERIENCE_PREPARATION_BONUSES[experience];
-        totalPreparation += experienceBonus;
-        breakdown.experience += experienceBonus;
-        if (experienceBonus > 0) {
-            breakdown.factors.push(`Experience (${experience}): +${experienceBonus}`);
-        }
-    }
-
-    // Positional preparation bonuses/penalties
-    Object.keys(position).forEach(situationKey => {
-        if (POSITIONAL_PREPARATION_BONUSES[situationKey] !== undefined) {
-            const positionBonus = POSITIONAL_PREPARATION_BONUSES[situationKey];
-            totalPreparation += positionBonus;
-            breakdown.position += positionBonus;
-            if (positionBonus !== 0) {
-                const sign = positionBonus > 0 ? '+' : '';
-                breakdown.factors.push(`Position (${situationKey}): ${sign}${positionBonus}`);
-            }
+    // Time & Position bonuses (0.5 each)
+    Object.keys(TIME_POSITION_BONUSES).forEach(factor => {
+        if (conditions[factor]) {
+            const bonus = TIME_POSITION_BONUSES[factor];
+            totalPreparation += bonus;
+            breakdown.timePosition += bonus;
+            breakdown.factors.push(`${factor}: +${bonus}`);
         }
     });
 
-    // Cultural preparation bonus (from culturalModifiers.js)
-    if (culture) {
-        const { getCulturalPreparationBonus } = require('./culturalModifiers');
-        const culturalBonus = getCulturalPreparationBonus(culture);
-        totalPreparation += culturalBonus;
-        breakdown.cultural += culturalBonus;
-        if (culturalBonus !== 0) {
-            const sign = culturalBonus > 0 ? '+' : '';
-            breakdown.factors.push(`Culture (${culture}): ${sign}${culturalBonus}`);
+    // Intelligence & Knowledge bonuses (0.5 each)
+    Object.keys(INTELLIGENCE_BONUSES).forEach(factor => {
+        if (conditions[factor]) {
+            const bonus = INTELLIGENCE_BONUSES[factor];
+            totalPreparation += bonus;
+            breakdown.intelligence += bonus;
+            breakdown.factors.push(`${factor}: +${bonus}`);
         }
+    });
+
+    // Coordination & Command bonuses (0.5 each)
+    Object.keys(COORDINATION_BONUSES).forEach(factor => {
+        if (conditions[factor]) {
+            const bonus = COORDINATION_BONUSES[factor];
+            totalPreparation += bonus;
+            breakdown.coordination += bonus;
+            breakdown.factors.push(`${factor}: +${bonus}`);
+        }
+    });
+
+    // Environmental Adaptation bonuses (0.5 each)
+    Object.keys(ENVIRONMENTAL_BONUSES).forEach(factor => {
+        if (conditions[factor]) {
+            const bonus = ENVIRONMENTAL_BONUSES[factor];
+            totalPreparation += bonus;
+            breakdown.environmental += bonus;
+            breakdown.factors.push(`${factor}: +${bonus}`);
+        }
+    });
+
+    // Tactical Advantage bonuses (0.5 each)
+    Object.keys(TACTICAL_ADVANTAGE_BONUSES).forEach(factor => {
+        if (conditions[factor]) {
+            const bonus = TACTICAL_ADVANTAGE_BONUSES[factor];
+            totalPreparation += bonus;
+            breakdown.tactical += bonus;
+            breakdown.factors.push(`${factor}: +${bonus}`);
+        }
+    });
+
+    // Morale & Readiness bonuses (0.5 each)
+    Object.keys(MORALE_READINESS_BONUSES).forEach(factor => {
+        if (conditions[factor]) {
+            const bonus = MORALE_READINESS_BONUSES[factor];
+            totalPreparation += bonus;
+            breakdown.morale += bonus;
+            breakdown.factors.push(`${factor}: +${bonus}`);
+        }
+    });
+
+    // Apply penalties
+    Object.keys(PREPARATION_PENALTIES).forEach(penalty => {
+        if (conditions[penalty]) {
+            const penaltyValue = PREPARATION_PENALTIES[penalty];
+            totalPreparation += penaltyValue; // Already negative
+            breakdown.penalties += penaltyValue;
+            breakdown.factors.push(`${penalty}: ${penaltyValue}`);
+        }
+    });
+
+    // Apply asymmetric bonuses based on role
+    if (conditions.isAttacker) {
+        Object.keys(ATTACKER_ASYMMETRIC_BONUSES).forEach(bonus => {
+            if (conditions[bonus]) {
+                const bonusValue = ATTACKER_ASYMMETRIC_BONUSES[bonus];
+                totalPreparation += bonusValue;
+                breakdown.tactical += bonusValue;
+                breakdown.factors.push(`ATTACKER ${bonus}: +${bonusValue}`);
+            }
+        });
+    }
+    
+    if (conditions.isDefender) {
+        Object.keys(DEFENDER_ASYMMETRIC_BONUSES).forEach(bonus => {
+            if (conditions[bonus]) {
+                const bonusValue = DEFENDER_ASYMMETRIC_BONUSES[bonus];
+                totalPreparation += bonusValue;
+                breakdown.tactical += bonusValue;
+                breakdown.factors.push(`DEFENDER ${bonus}: +${bonusValue}`);
+            }
+        });
     }
 
-    // Cap preparation at maximum 8, minimum 0
-    const finalPreparation = Math.max(0, Math.min(8, totalPreparation));
+    // Cap at reasonable bounds (0.5 minimum - even disaster has some prep, 4.0 maximum - legendary)
+    const finalPreparation = Math.max(0.5, Math.min(4.0, totalPreparation));
 
     return {
         preparationLevel: finalPreparation,
         rawTotal: totalPreparation,
-        capped: totalPreparation > 8 || totalPreparation < 0,
+        capped: totalPreparation > 4.0 || totalPreparation < 0.5,
         breakdown,
-        description: getPreparationDescription(finalPreparation)
+        description: getNewPreparationDescription(finalPreparation)
     };
 }
 
 /**
- * Get descriptive text for preparation level
- * @param {number} preparationLevel - Preparation level 0-8
+ * Get descriptive text for new preparation divisor system
+ * @param {number} preparationLevel - Preparation level 0.5-4.0
  * @returns {string} Description of unit readiness
  */
-function getPreparationDescription(preparationLevel) {
-    const descriptions = {
-        0: "Unprepared - maximum chaos vulnerability",
-        1: "Minimal preparation - very vulnerable to chaos", 
-        2: "Basic preparation - some chaos resistance",
-        3: "Adequate preparation - moderate chaos resistance",
-        4: "Good preparation - solid chaos resistance",
-        5: "Well prepared - strong chaos resistance", 
-        6: "Very well prepared - excellent chaos resistance",
-        7: "Exceptionally prepared - near-maximum chaos resistance",
-        8: "Perfectly prepared - maximum chaos resistance (but never immune)"
-    };
-    
-    return descriptions[preparationLevel] || `Preparation level ${preparationLevel}`;
-}
-
-/**
- * Apply preparation to chaos modifier
- * This is the core chaos-preparation interaction
- * Preparation reduces chaos but never eliminates it completely
- * @param {number} rawChaosModifier - Raw chaos penalty from chaos roll
- * @param {number} preparationLevel - Unit's preparation level
- * @returns {Object} Final chaos modifier after preparation
- */
-function applyPreparationToChaos(rawChaosModifier, preparationLevel) {
-    // Preparation reduces chaos impact, but minimum 1 chaos remains if rawChaos > 0
-    let finalChaosModifier;
-    
-    if (rawChaosModifier <= 0) {
-        // No chaos or negative chaos - preparation doesn't matter
-        finalChaosModifier = rawChaosModifier;
+function getNewPreparationDescription(preparationLevel) {
+    if (preparationLevel >= 3.5) {
+        return `Legendary preparation (${preparationLevel.toFixed(1)}) - Near-masterful chaos mitigation`;
+    } else if (preparationLevel >= 3.0) {
+        return `Exceptional preparation (${preparationLevel.toFixed(1)}) - Excellent chaos mitigation (Caesar-level)`;
+    } else if (preparationLevel >= 2.5) {
+        return `Very well prepared (${preparationLevel.toFixed(1)}) - Strong chaos mitigation`;
+    } else if (preparationLevel >= 2.0) {
+        return `Well prepared (${preparationLevel.toFixed(1)}) - Good chaos mitigation (halves chaos)`;
+    } else if (preparationLevel >= 1.5) {
+        return `Adequately prepared (${preparationLevel.toFixed(1)}) - Moderate chaos mitigation`;
+    } else if (preparationLevel >= 1.0) {
+        return `Basic preparation (${preparationLevel.toFixed(1)}) - Minimal chaos mitigation`;
     } else {
-        // Positive chaos - preparation reduces it but leaves minimum 1
-        const reducedChaos = rawChaosModifier - preparationLevel;
-        finalChaosModifier = Math.max(1, reducedChaos);
+        return `Poorly prepared (${preparationLevel.toFixed(1)}) - Chaos amplified!`;
     }
-    
-    const chaosReduced = rawChaosModifier - finalChaosModifier;
-    
-    return {
-        rawChaos: rawChaosModifier,
-        preparation: preparationLevel,
-        chaosReduced: chaosReduced,
-        finalChaosModifier: finalChaosModifier,
-        description: `Raw chaos ${rawChaosModifier} - Preparation ${preparationLevel} = Final chaos ${finalChaosModifier} (min 1 if positive)`
+}
+
+/**
+ * Legacy description function for backward compatibility
+ */
+function getPreparationDescription(preparationLevel) {
+    return getNewPreparationDescription(preparationLevel);
+}
+
+/**
+ * Simple preparation adapter for balance testing with asymmetric bonuses
+ * Maps old unit format to new preparation conditions
+ * @param {Object} unit - Legacy unit format
+ * @param {Object} battleConditions - Battle conditions
+ * @param {boolean} isAttacker - Whether this unit is the attacker
+ * @returns {Object} Preparation result
+ */
+function calculatePreparationLegacy(unit, battleConditions = {}, isAttacker = false) {
+    const conditions = {
+        // Basic conditions for testing with variance
+        formationIntact: Math.random() > 0.2,   // 80% chance formation intact
+        freshTroops: Math.random() > 0.3,       // 70% chance troops are fresh
+        commanderPresent: Math.random() > 0.4,  // 60% chance commander present
+        
+        // Map from battle conditions if available
+        terrainSuited: battleConditions.terrain !== 'forest' || !unit.mounted,
+        weatherPreparation: battleConditions.weather === 'clear' && Math.random() > 0.2, // 80% chance if clear weather
+        
+        // Role designation
+        isAttacker: isAttacker,
+        isDefender: !isAttacker
     };
+    
+    // ASYMMETRIC ATTACKER BONUSES
+    if (isAttacker) {
+        conditions.initiativeAdvantage = true;  // Attackers always choose timing
+        conditions.concentratedAssault = true; // Can focus forces
+        
+        // Conditional attacker bonuses
+        conditions.momentumCharge = isChargeCapable(unit);
+        conditions.chosenBattlefield = battleConditions.combat_situation !== 'ambush';
+        conditions.tacticalSurprise = battleConditions.combat_situation === 'ambush';
+        
+        // AMBUSH BONUSES - Major attacker advantages
+        if (battleConditions.combat_situation === 'ambush') {
+            conditions.ambushAdvantage = true;  // Setup advantage
+            conditions.firstStrike = true;      // Strike first
+            
+            // TEUTOBURG FOREST BONUS - Melee ambush in forest gets massive advantage
+            if (battleConditions.terrain === 'forest' && !unit.mounted) {
+                conditions.teutoburg_ambush = true; // Germanic tribes-style forest ambush
+            }
+        }
+        
+        // Attacker penalties
+        if (battleConditions.combat_situation === 'siege_assault') {
+            conditions.assaultingFortification = true;
+        }
+    }
+    
+    // ASYMMETRIC DEFENDER BONUSES
+    if (!isAttacker) {
+        conditions.terrainKnowledge = true;     // Defenders know the ground
+        conditions.secureSupplies = true;      // Shorter supply lines
+        
+        // Conditional defender bonuses
+        conditions.preparedPosition = battleConditions.combat_situation !== 'ambush';
+        conditions.defensiveOptimization = isDefensiveFormation(unit.formation);
+        conditions.interiorLines = true;       // Generally shorter movement distances
+        
+        // Defender penalties (from ambush, surprise, etc.)
+        if (battleConditions.combat_situation === 'ambush') {
+            conditions.surprised = true;
+        }
+        if (battleConditions.combat_situation === 'flanked') {
+            conditions.flanked = true;
+        }
+        if (battleConditions.combat_situation === 'surrounded') {
+            conditions.surrounded = true;
+        }
+    }
+    
+    return calculatePreparation(unit, conditions);
 }
 
 /**
- * Calculate training requirements for weapon combinations
- * Determines what training types are valid for a unit's equipment
- * @param {Object} unit - Unit with weapon loadout
- * @returns {Array} Valid training options for this unit
+ * Check if unit is capable of momentum charge
  */
-function getValidTrainingOptions(unit) {
-    const validTraining = ['none']; // Always can have no training
-    const weapons = unit.weapons || [];
-    const mounted = unit.mounted || false;
-    
-    // Check for ranged weapons (archer training)
-    const hasRangedWeapon = weapons.some(weapon => 
-        weapon.includes('bow') || weapon.includes('crossbow') || 
-        weapon.includes('sling') || weapon.includes('javelin')
-    );
-    if (hasRangedWeapon) {
-        validTraining.push('archer_basic', 'archer_technical', 'archer_expert');
-    }
-    
-    // Check for melee weapons (swordsman training)
-    const hasSword = weapons.some(weapon => 
-        weapon.includes('sword') || weapon.includes('gladius') || 
-        weapon.includes('dao') || weapon.includes('xiphos')
-    );
-    if (hasSword) {
-        validTraining.push('swordsman_basic', 'swordsman_technical', 'swordsman_expert');
-    }
-    
-    // Check for spear weapons (spear training)
-    const hasSpear = weapons.some(weapon => 
-        weapon.includes('spear') || weapon.includes('sarissa') || 
-        weapon.includes('pike') || weapon.includes('pilum')
-    );
-    if (hasSpear) {
-        validTraining.push('spear_basic', 'spear_technical', 'spear_expert');
-    }
-    
-    // Check if mounted (cavalry training)
-    if (mounted) {
-        validTraining.push('cavalry_basic', 'cavalry_technical', 'cavalry_expert');
-    }
-    
-    return validTraining;
+function isChargeCapable(unit) {
+    return unit.mounted || 
+           ['wedge', 'loose'].includes(unit.formation) ||
+           unit.qualityType === 'professional' ||
+           unit.qualityType === 'veteran_mercenary';
 }
 
 /**
- * Get training cost for army builder
- * @param {string} trainingType - Training type
- * @returns {number} SP cost
+ * Check if formation is primarily defensive
  */
-function getTrainingCost(trainingType) {
-    if (trainingType.includes('basic')) return 2;
-    if (trainingType.includes('technical')) return 4;
-    if (trainingType.includes('expert')) return 6;
-    return 0; // 'none' costs nothing
+function isDefensiveFormation(formation) {
+    return ['phalanx', 'testudo', 'shield_wall', 'square', 'hedgehog'].includes(formation);
 }
 
 module.exports = {
-    TRAINING_PREPARATION_BONUSES,
-    FORMATION_PREPARATION_BONUSES,
-    EXPERIENCE_PREPARATION_BONUSES,
-    POSITIONAL_PREPARATION_BONUSES,
+    // New preparation system constants
+    TIME_POSITION_BONUSES,
+    INTELLIGENCE_BONUSES,
+    COORDINATION_BONUSES,
+    ENVIRONMENTAL_BONUSES,
+    TACTICAL_ADVANTAGE_BONUSES,
+    MORALE_READINESS_BONUSES,
+    PREPARATION_PENALTIES,
+    ATTACKER_ASYMMETRIC_BONUSES,
+    DEFENDER_ASYMMETRIC_BONUSES,
+    
+    // Core functions
     calculatePreparation,
+    calculatePreparationLegacy, // For backward compatibility in testing
     getPreparationDescription,
-    applyPreparationToChaos,
-    getValidTrainingOptions,
-    getTrainingCost
+    getNewPreparationDescription,
+    isChargeCapable,
+    isDefensiveFormation
 };

@@ -132,6 +132,10 @@ module.exports = (sequelize) => {
             foreignKey: 'battleId',
             as: 'turns'
         });
+        Battle.hasMany(models.BattleCommander, {
+            foreignKey: 'battleId',
+            as: 'commanders'
+        });
     };
 
     // Instance methods

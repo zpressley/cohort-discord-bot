@@ -5,18 +5,21 @@
 const { calculateAttackRating, WEAPON_ATTACK_RATINGS } = require('./combat/attackRatings');
 const { calculateDefenseRating, ARMOR_DEFENSE_RATINGS } = require('./combat/defenseRatings');
 const { calculateChaosLevel } = require('./combat/chaosCalculator');
-const { calculatePreparation } = require('./combat/preparationCalculator');
+const { calculatePreparationLegacy } = require('./combat/preparationCalculator');
 const { getCulturalCombatModifiers } = require('./combat/culturalModifiers');
 const { applyDamageWithAccumulation, getDamageAccumulationStatus } = require('./combat/damageAccumulation');
 
 /**
  * Calculate total attack rating for an entire force
- * @param {Object} force - Force with units array and formation data
+ * @param {Object} force - Force with units, formation, and experience data
+ * @param {Object} targetForce - Target force for range calculations
+ * @param {Object} conditions - Battle conditions
+ * @param {boolean} isDefender - Whether this force is the defender
  * @returns {number} Total attack rating
  */
-function calculateTotalAttackRating(force) {
+function calculateTotalAttackRating(force, targetForce = null, conditions = {}, isDefender = false) {
     if (!force.units || force.units.length === 0) {
-        return 2; // Minimum attack rating
+        return 1; // Minimum attack rating
     }
     
     let totalAttack = 0;
@@ -25,19 +28,32 @@ function calculateTotalAttackRating(force) {
     force.units.forEach(unit => {
         // Convert unit data structure to match combat system
         const combatUnit = {
-            weapons: [unit.primaryWeapon?.name || 'clubs'],
+            weapons: unit.primaryWeapon?.name ? [unit.primaryWeapon.name] : ['unarmed'],
             quality: unit.qualityType || 'levy',
-            formation: force.formation || 'line'
+            formation: force.formation || 'line',
+            mounted: unit.mounted || false
         };
         
-        const unitAttack = calculateAttackRating(combatUnit, {});
+        // Create target unit for range calculations
+        let targetUnit = null;
+        if (targetForce && targetForce.units && targetForce.units.length > 0) {
+            const firstTarget = targetForce.units[0];
+            targetUnit = {
+                weapons: firstTarget.primaryWeapon?.name ? [firstTarget.primaryWeapon.name] : ['unarmed'],
+                quality: firstTarget.qualityType || 'levy',
+                formation: targetForce.formation || 'line',
+                mounted: firstTarget.mounted || false
+            };
+        }
+        
+        const unitAttack = calculateAttackRating(combatUnit, conditions, targetUnit, isDefender);
         
         // Weight by unit size
         const unitSize = unit.quality?.size || 100;
         totalAttack += unitAttack * (unitSize / 100);
     });
     
-    return Math.max(2, Math.round(totalAttack));
+    return Math.max(1, Math.round(totalAttack));
 }
 
 /**
@@ -76,11 +92,12 @@ function calculateTotalDefenseRating(force) {
  * Calculate total preparation level for an entire force
  * @param {Object} force - Force with units, formation, and experience data
  * @param {Object} conditions - Battle conditions
+ * @param {boolean} isAttacker - Whether this force is the attacker
  * @returns {number} Total preparation level
  */
-function calculateTotalPreparation(force, conditions) {
+function calculateTotalPreparation(force, conditions, isAttacker = false) {
     if (!force.units || force.units.length === 0) {
-        return 0; // No preparation
+        return 1.0; // Minimum preparation
     }
     
     let totalPreparation = 0;
@@ -93,18 +110,19 @@ function calculateTotalPreparation(force, conditions) {
             formation: force.formation || 'line',
             experience: force.experience || 'regular',
             position: 'neutral', // Default position
-            cultural_traits: [] // Could be enhanced
+            cultural_traits: [], // Could be enhanced
+            mounted: unit.mounted || false
         };
         
-        const preparationResult = calculatePreparation(combatUnit, conditions);
-        const unitPreparation = preparationResult.preparationLevel || 0;
+        const preparationResult = calculatePreparationLegacy(combatUnit, conditions, isAttacker);
+        const unitPreparation = preparationResult.preparationLevel || 1.0;
         
         // Weight by unit size
         const unitSize = unit.quality?.size || 100;
         totalPreparation += unitPreparation * (unitSize / 100);
     });
     
-    return Math.max(0, Math.round(totalPreparation));
+    return Math.max(1.0, totalPreparation / force.units.length); // Return average, not sum
 }
 
 /**
@@ -121,10 +139,10 @@ async function resolveCombat(attackingForce, defendingForce, battleConditions, t
     try {
         console.log('=== Combat System v2.0 - Starting Resolution ===');
         
-        // STEP 1: Calculate Attack and Defense Ratings
-        const attackerAttack = calculateTotalAttackRating(attackingForce);
+        // STEP 1: Calculate Attack and Defense Ratings (with range bonuses)
+        const attackerAttack = calculateTotalAttackRating(attackingForce, defendingForce, battleConditions, false);
         const attackerDefense = calculateTotalDefenseRating(attackingForce);
-        const defenderAttack = calculateTotalAttackRating(defendingForce);
+        const defenderAttack = calculateTotalAttackRating(defendingForce, attackingForce, battleConditions, true);
         const defenderDefense = calculateTotalDefenseRating(defendingForce);
         
         console.log(`Attack Ratings - Attacker: ${attackerAttack}, Defender: ${defenderAttack}`);
@@ -136,19 +154,36 @@ async function resolveCombat(attackingForce, defendingForce, battleConditions, t
         console.log(`Battlefield Chaos Level: ${chaosLevel}/10`);
         console.log(`Chaos Factors: ${chaosResult.breakdown.factors.join(', ') || 'None'}`);
         
-        // STEP 3: Calculate Preparation Levels
-        const attackerPreparation = calculateTotalPreparation(attackingForce, battleConditions);
-        const defenderPreparation = calculateTotalPreparation(defendingForce, battleConditions);
+        // STEP 3: Calculate Preparation Levels (Asymmetric)
+        const attackerPreparation = calculateTotalPreparation(attackingForce, battleConditions, true);
+        const defenderPreparation = calculateTotalPreparation(defendingForce, battleConditions, false);
         
         console.log(`Preparation - Attacker: ${attackerPreparation}, Defender: ${defenderPreparation}`);
         
         // STEP 4: Roll Chaos and Apply Preparation
-        const chaosRoll = rollChaos(chaosLevel);
+        let chaosRoll = rollChaos(chaosLevel);
+        
+        // Amplify chaos variance in low-chaos scenarios to prevent stalemates
+        if (chaosLevel <= 3) {
+            chaosRoll = Math.round(chaosRoll * 2.0); // 100% variance boost to break stalemates
+        }
+        
         const rawChaos = chaosRoll - (chaosLevel / 2); // Center around 0
         
-        // Apply preparation to reduce chaos impact (can't go below 0)
-        const attackerChaos = Math.max(0, rawChaos - attackerPreparation);
-        const defenderChaos = Math.max(0, rawChaos - defenderPreparation);
+        // Apply preparation as divisor - better preparation reduces chaos impact
+        // Preparation: 1=no mitigation, 2=amazing (halves chaos), 3=exceptional (thirds), 4+=masterful
+        const attackerPrepDivisor = Math.max(1, attackerPreparation);
+        const defenderPrepDivisor = Math.max(1, defenderPreparation);
+        
+        // Asymmetric chaos application for ambush scenarios
+        let attackerChaos = rawChaos / attackerPrepDivisor;
+        let defenderChaos = rawChaos / defenderPrepDivisor;
+        
+        // In ambush scenarios, defenders suffer additional chaos penalty
+        if (battleConditions.combat_situation === 'ambush') {
+            defenderChaos = defenderChaos * 1.5; // 50% more chaos impact on surprised defenders
+            console.log(`Ambush detected: Defender chaos amplified by 50%`);
+        }
         
         console.log(`Chaos Roll: ${chaosRoll}, Raw Chaos: ${rawChaos}`);
         console.log(`Applied Chaos - Attacker: ${attackerChaos}, Defender: ${defenderChaos}`);
@@ -340,23 +375,23 @@ function determineCombatResult(attackerDamage, defenderDamage, casualties) {
     
     const damageDifference = attackerDamage - defenderDamage;
     
-    // Determine result based on damage differential
-    if (damageDifference >= 6) {
+    // Determine result based on damage differential (REBALANCED: Lower thresholds)
+    if (damageDifference >= 4) {
         result = 'attacker_major_victory';
         intensity = 'decisive';
-    } else if (damageDifference >= 3) {
+    } else if (damageDifference >= 2) {
         result = 'attacker_victory';
         intensity = 'significant';
-    } else if (damageDifference >= 1) {
+    } else if (damageDifference >= 0.5) {
         result = 'attacker_advantage';
         intensity = 'slight';
-    } else if (damageDifference <= -6) {
+    } else if (damageDifference <= -4) {
         result = 'defender_major_victory';
         intensity = 'decisive';
-    } else if (damageDifference <= -3) {
+    } else if (damageDifference <= -2) {
         result = 'defender_victory';
         intensity = 'significant';
-    } else if (damageDifference <= -1) {
+    } else if (damageDifference <= -0.5) {
         result = 'defender_advantage';
         intensity = 'slight';
     }

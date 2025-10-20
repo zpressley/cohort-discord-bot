@@ -5,6 +5,10 @@ const { validateMovement } = require('../game/movementSystem');
 const { parseCoord } = require('../game/maps/mapUtils');
 const { calculateVisibility } = require('../game/fogOfWar');
 const { calculateDistance } = require('../game/maps/mapUtils');
+const { 
+    getCommanderStatus,
+    resolveCommanderCapture
+} = require('../game/commandSystem/commanderManager');
 
 /**
  * Check if unit's active mission should be interrupted
@@ -77,7 +81,7 @@ function checkMissionInterruption(unit, battleState, playerSide, map) {
  * @param {Object} map - Map data for validation
  * @returns {Object} Validated actions to execute
  */
-async function interpretOrders(orderText, battleState, playerSide, map) {
+async function interpretOrders(orderText, battleState, playerSide, map, battleContext = null) {
     const playerUnits = battleState[playerSide].unitPositions || [];
     const playerArmy = battleState[playerSide].army || {};
     
@@ -106,7 +110,20 @@ async function interpretOrders(orderText, battleState, playerSide, map) {
         }
     }
     
-    // STEP 2: Normal order processing
+    // STEP 2: Check for commander actions first (before AI parsing)
+    if (battleContext) {
+        const commanderContext = {
+            battleId: battleContext.battleId,
+            playerId: playerSide === 'player1' ? battleContext.player1Id : battleContext.player2Id
+        };
+        
+        const commanderAction = await parseCommanderActions(orderText, battleState, playerSide, commanderContext);
+        if (commanderAction) {
+            return commanderAction;
+        }
+    }
+    
+    // STEP 3: Normal AI order processing
     const context = {
         currentTurn: battleState.currentTurn,
         yourUnits: playerUnits,
@@ -386,6 +403,11 @@ function splitMultipleOrders(orderText) {
         return [orderText]; // Don't split, handle as override
     }
     
+    // Detect delegation pattern: "[Name], take the [unit] and [command]"
+    if (/\w+,\s+take\s+(?:the\s+)?[\w\s]+\s+and\s+[\w\s]+/i.test(orderText)) {
+        return [orderText]; // Don't split, handle as delegation
+    }
+    
     // Split on commas
     return orderText.split(',').map(s => s.trim());
 }
@@ -466,6 +488,7 @@ async function callAIForOrderParsing(prompt, realBattleUnits = null) {
             targetUnits = targetUnits.filter(u => u.unitId !== excludeUnit.unitId);
         }
     }
+    
     
     // Check for explicit "hold" - return empty to let Phase 1.5 handle missions
     if (lowerOrder === 'hold' || lowerOrder === 'wait' || lowerOrder === 'stay') {
@@ -707,11 +730,291 @@ function isQuestion(text) {
     return false;
 }
 
+/**
+ * Parse natural language commander actions
+ * @param {string} orderText - The order text
+ * @param {Object} battleState - Battle state with battleId
+ * @param {string} playerSide - 'player1' or 'player2'
+ * @returns {Object|null} Commander action result or null if no commander action detected
+ */
+async function parseCommanderActions(orderText, battleState, playerSide, context) {
+    const lowerOrder = orderText.toLowerCase().trim();
+    
+    // We need battle context from the turn orchestrator to get battle ID and player ID
+    // For now, we'll need to pass this through the context or get it another way
+    // This is a limitation we'll need to address in the integration
+    if (!context?.battleId || !context?.playerId) {
+        return null; // Can't process commander actions without battle context
+    }
+    
+    const battleId = context.battleId;
+    const playerId = context.playerId;
+    
+    if (!battleId || !playerId) {
+        return null; // Can't process commander actions without these
+    }
+    
+    // Pattern: "I will move to the cavalry" or "I move to Marcus"
+    const commanderMovePattern = /(?:i will|i'll|i) (?:move to|join|go to) (?:the )?(.+?)$/i;
+    const commanderMove = orderText.match(commanderMovePattern);
+    
+    if (commanderMove) {
+        const target = commanderMove[1].trim();
+        
+        // Find unit that matches the target description
+        const playerUnits = battleState[playerSide].unitPositions || [];
+        const targetUnit = findUnitByDescription(target, playerUnits);
+        
+        if (targetUnit) {
+            try {
+                const { models } = require('../database/setup');
+                
+                // Fetch current commander attachment
+                const currentCommander = await models.BattleCommander.findOne({
+                    where: { battleId, playerId }
+                });
+                if (!currentCommander) {
+                    return {
+                        actions: [],
+                        validation: { isValid: false, errors: ['No commander found'], warnings: [] },
+                        officerComment: 'No commander found in this battle.'
+                    };
+                }
+                
+                // Find the currently attached unit's position
+                const playerUnits = battleState[playerSide].unitPositions || [];
+                const attachedUnit = playerUnits.find(u => u.unitId === currentCommander.attachedToUnitId);
+                if (!attachedUnit) {
+                    return {
+                        actions: [],
+                        validation: { isValid: false, errors: ['Current attached unit not found'], warnings: [] },
+                        officerComment: 'Current attached unit not found.'
+                    };
+                }
+                
+                // Enforce 1-tile adjacency rule
+                const distance = require('../game/maps/mapUtils').calculateDistance(attachedUnit.position, targetUnit.position);
+                if (distance > 1) {
+                    return {
+                        actions: [],
+                        validation: { isValid: false, errors: ['Target unit is too far'], warnings: [] },
+                        officerComment: `Commander can only move to a unit within 1 tile (current: ${distance}).`
+                    };
+                }
+                
+                // Attach commander to the new target unit (always attached; no detach state)
+                await currentCommander.attachToUnit(targetUnit.unitId, targetUnit.position);
+                
+                return {
+                    actions: [{
+                        type: 'commander_move_pov',
+                        unitId: targetUnit.unitId,
+                        reasoning: `Commander moving (POV) to ${targetUnit.unitId}`
+                    }],
+                    validation: { isValid: true, errors: [], warnings: [] },
+                    officerComment: `Commander joined ${targetUnit.unitId}.`
+                };
+            } catch (error) {
+                return {
+                    actions: [],
+                    validation: { isValid: false, errors: [error.message], warnings: [] },
+                    officerComment: `Cannot reposition commander: ${error.message}`
+                };
+            }
+        }
+    }
+    
+    // Pattern: "I will detach" or "I'll move independently to H8"
+    const detachPattern = /(?:i will|i'll|i) (?:detach|move independently|leave the unit)(?:\s+(?:to|at)\s+([A-T]\d{1,2}))?/i;
+    const detachMatch = orderText.match(detachPattern);
+    
+    // Pattern: "I will move to H8" (independent commander movement)
+    const commanderMovePositionPattern = /(?:i will|i'll|i) (?:move|go) (?:to|at) ([A-T]\d{1,2})/i;
+    const commanderPositionMove = orderText.match(commanderMovePositionPattern);
+    
+    // Independent commander movement is not allowed; commander must always be with a unit
+    if (commanderPositionMove) {
+        return {
+            actions: [],
+            validation: { isValid: false, errors: ['Commander must remain with a unit'], warnings: [] },
+            officerComment: 'Commander must remain with a unit. Say “I will move to the cavalry/legion/etc.”'
+        };
+    }
+    
+    // Detach is not allowed; commander is a point-of-view attached to a unit
+    if (detachMatch) {
+        return {
+            actions: [],
+            validation: { isValid: false, errors: ['Commander cannot detach'], warnings: [] },
+            officerComment: 'Commander cannot detach. Move to a nearby unit instead (within one tile).'
+        };
+    }
+    
+    // Pattern: "I will escape" or "I choose to fight to the death" (capture resolution)
+    const escapePattern = /(?:i will|i choose to|i) (?:escape|flee|run)/i;
+    const diePattern = /(?:i will|i choose to|i) (?:die|fight to (?:the )?death|stand and fight)/i;
+    const surrenderPattern = /(?:i will|i choose to|i) surrender/i;
+    
+    let captureChoice = null;
+    if (escapePattern.test(lowerOrder)) captureChoice = 'escape';
+    else if (diePattern.test(lowerOrder)) captureChoice = 'die';
+    else if (surrenderPattern.test(lowerOrder)) captureChoice = 'surrender';
+    
+    if (captureChoice) {
+        try {
+            const result = await resolveCommanderCapture(battleId, playerId, captureChoice);
+            
+            const outcomeMessages = {
+                escaped: 'successfully escaped to a nearby unit',
+                captured: 'was captured during the escape attempt',
+                killed: 'died fighting heroically',
+                surrendered: 'surrendered to the enemy'
+            };
+            
+            // If escaped, commander needs to be moved to nearest friendly unit
+            if (result.status === 'escaped') {
+                // Find nearest friendly unit to escape to
+                const playerUnits = battleState[playerSide].unitPositions || [];
+                const nearestUnit = playerUnits.find(unit => unit.currentStrength > 0);
+                
+                if (nearestUnit && nearestUnit.unitId !== result.attachedToUnitId) {
+                    // Move commander to nearest unit
+                    const { models } = require('../database/setup');
+                    const commander = await models.BattleCommander.findOne({
+                        where: { battleId, playerId }
+                    });
+                    
+                    if (commander) {
+                        await commander.attachToUnit(nearestUnit.unitId, nearestUnit.position);
+                    }
+                }
+            }
+            
+            return {
+                actions: [{
+                    type: 'commander_capture_resolution',
+                    choice: captureChoice,
+                    result: result.status,
+                    reasoning: `Commander ${outcomeMessages[result.status] || 'fate determined'}`
+                }],
+                validation: { isValid: true, errors: [], warnings: [] },
+                officerComment: `Commander ${outcomeMessages[result.status] || 'fate has been decided'}.`
+            };
+        } catch (error) {
+            return {
+                actions: [],
+                validation: { isValid: false, errors: [error.message], warnings: [] },
+                officerComment: `Cannot resolve commander situation: ${error.message}`
+            };
+        }
+    }
+    
+    // Pattern: Command delegation - "Marcus, take the praetorian guard and attack the bridge"
+    const delegationPattern = /([\w]+),\s+take\s+(?:the\s+)?([\w\s]+)\s+and\s+([\w\s]+)/i;
+    const delegation = orderText.match(delegationPattern);
+    
+    if (delegation) {
+        const officerName = delegation[1];
+        const unitDescription = delegation[2];
+        const command = delegation[3];
+        
+        // Find the unit being delegated to
+        const playerUnits = battleState[playerSide].unitPositions || [];
+        const targetUnit = findUnitByDescription(unitDescription, playerUnits);
+        
+        if (targetUnit) {
+            // This is delegation - the commander stays where they are
+            // The unit executes the command independently
+            
+            // Parse the delegated command (basic movement for now)
+            let targetPosition = targetUnit.position; // Default to staying
+            
+            if (command.includes('bridge') || command.includes('ford')) {
+                targetPosition = 'I11'; // Ford position
+            } else if (command.includes('hill')) {
+                targetPosition = 'B5'; // Hill position
+            }
+            
+            return {
+                actions: [{
+                    type: 'move',
+                    unitId: targetUnit.unitId,
+                    currentPosition: targetUnit.position,
+                    targetPosition: targetPosition,
+                    reasoning: `${officerName} commanding ${unitDescription} to ${command}`
+                }],
+                validation: { isValid: true, errors: [], warnings: [] },
+                officerComment: `${officerName} acknowledged. ${unitDescription} will ${command}.`
+            };
+        }
+    }
+    
+    return null; // No commander action detected
+}
+
+/**
+ * Find unit by natural language description
+ * @param {string} description - Description like "cavalry", "praetorian guard", "spearmen"
+ * @param {Array} units - Array of unit objects
+ * @returns {Object|null} Matching unit or null
+ */
+function findUnitByDescription(description, units) {
+    const desc = description.toLowerCase();
+    
+    // Direct unit type matches
+    const typeMatches = {
+        'cavalry': ['cavalry', 'horse', 'mounted'],
+        'infantry': ['infantry', 'foot', 'soldiers'],
+        'spear': ['spear', 'spearmen', 'spears', 'phalanx'],
+        'sword': ['sword', 'swordsmen', 'swords', 'legion'],
+        'archer': ['archer', 'archers', 'bow', 'ranged'],
+        'elite': ['elite', 'guard', 'praetorian']
+    };
+    
+    for (const [unitType, keywords] of Object.entries(typeMatches)) {
+        if (keywords.some(keyword => desc.includes(keyword))) {
+            const matchingUnit = units.find(unit => 
+                unit.unitId.toLowerCase().includes(unitType) ||
+                unit.unitId.toLowerCase().includes(desc) || // Direct description match
+                (unit.equipment && JSON.stringify(unit.equipment).toLowerCase().includes(unitType))
+            );
+            if (matchingUnit) return matchingUnit;
+        }
+    }
+    
+    // Also try direct partial match on unitId
+    const directMatch = units.find(unit => 
+        unit.unitId.toLowerCase().includes(desc) ||
+        desc.includes(unit.unitId.toLowerCase().split('_')[0])
+    );
+    if (directMatch) return directMatch;
+    
+    // Officer name matches (if units have officer names)
+    const nameMatch = units.find(unit => 
+        unit.officerName && unit.officerName.toLowerCase().includes(desc)
+    );
+    if (nameMatch) return nameMatch;
+    
+    // Positional matches ("northern unit", "leftmost unit")
+    if (desc.includes('northern') || desc.includes('north')) {
+        return units.reduce((n, u) => 
+            parseCoord(u.position).row < parseCoord(n.position).row ? u : n
+        );
+    }
+    if (desc.includes('southern') || desc.includes('south')) {
+        return units.reduce((s, u) => 
+            parseCoord(u.position).row > parseCoord(s.position).row ? u : s
+        );
+    }
+    
+    // Fallback: first unit if description is generic
+    if (desc.includes('unit') || desc.includes('troops') || desc.includes('men')) {
+        return units[0];
+    }
+    
+    return null;
+}
 
 module.exports = {
-    interpretOrders,
-    checkMissionInterruption,
-    buildOrderInterpretationPrompt,
-    isQuestion,
-    generateDefaultComment
+    interpretOrders
 };

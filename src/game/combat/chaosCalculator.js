@@ -210,13 +210,24 @@ function calculateChaosLevel(conditions) {
         });
     }
 
+    // Add minimum base chaos (2) even in perfect conditions to prevent deterministic outcomes
+    const baseMinimumChaos = 2;
+    const chaosWithMinimum = Math.max(baseMinimumChaos, totalChaos);
+    
     // Cap chaos at maximum 10
-    const finalChaos = Math.max(0, Math.min(10, totalChaos));
+    const finalChaos = Math.min(10, chaosWithMinimum);
+
+    // Track if minimum chaos was applied
+    const minimumApplied = totalChaos < baseMinimumChaos;
+    if (minimumApplied) {
+        breakdown.factors.push(`Minimum battlefield uncertainty: +${baseMinimumChaos}`);
+    }
 
     return {
         chaosLevel: finalChaos,
         rawTotal: totalChaos,
-        capped: totalChaos > 10,
+        capped: chaosWithMinimum > 10,
+        minimumApplied: minimumApplied,
         breakdown,
         description: getChaosDescription(finalChaos)
     };
