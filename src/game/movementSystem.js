@@ -54,7 +54,7 @@ function validateMovement(unit, targetPosition, map) {
             path: partialPath,
             cost: maxMovement,
             movementRemaining: 0,
-            targetTerrain: getTerrainType(reachablePosition),
+            targetTerrain: getTerrainTypeBound(reachablePosition),
             partialMovement: true,
             finalPosition: reachablePosition,
             originalTarget: targetPosition,

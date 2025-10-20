@@ -5,7 +5,8 @@
   "scripts": {
     "start": "node src/index.js",
     "dev": "nodemon src/index.js",
-    "test:schemas": "node src/tests/schemas/validator.test.js"
+    "test:schemas": "node src/tests/schemas/validator.test.js",
+    "test:core": "node src/tests/core/coreEngine.test.js"
   },
   "keywords": [
     "discord",
