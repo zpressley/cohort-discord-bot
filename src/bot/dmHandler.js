@@ -199,17 +199,32 @@ async function processTurnResolution(battle, battleTurn, client) {
         console.log(`   Combat engagements: ${turnResult.turnResults.combats}`);
         console.log(`   Casualties: P1 ${turnResult.turnResults.casualties.player1}, P2 ${turnResult.turnResults.casualties.player2}`);
         
-        // Update battle state - deep clone to force Sequelize to detect change
+        // Update battle state transactionally with rollback on error (current code-005)
+        const { sequelize } = require('../database/setup');
         const newState = JSON.parse(JSON.stringify(turnResult.newBattleState));
+        const diffs = turnResult.metrics?.diffs || {};
 
-        await battle.update({
-            battleState: newState,
-            currentTurn: battle.currentTurn + 1
+        await sequelize.transaction(async (t) => {
+            // Persist turn analytics on BattleTurn (reuse aiAnalysis JSON)
+            const analysis = {
+                ...(battleTurn.aiAnalysis || {}),
+                schemaValidation: 'passed',
+                diffs
+            };
+            battleTurn.aiAnalysis = analysis;
+            battleTurn.combatResults = turnResult.turnResults || {};
+            battleTurn.turnNarrative = turnResult.narrative?.mainNarrative?.fullNarrative || null;
+            battleTurn.isResolved = true;
+            battleTurn.resolvedAt = new Date();
+            await battleTurn.save({ transaction: t });
+
+            // Apply new battle state and advance turn
+            await battle.update({
+                battleState: newState,
+                currentTurn: battle.currentTurn + 1
+            }, { transaction: t });
         });
-        const reloaded = await models.Battle.findByPk(battle.id);   
 
-        await battleTurn.save();
-        
         // Send results to both players
         await sendTurnResults(battle, battleTurn, turnResult.narrative, turnResult.turnResults, client);
         
