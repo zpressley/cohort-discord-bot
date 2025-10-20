@@ -538,21 +538,30 @@ function extractCasualtySummary(combatResults) {
  * Generate turn narrative from all events
  */
 async function generateTurnNarrative(turnEvents, battleState, turnNumber) {
-    // This will call AI narrative engine
-    // For now, return structured summary
-    
+    const AI_ENABLED = (process.env.AI_ENABLED || 'false').toLowerCase() === 'true';
+    if (AI_ENABLED) {
+        try {
+            const { generateBattleNarrative } = require('../ai/aiNarrativeEngine');
+            const battleContext = { weather: battleState.weather, terrain: battleState.terrain, turnNumber };
+            const narrative = await generateBattleNarrative(turnEvents, battleContext, {}, []);
+            if (narrative && narrative.mainNarrative?.fullNarrative) {
+                return narrative;
+            }
+        } catch (e) {
+            console.warn('AI narrative failed, falling back:', e.message);
+        }
+    }
+
+    // Fallback deterministic narrative
+    const combatLines = turnEvents.combats.map(c => `Combat at ${c.location}: ${c.result.combatResult.result}`);
     return {
         mainNarrative: {
-            fullNarrative: `Turn ${turnNumber} - Movement and combat processed. ${turnEvents.combats.length} engagement(s).`
+            fullNarrative: `Turn ${turnNumber} — ${turnEvents.combats.length} engagement(s). P1 detected ${turnEvents.intelligence.player1?.total || 0}, P2 detected ${turnEvents.intelligence.player2?.total || 0}.`
         },
-        movementSummary: `Units repositioned across the battlefield.`,
-        combatSummary: turnEvents.combats.map(c => 
-            `Combat at ${c.location}: ${c.result.combatResult.result}`
-        ).join('\n'),
+        movementSummary: `P1 moves: ${turnEvents.movements?.movementSummary?.player1Moves ?? 'N/A'}, P2 moves: ${turnEvents.movements?.movementSummary?.player2Moves ?? 'N/A'}`,
+        combatSummary: combatLines.slice(0, 10).join('\n'),
         casualtySummary: `Casualties: P1 ${turnEvents.casualties.player1}, P2 ${turnEvents.casualties.player2}`,
-        nextTurnSetup: {
-            nextTurnPrompt: 'What are your orders for the next turn?'
-        }
+        nextTurnSetup: { nextTurnPrompt: 'What are your orders for the next turn?' }
     };
 }
 

@@ -246,11 +246,24 @@ async function processTurnResolution(battle, battleTurn, client) {
  */
 async function sendTurnResults(battle, battleTurn, narrative, turnResults, client) {
     try {
-        const narrativeText = narrative?.mainNarrative?.fullNarrative || 
-                             `Turn ${battleTurn.turnNumber} processed.\n\n` +
-                             `Movements: ${turnResults.movements?.player1Moves || 0} vs ${turnResults.movements?.player2Moves || 0}\n` +
-                             `Combat engagements: ${turnResults.combats || 0}\n` +
-                             `Casualties: P1 ${turnResults.casualties?.player1 || 0}, P2 ${turnResults.casualties?.player2 || 0}`;
+        const narrativeText = (narrative?.mainNarrative?.fullNarrative || `Turn ${battleTurn.turnNumber} processed.`).slice(0, 900);
+
+        // Structured summaries with safe truncation
+        const mvP1 = turnResults.movements?.player1Moves || 0;
+        const mvP2 = turnResults.movements?.player2Moves || 0;
+        const combats = turnResults.combats || 0;
+        const casP1 = turnResults.casualties?.player1 || 0;
+        const casP2 = turnResults.casualties?.player2 || 0;
+
+        const combatSummary = (narrative?.combatSummary || `${combats} engagement(s)`).toString().slice(0, 900);
+        const casualtySummary = `P1 ${casP1}, P2 ${casP2}`;
+
+        // Recent moves from diffs if present
+        const diffs = battleTurn.aiAnalysis?.diffs || battleTurn.turnDiffs || {};
+        const recentMoves = [];
+        for (const m of (diffs.player1 || []).slice(0, 3)) recentMoves.push(`P1 ${m.unitId}: ${m.from}→${m.to}`);
+        for (const m of (diffs.player2 || []).slice(0, 3)) recentMoves.push(`P2 ${m.unitId}: ${m.from}→${m.to}`);
+        const moveSummary = recentMoves.join('\n').slice(0, 900) || '—';
         
         // Send to player 1 (skip TEST users)
         if (!battle.player1Id.startsWith('TEST_')) {
@@ -260,18 +273,10 @@ async function sendTurnResults(battle, battleTurn, narrative, turnResults, clien
                 .setTitle(`⚔️ Turn ${battleTurn.turnNumber} - Battle Resolution`)
                 .setDescription(narrativeText)
                 .addFields(
-                    {
-                        name: '📊 Turn Summary',
-                        value: `Movements: ${turnResults.movements?.player1Moves || 0}\n` +
-                               `Combats: ${turnResults.combats || 0}\n` +
-                               `Your Casualties: ${turnResults.casualties?.player1 || 0}`,
-                        inline: true
-                    },
-                    {
-                        name: '🎯 Intelligence',
-                        value: `Enemy units detected: ${turnResults.intelligence?.player1Detected || 0}`,
-                        inline: true
-                    }
+                    { name: '📊 Turn Summary', value: `Moves: ${mvP1}\nCombats: ${combats}\nYour casualties: ${casP1}`.slice(0, 1024), inline: true },
+                    { name: '🎯 Intelligence', value: `Enemy units detected: ${turnResults.intelligence?.player1Detected || 0}`.slice(0, 1024), inline: true },
+                    { name: '📝 Combat', value: combatSummary.slice(0, 1024), inline: false },
+                    { name: '🔁 Recent Moves', value: moveSummary.slice(0, 1024), inline: false }
                 )
                 .setFooter({ text: `Awaiting orders for Turn ${battle.currentTurn}` });
             
@@ -287,18 +292,10 @@ async function sendTurnResults(battle, battleTurn, narrative, turnResults, clien
                 .setTitle(`⚔️ Turn ${battleTurn.turnNumber} - Battle Resolution`)
                 .setDescription(narrativeText)
                 .addFields(
-                    {
-                        name: '📊 Turn Summary',
-                        value: `Movements: ${turnResults.movements?.player2Moves || 0}\n` +
-                               `Combats: ${turnResults.combats || 0}\n` +
-                               `Your Casualties: ${turnResults.casualties?.player2 || 0}`,
-                        inline: true
-                    },
-                    {
-                        name: '🎯 Intelligence',
-                        value: `Enemy units detected: ${turnResults.intelligence?.player2Detected || 0}`,
-                        inline: true
-                    }
+                    { name: '📊 Turn Summary', value: `Moves: ${mvP2}\nCombats: ${combats}\nYour casualties: ${casP2}`.slice(0, 1024), inline: true },
+                    { name: '🎯 Intelligence', value: `Enemy units detected: ${turnResults.intelligence?.player2Detected || 0}`.slice(0, 1024), inline: true },
+                    { name: '📝 Combat', value: combatSummary.slice(0, 1024), inline: false },
+                    { name: '🔁 Recent Moves', value: moveSummary.slice(0, 1024), inline: false }
                 )
                 .setFooter({ text: `Awaiting orders for Turn ${battle.currentTurn}` });
             
