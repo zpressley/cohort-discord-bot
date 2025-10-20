@@ -7,14 +7,15 @@ const { findPathAStar, calculateDistance, coordToString, parseCoord } = require(
  * Validate movement with partial movement support
  */
 function validateMovement(unit, targetPosition, map) {
-    const { getTerrainAt: getTerrainType } = require('./maps/riverCrossing');
+    // Use generic terrain getter bound to the current map
+    const getTerrainTypeBound = (coord) => getTerrainType(coord, map);
     
     // Find path using A* pathfinding
     const pathResult = findPathAStar(
         unit.position,
         targetPosition,
         map,
-        getTerrainType
+        getTerrainTypeBound
     );
     
     if (!pathResult.valid) {
@@ -62,15 +63,15 @@ function validateMovement(unit, targetPosition, map) {
     }
     
     // Target reachable in one turn
-    return {
-        valid: true,
-        path: fullPath,
-        cost: fullCost,
-        movementRemaining: maxMovement - fullCost,
-        targetTerrain: getTerrainType(targetPosition),
-        finalPosition: targetPosition,
-        partialMovement: false
-    };
+        return {
+            valid: true,
+            path: fullPath,
+            cost: fullCost,
+            movementRemaining: maxMovement - fullCost,
+            targetTerrain: getTerrainTypeBound(targetPosition),
+            finalPosition: targetPosition,
+            partialMovement: false
+        };
 }
 
 /**

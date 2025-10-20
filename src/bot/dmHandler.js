@@ -157,6 +157,10 @@ async function processTurnResolution(battle, battleTurn, client) {
         const { models } = require('../database/setup');
         const { processTurn } = require('../game/turnOrchestrator');
         const { RIVER_CROSSING_MAP } = require('../game/maps/riverCrossing');
+        const { BRIDGE_CONTROL_MAP } = require('../game/maps/bridgeControl');
+        const { HILL_FORT_ASSAULT_MAP } = require('../game/maps/hillFortAssault');
+        const { FOREST_AMBUSH_MAP } = require('../game/maps/forestAmbush');
+        const { DESERT_OASIS_MAP } = require('../game/maps/desertOasis');
         
         console.log(`\n⚔️ RESOLVING TURN ${battle.currentTurn} - Battle ${battle.id}`);
         console.log(`Player 1 Order: "${battleTurn.player1Command}"`);
@@ -165,11 +169,10 @@ async function processTurnResolution(battle, battleTurn, client) {
         // Get the map for this scenario
         const scenarioMaps = {
             'river_crossing': RIVER_CROSSING_MAP,
-            // Add other maps as you build them
-            'bridge_control': RIVER_CROSSING_MAP, // Placeholder
-            'forest_ambush': RIVER_CROSSING_MAP,  // Placeholder
-            'hill_fort_assault': RIVER_CROSSING_MAP, // Placeholder
-            'desert_oasis': RIVER_CROSSING_MAP // Placeholder
+            'bridge_control': BRIDGE_CONTROL_MAP,
+            'forest_ambush': FOREST_AMBUSH_MAP,
+            'hill_fort_assault': HILL_FORT_ASSAULT_MAP,
+            'desert_oasis': DESERT_OASIS_MAP
         };
         
         const map = scenarioMaps[battle.scenario] || RIVER_CROSSING_MAP;
