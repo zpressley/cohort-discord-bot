@@ -144,8 +144,11 @@ async function processTurn(battle, player1Order, player2Order, map) {
 
         // PHASE 3: Execute movements (existing code continues here)
         console.log('\n🚶 Phase 2: Processing movement...');
-        const p1Moves = p1Interpretation.validatedActions.filter(a => a.type === 'move');
-        const p2Moves = p2Interpretation.validatedActions.filter(a => a.type === 'move');
+        const { partitionActions } = require('./engine/adapters/schemaAdapter');
+        const p1Parts = partitionActions(p1Interpretation.validatedActions);
+        const p2Parts = partitionActions(p2Interpretation.validatedActions);
+        const p1Moves = p1Parts.moves;
+        const p2Moves = p2Parts.moves;
         console.log('  Filtered P1 moves:', p1Moves.length);
         console.log('  Filtered P2 moves:', p2Moves.length);
         
@@ -264,6 +267,9 @@ async function processTurn(battle, player1Order, player2Order, map) {
             }
         };
         
+        // Compute simple state diffs for telemetry
+        const diffs = computeStateDiffs(battleState, updatedPositions);
+
         return {
             success: true,
             newBattleState: {
@@ -288,6 +294,7 @@ async function processTurn(battle, player1Order, player2Order, map) {
                 combats: combatResults.length,
                 casualties: extractCasualtySummary(combatResults)
             },
+            metrics: { diffs },
             narrative,
             victory: victoryCheck,
             phase: 'complete',
@@ -546,6 +553,24 @@ async function generateTurnNarrative(turnEvents, battleState, turnNumber) {
         nextTurnSetup: {
             nextTurnPrompt: 'What are your orders for the next turn?'
         }
+    };
+}
+
+function computeStateDiffs(prevState, newPositions) {
+    const diffOneSide = (before, after) => {
+        const moves = [];
+        const beforeIdx = Object.fromEntries((before || []).map(u => [u.unitId, u]));
+        for (const u of after || []) {
+            const prev = beforeIdx[u.unitId];
+            if (prev && prev.position !== u.position) {
+                moves.push({ unitId: u.unitId, from: prev.position, to: u.position });
+            }
+        }
+        return moves;
+    };
+    return {
+        player1: diffOneSide(prevState.player1?.unitPositions, newPositions.player1),
+        player2: diffOneSide(prevState.player2?.unitPositions, newPositions.player2)
     };
 }
 
