@@ -172,10 +172,18 @@ async function handleBattleJoin(interaction) {
                 .setEmoji('🚪')
         );
 
-    await interaction.update({
-        embeds: [updatedEmbed],
-        components: [readyButtons]
-    });
+    // Try to update the original battle message with Ready buttons; if this fails (e.g. simulated interaction), send a new channel message.
+    try {
+        await interaction.update({
+            embeds: [updatedEmbed],
+            components: [readyButtons]
+        });
+    } catch (e) {
+        console.warn('join-battle: update failed, sending new message:', e.message);
+        if (interaction.channel && interaction.channel.send) {
+            await interaction.channel.send({ embeds: [updatedEmbed], components: [readyButtons] });
+        }
+    }
 
     // Send private briefings to both players
     const player1 = await models.Commander.findByPk(battle.player1Id);
@@ -236,25 +244,55 @@ async function handleReadyForBattle(interaction) {
 async function startBattlePhase(battle) {
     const { models } = require('../database/setup');
     const { BATTLE_SCENARIOS } = require('./commands/create-game');
-    
-    // Create first turn
-    await models.BattleTurn.create({
-        battleId: battle.id,
-        turnNumber: 1,
-        player1Command: null,
-        player2Command: null
-    });
+    const { initializeDeployment } = require('../game/maps/riverCrossing'); // generic deployer
+    const { getAllWeapons, TROOP_QUALITY } = require('../game/armyData');
+    const { getEliteUnitForCulture } = require('../game/eliteTemplates');
+    const allWeapons = getAllWeapons();
+
+    // Ensure unit positions exist (deploy now if missing)
+    const p1Army = battle.battleState?.player1?.army || (await models.Commander.findByPk(battle.player1Id))?.armyComposition || {};
+    const p2Army = battle.battleState?.player2?.army || (await models.Commander.findByPk(battle.player2Id))?.armyComposition || {};
+    function addEliteIfAny(units, eliteSize, culture) {
+        const elite = getEliteUnitForCulture(culture, eliteSize, allWeapons, require('../game/armyData').TROOP_QUALITY);
+        return elite ? [elite, ...(units || [])] : (units || []);
+    }
+
+    if (!battle.battleState?.player1?.unitPositions || !battle.battleState?.player2?.unitPositions) {
+        const p1Units = initializeDeployment('north', addEliteIfAny(p1Army.units || [], p1Army.eliteSize || 0, battle.player1Culture));
+        const p2Units = initializeDeployment('south', addEliteIfAny(p2Army.units || [], p2Army.eliteSize || 0, battle.player2Culture));
+        const newState = {
+            ...(battle.battleState || {}),
+            player1: { ...(battle.battleState?.player1 || {}), army: p1Army, unitPositions: p1Units, visibleEnemyPositions: [] },
+            player2: { ...(battle.battleState?.player2 || {}), army: p2Army, unitPositions: p2Units, visibleEnemyPositions: [] }
+        };
+        await battle.update({ battleState: newState });
+        await battle.reload();
+    }
+
+    // Create first turn record if not exists
+    const existingTurn = await models.BattleTurn.findOne({ where: { battleId: battle.id, turnNumber: 1 } });
+    if (!existingTurn) {
+        await models.BattleTurn.create({ battleId: battle.id, turnNumber: 1, player1Command: null, player2Command: null });
+    }
 
     const scenario = BATTLE_SCENARIOS[battle.scenario];
-    
+
     // Send initial map/briefings to both players
-    const { handleDMCommand } = require('./dmHandler');
     try {
-        const client = require('../index').client || interaction?.client; // best-effort
+        const client = require('../index').client;
         const { sendNextTurnBriefings } = require('./dmHandler');
         await sendNextTurnBriefings(battle, battle.battleState, { p1Interpretation:{}, p2Interpretation:{} }, client);
     } catch (e) {
-        console.log('Initial briefing send skipped:', e.message);
+        console.log('Initial briefing send failed:', e.message);
+        // Fallback minimal DM
+        try {
+            const client = require('../index').client;
+            const p1 = await client.users.fetch(battle.player1Id);
+            const p2 = battle.player2Id ? await client.users.fetch(battle.player2Id) : null;
+            const text = `Turn 1 begins. Scenario: ${battle.scenario}. Orders now open.`;
+            await p1.send(text);
+            if (p2) await p2.send(text);
+        } catch (_) {}
     }
 
     console.log(`Battle ${battle.id} - ${scenario.name} has begun!`);

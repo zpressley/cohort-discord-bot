@@ -67,7 +67,7 @@ async function showMainLobby(interaction, commander, isNewPlayer) {
     const embed = new EmbedBuilder()
         .setColor(0x8B4513)
         .setTitle('⚔️ COHORT - Ancient Warfare Strategy')
-        .setDescription('*Command armies from 3000 BCE to 500 CE in tactical Discord battles*')
+        .setDescription('*Command armies from 3000 BC to 500 AD in tactical Discord battles*')
         .addFields(
             {
                 name: '👤 Commander Status',
@@ -86,7 +86,7 @@ async function showMainLobby(interaction, commander, isNewPlayer) {
             },
             {
                 name: '🎮 How to Play',
-                value: '1. **Build Army** - Choose culture and create forces\n2. **Create Battle** - Select scenario and wait for opponent\n3. **Fight** - Give orders via DM, AI narrates results\n4. **Victory** - Gain experience, unlock new tactics',
+                value: '1. **Build Army** - Choose culture and create forces\n2. **Create Battle** - Select scenario and wait for opponent\n3. **Fight** - Give orders via DM, AI narrates results\n4. **Victory** - Means your veterans live to fight another day!',
                 inline: false
             }
         )

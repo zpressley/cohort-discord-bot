@@ -5,17 +5,22 @@ function sanitizeAction(a) {
   if (!a || typeof a !== 'object') return null;
   const t = a.type;
   switch (t) {
-    case 'move':
-      return {
+    case 'move': {
+      const out = {
         type: 'move',
         unitId: String(a.unitId || ''),
-        currentPosition: a.currentPosition || null,
         targetPosition: a.targetPosition,
         finalPosition: a.finalPosition || a.targetPosition,
-        validation: a.validation || { valid: true },
-        newMission: a.newMission || null,
-        reasoning: a.reasoning || null
+        validation: a.validation || { valid: true }
       };
+      if (typeof a.currentPosition === 'string') out.currentPosition = a.currentPosition;
+      if (a.newMission && typeof a.newMission === 'object') out.newMission = a.newMission;
+      if (a.isMissionContinuation === true) out.isMissionContinuation = true;
+      if (a.missionAction === true) out.missionAction = true;
+      if (a.modifier && typeof a.modifier === 'object') out.modifier = a.modifier;
+      if (typeof a.reasoning === 'string') out.reasoning = a.reasoning;
+      return out;
+    }
     case 'formation':
       return {
         type: 'formation',

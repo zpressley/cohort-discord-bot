@@ -108,6 +108,13 @@ async function interpretOrders(orderText, battleState, playerSide, map, battleCo
                 requiresPlayerDecision: true
             };
         }
+        // Otherwise, treat HOLD as "no new orders" so mission continuation logic can run
+        return {
+            validatedActions: [],
+            errors: [],
+            missionInterruptions: interruptions,
+            officerComment: 'No enemy detected. Maintaining discipline.'
+        };
     }
     
     // STEP 2: Check for commander actions first (before AI parsing)
@@ -586,19 +593,21 @@ async function callAIForOrderParsing(prompt, realBattleUnits = null) {
     const coordMatch = orderText.match(/\b([A-T]\d{1,2})\b/i);
     if (coordMatch) {
         const targetPosition = coordMatch[1].toUpperCase();
+        const isGroupMarch = /(march together|advance together|keep formation|move as one|group march)/i.test(orderText);
         
         const actions = targetUnits.map(unit => ({
             type: 'move',
             unitId: unit.unitId,
             currentPosition: unit.position,
             targetPosition: targetPosition,
-            reasoning: `Moving to ${targetPosition}`
+            modifier: isGroupMarch ? { groupMarch: true } : undefined,
+            reasoning: isGroupMarch ? `Group march to ${targetPosition}` : `Moving to ${targetPosition}`
         }));
         
         return {
             actions,
             validation: { isValid: true, errors: [], warnings: [] },
-            officerComment: `${targetUnits.length} unit(s) → ${targetPosition}.`
+            officerComment: `${targetUnits.length} unit(s) ${isGroupMarch ? 'march together' : '→'} ${targetPosition}.`
         };
     }
     
@@ -610,18 +619,21 @@ async function callAIForOrderParsing(prompt, realBattleUnits = null) {
     else if (lowerOrder.includes('west')) direction = 'west';
     
     if (direction) {
+        const isGroupMarch = /(march together|advance together|keep formation|move as one|group march)/i.test(orderText);
+        const step = isGroupMarch ? 1 : 3;
         const actions = targetUnits.map(unit => ({
             type: 'move',
             unitId: unit.unitId,
             currentPosition: unit.position,
-            targetPosition: moveInDirection(unit.position, direction, 3),
-            reasoning: `Moving ${direction}`
+            targetPosition: moveInDirection(unit.position, direction, step),
+            modifier: isGroupMarch ? { groupMarch: true } : undefined,
+            reasoning: isGroupMarch ? `Group march ${direction}` : `Moving ${direction}`
         }));
         
         return {
             actions,
             validation: { isValid: true, errors: [], warnings: [] },
-            officerComment: `${targetUnits.length} unit(s) → ${direction}.`
+            officerComment: isGroupMarch ? `${targetUnits.length} unit(s) march ${direction} together.` : `${targetUnits.length} unit(s) → ${direction}.`
         };
     }
     

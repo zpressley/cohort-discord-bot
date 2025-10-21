@@ -84,13 +84,11 @@ async function handleArmyBuilderInteractions(interaction) {
             await handleStep1Selection(interaction, composition);
         } else if (interaction.customId === 'mount-decision') {
             // legacy; kept for compatibility
-            await handleMountDecision(interaction, composition);
+            await showMountDecision(interaction, composition);
         } else if (interaction.customId === 'primary-type-melee') {
             await showPrimaryWeaponSelection(interaction, composition);
         } else if (interaction.customId === 'primary-type-ranged') {
             await showPrimaryRangedSelection(interaction, composition);
-        } else if (interaction.customId === 'primary-weapon-selection') {
-            await handleMountDecision(interaction, composition);
         } else if (interaction.customId === 'primary-weapon-selection') {
             await handleStep2Selection(interaction, composition);
         } else if (interaction.customId === 'primary-ranged-selection') {
@@ -117,11 +115,17 @@ async function handleArmyBuilderInteractions(interaction) {
         
         // Handle skip/add buttons for optional equipment
         else if (interaction.customId === 'skip-mount') {
-            await showPrimaryWeaponSelection(interaction, composition);
+            await showPrimaryTypeDecision(interaction, composition);
         } else if (interaction.customId === 'add-mount') {
             await handleAddMount(interaction, composition);
         } else if (interaction.customId === 'skip-secondary') {
-            await showRangedWeaponDecision(interaction, composition);
+            // If primary is ranged, skip directly to armor; otherwise ask about optional ranged
+            const unit = unitsInProgress.get(interaction.user.id);
+            if (unit?.primaryWeapon?.stacking === 'primary_ranged') {
+                await showArmorStep(interaction, composition);
+            } else {
+                await showRangedWeaponDecision(interaction, composition);
+            }
         } else if (interaction.customId === 'add-secondary') {
             await showSecondaryWeaponSelection(interaction, composition);
         } else if (interaction.customId === 'skip-ranged') {
@@ -268,25 +272,62 @@ async function handleAddMount(interaction, composition) {
     await showPrimaryTypeDecision(interaction, composition);
 }
 
+// After deciding to skip/add mount, let user choose melee vs ranged track
+async function showPrimaryTypeDecision(interaction, composition) {
+    const unit = unitsInProgress.get(interaction.user.id);
+    const usedSP = unit.quality.cost + (unit.mounted ? unit.mount.cost : 0);
+    const availableSP = composition.totalSP - composition.usedSP - usedSP;
+
+    const typeButtons = new ActionRowBuilder()
+        .addComponents(
+            new ButtonBuilder().setCustomId('primary-type-melee').setLabel('Melee Weapons').setStyle(ButtonStyle.Primary),
+            new ButtonBuilder().setCustomId('primary-type-ranged').setLabel('Ranged Weapons').setStyle(ButtonStyle.Secondary)
+        );
+
+    const embed = new EmbedBuilder()
+        .setColor(0x8B4513)
+        .setTitle('Step 2: Choose Weapon Category')
+        .setDescription(`**Available SP:** ${availableSP}\n\nSelect melee or ranged to continue.`);
+
+    if (interaction.replied || interaction.deferred) {
+        await interaction.followUp({ embeds: [embed], components: [typeButtons], ephemeral: true });
+    } else {
+        await interaction.update({ embeds: [embed], components: [typeButtons, createBackButton()] });
+    }
+}
+
 // STEP 2R: Primary Ranged Selection
 async function showPrimaryRangedSelection(interaction, composition) {
-    const { LIGHT_RANGED, MEDIUM_RANGED } = require('../game/armyData');
+    const { getAvailableWeapons } = require('../game/armyData');
     const unit = unitsInProgress.get(interaction.user.id);
     let usedSP = unit.quality.cost;
     if (unit.mounted) usedSP += unit.mount.cost;
     const availableSP = composition.totalSP - composition.usedSP - usedSP;
 
-    const allRanged = { ...LIGHT_RANGED, ...MEDIUM_RANGED };
-    const options = Object.entries(allRanged).map(([key, w]) => ({
+    // Filter by culture, quality, and mount using shared utility
+    const light = getAvailableWeapons(composition.culture, unit.qualityType, unit.mounted, 'light_ranged');
+    const medium = getAvailableWeapons(composition.culture, unit.qualityType, unit.mounted, 'medium_ranged');
+    const allRanged = [...light, ...medium];
+
+    const options = allRanged
+      .map(([key, w]) => ({
         label: `${w.name} (+${w.cost} SP)`,
-        description: `Dmg: ${w.damage} | Rng: ${w.range}m` ,
+        description: `Dmg: ${w.damage} | Rng: ${w.range}m`,
         value: key
-    }));
+      }));
+
     const menu = new ActionRowBuilder().addComponents(
-        new StringSelectMenuBuilder().setCustomId('primary-ranged-selection').setPlaceholder('Select Primary Ranged...').addOptions(options.slice(0,25))
+        new StringSelectMenuBuilder()
+          .setCustomId('primary-ranged-selection')
+          .setPlaceholder('Select Primary Ranged...')
+          .addOptions(options.slice(0,25))
     );
-    const embed = new EmbedBuilder().setColor(0x8B4513).setTitle('Step 2: Primary Ranged Weapon')
+
+    const embed = new EmbedBuilder()
+      .setColor(0x8B4513)
+      .setTitle('Step 2: Primary Ranged Weapon')
       .setDescription(`**Available SP:** ${availableSP}\n\nSelect your primary ranged weapon:`);
+
     await interaction.update({ embeds:[embed], components:[menu, createBackButton()] });
 }
 
@@ -400,25 +441,36 @@ async function showSecondaryWeaponDecision(interaction, composition) {
 }
 
 async function showSecondaryWeaponSelection(interaction, composition) {
-    const { LIGHT_WEAPONS, MEDIUM_WEAPONS } = require('../game/armyData');
+    const { LIGHT_WEAPONS, MEDIUM_WEAPONS, HEAVY_WEAPONS } = require('../game/armyData');
     
     const unit = unitsInProgress.get(interaction.user.id);
     let usedSP = unit.quality.cost + unit.primaryWeapon.cost;
     if (unit.mounted) usedSP += unit.mount.cost;
     const availableSP = composition.totalSP - composition.usedSP - usedSP;
-    
-    // Filter for secondary weapons only
-    const allWeapons = { ...LIGHT_WEAPONS, ...MEDIUM_WEAPONS };
-    const secondaryWeapons = Object.entries(allWeapons).filter(([weaponKey, weapon]) => {
-        if (weapon.stacking !== 'secondary') return false;
+
+    const isPrimaryRanged = unit.primaryWeapon?.stacking === 'primary_ranged';
+
+    // Build candidate melee list
+    const allMelee = { ...LIGHT_WEAPONS, ...MEDIUM_WEAPONS, ...HEAVY_WEAPONS };
+    const candidates = Object.entries(allMelee).filter(([weaponKey, weapon]) => {
+        // If primary is ranged: allow any one-handed melee (exclude two_handed)
+        // If primary is melee: only true secondary stackers
+        if (isPrimaryRanged) {
+            if (weapon.stacking === 'two_handed') return false;
+        } else {
+            if (weapon.stacking !== 'secondary') return false;
+        }
         if (weapon.cost > availableSP) return false;
         if (weapon.cultures !== 'all' && !weapon.cultures.includes(composition.culture)) return false;
+        if (weapon.min_quality && !meetsQualityRequirement(unit.qualityType, weapon.min_quality)) return false;
+        if (unit.mounted && !weapon.cavalry_compatible && !weapon.mount_required) return false;
+        if (weapon.mount_required && !unit.mounted) return false;
         return true;
     });
 
-    const options = secondaryWeapons.map(([weaponKey, weapon]) => ({
+    const options = candidates.map(([weaponKey, weapon]) => ({
         label: `${weapon.name} (+${weapon.cost} SP)`,
-        description: `Dmg: ${weapon.damage} | ${weapon.special.substring(0, 60)}`,
+        description: `Dmg: ${weapon.damage}${weapon.range ? ` | Rng: ${weapon.range}m` : ''} | ${weapon.special.substring(0, 60)}`,
         value: weaponKey
     }));
 
@@ -427,7 +479,7 @@ async function showSecondaryWeaponSelection(interaction, composition) {
             new StringSelectMenuBuilder()
                 .setCustomId('secondary-weapon-selection')
                 .setPlaceholder('Select Secondary Weapon...')
-                .addOptions(options)
+                .addOptions(options.slice(0,25))
         );
 
     const embed = new EmbedBuilder()
@@ -435,9 +487,9 @@ async function showSecondaryWeaponSelection(interaction, composition) {
         .setTitle('Secondary Weapon Selection')
         .setDescription(`**Available SP:** ${availableSP}\n\nChoose backup weapon (stacks with ${unit.primaryWeapon.name}):`)
         .addFields(
-            secondaryWeapons.map(([weaponKey, weapon]) => ({
+            candidates.slice(0, 12).map(([weaponKey, weapon]) => ({
                 name: `${weapon.name} (+${weapon.cost} SP)`,
-                value: `Damage: ${weapon.damage} | ${weapon.special}`,
+                value: `Damage: ${weapon.damage}${weapon.range ? ` | Rng: ${weapon.range}m` : ''} | ${weapon.special}`,
                 inline: true
             }))
         );
@@ -457,7 +509,12 @@ async function handleSecondaryWeaponSelection(interaction, composition) {
     const allWeapons = getAllWeapons();
     unit.secondaryWeapons.push(allWeapons[weaponKey]);
     
-    await showRangedWeaponDecision(interaction, composition);
+    // If primary is ranged, proceed to armor; else ask about optional ranged
+    if (unit.primaryWeapon?.stacking === 'primary_ranged') {
+        await showArmorStep(interaction, composition);
+    } else {
+        await showRangedWeaponDecision(interaction, composition);
+    }
 }
 
 // STEP 3: Ranged Weapon Decision
@@ -942,77 +999,46 @@ function getAvailableTrainingTypes(unit, availableSP) {
         description: 'No specialized training',
         value: 'none-none'
     });
-    
-    // Determine available training based on weapons and mount
-    const availableTypes = [];
-    
-    // Cavalry training - if mounted
-    if (unit.mounted) {
-        availableTypes.push('cavalry');
-    }
-    
-    // Archer training - if has ranged weapons
-    if (unit.rangedWeapons.length > 0) {
-        const hasProjectile = unit.rangedWeapons.some(w => 
-            w.name.toLowerCase().includes('bow') || 
-            w.name.toLowerCase().includes('javelin') ||
-            w.name.toLowerCase().includes('sling')
-        );
-        if (hasProjectile) {
-            availableTypes.push('archer');
+
+    // Allowed training types are derived ONLY from mount status and PRIMARY weapon
+    const allowed = [];
+    if (unit.mounted) allowed.push('cavalry');
+
+    const primary = unit.primaryWeapon || {};
+    const pname = (primary.name || '').toLowerCase();
+    const isPrimaryRanged = primary.stacking === 'primary_ranged';
+
+    if (isPrimaryRanged) {
+        // Ranged primary → archer-only (plus cavalry if mounted)
+        if (pname.includes('bow') || pname.includes('crossbow') || pname.includes('javelin') || pname.includes('sling')) {
+            allowed.push('archer');
+        } else {
+            allowed.push('archer'); // default ranged bucket
+        }
+    } else {
+        // Melee primary → derive from melee type only (ignore secondary/ranged add-ons)
+        if (pname.includes('sword') || pname.includes('gladius') || pname.includes('spatha')) {
+            allowed.push('swordsman');
+        }
+        if (pname.includes('spear') || pname.includes('pike') || pname.includes('sarissa')) {
+            allowed.push('spear');
         }
     }
-    
-    // Swordsman training - if has sword-type weapons
-    const allWeapons = [unit.primaryWeapon, ...unit.secondaryWeapons];
-    const hasSword = allWeapons.some(w => 
-        w && (w.name.toLowerCase().includes('sword') ||
-              w.name.toLowerCase().includes('gladius') ||
-              w.name.toLowerCase().includes('spatha'))
-    );
-    if (hasSword) {
-        availableTypes.push('swordsman');
-    }
-    
-    // Spear training - if has spear/pike weapons
-    const hasSpear = allWeapons.some(w => 
-        w && (w.name.toLowerCase().includes('spear') ||
-              w.name.toLowerCase().includes('pike') ||
-              w.name.toLowerCase().includes('sarissa'))
-    );
-    if (hasSpear) {
-        availableTypes.push('spear');
-    }
-    
-    // Add training levels for each available type
-    availableTypes.forEach(type => {
+
+    // Materialize levels for allowed types
+    allowed.forEach(type => {
         const typeName = type.charAt(0).toUpperCase() + type.slice(1);
-        
         if (availableSP >= 2) {
-            trainingTypes.push({
-                name: `${typeName} - Basic (+2 SP)`,
-                description: `Basic ${type} combat training`,
-                value: `${type}-basic`
-            });
+            trainingTypes.push({ name: `${typeName} - Basic (+2 SP)`, description: `Basic ${type} combat training`, value: `${type}-basic` });
         }
-        
         if (availableSP >= 4) {
-            trainingTypes.push({
-                name: `${typeName} - Technical (+4 SP)`,
-                description: `Advanced ${type} tactical skills`,
-                value: `${type}-technical`
-            });
+            trainingTypes.push({ name: `${typeName} - Technical (+4 SP)`, description: `Advanced ${type} tactical skills`, value: `${type}-technical` });
         }
-        
         if (availableSP >= 6) {
-            trainingTypes.push({
-                name: `${typeName} - Expert (+6 SP)`,
-                description: `Elite ${type} professional training`,
-                value: `${type}-expert`
-            });
+            trainingTypes.push({ name: `${typeName} - Expert (+6 SP)`, description: `Elite ${type} professional training`, value: `${type}-expert` });
         }
     });
-    
+
     return trainingTypes;
 }
 

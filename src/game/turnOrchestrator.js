@@ -61,6 +61,11 @@ async function processTurn(battle, player1Order, player2Order, map) {
         const p1Interpretation = await interpretOrders(player1Order, battleState, 'player1', map, battleContext);
         const p2Interpretation = await interpretOrders(player2Order, battleState, 'player2', map, battleContext);
         
+        // Normalize actions before any schema checks
+        const { sanitizeAction } = require('./engine/adapters/schemaAdapter');
+        p1Interpretation.validatedActions = (p1Interpretation.validatedActions || []).map(sanitizeAction).filter(Boolean);
+        p2Interpretation.validatedActions = (p2Interpretation.validatedActions || []).map(sanitizeAction).filter(Boolean);
+        
         // PHASE 1.5: Mission Continuation (add this entire block)
         console.log('\n🔄 Phase 1.5: Checking active missions...');
         

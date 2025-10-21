@@ -1080,5 +1080,7 @@ function getRelativeDirection(from, to) {
 
 module.exports = {
     handleDMCommand,
-    processTurnResolution
+    processTurnResolution,
+    sendNextTurnBriefings,
+    notifyValidationErrors
 };

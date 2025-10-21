@@ -72,15 +72,29 @@ module.exports = {
             // Get current battle state
             const currentState = battle.battleState || {};
             
+            // Helper to include elite unit if configured
+            const { getAllWeapons, TROOP_QUALITY } = require('../../game/armyData');
+            const { getEliteUnitForCulture } = require('../../game/eliteTemplates');
+            const allWeapons = getAllWeapons();
+            function addEliteIfAny(units, eliteSize, culture) {
+                const elite = getEliteUnitForCulture(culture, eliteSize, allWeapons, require('../../game/armyData').TROOP_QUALITY);
+                return elite ? [elite, ...units] : units;
+            }
+
+            const p1ArmyUnits = currentState.player1?.army?.units || [];
+            const p1EliteSize = currentState.player1?.army?.eliteSize || 0;
+            const p2ArmyUnits = commander.armyComposition?.units || [];
+            const p2EliteSize = commander.armyComposition?.eliteSize || 0;
+
             // Initialize unit positions on the map
             const p1Units = initializeDeployment(
                 'north', 
-                currentState.player1?.army?.units || []
+                addEliteIfAny(p1ArmyUnits, p1EliteSize, battle.player1Culture)
             );
             
             const p2Units = initializeDeployment(
                 'south',
-                commander.armyComposition?.units || []
+                addEliteIfAny(p2ArmyUnits, p2EliteSize, testCulture)
             );
             
             console.log(`Initialized positions: P1 ${p1Units.length} units, P2 ${p2Units.length} units`);
@@ -110,6 +124,13 @@ module.exports = {
             battle.status = 'in_progress';
             
             await battle.save();
+
+            // Ensure Turn 1 record exists
+            const { BattleTurn } = models;
+            const existingTurn = await BattleTurn.findOne({ where: { battleId: battle.id, turnNumber: 1 } });
+            if (!existingTurn) {
+                await BattleTurn.create({ battleId: battle.id, turnNumber: 1, player1Command: null, player2Command: null });
+            }
             
             // Create battle commanders for both players
             try {
@@ -147,6 +168,15 @@ module.exports = {
             }
             
             console.log(`Test-join: Battle ${battle.id} now active with positioned units and commanders`);
+
+            // Send initial briefings with map to both players (best-effort)
+            try {
+                const { sendNextTurnBriefings } = require('../dmHandler');
+                const client = interaction.client;
+                await sendNextTurnBriefings(battle, battle.battleState, { p1Interpretation:{}, p2Interpretation:{} }, client);
+            } catch (e) {
+                console.warn('test-join: initial briefing send failed:', e.message);
+            }
             
             return interaction.editReply({
                 content: `**Test Battle Started!**\n\n` +

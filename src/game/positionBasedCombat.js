@@ -245,10 +245,18 @@ function processMovementPhase(player1Movements, player2Movements, battleState, m
         console.log(`  Checking unit ${unit.unitId}: movement found = ${!!movement}`);
         
         if (movement && movement.validation.valid) {
+            // March-001: group march moves only one step along path to keep cohesion
+            let nextPos = movement.finalPosition || movement.targetPosition;
+            let movementRemaining = movement.validation.movementRemaining;
+            if (movement.modifier?.groupMarch && Array.isArray(movement.validation.path) && movement.validation.path.length > 1) {
+                nextPos = movement.validation.path[1]; // first step only
+                // assume step cost 1 for now
+                movementRemaining = Math.max(0, (unit.movementRemaining || 3) - 1);
+            }
             const updatedUnit = {
                 ...unit,
-                position: movement.finalPosition || movement.targetPosition,
-                movementRemaining: movement.validation.movementRemaining,
+                position: nextPos,
+                movementRemaining,
                 hasMoved: true
             };
             
@@ -271,10 +279,16 @@ function processMovementPhase(player1Movements, player2Movements, battleState, m
         const movement = player2Movements.find(m => m.unitId === unit.unitId);
     
         if (movement && movement.validation.valid) {
+            let nextPos = movement.finalPosition || movement.targetPosition;
+            let movementRemaining = movement.validation.movementRemaining;
+            if (movement.modifier?.groupMarch && Array.isArray(movement.validation.path) && movement.validation.path.length > 1) {
+                nextPos = movement.validation.path[1];
+                movementRemaining = Math.max(0, (unit.movementRemaining || 3) - 1);
+            }
             const updatedUnit = {
                 ...unit,
-                position: movement.finalPosition || movement.targetPosition,
-                movementRemaining: movement.validation.movementRemaining,
+                position: nextPos,
+                movementRemaining,
                 hasMoved: true
             };
             
@@ -292,6 +306,30 @@ function processMovementPhase(player1Movements, player2Movements, battleState, m
         return unit;
     });
     
+    // Stack-001: compression penalties for stacked friendly units
+    function applyStackCompression(units) {
+        const byTile = new Map();
+        units.forEach(u => {
+            const key = u.position;
+            if (!byTile.has(key)) byTile.set(key, []);
+            byTile.get(key).push(u);
+        });
+        const compressed = [];
+        byTile.forEach((arr, tile) => {
+            if (arr.length > 1) {
+                arr.forEach(u => {
+                    u.movementRemaining = Math.max(0, (u.movementRemaining || 0) - (arr.length - 1));
+                    u.compressionLevel = arr.length - 1; // annotate for downstream systems
+                    compressed.push({ unitId: u.unitId, tile, level: u.compressionLevel });
+                });
+            }
+        });
+        return compressed;
+    }
+
+    const p1Compressed = applyStackCompression(newPlayer1Positions);
+    const p2Compressed = applyStackCompression(newPlayer2Positions);
+
     // Detect combat triggers
     const combatTriggers = detectCombatTriggers(newPlayer1Positions, newPlayer2Positions);
     
@@ -313,6 +351,10 @@ function processMovementPhase(player1Movements, player2Movements, battleState, m
         movementSummary: {
             player1Moves: player1Movements.filter(m => m.validation?.valid).length,
             player2Moves: player2Movements.filter(m => m.validation?.valid).length
+        },
+        compression: {
+            player1: p1Compressed,
+            player2: p2Compressed
         }
     };
 }
