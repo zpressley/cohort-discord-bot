@@ -261,6 +261,23 @@ async function processTurnResolution(battle, battleTurn, client) {
             }, { transaction: t });
         });
 
+        // Emit telemetry metrics (best-effort)
+        try {
+            const { appendMetrics } = require('../telemetry/metrics');
+            appendMetrics('turn_resolved', {
+                battleId: battle.id,
+                scenario: battle.scenario,
+                turn: battle.currentTurn,
+                movements_p1: turnResult.turnResults.movements?.player1Moves || 0,
+                movements_p2: turnResult.turnResults.movements?.player2Moves || 0,
+                combats: turnResult.turnResults.combats || 0,
+                casualties_p1: turnResult.turnResults.casualties?.player1 || 0,
+                casualties_p2: turnResult.turnResults.casualties?.player2 || 0
+            });
+        } catch (e) {
+            console.warn('turn metrics failed:', e.message);
+        }
+
         // Send results to both players
         await sendTurnResults(battle, battleTurn, turnResult.narrative, turnResult.turnResults, client);
         

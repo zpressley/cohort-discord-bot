@@ -9,8 +9,8 @@
 ## 📌 Project Guide — current code Task List (Core-first, free-AI optional)
 
 ### Priority Roadmap (remaining)
-- High: current code-017 (DB model alignment/migrations), current code-015 (central router), current code-009 (keyword-only orchestrator)
-- Medium: current code-020 (telemetry/replay), current code-025 (lint/typecheck finish), current code-024 (docs polish)
+- High: —
+- Medium: current code-020 (telemetry/metrics/replay polish), current code-025 (lint/typecheck finish)
 - Optional: current code-029/030/031 (free AI provider)
 
 ### current code-002: Define Command Catalog and JSON Schemas
@@ -74,7 +74,7 @@
 ### current code-017: Battle Model Alignment and Migrations
 - Priority: High
 - Estimate: 3-4 hours
-- Status: Not Started
+- Status: ✅ Complete
 - Description: Ensure DB fields used in code exist; add/alter migrations and startup checks.
 - Files to Modify/Create:
   - Sequelize migrations for `weather`, `terrain`, `victoryConditions`, `battleState.pendingOrders`, `messageId`
@@ -130,7 +130,7 @@
 ### current code-015: Refactor Interaction Routing To interactionHandler
 - Priority: Medium
 - Estimate: 1-2 hours
-- Status: Not Started
+- Status: ✅ Complete
 - Description: Centralize routing and remove duplicated lobby branching.
 - Files to Modify:
   - `src/index.js`, `src/bot/interactionHandler.js`
@@ -156,7 +156,7 @@
 ### current code-009: Hybrid Orchestrator In dmHandler (Keyword-Only Phase)
 - Priority: Medium
 - Estimate: 2-3 hours
-- Status: Not Started
+- Status: ✅ Complete
 - Description: Use keyword parser → validate against schemas → build execution plan → optional dry-run, no paid AI.
 - Files to Modify:
   - `src/bot/dmHandler.js`
@@ -225,6 +225,7 @@
 - Priority: Low
 - Estimate: 1-2 hours
 - Status: In Progress
+- Notes: CI added for schema/core tests. Pending: lint/typecheck scripts and fixes.
 - Description: Add npm scripts and CI workflow for lint/test; fix existing warnings.
 - Files to Modify/Create:
   - `package.json` scripts, `.github/workflows/ci.yml`
@@ -264,7 +265,8 @@
 ### current code-020: Telemetry, Replay Logs, and Tracing
 - Priority: Medium
 - Estimate: 3-4 hours
-- Status: Not Started
+- Status: In Progress
+- Notes: Per-turn inputs/outputs stored; diffs persisted; replay CLI added. Pending: anonymized metrics exporter and richer replay formatting.
 - Description: Per-turn audit (inputs, validated actions, diffs, narrative); replay CLI; anonymized metrics.
 - Files to Modify/Create:
   - `src/database/models/BattleTurn.js` (audit)
@@ -885,11 +887,9 @@ else returnToCommander();
 
 ## 🎯 Next Immediate Actions (updated)
 
-1. current code-017: DB model alignment + migrations
-2. current code-015: Central interaction router
-3. current code-009: Keyword-only orchestrator
-4. current code-020: Telemetry and replay logs
-5. current code-025: Lint/typecheck + CI polish
+1. current code-020: Telemetry metrics exporter and replay polish
+2. current code-025: Lint/typecheck scripts and CI polish
+3. current code-029/030/031: Optional local AI provider & flags (if desired)
 
 1. **CMD-001:** Commander Entity Foundation (3-4h) - *IN PROGRESS*
 2. **CMD-002:** Command Range Zones (3-4h)
@@ -917,6 +917,6 @@ else returnToCommander();
 - Status: ✅ Complete
 - Notes: `src/bot/commandLoader.js` in use via `src/index.js`; ensure registration remains after routing cleanup (current code-015).
 
-### current code-002/032/004/005/012/014/019/021/022/024/027/028
+### current code-002/032/004/005/012/014/015/017/019/021/022/024/027/028/009
 - Status: ✅ Complete (see sections above)
-- Notes: Schemas and validators; engine alignment; scenario maps; transactional updates; structured results+narrative; messaging cleanup; DM queue; dry-run; core tests; help UI; scenario assertion; fallback narrative.
+- Notes: Schemas and validators; engine alignment; scenario maps; transactional updates; structured results+narrative; central router; DB model alignment; messaging cleanup; DM queue; dry-run; core tests; help UI; scenario assertion; fallback narrative; keyword-only orchestrator.
