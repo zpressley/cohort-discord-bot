@@ -247,14 +247,16 @@ async function startBattlePhase(battle) {
 
     const scenario = BATTLE_SCENARIOS[battle.scenario];
     
-    // Send detailed tactical briefings to both players
-    const player1User = battle.player1; // This should be populated via include
-    const player2User = battle.player2;
-    
-    const tacticalBrief = createDetailedTacticalBriefing(battle, scenario);
-    
-    // Send to both players via DM
-    // This would be expanded with your rich narrative system
+    // Send initial map/briefings to both players
+    const { handleDMCommand } = require('./dmHandler');
+    try {
+        const client = require('../index').client || interaction?.client; // best-effort
+        const { sendNextTurnBriefings } = require('./dmHandler');
+        await sendNextTurnBriefings(battle, battle.battleState, { p1Interpretation:{}, p2Interpretation:{} }, client);
+    } catch (e) {
+        console.log('Initial briefing send skipped:', e.message);
+    }
+
     console.log(`Battle ${battle.id} - ${scenario.name} has begun!`);
     console.log(`Weather: ${battle.weather}, Turn 1 awaiting commands`);
 }

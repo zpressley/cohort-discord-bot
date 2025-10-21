@@ -12,7 +12,9 @@
     "reasoning": { "type": "string" },
     "validation": { "type": "object", "additionalProperties": true },
     "finalPosition": { "type": "string" },
-    "isMissionContinuation": { "type": "boolean" }
+    "isMissionContinuation": { "type": "boolean" },
+    "newMission": { "type": "object", "additionalProperties": true },
+    "missionAction": { "type": "boolean" }
   },
   "required": ["type", "unitId", "targetPosition"],
   "additionalProperties": false

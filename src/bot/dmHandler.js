@@ -519,8 +519,19 @@ async function sendNextTurnBriefings(battle, battleState, turnResult, client) {
         const { calculateDistance } = require('../game/maps/mapUtils');
         const { models } = require('../database/setup');
         const { RIVER_CROSSING_MAP } = require('../game/maps/riverCrossing');
+        const { BRIDGE_CONTROL_MAP } = require('../game/maps/bridgeControl');
+        const { HILL_FORT_ASSAULT_MAP } = require('../game/maps/hillFortAssault');
+        const { FOREST_AMBUSH_MAP } = require('../game/maps/forestAmbush');
+        const { DESERT_OASIS_MAP } = require('../game/maps/desertOasis');
         
-        const map = RIVER_CROSSING_MAP;
+        const scenarioMaps = {
+          'river_crossing': RIVER_CROSSING_MAP,
+          'bridge_control': BRIDGE_CONTROL_MAP,
+          'hill_fort_assault': HILL_FORT_ASSAULT_MAP,
+          'forest_ambush': FOREST_AMBUSH_MAP,
+          'desert_oasis': DESERT_OASIS_MAP
+        };
+        const map = scenarioMaps[battle.scenario] || RIVER_CROSSING_MAP;
         
         // ===== PLAYER 1 BRIEFING =====
         if (!battle.player1Id.startsWith('TEST_')) {

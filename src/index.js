@@ -86,6 +86,9 @@ process.on('SIGINT', () => {
 });
 
 
+// Export client for other modules that may need it
+module.exports.client = client;
+
 // Initialize and start bot
 initializeBot().then(() => {
     client.login(process.env.DISCORD_TOKEN);

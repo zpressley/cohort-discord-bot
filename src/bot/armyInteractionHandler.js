@@ -83,9 +83,24 @@ async function handleArmyBuilderInteractions(interaction) {
         else if (interaction.customId === 'manpower-selection') {
             await handleStep1Selection(interaction, composition);
         } else if (interaction.customId === 'mount-decision') {
+            // legacy; kept for compatibility
+            await handleMountDecision(interaction, composition);
+        } else if (interaction.customId === 'primary-type-melee') {
+            await showPrimaryWeaponSelection(interaction, composition);
+        } else if (interaction.customId === 'primary-type-ranged') {
+            await showPrimaryRangedSelection(interaction, composition);
+        } else if (interaction.customId === 'primary-weapon-selection') {
             await handleMountDecision(interaction, composition);
         } else if (interaction.customId === 'primary-weapon-selection') {
             await handleStep2Selection(interaction, composition);
+        } else if (interaction.customId === 'primary-ranged-selection') {
+            const { getAllWeapons } = require('../game/armyData');
+            const weaponKey = interaction.values[0];
+            const unit = unitsInProgress.get(interaction.user.id);
+            const allWeapons = getAllWeapons();
+            unit.primaryWeapon = allWeapons[weaponKey];
+            unit.primaryWeaponKey = weaponKey;
+            await showSecondaryWeaponDecision(interaction, composition);
         } else if (interaction.customId === 'secondary-weapon-selection') {
             await handleSecondaryWeaponSelection(interaction, composition);
         } else if (interaction.customId === 'ranged-weapon-selection') {
@@ -250,7 +265,29 @@ async function handleAddMount(interaction, composition) {
     unit.mounted = true;
     unit.mount = { name: 'Horses', cost: mountCost };
     
-    await showPrimaryWeaponSelection(interaction, composition);
+    await showPrimaryTypeDecision(interaction, composition);
+}
+
+// STEP 2R: Primary Ranged Selection
+async function showPrimaryRangedSelection(interaction, composition) {
+    const { LIGHT_RANGED, MEDIUM_RANGED } = require('../game/armyData');
+    const unit = unitsInProgress.get(interaction.user.id);
+    let usedSP = unit.quality.cost;
+    if (unit.mounted) usedSP += unit.mount.cost;
+    const availableSP = composition.totalSP - composition.usedSP - usedSP;
+
+    const allRanged = { ...LIGHT_RANGED, ...MEDIUM_RANGED };
+    const options = Object.entries(allRanged).map(([key, w]) => ({
+        label: `${w.name} (+${w.cost} SP)`,
+        description: `Dmg: ${w.damage} | Rng: ${w.range}m` ,
+        value: key
+    }));
+    const menu = new ActionRowBuilder().addComponents(
+        new StringSelectMenuBuilder().setCustomId('primary-ranged-selection').setPlaceholder('Select Primary Ranged...').addOptions(options.slice(0,25))
+    );
+    const embed = new EmbedBuilder().setColor(0x8B4513).setTitle('Step 2: Primary Ranged Weapon')
+      .setDescription(`**Available SP:** ${availableSP}\n\nSelect your primary ranged weapon:`);
+    await interaction.update({ embeds:[embed], components:[menu, createBackButton()] });
 }
 
 // STEP 2: Primary Weapon Selection
