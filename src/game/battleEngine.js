@@ -170,14 +170,12 @@ async function resolveCombat(attackingForce, defendingForce, battleConditions, t
         
         const rawChaos = chaosRoll - (chaosLevel / 2); // Center around 0
         
-        // Apply preparation as divisor - better preparation reduces chaos impact
-        // Preparation: 1=no mitigation, 2=amazing (halves chaos), 3=exceptional (thirds), 4+=masterful
-        const attackerPrepDivisor = Math.max(1, attackerPreparation);
-        const defenderPrepDivisor = Math.max(1, defenderPreparation);
-        
-        // Asymmetric chaos application for ambush scenarios
-        let attackerChaos = rawChaos / attackerPrepDivisor;
-        let defenderChaos = rawChaos / defenderPrepDivisor;
+// Apply preparation as divisor - better preparation reduces chaos impact
+        // Preparation: 1=no mitigation, 2=amazing (halves chaos), 3=exceptional (thirds), 4+=masterful  
+        // CRITICAL FIX: Use SUBTRACTION as approved in combat_design_parameters.md
+        // Line 39-40: attackerChaos = max(0, rawChaos - attacker.preparation)
+        let attackerChaos = Math.max(0, rawChaos - attackerPreparation);
+        let defenderChaos = Math.max(0, rawChaos - defenderPreparation);
         
         // In ambush scenarios, defenders suffer additional chaos penalty
         if (battleConditions.combat_situation === 'ambush') {

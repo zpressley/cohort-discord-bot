@@ -11,10 +11,10 @@
  * Did you set up properly?
  */
 const TIME_POSITION_BONUSES = {
-    'waitedOneTurn': 0.3,           // Spent turn preparing (not caught moving)
-    'defendingPreparedPosition': 0.3, // Pre-positioned defense
-    'highGround': 0.3,              // Claimed elevation advantage
-    'fortifiedPosition': 0.4        // Behind walls/earthworks (slightly higher)
+    'waitedOneTurn': 0.2,           // Spent turn preparing (not caught moving)
+    'defendingPreparedPosition': 0.2, // Pre-positioned defense
+    'highGround': 0.2,              // Claimed elevation advantage
+    'fortifiedPosition': 0.3        // Behind walls/earthworks (keep slightly higher)
 };
 
 /**
@@ -22,10 +22,10 @@ const TIME_POSITION_BONUSES = {
  * Do you know what's coming?
  */
 const INTELLIGENCE_BONUSES = {
-    'scoutsDeployed': 0.3,          // Sent scouts, have intel
-    'foughtThisEnemyBefore': 0.3,   // Veterans remember their tactics
-    'identifiedEnemyType': 0.3,     // Know what unit type approaching
-    'anticipatedAttack': 0.3        // Expected this assault (not surprised)
+    'scoutsDeployed': 0.2,          // Sent scouts, have intel
+    'foughtThisEnemyBefore': 0.2,   // Veterans remember their tactics
+    'identifiedEnemyType': 0.2,     // Know what unit type approaching
+    'anticipatedAttack': 0.2        // Expected this assault (not surprised)
 };
 
 /**
@@ -33,10 +33,10 @@ const INTELLIGENCE_BONUSES = {
  * Is everyone working together?
  */
 const COORDINATION_BONUSES = {
-    'commanderPresent': 0.3,        // Commander within 3 tiles
-    'coordinatedAttack': 0.3,       // Multiple units acting together
-    'formationIntact': 0.3,         // Formation hasn't been disrupted
-    'clearOrders': 0.3              // Unambiguous command received
+    'commanderPresent': 0.2,        // Commander within 3 tiles
+    'coordinatedAttack': 0.2,       // Multiple units acting together
+    'formationIntact': 0.2,         // Formation hasn't been disrupted
+    'clearOrders': 0.2              // Unambiguous command received
 };
 
 /**
@@ -44,10 +44,10 @@ const COORDINATION_BONUSES = {
  * Did you adapt to conditions?
  */
 const ENVIRONMENTAL_BONUSES = {
-    'weatherPreparation': 0.3,      // Torches for night, waxed strings for rain
-    'terrainSuited': 0.3,           // Right unit type for terrain
-    'environmentalAdvantage': 0.3,  // Wind at back, sun behind, etc.
-    'acclimated': 0.3               // Desert culture in desert, mountain culture in mountains
+    'weatherPreparation': 0.2,      // Torches for night, waxed strings for rain
+    'terrainSuited': 0.2,           // Right unit type for terrain
+    'environmentalAdvantage': 0.2,  // Wind at back, sun behind, etc.
+    'acclimated': 0.2               // Desert culture in desert, mountain culture in mountains
 };
 
 /**
@@ -55,10 +55,10 @@ const ENVIRONMENTAL_BONUSES = {
  * Do you have the right matchup?
  */
 const TACTICAL_ADVANTAGE_BONUSES = {
-    'formationCountersEnemy': 0.3,  // Phalanx vs cavalry, testudo vs archers
-    'weaponAdvantage': 0.3,         // Longer reach, better penetration
-    'freshTroops': 0.3,             // Not exhausted from previous combat
-    'supplySecure': 0.3             // Baggage train protected, no supply worries
+    'formationCountersEnemy': 0.2,  // Phalanx vs cavalry, testudo vs archers
+    'weaponAdvantage': 0.2,         // Longer reach, better penetration
+    'freshTroops': 0.2,             // Not exhausted from previous combat
+    'supplySecure': 0.2             // Baggage train protected, no supply worries
 };
 
 /**
@@ -66,10 +66,10 @@ const TACTICAL_ADVANTAGE_BONUSES = {
  * Are your troops mentally prepared?
  */
 const MORALE_READINESS_BONUSES = {
-    'highMorale': 0.3,              // >80% morale
-    'inspiringLeader': 0.3,         // Legendary officer present
-    'culturalAdvantage': 0.3,       // Fighting for homeland, sacred ground, etc.
-    'recentVictory': 0.3            // Won last engagement (confidence)
+    'highMorale': 0.2,              // >80% morale
+    'inspiringLeader': 0.2,         // Legendary officer present
+    'culturalAdvantage': 0.2,       // Fighting for homeland, sacred ground, etc.
+    'recentVictory': 0.2            // Won last engagement (confidence)
 };
 
 /**
@@ -107,14 +107,14 @@ const PREPARATION_PENALTIES = {
  * REBALANCED: Reduced from 0.5 to 0.3 each to prevent preparation dominance
  */
 const ATTACKER_ASYMMETRIC_BONUSES = {
-    'initiativeAdvantage': 0.3,      // Attacker chooses timing of battle
-    'momentumCharge': 0.3,           // Forward momentum in assault
-    'chosenBattlefield': 0.3,        // Attacker picked engagement point
-    'concentratedAssault': 0.3,      // Can mass forces at breakthrough point
-    'tacticalSurprise': 0.3,         // Unexpected attack angle/timing
-    'ambushAdvantage': 1.2,          // Major advantage from ambush setup
-    'firstStrike': 0.8,              // Get first attack in surprise scenario
-    'teutoburg_ambush': 2.0          // Teutoburg Forest-style forest ambush bonus
+    'initiativeAdvantage': 0.2,      // Attacker chooses timing of battle
+    'momentumCharge': 0.2,           // Forward momentum in assault
+    'chosenBattlefield': 0.2,        // Attacker picked engagement point
+    'concentratedAssault': 0.2,      // Can mass forces at breakthrough point
+    'tacticalSurprise': 0.2,         // Unexpected attack angle/timing
+    'ambushAdvantage': 0.6,          // Reduced from 1.2 - ambush advantage
+    'firstStrike': 0.4,              // Reduced from 0.8 - first attack bonus
+    'teutoburg_ambush': 0.8          // Reduced from 2.0 - forest ambush bonus
 };
 
 /**
@@ -123,11 +123,11 @@ const ATTACKER_ASYMMETRIC_BONUSES = {
  * REBALANCED: Reduced from 0.5 to 0.3 each to prevent preparation dominance
  */
 const DEFENDER_ASYMMETRIC_BONUSES = {
-    'preparedPosition': 0.3,         // Had time to set up defenses
-    'terrainKnowledge': 0.3,         // Intimate knowledge of battlefield
-    'secureSupplies': 0.3,           // Protected baggage train
-    'defensiveOptimization': 0.3,    // Formations optimized for defense
-    'interiorLines': 0.3             // Shorter movement distances
+    'preparedPosition': 0.2,         // Had time to set up defenses
+    'terrainKnowledge': 0.2,         // Intimate knowledge of battlefield
+    'secureSupplies': 0.2,           // Protected baggage train
+    'defensiveOptimization': 0.2,    // Formations optimized for defense
+    'interiorLines': 0.2             // Shorter movement distances
 };
 
 /**
@@ -442,6 +442,168 @@ function isDefensiveFormation(formation) {
     return ['phalanx', 'testudo', 'shield_wall', 'square', 'hedgehog'].includes(formation);
 }
 
+/**
+ * Build preparation context from actual game state
+ * Extracts real battlefield conditions instead of using placeholders
+ * @param {Object} unit - Unit from battleState.unitPositions
+ * @param {Object} battleState - Complete battle state
+ * @param {Object} combatContext - Immediate combat situation
+ * @param {Object} map - Map data
+ * @param {boolean} isAttacker - True if this unit is attacking
+ * @returns {Object} Preparation conditions for calculatePreparation()
+ */
+function buildPreparationContext(unit, battleState, combatContext, map, isAttacker) {
+    const conditions = {
+        isAttacker: isAttacker,
+        isDefender: !isAttacker
+    };
+    
+    // TIME & POSITION
+    if (!unit.hasMoved) {
+        conditions.waitedOneTurn = true;
+    }
+    
+    if (isAttacker && battleState.commanderPosition) {
+        const distance = calculateDistance(
+            unit.position,
+            battleState.commanderPosition
+        );
+        if (distance <= 3) {
+            conditions.commanderPresent = true;
+        }
+    }
+    
+    const terrain = map.terrain;
+    const unitTerrain = getTerrainAt(unit.position, terrain);
+    
+    if (combatContext.fortified) {
+        conditions.fortifiedPosition = true;
+    }
+    
+    if (combatContext.elevation > 0) {
+        conditions.highGround = true;
+    }
+    
+    // INTELLIGENCE & KNOWLEDGE
+    if (battleState.scoutingOrders?.includes(unit.unitId)) {
+        conditions.scoutsDeployed = true;
+    }
+    
+    if (unit.institutionalMemory?.foughtCultures?.includes(combatContext.enemyCulture)) {
+        conditions.foughtThisEnemyBefore = true;
+    }
+    
+    if (combatContext.enemyIdentified) {
+        conditions.identifiedEnemyType = true;
+    }
+    
+    if (!combatContext.surprised) {
+        conditions.anticipatedAttack = true;
+    }
+    
+    // COORDINATION & COMMAND  
+    if (combatContext.coordinatedUnits > 1) {
+        conditions.coordinatedAttack = true;
+    }
+    
+    if (!unit.formationDisrupted) {
+        conditions.formationIntact = true;
+    }
+    
+    // ENVIRONMENTAL
+    if (checkWeatherPreparation(battleState.weather, unit)) {
+        conditions.weatherPreparation = true;
+    }
+    
+    if (checkTerrainSuited(unitTerrain, unit)) {
+        conditions.terrainSuited = true;
+    }
+    
+    // TACTICAL
+    if (checkFormationCounters(unit.formation, combatContext.enemyFormation)) {
+        conditions.formationCountersEnemy = true;
+    }
+    
+    if (!combatContext.previousCombatThisTurn) {
+        conditions.freshTroops = true;
+    }
+    
+    // MORALE
+    if (unit.morale > 80) {
+        conditions.highMorale = true;
+    }
+    
+    // PENALTIES
+    if (combatContext.surprised) {
+        conditions.surprised = true;
+    }
+    
+    if (combatContext.flanked) {
+        conditions.flanked = true;
+    }
+    
+    if (combatContext.ambushed) {
+        conditions.ambushed = true;
+    }
+    
+    // ASYMMETRIC BONUSES
+    if (isAttacker) {
+        conditions.initiativeAdvantage = true;
+        conditions.concentratedAssault = true;
+        
+        if (combatContext.combat_situation === 'ambush') {
+            conditions.ambushAdvantage = true;
+            conditions.tacticalSurprise = true;
+            
+            if (unitTerrain === 'forest' && !unit.mounted) {
+                conditions.teutoburg_ambush = true;
+            }
+        }
+    }
+    
+    if (!isAttacker) {
+        conditions.preparedPosition = combatContext.combat_situation !== 'ambush';
+        conditions.terrainKnowledge = true;
+    }
+    
+    return conditions;
+}
+
+// Helper functions
+function calculateDistance(pos1, pos2) {
+    if (!pos1 || !pos2) return Infinity;
+    const dx = pos1.x - pos2.x;
+    const dy = pos1.y - pos2.y;
+    return Math.sqrt(dx * dx + dy * dy);
+}
+
+function getTerrainAt(position, terrainData) {
+    if (terrainData.hill?.includes(position)) return 'hill';
+    if (terrainData.forest?.includes(position)) return 'forest';
+    if (terrainData.marsh?.includes(position)) return 'marsh';
+    return 'plains';
+}
+
+function checkWeatherPreparation(weather, unit) {
+    // Check if unit prepared for weather (placeholder - enhance later)
+    return weather === 'clear' || Math.random() > 0.5;
+}
+
+function checkTerrainSuited(terrain, unit) {
+    if (unit.mounted) return terrain === 'plains' || terrain === 'road';
+    if (unit.heavy) return terrain !== 'marsh' && terrain !== 'forest';
+    return true; // Light infantry suited everywhere
+}
+
+function checkFormationCounters(myFormation, enemyFormation) {
+    const counters = {
+        'phalanx': ['cavalry', 'wedge'],
+        'testudo': ['loose', 'archery'],
+        'loose': ['phalanx', 'testudo']
+    };
+    return counters[myFormation]?.includes(enemyFormation);
+}
+
 module.exports = {
     // New preparation system constants
     TIME_POSITION_BONUSES,
@@ -456,7 +618,8 @@ module.exports = {
     
     // Core functions
     calculatePreparation,
-    calculatePreparationLegacy, // For backward compatibility in testing
+    buildPreparationContext,     // NEW: Game state integration
+    calculatePreparationLegacy,  // For backward compatibility in testing
     getPreparationDescription,
     getNewPreparationDescription,
     isChargeCapable,

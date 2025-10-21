@@ -210,23 +210,19 @@ function calculateChaosLevel(conditions) {
         });
     }
 
-    // Add minimum base chaos (2) even in perfect conditions to prevent deterministic outcomes
-    const baseMinimumChaos = 2;
-    const chaosWithMinimum = Math.max(baseMinimumChaos, totalChaos);
+    // FIXED: Remove minimum chaos to allow Chaos 0 scenarios per combat_design_parameters.md
+    // Examples show "Plains Battle (Chaos 0)" which should be possible
     
     // Cap chaos at maximum 10
-    const finalChaos = Math.min(10, chaosWithMinimum);
+    const finalChaos = Math.min(10, totalChaos);
 
-    // Track if minimum chaos was applied
-    const minimumApplied = totalChaos < baseMinimumChaos;
-    if (minimumApplied) {
-        breakdown.factors.push(`Minimum battlefield uncertainty: +${baseMinimumChaos}`);
-    }
+    // No minimum chaos applied
+    const minimumApplied = false;
 
     return {
         chaosLevel: finalChaos,
         rawTotal: totalChaos,
-        capped: chaosWithMinimum > 10,
+        capped: totalChaos > 10,
         minimumApplied: minimumApplied,
         breakdown,
         description: getChaosDescription(finalChaos)

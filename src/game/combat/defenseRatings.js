@@ -132,20 +132,22 @@ const ARMOR_TYPE_EFFECTIVENESS = {
 function calculateDefenseRating(unit, situation = {}) {
     let totalDefense = 0;
     
-    // Base armor defense
-    const armor = unit.armor || 'no_armor';
+    // Base armor defense - FIX: Use actual unit structure with mapping
+    const rawArmor = unit.armor?.key || unit.armor?.name?.toLowerCase() || 'no_armor';
+    const armor = mapArmorKeyToRatingKey(rawArmor);
     if (ARMOR_DEFENSE_RATINGS[armor]) {
         totalDefense += ARMOR_DEFENSE_RATINGS[armor];
     }
     
-    // Shield bonus
-    const shield = unit.shield || 'no_shield';
+    // Shield bonus - FIX: Use actual unit structure with mapping
+    const rawShield = unit.shields?.key || unit.shields?.name?.toLowerCase() || 'no_shield';
+    const shield = mapShieldKeyToRatingKey(rawShield);
     if (SHIELD_DEFENSE_BONUSES[shield]) {
         totalDefense += SHIELD_DEFENSE_BONUSES[shield];
     }
     
-    // Training bonus
-    const quality = unit.quality || 'levy';
+    // Training bonus - FIX: Use qualityType instead of quality
+    const quality = unit.qualityType || 'levy';
     if (TRAINING_DEFENSE_BONUSES[quality]) {
         totalDefense += TRAINING_DEFENSE_BONUSES[quality];
     }
@@ -232,6 +234,48 @@ const WEAPON_DAMAGE_TYPES = {
 };
 
 /**
+ * Map army data armor keys to rating table keys
+ * @param {string} armorKey - Key from armyData.js or unit.armor
+ * @returns {string} Key for armor rating table lookup
+ */
+function mapArmorKeyToRatingKey(armorKey) {
+    const mapping = {
+        'chainmail': 'medium_armor',
+        'bronze': 'light_armor',
+        'leather': 'light_armor', 
+        'cloth': 'light_armor',
+        'scale': 'medium_armor',
+        'lamellar': 'heavy_armor',
+        'loricasegmentata': 'heavy_armor',
+        'plate': 'heavy_armor',
+        'combined': 'heavy_armor',
+        'cataphract': 'heavy_armor',
+        'none': 'no_armor'
+    };
+    
+    return mapping[armorKey] || armorKey;
+}
+
+/**
+ * Map army data shield keys to rating table keys
+ * @param {string} shieldKey - Key from armyData.js or unit.shields
+ * @returns {string} Key for shield rating table lookup
+ */
+function mapShieldKeyToRatingKey(shieldKey) {
+    const mapping = {
+        'roundshield': 'medium_shield',
+        'hoplon': 'heavy_shield',
+        'scutum': 'heavy_shield', 
+        'towershield': 'heavy_shield',
+        'pelta': 'light_shield',
+        'buckler': 'light_shield',
+        'none': 'no_shield'
+    };
+    
+    return mapping[shieldKey] || shieldKey;
+}
+
+/**
  * Get weapon damage type for armor effectiveness calculations
  * @param {string} weaponType - Weapon identifier
  * @returns {string} Damage type: 'blunt', 'piercing', or 'slashing'
@@ -249,6 +293,8 @@ module.exports = {
     ARMOR_TYPE_EFFECTIVENESS,
     WEAPON_DAMAGE_TYPES,
     calculateDefenseRating,
+    mapArmorKeyToRatingKey,       // NEW: Armor name mapping
+    mapShieldKeyToRatingKey,      // NEW: Shield name mapping
     getArmorEffectiveness,
     getWeaponDamageType
 };

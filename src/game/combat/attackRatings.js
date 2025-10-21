@@ -158,9 +158,11 @@ function isRangedWeapon(weaponName) {
  * @returns {number} Bonus attack rating from range advantage
  */
 function calculateClosingDistanceBonus(attacker, defender, conditions = {}, isDefender = false) {
-    // Check if attacker has ranged weapons
-    const attackerRanged = attacker.weapons && attacker.weapons.some(w => isRangedWeapon(w));
-    const defenderRanged = defender.weapons && defender.weapons.some(w => isRangedWeapon(w));
+    // Check if attacker has ranged weapons - FIX: Use actual unit structure
+    const attackerWeapon = attacker.primaryWeapon?.key || attacker.primaryWeapon?.name?.toLowerCase();
+    const defenderWeapon = defender.primaryWeapon?.key || defender.primaryWeapon?.name?.toLowerCase();
+    const attackerRanged = attackerWeapon && isRangedWeapon(attackerWeapon);
+    const defenderRanged = defenderWeapon && isRangedWeapon(defenderWeapon);
     
     if (!attackerRanged) return 0; // No bonus if attacker isn't ranged
     
@@ -216,16 +218,17 @@ function calculateClosingDistanceBonus(attacker, defender, conditions = {}, isDe
 function calculateAttackRating(unit, situation = {}, targetUnit = null, isDefender = false) {
     let totalAttack = 0;
     
-    // Base weapon attack
-    const primaryWeapon = unit.weapons?.[0];
+    // Base weapon attack - FIX: Use actual unit structure with mapping
+    const rawWeapon = unit.primaryWeapon?.key || unit.primaryWeapon?.name?.toLowerCase();
+    const primaryWeapon = rawWeapon ? mapWeaponKeyToRatingKey(rawWeapon) : null;
     if (primaryWeapon && WEAPON_ATTACK_RATINGS[primaryWeapon]) {
         totalAttack += WEAPON_ATTACK_RATINGS[primaryWeapon];
     } else {
         totalAttack += 2; // Minimum attack rating
     }
     
-    // Training bonus
-    const quality = unit.quality || 'levy';
+    // Training bonus - FIX: Use qualityType instead of quality
+    const quality = unit.qualityType || 'levy';
     if (TRAINING_ATTACK_BONUSES[quality]) {
         totalAttack += TRAINING_ATTACK_BONUSES[quality];
     }
@@ -273,6 +276,47 @@ function calculateAttackRating(unit, situation = {}, targetUnit = null, isDefend
  * @param {string} targetArmorType - Armor type being attacked
  * @returns {number} Bonus attack rating vs this armor
  */
+/**
+ * Map army data weapon keys to rating table keys
+ * Handles mismatched naming between armyData.js and rating tables
+ * @param {string} weaponKey - Key from armyData.js or unit.primaryWeapon
+ * @returns {string} Key for rating table lookup
+ */
+function mapWeaponKeyToRatingKey(weaponKey) {
+    const mapping = {
+        // Direct matches (most common case)
+        'gladius': 'roman_gladius',
+        'xiphos': 'greek_xiphos', 
+        'dao': 'chinese_dao',
+        'longsword': 'celtic_longsword',
+        'crossbow': 'han_chinese_crossbow',
+        'compositeBow': 'greek_composite_bow',
+        'spear': 'spear_professional',
+        'javelin': 'javelin_heavy',
+        'bow': 'self_bow_professional',
+        'sling': 'sling_professional',
+        
+        // Common weapon name variants
+        'sword': 'sword_standard',
+        'axe': 'battle_axe',
+        'mace': 'mace',
+        'dagger': 'daggers',
+        'club': 'clubs',
+        
+        // Armor/shield mapping
+        'chainmail': 'medium_armor',
+        'bronze': 'light_armor', 
+        'leather': 'light_armor',
+        'plate': 'heavy_armor',
+        'roundshield': 'medium_shield',
+        'hoplon': 'heavy_shield',
+        'scutum': 'heavy_shield',
+        'buckler': 'light_shield'
+    };
+    
+    return mapping[weaponKey] || weaponKey;
+}
+
 function getAntiArmorBonus(weaponType, targetArmorType) {
     const antiArmorBonuses = {
         // Blunt weapons vs heavy armor
@@ -304,6 +348,7 @@ module.exports = {
     FORMATION_ATTACK_MODIFIERS,
     SITUATIONAL_ATTACK_MODIFIERS,
     calculateAttackRating,
+    mapWeaponKeyToRatingKey,      // NEW: Weapon name mapping
     getAntiArmorBonus,
     isRangedWeapon,
     calculateClosingDistanceBonus
