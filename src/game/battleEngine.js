@@ -70,20 +70,37 @@ function calculateTotalDefenseRating(force) {
     
     // Sum defense ratings for all units
     force.units.forEach(unit => {
+        // DEBUG: Log unit structure to diagnose armor extraction issues
+        console.log('DEBUG - Unit armor/shield structure:', {
+            armorObject: unit.armor,
+            shieldObject: unit.shields,
+            armorName: unit.armor?.name,
+            armorKey: unit.armor?.key,
+            shieldName: unit.shields?.name,
+            shieldKey: unit.shields?.key
+        });
+        
         // Convert unit data structure to match combat system
+        // FIX: Handle both .key and .name properties for equipment
         const combatUnit = {
-            armor: unit.armor?.name || 'no_armor',
-            shield: unit.shields?.name || 'no_shield', 
+            armor: unit.armor?.key || unit.armor?.name || 'no_armor',
+            shield: unit.shields?.key || unit.shields?.name || 'no_shield', 
             quality: unit.qualityType || 'levy',
             formation: force.formation || 'line'
         };
         
+        console.log('DEBUG - Converted combatUnit:', combatUnit);
+        
         const unitDefense = calculateDefenseRating(combatUnit, {});
+        
+        console.log('DEBUG - Unit defense rating:', unitDefense);
         
         // Weight by unit size
         const unitSize = unit.quality?.size || 100;
         totalDefense += unitDefense * (unitSize / 100);
     });
+    
+    console.log('DEBUG - Total defense rating:', totalDefense);
     
     return Math.max(0, Math.round(totalDefense));
 }
@@ -93,7 +110,7 @@ function calculateTotalDefenseRating(force) {
  * @param {Object} force - Force with units, formation, and experience data
  * @param {Object} conditions - Battle conditions
  * @param {boolean} isAttacker - Whether this force is the attacker
- * @returns {number} Total preparation level
+ * @returns {number} Total preparation level (1.0-4.0 scale)
  */
 function calculateTotalPreparation(force, conditions, isAttacker = false) {
     if (!force.units || force.units.length === 0) {
@@ -115,14 +132,24 @@ function calculateTotalPreparation(force, conditions, isAttacker = false) {
         };
         
         const preparationResult = calculatePreparationLegacy(combatUnit, conditions, isAttacker);
-        const unitPreparation = preparationResult.preparationLevel || 1.0;
+        let unitPreparation = preparationResult.preparationLevel || 1.0;
+        
+        // FIX: Normalize preparation to 1.0-4.0 scale if needed
+        // If calculatePreparationLegacy returns 0-10 scale, convert it
+        if (unitPreparation > 4.0) {
+            // Assume 0-10 scale, normalize to 1.0-4.0
+            unitPreparation = 1.0 + (unitPreparation / 10) * 3.0;
+            console.log(`DEBUG - Normalized preparation from ${preparationResult.preparationLevel} to ${unitPreparation}`);
+        }
         
         // Weight by unit size
         const unitSize = unit.quality?.size || 100;
         totalPreparation += unitPreparation * (unitSize / 100);
     });
     
-    return Math.max(1.0, totalPreparation / force.units.length); // Return average, not sum
+    // Return average preparation, clamped to valid range
+    const avgPreparation = totalPreparation / force.units.length;
+    return Math.max(1.0, Math.min(4.0, avgPreparation));
 }
 
 /**
@@ -158,24 +185,19 @@ async function resolveCombat(attackingForce, defendingForce, battleConditions, t
         const attackerPreparation = calculateTotalPreparation(attackingForce, battleConditions, true);
         const defenderPreparation = calculateTotalPreparation(defendingForce, battleConditions, false);
         
-        console.log(`Preparation - Attacker: ${attackerPreparation}, Defender: ${defenderPreparation}`);
+        console.log(`Preparation - Attacker: ${attackerPreparation.toFixed(2)}, Defender: ${defenderPreparation.toFixed(2)}`);
         
-        // STEP 4: Roll Chaos and Apply Preparation
+        // STEP 4: Roll Chaos and Calculate Raw Chaos
         let chaosRoll = rollChaos(chaosLevel);
-        
-        // Amplify chaos variance in low-chaos scenarios to prevent stalemates
-        if (chaosLevel <= 3) {
-            chaosRoll = Math.round(chaosRoll * 2.0); // 100% variance boost to break stalemates
-        }
-        
         const rawChaos = chaosRoll - (chaosLevel / 2); // Center around 0
         
-// Apply preparation as divisor - better preparation reduces chaos impact
-        // Preparation: 1=no mitigation, 2=amazing (halves chaos), 3=exceptional (thirds), 4+=masterful  
-        // CRITICAL FIX: Use SUBTRACTION as approved in combat_design_parameters.md
-        // Line 39-40: attackerChaos = max(0, rawChaos - attacker.preparation)
-        let attackerChaos = Math.max(0, rawChaos - attackerPreparation);
-        let defenderChaos = Math.max(0, rawChaos - defenderPreparation);
+        console.log(`Chaos Roll: ${chaosRoll}, Raw Chaos: ${rawChaos}`);
+        
+        // STEP 5: Apply Preparation as DIVISOR (App Dev 006 Approved Design)
+        // Preparation: 1.0 = full chaos, 2.0 = half chaos, 3.0 = third, 4.0 = quarter
+        // FIX: Changed from SUBTRACTION to DIVISION
+        let attackerChaos = rawChaos / Math.max(1.0, attackerPreparation);
+        let defenderChaos = rawChaos / Math.max(1.0, defenderPreparation);
         
         // In ambush scenarios, defenders suffer additional chaos penalty
         if (battleConditions.combat_situation === 'ambush') {
@@ -183,26 +205,26 @@ async function resolveCombat(attackingForce, defendingForce, battleConditions, t
             console.log(`Ambush detected: Defender chaos amplified by 50%`);
         }
         
-        console.log(`Chaos Roll: ${chaosRoll}, Raw Chaos: ${rawChaos}`);
-        console.log(`Applied Chaos - Attacker: ${attackerChaos}, Defender: ${defenderChaos}`);
+        console.log(`Applied Chaos - Attacker: ${attackerChaos.toFixed(2)}, Defender: ${defenderChaos.toFixed(2)}`);
+        console.log(`Preparation Effect - Attacker chaos reduced by ${((1 - (attackerChaos / rawChaos)) * 100).toFixed(0)}%, Defender by ${((1 - (defenderChaos / rawChaos)) * 100).toFixed(0)}%`);
         
-        // STEP 5: Calculate Modified Attack/Defense Values
+        // STEP 6: Calculate Modified Attack/Defense Values
         const attackerEffectiveAttack = attackerAttack - attackerChaos;
         const attackerEffectiveDefense = attackerDefense - attackerChaos;
         const defenderEffectiveAttack = defenderAttack - defenderChaos;
         const defenderEffectiveDefense = defenderDefense - defenderChaos;
         
         console.log(`Effective Values:`);
-        console.log(`  Attacker: Attack ${attackerEffectiveAttack}, Defense ${attackerEffectiveDefense}`);
-        console.log(`  Defender: Attack ${defenderEffectiveAttack}, Defense ${defenderEffectiveDefense}`);
+        console.log(`  Attacker: Attack ${attackerEffectiveAttack.toFixed(2)}, Defense ${attackerEffectiveDefense.toFixed(2)}`);
+        console.log(`  Defender: Attack ${defenderEffectiveAttack.toFixed(2)}, Defense ${defenderEffectiveDefense.toFixed(2)}`);
         
-        // STEP 6: Calculate Damage
+        // STEP 7: Calculate Damage
         const attackerDamage = attackerEffectiveAttack - defenderEffectiveDefense;
         const defenderDamage = defenderEffectiveAttack - attackerEffectiveDefense;
         
-        console.log(`Raw Damage - Attacker deals: ${attackerDamage}, Defender deals: ${defenderDamage}`);
+        console.log(`Raw Damage - Attacker deals: ${attackerDamage.toFixed(2)}, Defender deals: ${defenderDamage.toFixed(2)}`);
         
-        // STEP 7: Apply Damage Using Accumulation System
+        // STEP 8: Apply Damage Using Accumulation System
         const casualties = applyDamageWithAccumulationToForces(
             attackerDamage, 
             defenderDamage, 
@@ -211,10 +233,10 @@ async function resolveCombat(attackingForce, defendingForce, battleConditions, t
             tacticalContext.turn || 1
         );
         
-        // STEP 8: Determine Combat Result
+        // STEP 9: Determine Combat Result
         const combatResult = determineCombatResult(attackerDamage, defenderDamage, casualties);
         
-        // STEP 9: Calculate Morale Effects
+        // STEP 10: Calculate Morale Effects
         const moraleChanges = calculateMoraleFromResult(combatResult);
         
         console.log(`=== Combat Resolution Complete ===`);

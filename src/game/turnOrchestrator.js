@@ -530,16 +530,17 @@ function checkVictoryConditions(positions, turnNumber, objectives) {
     return { achieved: false };
 }
 
-/**
- * Extract casualty summary for narrative
- */
 function extractCasualtySummary(combatResults) {
     let p1Total = 0;
     let p2Total = 0;
     
     combatResults.forEach(combat => {
-        combat.result.casualties.attacker.forEach(cas => p1Total += cas.casualties);
-        combat.result.casualties.defender.forEach(cas => p2Total += cas.casualties);
+        // NEW STRUCTURE: casualties.attacker.total and casualties.defender.total
+        const attackerCas = combat.result?.casualties?.attacker?.total || 0;
+        const defenderCas = combat.result?.casualties?.defender?.total || 0;
+        
+        p1Total += attackerCas;
+        p2Total += defenderCas;
     });
     
     return {
