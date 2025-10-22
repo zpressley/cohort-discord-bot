@@ -5,6 +5,9 @@
 const { EmbedBuilder } = require('discord.js');
 const { Op } = require('sequelize');
 const { calculateDistance, getAdjacentCoords } = require('../game/maps/mapUtils');
+const { sendNextTurnBriefings } = require('../game/briefingSystem');
+const { createVictoryAnnouncement, updateCommanderRecords } = require('../game/victorySystem');
+const { generateOrderFeedback } = require('../game/orderFeedback');
 
 // Track processed messages to prevent duplicates
 const processedMessages = new Set();
@@ -131,9 +134,24 @@ async function processPlayerOrder(message, battle, playerId, playerSide, client)
         
         await battleTurn.save();
         
-        // Send order confirmation with cultural flavor
-        const commander = await models.Commander.findByPk(playerId);
-        const confirmation = getOrderConfirmation(commander?.culture || 'Unknown', orderText);
+        // Parse order to show what was understood
+        const { interpretOrders } = require('../ai/orderInterpreter');
+        const { RIVER_CROSSING_MAP } = require('../game/maps/riverCrossing');
+        const map = RIVER_CROSSING_MAP; // TODO: Get correct map for scenario
+
+        try {
+            const interpretation = await interpretOrders(orderText, battle.battleState, playerSide, map);
+            const feedback = generateOrderFeedback(interpretation.validatedActions, orderText);
+            
+            await message.reply(feedback);
+            
+        } catch (parseError) {
+            console.error('Order parsing error:', parseError);
+            // Fallback to basic confirmation
+            const commander = await models.Commander.findByPk(playerId);
+            const confirmation = getOrderConfirmation(commander?.culture || 'Unknown', orderText);
+            await message.reply(confirmation);
+        }
         
         await message.reply(confirmation);
         
@@ -510,233 +528,6 @@ function getUnitDescription(unit) {
     return desc;
 }
 
-/**
- * Send clean 4-section briefings
- */
-async function sendNextTurnBriefings(battle, battleState, turnResult, client) {
-    try {
-        const { generateEmojiMap, getUnitEmoji } = require('../game/maps/mapUtils');
-        const { calculateDistance } = require('../game/maps/mapUtils');
-        const { models } = require('../database/setup');
-        const { RIVER_CROSSING_MAP } = require('../game/maps/riverCrossing');
-        const { BRIDGE_CONTROL_MAP } = require('../game/maps/bridgeControl');
-        const { HILL_FORT_ASSAULT_MAP } = require('../game/maps/hillFortAssault');
-        const { FOREST_AMBUSH_MAP } = require('../game/maps/forestAmbush');
-        const { DESERT_OASIS_MAP } = require('../game/maps/desertOasis');
-        
-        const scenarioMaps = {
-          'river_crossing': RIVER_CROSSING_MAP,
-          'bridge_control': BRIDGE_CONTROL_MAP,
-          'hill_fort_assault': HILL_FORT_ASSAULT_MAP,
-          'forest_ambush': FOREST_AMBUSH_MAP,
-          'desert_oasis': DESERT_OASIS_MAP
-        };
-        const map = scenarioMaps[battle.scenario] || RIVER_CROSSING_MAP;
-        
-        // ===== PLAYER 1 BRIEFING =====
-        if (!battle.player1Id.startsWith('TEST_')) {
-            const p1Data = battleState.player1;
-            const p1Commander = await models.Commander.findByPk(battle.player1Id);
-            
-            // 1. UNIT LIST
-            const unitList = (p1Data.unitPositions || []).map(u => {
-                const emoji = getUnitEmoji(u, 'friendly');
-                const desc = getUnitDescription(u);
-                const terrainDesc = getTerrainDescription(u.position, map);
-                return `[${u.position}] ${emoji} ${desc} (${u.currentStrength}) - ${terrainDesc}`;
-            }).join('\n');
-            
-            // 2. INTELLIGENCE
-            const visibleEnemies = p1Data.visibleEnemyPositions || [];
-            let intelligence = '';
-            
-            if (visibleEnemies.length === 0) {
-                intelligence = '👁️ No enemy contact';
-            } else {
-                const playerPos = p1Data.unitPositions[0]?.position;
-                intelligence = visibleEnemies.map(enemyPos => {
-                    const distance = playerPos ? calculateDistance(playerPos, enemyPos) : '?';
-                    return formatEnemyIntel(enemyPos, playerPos, map);
-                }).join('\n');
-            }
-            
-            // 3. OFFICER REPORT
-            const culture = p1Commander?.culture || 'Roman Republic';
-            let officerReport = '';
-            
-            if (visibleEnemies.length === 0) {
-                const noContactComments = {
-                    'Roman Republic': '"All quiet, Commander. The men stand ready."',
-                    'Celtic': '"No sign of them yet, Chief. The lads grow restless."',
-                    'Han Dynasty': '"No enemy detected. Maintaining discipline."',
-                    'Spartan City-State': '"We wait."',
-                    'default': '"No contact. Units ready."'
-                };
-                officerReport = noContactComments[culture] || noContactComments['default'];
-            } else {
-                const nearestEnemy = visibleEnemies[0];
-                const distance = p1Data.unitPositions[0]?.position 
-                    ? calculateDistance(p1Data.unitPositions[0].position, nearestEnemy) 
-                    : '?';
-                
-                const enemyComments = {
-                    'Roman Republic': `"Enemy at ${nearestEnemy}, ${distance} tiles. Legion stands ready."`,
-                    'Celtic': `"Enemy spotted at ${nearestEnemy}! ${distance} tiles. Ready to charge!"`,
-                    'Han Dynasty': `"Forces detected at ${nearestEnemy}. ${distance} tiles distant."`,
-                    'Spartan City-State': `"Enemy at ${nearestEnemy}. We do not retreat."`,
-                    'default': `"Enemy at ${nearestEnemy}, ${distance} tiles away."`
-                };
-                officerReport = enemyComments[culture] || enemyComments['default'];
-            }
-            
-            // Add mission interruption questions if any
-            if (turnResult?.p1Interpretation?.missionInterruptions?.length > 0) {
-                const interruption = turnResult.p1Interpretation.missionInterruptions[0];
-                officerReport += `\n\n⚠️ "${interruption.question}"`;
-            }
-            
-            // 4. MAP
-            const p1Map = generateEmojiMap({
-                terrain: map.terrain,
-                player1Units: p1Data.unitPositions || [],
-                player2Units: (p1Data.visibleEnemyPositions || []).map(pos => ({
-                    position: pos,
-                    currentStrength: 100,
-                    unitType: 'unknown'
-                }))
-            });
-            
-            // Assemble briefing
-            const briefing = 
-`🏺 **WAR COUNCIL - Turn ${battle.currentTurn}**
-
-**YOUR FORCES:**
-${unitList}
-
-**INTELLIGENCE:**
-${intelligence}
-
-**OFFICER REPORT:**
-${officerReport}
-
-**MAP:**
-\`\`\`
-${p1Map}
-\`\`\`
-
-**AWAITING ORDERS**`;
-            
-            const { queuedDM } = require('./utils/dmQueue');
-            queuedDM(battle.player1Id, { content: briefing }, client);
-        }
-        
-        // ===== PLAYER 2 BRIEFING ===== (Same structure)
-        if (battle.player2Id && !battle.player2Id.startsWith('TEST_')) {
-            const p2Data = battleState.player2;
-            const p2Commander = await models.Commander.findByPk(battle.player2Id);
-            
-            const unitList = (p2Data.unitPositions || []).map(u => {
-                const emoji = getUnitEmoji(u, 'friendly');
-                const desc = getUnitDescription(u);
-                const terrainDesc = getTerrainDescription(u.position, map);
-                return `[${u.position}] ${emoji} ${desc} (${u.currentStrength}) - ${terrainDesc}`;
-            }).join('\n');
-            
-            const visibleEnemies = p2Data.visibleEnemyPositions || [];
-            let intelligence = '';
-            
-            if (visibleEnemies.length === 0) {
-                intelligence = '👁️ No enemy contact';
-            } else {
-                const playerPos = p2Data.unitPositions[0]?.position;
-                intelligence = visibleEnemies.map(enemyPos => {
-                    return formatEnemyIntel(enemyPos, playerPos, map);
-                }).join('\n');
-            }
-            
-            const culture = p2Commander?.culture || 'Roman Republic';
-            let officerReport = '';
-            
-            if (visibleEnemies.length === 0) {
-                const noContactComments = {
-                    'Roman Republic': '"All quiet, Commander. The men stand ready."',
-                    'Celtic': '"No sign of them yet, Chief. The lads grow restless."',
-                    'Han Dynasty': '"No enemy detected. Maintaining discipline."',
-                    'Spartan City-State': '"We wait."',
-                    'default': '"No contact. Units ready."'
-                };
-                officerReport = noContactComments[culture] || noContactComments['default'];
-            } else {
-                const nearestEnemy = visibleEnemies[0];
-                const distance = p2Data.unitPositions[0]?.position 
-                    ? calculateDistance(p2Data.unitPositions[0].position, nearestEnemy) 
-                    : '?';
-                
-                const enemyComments = {
-                    'Roman Republic': `"Enemy at ${nearestEnemy}, ${distance} tiles. Legion stands ready."`,
-                    'Celtic': `"Enemy spotted at ${nearestEnemy}! ${distance} tiles. Ready to charge!"`,
-                    'Han Dynasty': `"Forces detected at ${nearestEnemy}. ${distance} tiles distant."`,
-                    'Spartan City-State': `"Enemy at ${nearestEnemy}. We do not retreat."`,
-                    'default': `"Enemy at ${nearestEnemy}, ${distance} tiles away."`
-                };
-                officerReport = enemyComments[culture] || enemyComments['default'];
-            }
-            
-            if (turnResult?.p2Interpretation?.missionInterruptions?.length > 0) {
-                const interruption = turnResult.p2Interpretation.missionInterruptions[0];
-                officerReport += `\n\n⚠️ "${interruption.question}"`;
-            }
-            
-            const p2Map = generateEmojiMap({
-                terrain: map.terrain,
-                player1Units: (p2Data.visibleEnemyPositions || []).map(pos => ({
-                    position: pos,
-                    currentStrength: 100,
-                    unitType: 'unknown'
-                })),
-                player2Units: p2Data.unitPositions || []
-            });
-            
-            const briefing = 
-`🏺 **WAR COUNCIL - Turn ${battle.currentTurn}**
-
-**YOUR FORCES:**
-${unitList}
-
-**INTELLIGENCE:**
-${intelligence}
-
-**OFFICER REPORT:**
-${officerReport}
-
-**MAP:**
-\`\`\`
-${p2Map}
-\`\`\`
-
-**AWAITING ORDERS**`;
-            
-            const { queuedDM } = require('./utils/dmQueue');
-            queuedDM(battle.player2Id, { content: briefing }, client);
-        }
-        
-    } catch (error) {
-        console.error('Error sending briefings:', error);
-        
-        // Fallback
-        const simple = `⚡ Turn ${battle.currentTurn} - Orders required`;
-        try {
-            if (!battle.player1Id.startsWith('TEST_')) {
-                await (await client.users.fetch(battle.player1Id)).send(simple);
-            }
-            if (battle.player2Id && !battle.player2Id.startsWith('TEST_')) {
-                await (await client.users.fetch(battle.player2Id)).send(simple);
-            }
-        } catch (fallbackError) {
-            console.error('Fallback failed:', fallbackError);
-        }
-    }
-}
 
 /**
  * Load complete battle context - PROPERLY LOAD CULTURES
@@ -842,31 +633,41 @@ async function endBattle(battle, victory, client) {
     try {
         const { models } = require('../database/setup');
         
-        battle.status = 'completed';
-        battle.winner = victory.winner;
-        await battle.save();
+        console.log(`🏆 Ending battle ${battle.id}: Winner = ${victory.winner}`);
         
-        const resultEmbed = new EmbedBuilder()
-            .setColor(victory.winner === 'draw' ? 0x808080 : 0xFFD700)
-            .setTitle('🏆 BATTLE CONCLUDED')
-            .setDescription(`**Scenario:** ${battle.scenario}\n**Total Turns:** ${battle.currentTurn}\n**Victor:** ${victory.winner}`)
-            .setFooter({ text: 'Experience gained! Use /lobby to start your next battle.' });
+        // Create detailed victory announcement
+        const { embed, statistics } = await createVictoryAnnouncement(
+            battle,
+            victory,
+            battle.battleState
+        );
         
-        // Send to real players only
+        // Update commander records (wins/losses)
+        await updateCommanderRecords(battle, victory, statistics);
+        
+        // Update battle status
+        await battle.update({
+            status: 'completed',
+            winner: victory.winner
+        });
+        
+        // Send victory announcement to both players
         if (!battle.player1Id.startsWith('TEST_')) {
             const player1 = await client.users.fetch(battle.player1Id);
-            await player1.send({ embeds: [resultEmbed] });
+            await player1.send({ embeds: [embed] });
+            console.log('Victory announcement sent to player 1');
         }
         
         if (battle.player2Id && !battle.player2Id.startsWith('TEST_')) {
             const player2 = await client.users.fetch(battle.player2Id);
-            await player2.send({ embeds: [resultEmbed] });
+            await player2.send({ embeds: [embed] });
+            console.log('Victory announcement sent to player 2');
         }
         
-        console.log(`Battle ${battle.id} concluded: Winner = ${victory.winner}`);
+        console.log(`✅ Battle ${battle.id} concluded successfully`);
         
     } catch (error) {
-        console.error('End battle error:', error);
+        console.error('Error ending battle:', error);
     }
 }
 

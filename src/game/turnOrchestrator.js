@@ -8,6 +8,7 @@ const { resolveCombat } = require('./battleEngine');
 const { validateActions } = require('./schemas');
 const { validateMovement } = require('./movementSystem');
 const { updateCommanderPosition, checkCommanderCaptureRisk } = require('./commandSystem/commanderManager');
+const { checkVictoryConditions } = require('./victorySystem');
 
 /**
  * Process complete turn with both players' orders
@@ -253,7 +254,8 @@ async function processTurn(battle, player1Order, player2Order, map) {
         const victoryCheck = checkVictoryConditions(
             updatedPositions,
             battle.currentTurn,
-            map.objectives
+            map.objectives,
+            battle.maxTurns
         );
         
         // PHASE 7: Generate turn narrative
@@ -427,43 +429,8 @@ function applyCasualties(positions, combatResults) {
     return updated;
 }
 
-/**
- * Check victory conditions
- */
-function checkVictoryConditions(positions, turnNumber, objectives) {
-    // Don't end battle in first 3 turns unless complete annihilation
-    if (turnNumber < 3) {
-        return { achieved: false };
-    }
-    
-    // Rest of function...
-    const p1Strength = positions.player1.reduce((sum, u) => sum + u.currentStrength, 0);
-    const p2Strength = positions.player2.reduce((sum, u) => sum + u.currentStrength, 0);
-    
-    const p1Original = positions.player1.reduce((sum, u) => sum + (u.maxStrength || u.currentStrength), 0);
-    const p2Original = positions.player2.reduce((sum, u) => sum + (u.maxStrength || u.currentStrength), 0);
-    
-    // Annihilation victory
-    if (p1Strength <= 0) {
-        return { achieved: true, winner: 'player2', reason: 'enemy_destroyed' };
-    }
-    if (p2Strength <= 0) {
-        return { achieved: true, winner: 'player1', reason: 'enemy_destroyed' };
-    }
-    
-    // Casualties > 75% = defeat
-    if (p1Strength < p1Original * 0.25) {
-        return { achieved: true, winner: 'player2', reason: 'catastrophic_casualties' };
-    }
-    if (p2Strength < p2Original * 0.25) {
-        return { achieved: true, winner: 'player1', reason: 'catastrophic_casualties' };
-    }
-    
-    // Objective-based victory (will be enhanced with control point tracking)
-    // TODO: Check ford control, hill control, etc.
-    
-    return { achieved: false };
-}
+// Delete this function entirely - use the one from victorySystem.js
+// The import at the top will provide the new implementation
 
 function extractCasualtySummary(combatResults) {
     let p1Total = 0;

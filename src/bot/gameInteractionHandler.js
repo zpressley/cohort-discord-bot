@@ -243,60 +243,63 @@ async function handleReadyForBattle(interaction) {
 
 async function startBattlePhase(battle) {
     const { models } = require('../database/setup');
-    const { BATTLE_SCENARIOS } = require('./commands/create-game');
-    const { initializeDeployment } = require('../game/maps/riverCrossing'); // generic deployer
-    const { getAllWeapons, TROOP_QUALITY } = require('../game/armyData');
-    const { getEliteUnitForCulture } = require('../game/eliteTemplates');
-    const allWeapons = getAllWeapons();
-
-    // Ensure unit positions exist (deploy now if missing)
-    const p1Army = battle.battleState?.player1?.army || (await models.Commander.findByPk(battle.player1Id))?.armyComposition || {};
-    const p2Army = battle.battleState?.player2?.army || (await models.Commander.findByPk(battle.player2Id))?.armyComposition || {};
-    function addEliteIfAny(units, eliteSize, culture) {
-        const elite = getEliteUnitForCulture(culture, eliteSize, allWeapons, require('../game/armyData').TROOP_QUALITY);
-        return elite ? [elite, ...(units || [])] : (units || []);
-    }
-
-    if (!battle.battleState?.player1?.unitPositions || !battle.battleState?.player2?.unitPositions) {
-        const p1Units = initializeDeployment('north', addEliteIfAny(p1Army.units || [], p1Army.eliteSize || 0, battle.player1Culture));
-        const p2Units = initializeDeployment('south', addEliteIfAny(p2Army.units || [], p2Army.eliteSize || 0, battle.player2Culture));
-        const newState = {
-            ...(battle.battleState || {}),
-            player1: { ...(battle.battleState?.player1 || {}), army: p1Army, unitPositions: p1Units, visibleEnemyPositions: [] },
-            player2: { ...(battle.battleState?.player2 || {}), army: p2Army, unitPositions: p2Units, visibleEnemyPositions: [] }
-        };
-        await battle.update({ battleState: newState });
-        await battle.reload();
-    }
-
-    // Create first turn record if not exists
-    const existingTurn = await models.BattleTurn.findOne({ where: { battleId: battle.id, turnNumber: 1 } });
-    if (!existingTurn) {
-        await models.BattleTurn.create({ battleId: battle.id, turnNumber: 1, player1Command: null, player2Command: null });
-    }
-
-    const scenario = BATTLE_SCENARIOS[battle.scenario];
-
-    // Send initial map/briefings to both players
+    const { initializeBattle } = require('../game/battleInitializer');
+    const { sendInitialBriefings } = require('../game/briefingSystem');
+    
+    console.log(`🎬 Starting battle phase for ${battle.id}`);
+    
     try {
+        // Get both commanders
+        const p1Commander = await models.Commander.findByPk(battle.player1Id);
+        const p2Commander = await models.Commander.findByPk(battle.player2Id);
+        
+        if (!p1Commander || !p2Commander) {
+            throw new Error('Cannot find commander records');
+        }
+        
+        // Initialize battle with proper unit deployment
+        const initialState = await initializeBattle(battle, p1Commander, p2Commander);
+        
+        // Update battle with initialized state
+        await battle.update({
+            battleState: initialState,
+            status: 'in_progress',
+            currentTurn: 1
+        });
+        
+        // Reload to get updated state
+        await battle.reload();
+        
+        // Create Turn 1 record
+        await models.BattleTurn.create({
+            battleId: battle.id,
+            turnNumber: 1,
+            player1Command: null,
+            player2Command: null
+        });
+        
+        // Send initial briefings with opening narrative
         const client = require('../index').client;
-        const { sendNextTurnBriefings } = require('./dmHandler');
-        await sendNextTurnBriefings(battle, battle.battleState, { p1Interpretation:{}, p2Interpretation:{} }, client);
-    } catch (e) {
-        console.log('Initial briefing send failed:', e.message);
-        // Fallback minimal DM
+        await sendInitialBriefings(battle, initialState, client);
+        
+        console.log(`✅ Battle ${battle.id} initialized and briefings sent`);
+        
+    } catch (error) {
+        console.error('Error starting battle phase:', error);
+        
+        // Notify players of error
         try {
             const client = require('../index').client;
             const p1 = await client.users.fetch(battle.player1Id);
             const p2 = battle.player2Id ? await client.users.fetch(battle.player2Id) : null;
-            const text = `Turn 1 begins. Scenario: ${battle.scenario}. Orders now open.`;
-            await p1.send(text);
-            if (p2) await p2.send(text);
-        } catch (_) {}
+            
+            const errorMsg = `❌ Error initializing battle: ${error.message}\n\nPlease report this issue.`;
+            await p1.send(errorMsg);
+            if (p2) await p2.send(errorMsg);
+        } catch (dmError) {
+            console.error('Could not send error DMs:', dmError);
+        }
     }
-
-    console.log(`Battle ${battle.id} - ${scenario.name} has begun!`);
-    console.log(`Weather: ${battle.weather}, Turn 1 awaiting commands`);
 }
 
 function createDetailedTacticalBriefing(battle, scenario) {
