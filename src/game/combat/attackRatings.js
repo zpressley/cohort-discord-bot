@@ -35,6 +35,7 @@ const WEAPON_ATTACK_RATINGS = {
     'sword_standard': 4,
     'self_bow_professional': 5,
     'javelin_heavy': 6,
+    'heavy_javelin': 6,         // Same as javelin_heavy
     'sling_professional': 6,  // Extreme impact
     
     // Cultural medium weapons
@@ -89,6 +90,7 @@ const FORMATION_ATTACK_MODIFIERS = {
     // Offensive formations (enhance attack)
     'wedge': +2,             // Concentrated assault formation
     'line': 0,               // Standard battle line, balanced
+    'standard': 0,           // Default formation, no bonus/penalty
     'loose': +1,             // Flexible, individual initiative
     'column': 0,             // March formation, neutral
     
@@ -208,6 +210,49 @@ function calculateClosingDistanceBonus(attacker, defender, conditions = {}, isDe
 }
 
 /**
+ * Normalize weapon names to match rating keys
+ * Handles both "Gladius" and "roman_gladius" formats
+ */
+function normalizeWeaponKey(name) {
+    if (!name || typeof name !== 'string') return 'unarmed';
+    
+    // Already normalized (lowercase with underscores)
+    if (name.match(/^[a-z_]+$/)) return name;
+    
+    // Convert "Gladius" -> "gladius" (simple lowercase)
+    // If exact match not found, try common patterns
+    const normalized = name.toLowerCase().trim().replace(/\s+/g, '_');
+    
+    // Try exact match first
+    if (WEAPON_ATTACK_RATINGS[normalized]) {
+        return normalized;
+    }
+    
+    // Try common weapon name variations
+    const variations = [
+        normalized,
+        `roman_${normalized}`,
+        `greek_${normalized}`,
+        `celtic_${normalized}`,
+        `persian_${normalized}`,
+        `chinese_${normalized}`,
+        `germanic_${normalized}`,
+        `${normalized}_standard`,
+        `${normalized}_professional`,
+        `${normalized}_basic`
+    ];
+    
+    for (const variant of variations) {
+        if (WEAPON_ATTACK_RATINGS[variant]) {
+            return variant;
+        }
+    }
+    
+    console.warn(`WARNING - Unknown weapon: '${name}' (normalized: '${normalized}')`);
+    return normalized; // Return normalized even if not found (will use fallback)
+}
+
+/**
  * Calculate total attack rating for a unit
  * @param {Object} unit - Unit with weapon, quality, formation data
  * @param {Object} situation - Combat situation modifiers
@@ -218,25 +263,30 @@ function calculateClosingDistanceBonus(attacker, defender, conditions = {}, isDe
 function calculateAttackRating(unit, situation = {}, targetUnit = null, isDefender = false) {
     let totalAttack = 0;
     
-    // Base weapon attack - FIX: Use actual unit structure with mapping
-    const rawWeapon = unit.primaryWeapon?.key || unit.primaryWeapon?.name?.toLowerCase();
-    const primaryWeapon = rawWeapon ? mapWeaponKeyToRatingKey(rawWeapon) : null;
-    if (primaryWeapon && WEAPON_ATTACK_RATINGS[primaryWeapon]) {
-        totalAttack += WEAPON_ATTACK_RATINGS[primaryWeapon];
+    // Base weapon attack (normalize key format)
+    const primaryWeapon = unit.weapons?.[0];
+    const weaponKey = normalizeWeaponKey(primaryWeapon);
+    
+    if (WEAPON_ATTACK_RATINGS[weaponKey] !== undefined) {
+        totalAttack += WEAPON_ATTACK_RATINGS[weaponKey];
     } else {
         totalAttack += 2; // Minimum attack rating
     }
     
-    // Training bonus - FIX: Use qualityType instead of quality
-    const quality = unit.qualityType || 'levy';
-    if (TRAINING_ATTACK_BONUSES[quality]) {
+    // Training bonus
+    const quality = unit.quality || 'levy';
+    if (TRAINING_ATTACK_BONUSES[quality] !== undefined) {
         totalAttack += TRAINING_ATTACK_BONUSES[quality];
+    } else {
+        console.warn(`WARNING - Unknown quality type: '${quality}'`);
     }
     
     // Formation modifier
     const formation = unit.formation || 'line';
-    if (FORMATION_ATTACK_MODIFIERS[formation]) {
+    if (FORMATION_ATTACK_MODIFIERS[formation] !== undefined) {
         totalAttack += FORMATION_ATTACK_MODIFIERS[formation];
+    } else {
+        console.warn(`WARNING - Unknown formation type: '${formation}'`);
     }
     
     // Cavalry vs infantry balance: reduce cavalry bonus vs formed infantry
@@ -252,7 +302,7 @@ function calculateAttackRating(unit, situation = {}, targetUnit = null, isDefend
     
     // Situational modifiers
     Object.keys(situation).forEach(modifier => {
-        if (SITUATIONAL_ATTACK_MODIFIERS[modifier]) {
+        if (SITUATIONAL_ATTACK_MODIFIERS[modifier] !== undefined) {
             totalAttack += SITUATIONAL_ATTACK_MODIFIERS[modifier];
         }
     });
@@ -265,6 +315,7 @@ function calculateAttackRating(unit, situation = {}, targetUnit = null, isDefend
             console.log(`Closing distance bonus: +${closingBonus} (ranged advantage)`);
         }
     }
+    
     
     // Ensure minimum attack of 1
     return Math.max(1, totalAttack);
@@ -351,5 +402,6 @@ module.exports = {
     mapWeaponKeyToRatingKey,      // NEW: Weapon name mapping
     getAntiArmorBonus,
     isRangedWeapon,
+    normalizeWeaponKey,
     calculateClosingDistanceBonus
 };

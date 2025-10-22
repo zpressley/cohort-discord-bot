@@ -56,6 +56,7 @@ const FORMATION_DEFENSE_MODIFIERS = {
     
     // Standard formations (neutral to minor bonus)
     'line': +1,              // Basic battle line
+    'standard': +1,          // Basic defensive coordination
     'column': 0,             // March formation, not defensive
     'echelon': +1,           // Staggered defense
     
@@ -124,6 +125,23 @@ const ARMOR_TYPE_EFFECTIVENESS = {
 };
 
 /**
+ * Normalize equipment names to match rating keys
+ * Handles both "Light Armor" and "light_armor" formats
+ */
+function normalizeEquipmentKey(name) {
+    if (!name || typeof name !== 'string') return 'no_armor';
+    
+    // Already normalized (lowercase with underscores)
+    if (name.match(/^[a-z_]+$/)) return name;
+    
+    // Convert "Light Armor" -> "light_armor"
+    return name
+        .toLowerCase()
+        .trim()
+        .replace(/\s+/g, '_');
+}
+
+/**
  * Calculate total defense rating for a unit
  * @param {Object} unit - Unit with armor, shield, quality, formation data
  * @param {Object} situation - Combat situation modifiers
@@ -132,38 +150,50 @@ const ARMOR_TYPE_EFFECTIVENESS = {
 function calculateDefenseRating(unit, situation = {}) {
     let totalDefense = 0;
     
-    // Base armor defense - FIX: Use actual unit structure with mapping
-    const rawArmor = unit.armor?.key || unit.armor?.name?.toLowerCase() || 'no_armor';
-    const armor = mapArmorKeyToRatingKey(rawArmor);
-    if (ARMOR_DEFENSE_RATINGS[armor]) {
-        totalDefense += ARMOR_DEFENSE_RATINGS[armor];
+    // Base armor defense (normalize key format)
+    const armorKey = normalizeEquipmentKey(unit.armor || 'no_armor');
+    if (ARMOR_DEFENSE_RATINGS[armorKey] !== undefined) {
+        totalDefense += ARMOR_DEFENSE_RATINGS[armorKey];
+        console.log(`DEBUG - Armor '${unit.armor}' -> '${armorKey}' = ${ARMOR_DEFENSE_RATINGS[armorKey]} defense`);
+    } else {
+        console.warn(`WARNING - Unknown armor type: '${unit.armor}' (normalized: '${armorKey}')`);
     }
     
-    // Shield bonus - FIX: Use actual unit structure with mapping
-    const rawShield = unit.shields?.key || unit.shields?.name?.toLowerCase() || 'no_shield';
-    const shield = mapShieldKeyToRatingKey(rawShield);
-    if (SHIELD_DEFENSE_BONUSES[shield]) {
-        totalDefense += SHIELD_DEFENSE_BONUSES[shield];
+    // Shield bonus (normalize key format)
+    const shieldKey = normalizeEquipmentKey(unit.shield || 'no_shield');
+    if (SHIELD_DEFENSE_BONUSES[shieldKey] !== undefined) {
+        totalDefense += SHIELD_DEFENSE_BONUSES[shieldKey];
+        console.log(`DEBUG - Shield '${unit.shield}' -> '${shieldKey}' = ${SHIELD_DEFENSE_BONUSES[shieldKey]} defense`);
+    } else {
+        console.warn(`WARNING - Unknown shield type: '${unit.shield}' (normalized: '${shieldKey}')`);
     }
     
-    // Training bonus - FIX: Use qualityType instead of quality
-    const quality = unit.qualityType || 'levy';
-    if (TRAINING_DEFENSE_BONUSES[quality]) {
+    // Training bonus
+    const quality = unit.quality || 'levy';
+    if (TRAINING_DEFENSE_BONUSES[quality] !== undefined) {
         totalDefense += TRAINING_DEFENSE_BONUSES[quality];
+        console.log(`DEBUG - Quality '${quality}' = ${TRAINING_DEFENSE_BONUSES[quality]} defense`);
+    } else {
+        console.warn(`WARNING - Unknown quality type: '${quality}'`);
     }
     
     // Formation modifier
     const formation = unit.formation || 'line';
-    if (FORMATION_DEFENSE_MODIFIERS[formation]) {
+    if (FORMATION_DEFENSE_MODIFIERS[formation] !== undefined) {
         totalDefense += FORMATION_DEFENSE_MODIFIERS[formation];
+        console.log(`DEBUG - Formation '${formation}' = ${FORMATION_DEFENSE_MODIFIERS[formation]} defense`);
+    } else {
+        console.warn(`WARNING - Unknown formation type: '${formation}'`);
     }
     
     // Situational modifiers
     Object.keys(situation).forEach(modifier => {
-        if (SITUATIONAL_DEFENSE_MODIFIERS[modifier]) {
+        if (SITUATIONAL_DEFENSE_MODIFIERS[modifier] !== undefined) {
             totalDefense += SITUATIONAL_DEFENSE_MODIFIERS[modifier];
         }
     });
+    
+    console.log(`DEBUG - Total defense calculated: ${totalDefense}`);
     
     // Defense cannot go below 0
     return Math.max(0, totalDefense);
@@ -296,5 +326,6 @@ module.exports = {
     mapArmorKeyToRatingKey,       // NEW: Armor name mapping
     mapShieldKeyToRatingKey,      // NEW: Shield name mapping
     getArmorEffectiveness,
-    getWeaponDamageType
+    getWeaponDamageType,
+    normalizeEquipmentKey 
 };

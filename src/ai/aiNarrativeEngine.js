@@ -372,11 +372,64 @@ function generateOfficerPerspective(officer, culture, combatResult, side, memori
 }
 
 /**
- * Generate main battle narrative using AI with structured context
+ * Generate main battle narrative using Groq AI
  */
 async function generateMainNarrative(combatResult, battleContext, historicalParallel, turnHistory) {
-    // Use fallback for now until AI is properly configured
-    return generateFallbackNarrative(combatResult, battleContext);
+    // Load environment variables fresh
+    require('dotenv').config();
+    
+    // Check if Groq is configured
+    if (!process.env.GROQ_API_KEY) {
+        console.log('ℹ️ No GROQ_API_KEY found in environment');
+        console.log('ℹ️ Current env keys:', Object.keys(process.env).filter(k => k.includes('GROQ')));
+        return generateFallbackNarrative(combatResult, battleContext).mainNarrative;
+    }
+    
+    try {
+        // Initialize Groq client here instead of at module level
+        const Groq = require('groq-sdk');
+        const groq = new Groq({ apiKey: process.env.GROQ_API_KEY });
+        
+        // Build prompt from context
+        const template = NARRATIVE_TEMPLATES[combatResult.result] || NARRATIVE_TEMPLATES['stalemate'];
+        const prompt = buildNarrativePrompt({
+            combatResult,
+            battleContext,
+            historicalParallel,
+            template
+        });
+        
+        console.log('🤖 Generating narrative with Groq (Llama 3.1 8B)...');
+        
+        const response = await groq.chat.completions.create({
+            model: 'llama-3.1-8b-instant',
+            messages: [
+                {
+                    role: 'system',
+                    content: 'You are an expert ancient warfare historian and narrator. Create vivid, historically authentic battle narratives. Use present tense. Focus on tactics, formations, and cultural authenticity. No modern language or anachronisms.'
+                },
+                {
+                    role: 'user',
+                    content: prompt
+                }
+            ],
+            max_tokens: 500,
+            temperature: 0.8
+        });
+        
+        const narrative = response.choices[0].message.content;
+        
+        return {
+            fullNarrative: narrative,
+            template: combatResult.result,
+            historicalReference: historicalParallel.battles?.[0] || 'Ancient precedent',
+            generated_by: 'groq_llama_3.1_8b'
+        };
+        
+    } catch (error) {
+        console.warn('⚠️ Groq AI failed:', error.message);
+        return generateFallbackNarrative(combatResult, battleContext).mainNarrative;
+    }
 }
 
 /**

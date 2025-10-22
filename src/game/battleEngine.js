@@ -70,15 +70,6 @@ function calculateTotalDefenseRating(force) {
     
     // Sum defense ratings for all units
     force.units.forEach(unit => {
-        // DEBUG: Log unit structure to diagnose armor extraction issues
-        console.log('DEBUG - Unit armor/shield structure:', {
-            armorObject: unit.armor,
-            shieldObject: unit.shields,
-            armorName: unit.armor?.name,
-            armorKey: unit.armor?.key,
-            shieldName: unit.shields?.name,
-            shieldKey: unit.shields?.key
-        });
         
         // Convert unit data structure to match combat system
         // FIX: Handle both .key and .name properties for equipment
@@ -89,18 +80,15 @@ function calculateTotalDefenseRating(force) {
             formation: force.formation || 'line'
         };
         
-        console.log('DEBUG - Converted combatUnit:', combatUnit);
         
         const unitDefense = calculateDefenseRating(combatUnit, {});
         
-        console.log('DEBUG - Unit defense rating:', unitDefense);
         
         // Weight by unit size
         const unitSize = unit.quality?.size || 100;
         totalDefense += unitDefense * (unitSize / 100);
     });
     
-    console.log('DEBUG - Total defense rating:', totalDefense);
     
     return Math.max(0, Math.round(totalDefense));
 }
@@ -139,7 +127,6 @@ function calculateTotalPreparation(force, conditions, isAttacker = false) {
         if (unitPreparation > 4.0) {
             // Assume 0-10 scale, normalize to 1.0-4.0
             unitPreparation = 1.0 + (unitPreparation / 10) * 3.0;
-            console.log(`DEBUG - Normalized preparation from ${preparationResult.preparationLevel} to ${unitPreparation}`);
         }
         
         // Weight by unit size
@@ -206,7 +193,15 @@ async function resolveCombat(attackingForce, defendingForce, battleConditions, t
         }
         
         console.log(`Applied Chaos - Attacker: ${attackerChaos.toFixed(2)}, Defender: ${defenderChaos.toFixed(2)}`);
-        console.log(`Preparation Effect - Attacker chaos reduced by ${((1 - (attackerChaos / rawChaos)) * 100).toFixed(0)}%, Defender by ${((1 - (defenderChaos / rawChaos)) * 100).toFixed(0)}%`);
+        
+        // Log preparation effectiveness (avoid division by zero)
+        if (rawChaos !== 0) {
+            const attackerReduction = ((1 - (attackerChaos / rawChaos)) * 100).toFixed(0);
+            const defenderReduction = ((1 - (defenderChaos / rawChaos)) * 100).toFixed(0);
+            console.log(`Preparation Effect - Attacker chaos reduced by ${attackerReduction}%, Defender by ${defenderReduction}%`);
+        } else {
+            console.log(`Preparation Effect - No chaos to reduce (clear conditions)`);
+        }
         
         // STEP 6: Calculate Modified Attack/Defense Values
         const attackerEffectiveAttack = attackerAttack - attackerChaos;
