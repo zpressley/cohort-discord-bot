@@ -136,7 +136,5 @@ function generateTemplateOpening(battle, player1Commander, player2Commander) {
 }
 
 module.exports = {
-    initializeBattle,
-    deployUnitsToStartingPositions,
     generateOpeningNarrative
 };

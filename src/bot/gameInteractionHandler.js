@@ -152,36 +152,29 @@ async function handleBattleJoin(interaction) {
             },
             {
                 name: '⏳ Status',
-                value: 'Both commanders reviewing their armies...',
+                value: 'Battle initializing...',
                 inline: false
             }
         )
-        .setFooter({ text: 'Commanders will receive private tactical briefings shortly!' });
+        .setFooter({ text: 'Check your DMs for tactical briefings!' });
 
-    const readyButtons = new ActionRowBuilder()
-        .addComponents(
-            new ButtonBuilder()
-                .setCustomId(`ready-for-battle-${battle.id}`)
-                .setLabel('Ready for Battle')
-                .setStyle(ButtonStyle.Success)
-                .setEmoji('⚔️'),
-            new ButtonBuilder()
-                .setCustomId(`abandon-battle-${battle.id}`)
-                .setLabel('Abandon Battle')
-                .setStyle(ButtonStyle.Danger)
-                .setEmoji('🚪')
-        );
+    // Reply to interaction first
+    await interaction.reply({
+        content: '✅ Battle joined! Initializing...',
+        ephemeral: true
+    });
 
-    // Try to update the original battle message with Ready buttons; if this fails (e.g. simulated interaction), send a new channel message.
-    try {
-        await interaction.update({
-            embeds: [updatedEmbed],
-            components: [readyButtons]
-        });
-    } catch (e) {
-        console.warn('join-battle: update failed, sending new message:', e.message);
-        if (interaction.channel && interaction.channel.send) {
-            await interaction.channel.send({ embeds: [updatedEmbed], components: [readyButtons] });
+    // Update the original battle message if we have it
+    if (battle.messageId && battle.channelId) {
+        try {
+            const channel = await interaction.client.channels.fetch(battle.channelId);
+            const message = await channel.messages.fetch(battle.messageId);
+            await message.edit({
+                embeds: [updatedEmbed],
+                components: [] // Remove join button
+            });
+        } catch (e) {
+            console.warn('Could not update original battle message:', e.message);
         }
     }
 
@@ -195,10 +188,37 @@ async function handleBattleJoin(interaction) {
     }
     await sendPrivateBriefing(player2User, battle, scenario, commander, 'player2');
 
-    await interaction.followUp({
-        content: 'Battle joined! Check your DMs for your private tactical briefing.',
-        ephemeral: true
-    });
+    // Initialize and start battle immediately
+    const { initializeBattle } = require('../game/battleInitializer');
+    const { sendInitialBriefings } = require('../game/briefingSystem');
+
+    try {
+        const initialState = await initializeBattle(battle, player1, commander);
+        
+        await battle.update({
+            battleState: initialState,
+            status: 'in_progress',
+            currentTurn: 1
+        });
+        
+        await battle.reload();
+        
+        await models.BattleTurn.create({
+            battleId: battle.id,
+            turnNumber: 1
+        });
+        
+        await sendInitialBriefings(battle, initialState, interaction.client);
+        
+        console.log('✅ Battle initialized and started');
+        
+    } catch (initError) {
+        console.error('Battle initialization failed:', initError);
+        await interaction.user.send(`❌ Error starting battle: ${initError.message}`);
+        if (player1User) {
+            await player1User.send(`❌ Error starting battle: ${initError.message}`);
+        }
+    }
 }
 
 async function handleReadyForBattle(interaction) {
