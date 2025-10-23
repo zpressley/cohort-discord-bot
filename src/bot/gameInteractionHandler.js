@@ -1,4 +1,5 @@
 const { EmbedBuilder, ActionRowBuilder, ButtonBuilder, ButtonStyle } = require('discord.js');
+const { Op } = require('sequelize');
 
 async function handleGameInteractions(interaction) {
     console.log('Game interaction received:', interaction.customId);
@@ -48,10 +49,14 @@ async function handleBattleJoin(interaction) {
     const { models } = require('../database/setup');
     const { BATTLE_SCENARIOS, sendPrivateBriefing } = require('./commands/create-game');
     
-    const battleId = interaction.customId.split('-')[2];
-    
+    // UUID has hyphens, so we need to extract everything after "join-battle-"
+    const battleId = interaction.customId.replace('join-battle-', '');
+    console.log('DEBUG - Attempting to join battle:', battleId);
+
     // Check if user can join this battle
     const commander = await models.Commander.findByPk(interaction.user.id);
+    console.log('DEBUG - Commander found:', !!commander);
+    console.log('DEBUG - Commander has culture:', !!commander?.culture);
     if (!commander || !commander.culture) {
         await interaction.reply({
             content: 'You need to build an army first! Use `/build-army` to create your forces.',
@@ -64,8 +69,22 @@ async function handleBattleJoin(interaction) {
     const battle = await models.Battle.findByPk(battleId, {
         include: ['player1', 'player2']
     });
-
+    // ADD DEBUG:
+    console.log('DEBUG - Battle found:', !!battle);
+    console.log('DEBUG - Battle status:', battle?.status);
+    console.log('DEBUG - Battle player2Id:', battle?.player2Id);
     if (!battle) {
+        // ADD MORE DEBUG:
+        const allBattles = await models.Battle.findAll({
+            where: { status: 'waiting_for_players' }
+        });
+        console.log('DEBUG - All waiting battles:', allBattles.map(b => ({
+            id: b.id,
+            status: b.status,
+            player1: b.player1Id,
+            player2: b.player2Id
+        })));
+        
         await interaction.reply({
             content: 'Battle not found or has been cancelled.',
             ephemeral: true
@@ -93,7 +112,7 @@ async function handleBattleJoin(interaction) {
     const userActiveBattle = await models.Battle.findOne({
         where: {
             status: ['waiting_for_players', 'army_building', 'in_progress'],
-            [models.sequelize.Op.or]: [
+            [Op.or]: [
                 { player1Id: interaction.user.id },
                 { player2Id: interaction.user.id }
             ]
