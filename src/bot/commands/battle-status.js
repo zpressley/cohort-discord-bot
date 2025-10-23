@@ -12,8 +12,8 @@ module.exports = {
     
     async execute(interaction) {
         try {
-            const { models } = require('../../database/setup');
-            const { generateBriefingEmbed, generateMapMessage } = require('../../game/briefingGenerator');
+const { models } = require('../../database/setup');
+            const { generateBriefingText, generateMapMessage } = require('../../game/briefingGenerator');
             
             // Find active battle
             const battle = await models.Battle.findOne({
@@ -44,35 +44,19 @@ module.exports = {
                 where: { commanderId: interaction.user.id }
             });
             
-            // Generate current briefing
-            const embed = await generateBriefingEmbed(
+// Generate current briefing
+            const text = await generateBriefingText(
                 battle.battleState,
                 playerSide,
                 commander,
                 eliteUnit,
                 battle.currentTurn
             );
-            
-            // Add battle metadata
-            embed.addFields({
-                name: '⏱️ Battle Info',
-                value: `**Scenario:** ${battle.scenario.replace('_', ' ')}\n` +
-                       `**Turn:** ${battle.currentTurn} / ${battle.maxTurns}\n` +
-                       `**Weather:** ${battle.weather.replace('_', ' ')}`,
-                inline: false
-            });
-            
+            const meta = `\n⏱️ Battle Info\nScenario: ${battle.scenario.replace('_', ' ')}\nTurn: ${battle.currentTurn} / ${battle.maxTurns}\nWeather: ${battle.weather.replace('_', ' ')}`;
             const map = generateMapMessage(battle.battleState, playerSide);
             
-            await interaction.reply({
-                embeds: [embed],
-                ephemeral: true
-            });
-            
-            await interaction.followUp({
-                content: map,
-                ephemeral: true
-            });
+            await interaction.reply({ content: text + '\n' + meta, ephemeral: true });
+            await interaction.followUp({ content: map, ephemeral: true });
             
         } catch (error) {
             console.error('Battle status command error:', error);

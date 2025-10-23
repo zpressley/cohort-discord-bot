@@ -270,38 +270,29 @@ async function createBattleWithScenario(interaction, scenarioKey, commander) {
 }
 
 async function sendPrivateBriefing(user, battle, scenario, commander, playerRole) {
-    const briefingEmbed = new EmbedBuilder()
-        .setColor(0x8B4513)
-        .setTitle(`🏺 War Council - ${scenario.name}`)
-        .setDescription(`*Commander of the ${commander.culture}*\n\n*Your officers gather in the command tent as reports arrive from the front lines...*`)
-        .addFields(
-            {
-                name: '🗺️ Battlefield Situation',
-                value: scenario.description,
-                inline: false
-            },
-            {
-                name: '🎯 Mission Objective',
-                value: scenario.objective,
-                inline: false
-            },
-            {
-                name: '⚡ Tactical Briefing',
-                value: `Weather conditions: **${battle.weather.replace('_', ' ')}**\nTerrain: **${scenario.terrain.replace('_', ' ')}**\nMaximum engagement time: **${scenario.maxTurns} turns**`,
-                inline: false
-            },
-            {
-                name: '📋 Status',
-                value: playerRole === 'player1' ? 
-                    'Waiting for an opponent to join the battle...' :
-                    'Battle is ready to begin! Prepare your strategy.',
-                inline: false
-            }
-        )
-        .setFooter({ text: 'You will receive detailed tactical briefings once both commanders are ready.' });
+    const text = [
+        `🏺 War Council — ${scenario.name}`,
+        `Commander of the ${commander.culture}`,
+        '',
+        '🗺️ Battlefield Situation',
+        scenario.description,
+        '',
+        '🎯 Mission Objective',
+        scenario.objective,
+        '',
+        '⚡ Tactical Briefing',
+        `Weather: ${battle.weather.replace('_', ' ')}`,
+        `Terrain: ${scenario.terrain.replace('_', ' ')}`,
+        `Maximum engagement time: ${scenario.maxTurns} turns`,
+        '',
+        '📋 Status',
+        playerRole === 'player1' ? 'Waiting for an opponent to join the battle...' : 'Battle is ready to begin! Prepare your strategy.',
+        '',
+        'You will receive detailed tactical briefings once both commanders are ready.'
+    ].join('\n');
 
     try {
-        await user.send({ embeds: [briefingEmbed] });
+        await user.send(text);
     } catch (error) {
         console.log(`Could not send DM to ${user.username} - DMs may be disabled`);
     }

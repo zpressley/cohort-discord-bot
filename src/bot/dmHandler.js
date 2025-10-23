@@ -45,9 +45,10 @@ async function handleDMCommand(message, client) {
         setTimeout(() => processedMessages.delete(message.id), 60000);
         
         const { models } = require('../database/setup');
-        const { isQuestion } = require('../ai/orderInterpreter');
         const { answerTacticalQuestion } = require('../ai/officerQA');
         const userId = message.author.id;
+
+        const isQuestion = (text) => /\?\s*$/.test(text.trim()) || /^(ask|should|do we|can we|what|where|why|how)\b/i.test(text.trim());
         
         const activeBattle = await models.Battle.findOne({
             where: {
@@ -309,7 +310,7 @@ async function processTurnResolution(battle, battleTurn, client) {
         if (turnResult.victory.achieved) {
             await endBattle(battle, turnResult.victory, client);
         } else {
-            await sendNextTurnBriefings(battle, turnResult.newBattleState, turnResult, client);
+            await sendNextTurnBriefings(battle, turnResult.newBattleState, client);
         }
         
     } catch (error) {
@@ -337,48 +338,42 @@ async function sendTurnResults(battle, battleTurn, narrative, turnResults, clien
 
         // Recent moves from diffs if present
         const diffs = battleTurn.aiAnalysis?.diffs || battleTurn.turnDiffs || {};
-        const recentMoves = [];
-        for (const m of (diffs.player1 || []).slice(0, 3)) recentMoves.push(`P1 ${m.unitId}: ${m.from}→${m.to}`);
-        for (const m of (diffs.player2 || []).slice(0, 3)) recentMoves.push(`P2 ${m.unitId}: ${m.from}→${m.to}`);
-        const moveSummary = recentMoves.join('\n').slice(0, 900) || '—';
+        const p1Moves = (diffs.player1 || []).slice(0, 5).map(m => `${m.unitId}: ${m.from}→${m.to}`);
+        const p2Moves = (diffs.player2 || []).slice(0, 5).map(m => `${m.unitId}: ${m.from}→${m.to}`);
+        const p1MoveSummary = p1Moves.join('\n').slice(0, 900) || '—';
+        const p2MoveSummary = p2Moves.join('\n').slice(0, 900) || '—';
         
-        // Send to player 1 (skip TEST users)
+// Send to player 1 (skip TEST users)
         if (!battle.player1Id.startsWith('TEST_')) {
-            const player1 = await client.users.fetch(battle.player1Id);
-            const p1Embed = new EmbedBuilder()
-                .setColor(0x8B0000)
-                .setTitle(`⚔️ Turn ${battleTurn.turnNumber} - Battle Resolution`)
-                .setDescription(narrativeText)
-                .addFields(
-                    { name: '📊 Turn Summary', value: `Moves: ${mvP1}\nCombats: ${combats}\nYour casualties: ${casP1}`.slice(0, 1024), inline: true },
-                    { name: '🎯 Intelligence', value: `Enemy units detected: ${turnResults.intelligence?.player1Detected || 0}`.slice(0, 1024), inline: true },
-                    { name: '📝 Combat', value: combatSummary.slice(0, 1024), inline: false },
-                    { name: '🔁 Recent Moves', value: moveSummary.slice(0, 1024), inline: false }
-                )
-                .setFooter({ text: `Awaiting orders for Turn ${battle.currentTurn}` });
-            
             const { queuedDM } = require('./utils/dmQueue');
-            queuedDM(battle.player1Id, { embeds: [p1Embed] }, client);
+            const shortLine = combats > 0
+                ? `Contact reported. Engagements: ${combats}.`
+                : (mvP1 > 0 ? 'Units maneuvered; no contact.' : 'Holding positions.');
+            const officerSummary = p1MoveSummary === '—' ? shortLine : p1MoveSummary;
+            const p1Text = [
+                `⚔️ Turn ${battleTurn.turnNumber} — Report`,
+                officerSummary,
+                '',
+                narrativeText
+            ].join('\n').slice(0, 4000);
+            queuedDM(battle.player1Id, p1Text, client);
             console.log('Results enqueued to player 1');
         }
         
         // Send to player 2 (skip TEST users)
         if (battle.player2Id && !battle.player2Id.startsWith('TEST_')) {
-            const player2 = await client.users.fetch(battle.player2Id);
-            const p2Embed = new EmbedBuilder()
-                .setColor(0x00008B)
-                .setTitle(`⚔️ Turn ${battleTurn.turnNumber} - Battle Resolution`)
-                .setDescription(narrativeText)
-                .addFields(
-                    { name: '📊 Turn Summary', value: `Moves: ${mvP2}\nCombats: ${combats}\nYour casualties: ${casP2}`.slice(0, 1024), inline: true },
-                    { name: '🎯 Intelligence', value: `Enemy units detected: ${turnResults.intelligence?.player2Detected || 0}`.slice(0, 1024), inline: true },
-                    { name: '📝 Combat', value: combatSummary.slice(0, 1024), inline: false },
-                    { name: '🔁 Recent Moves', value: moveSummary.slice(0, 1024), inline: false }
-                )
-                .setFooter({ text: `Awaiting orders for Turn ${battle.currentTurn}` });
-            
             const { queuedDM } = require('./utils/dmQueue');
-            queuedDM(battle.player2Id, { embeds: [p2Embed] }, client);
+            const shortLine2 = combats > 0
+                ? `Contact reported. Engagements: ${combats}.`
+                : (mvP2 > 0 ? 'Units maneuvered; no contact.' : 'Holding positions.');
+            const officerSummary2 = p2MoveSummary === '—' ? shortLine2 : p2MoveSummary;
+            const p2Text = [
+                `⚔️ Turn ${battleTurn.turnNumber} — Report`,
+                officerSummary2,
+                '',
+                narrativeText
+            ].join('\n').slice(0, 4000);
+            queuedDM(battle.player2Id, p2Text, client);
             console.log('Results enqueued to player 2');
         }
         

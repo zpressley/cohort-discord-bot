@@ -525,6 +525,89 @@ function generateEmojiMap(mapData) {
     return ascii;
 }
 
+/**
+ * Generate a 15x15 emoji viewport from a 20x20 map
+ * view = { top: number, left: number, width: 15, height: 15 }
+ */
+function generateEmojiMapViewport(mapData, view) {
+    const full = generateEmojiGrid(mapData);
+    const top = Math.max(0, Math.min(20 - (view.height || 15), view.top || 0));
+    const left = Math.max(0, Math.min(20 - (view.width || 15), view.left || 0));
+    const h = view.height || 15;
+    const w = view.width || 15;
+
+    // Column headers (top only), spaced to 2 columns per cell
+    const letters = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ'.slice(0, 20).split('');
+    const headerLetters = letters.slice(left, left + w).map(l => l + ' ').join('');
+
+    // Cell renderer: keep each cell width constant (2 cols). Emoji are double-width.
+    const isEmoji = (ch) => {
+        if (!ch) return false;
+        const cp = ch.codePointAt(0);
+        return cp >= 0x1F300 && cp <= 0x1FAFF; // general emoji ranges we use
+    };
+    const cellStr = (ch) => isEmoji(ch) ? ch + '' : ch + ' ';
+
+    let out = `   ${headerLetters}\n`;
+    out += '  ┌' + '─'.repeat(w * 2) + '┐\n';
+    for (let r = 0; r < h; r++) {
+        const rowNum = (top + r + 1).toString().padStart(2, ' ');
+        out += `${rowNum}│`;
+        const rowCells = full[top + r].slice(left, left + w).map(cellStr).join('');
+        out += rowCells;
+        out += '│\n';
+    }
+    out += '  └' + '─'.repeat(w * 2) + '┘\n';
+    out += 'Legend: 🔵 Yours, 🟠 Enemy, ~ river, = ford, ^ hill, T forest';
+    return out;
+}
+
+// Build full 20x20 emoji grid for reuse
+function generateEmojiGrid(mapData) {
+    const grid = Array(20).fill(null).map(() => Array(20).fill('.'));
+
+    // Terrain
+    if (mapData.terrain.river) {
+        mapData.terrain.river.forEach(c => { const p = parseCoord(c); if (p) grid[p.row][p.col] = '~'; });
+    }
+    if (mapData.terrain.fords) {
+        mapData.terrain.fords.forEach(f => { const c = typeof f === 'string' ? f : f.coord; const p = parseCoord(c); if (p) grid[p.row][p.col] = '='; });
+    }
+    if (mapData.terrain.hill) {
+        mapData.terrain.hill.forEach(c => { const p = parseCoord(c); if (p) grid[p.row][p.col] = '^'; });
+    }
+    if (mapData.terrain.marsh) {
+        mapData.terrain.marsh.forEach(c => { const p = parseCoord(c); if (p) grid[p.row][p.col] = '%'; });
+    }
+    if (mapData.terrain.road) {
+        mapData.terrain.road.forEach(c => { const p = parseCoord(c); if (p && grid[p.row][p.col] === '.') grid[p.row][p.col] = '#'; });
+    }
+    if (mapData.terrain.forest) {
+        mapData.terrain.forest.forEach(c => { const p = parseCoord(c); if (p) grid[p.row][p.col] = 'T'; });
+    }
+
+    // Units stacked preference
+    const tiles = new Map();
+    const addUnits = (arr, key) => {
+        (arr || []).forEach(u => {
+            if (!u.position) return;
+            const list = tiles.get(u.position) || { friendly: [], enemy: [] };
+            list[key].push(u);
+            tiles.set(u.position, list);
+        });
+    };
+    addUnits(mapData.player2Units, 'enemy');
+    addUnits(mapData.player1Units, 'friendly');
+
+    tiles.forEach((val, posStr) => {
+        const p = parseCoord(posStr); if (!p) return;
+        if (val.enemy.length > 0 && val.friendly.length === 0) grid[p.row][p.col] = getStackedEmoji(val.enemy, 'enemy');
+        if (val.friendly.length > 0) grid[p.row][p.col] = getStackedEmoji(val.friendly, 'friendly');
+    });
+
+    return grid;
+}
+
 module.exports = {
     parseCoord,
     coordToString,
@@ -542,5 +625,7 @@ module.exports = {
     getUnitEmoji,
     getStackedEmoji,
     getDirection,
-    UNIT_EMOJIS
+    UNIT_EMOJIS,
+    generateEmojiMapViewport,
+    generateEmojiGrid
 };

@@ -23,6 +23,7 @@ if (fs.existsSync(commandsPath)) {
 
 // Construct and prepare an instance of the REST module
 const rest = new REST().setToken(process.env.DISCORD_TOKEN);
+const CLIENT_ID = process.env.DISCORD_CLIENT_ID || process.env.CLIENT_ID;
 
 // Deploy commands
 (async () => {
@@ -32,7 +33,7 @@ const rest = new REST().setToken(process.env.DISCORD_TOKEN);
         // Register commands globally (takes up to 1 hour to propagate)
         // For faster testing, you can register to a specific guild instead
         const data = await rest.put(
-            Routes.applicationCommands(process.env.CLIENT_ID),
+Routes.applicationCommands(CLIENT_ID),
             { body: commands },
         );
 

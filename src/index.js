@@ -1,4 +1,4 @@
-const { Client, GatewayIntentBits, Events } = require('discord.js');
+const { Client, GatewayIntentBits, Events, Partials } = require('discord.js');
 const { setupDatabase } = require('./database/setup');
 const { loadCommands } = require('./bot/commandLoader');
 const { initializeAI } = require('./ai/aiManager');
@@ -12,7 +12,8 @@ const client = new Client({
         GatewayIntentBits.MessageContent,
         GatewayIntentBits.GuildMessageReactions,
         GatewayIntentBits.DirectMessages
-    ]
+    ],
+    partials: [Partials.Channel]
 });
 
 // Store commands in client for easy access
@@ -68,6 +69,18 @@ client.once(Events.ClientReady, async (readyClient) => {
 client.on(Events.InteractionCreate, async (interaction) => {
     const { handle } = require('./bot/interactionRouter');
     await handle(interaction, client);
+});
+
+// Handle Direct Message orders (DMs)
+client.on(Events.MessageCreate, async (message) => {
+    try {
+        // Only handle DMs from users (not in guilds, not bots)
+        if (message.guild || message.author.bot) return;
+        const { handleDMCommand } = require('./bot/dmHandler');
+        await handleDMCommand(message, client);
+    } catch (e) {
+        console.error('DM handling error:', e);
+    }
 });
 
 // Error handling

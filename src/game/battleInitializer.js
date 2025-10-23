@@ -28,6 +28,34 @@ async function initializeBattle(battle, player1Commander, player2Commander) {
         throw new Error('Player 2 has not built an army');
     }
     
+    // Ensure a cultural elite unit is present for each side (≈80 warriors)
+    try {
+        const { getEliteUnitForCulture } = require('./eliteTemplates');
+        const { getAllWeapons, TROOP_QUALITY } = require('./armyData');
+        const allWeapons = getAllWeapons();
+        const eliteSize = 80;
+
+        const normalize = (ac) => (typeof ac === 'string' ? JSON.parse(ac) : ac) || { units: [] };
+        player1Commander.armyComposition = normalize(player1Commander.armyComposition);
+        player2Commander.armyComposition = normalize(player2Commander.armyComposition);
+
+        if (!Array.isArray(player1Commander.armyComposition.units)) player1Commander.armyComposition.units = [];
+        if (!Array.isArray(player2Commander.armyComposition.units)) player2Commander.armyComposition.units = [];
+
+        const hasElite1 = player1Commander.armyComposition.units.some(u => u && u.isElite);
+        if (!hasElite1) {
+            const elite = getEliteUnitForCulture(player1Commander.culture, eliteSize, allWeapons, TROOP_QUALITY);
+            if (elite) player1Commander.armyComposition.units.unshift(elite);
+        }
+        const hasElite2 = player2Commander.armyComposition.units.some(u => u && u.isElite);
+        if (!hasElite2) {
+            const elite = getEliteUnitForCulture(player2Commander.culture, eliteSize, allWeapons, TROOP_QUALITY);
+            if (elite) player2Commander.armyComposition.units.unshift(elite);
+        }
+    } catch (e) {
+        console.warn('Elite unit injection skipped:', e.message);
+    }
+
     // Deploy units to starting positions
     const p1Units = deployUnitsToStartingPositions(
         player1Commander.armyComposition,
@@ -86,6 +114,17 @@ async function initializeBattle(battle, player1Commander, player2Commander) {
         objectives: parseObjectives(battle.victoryConditions)
     };
     
+    // Compute initial visibility so each player can see their own forces and any spotted enemies
+    try {
+        const { calculateVisibility } = require('./fogOfWar');
+        const p1Vis = calculateVisibility(battleState.player1.unitPositions, battleState.player2.unitPositions, map.terrain, battle.weather || 'clear');
+        const p2Vis = calculateVisibility(battleState.player2.unitPositions, battleState.player1.unitPositions, map.terrain, battle.weather || 'clear');
+        battleState.player1.visibleEnemyPositions = p1Vis.visibleEnemyPositions;
+        battleState.player2.visibleEnemyPositions = p2Vis.visibleEnemyPositions;
+    } catch (e) {
+        console.warn('Initial visibility calculation failed:', e.message);
+    }
+
     console.log('✅ Battle state initialized');
     
     return battleState;
