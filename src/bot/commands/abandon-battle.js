@@ -22,7 +22,7 @@ module.exports = {
                         { player2Id: interaction.user.id }
                     ],
                     status: {
-                        [Op.in]: ['waiting_for_players', 'in_progress']
+                        [Op.in]: ['waiting_for_players', 'army_building', 'in_progress']
                     }
                 }
             });

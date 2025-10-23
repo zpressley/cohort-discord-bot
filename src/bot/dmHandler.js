@@ -1,6 +1,6 @@
 // src/bot/dmHandler.js
 // Handle Direct Messages for Battle Commands
-// 10:47
+// 10/23/25 - 1pm
 
 const { EmbedBuilder } = require('discord.js');
 const { Op } = require('sequelize');
@@ -153,7 +153,6 @@ async function processPlayerOrder(message, battle, playerId, playerSide, client)
             await message.reply(confirmation);
         }
         
-        await message.reply(confirmation);
         
         // Simulation mode: process without committing turn/state
         if (simulate) {
@@ -190,6 +189,13 @@ async function processPlayerOrder(message, battle, playerId, playerSide, client)
         // Check if both players have submitted orders
         const bothReady = battleTurn.player1Command && battleTurn.player2Command;
         
+        // Right before: if (bothReady && !battleTurn.aiResolution) {
+        console.log('DEBUG - Turn resolution check:');
+        console.log('  bothReady:', bothReady);
+        console.log('  p1Command:', battleTurn.player1Command);
+        console.log('  p2Command:', battleTurn.player2Command);
+        console.log('  aiResolution:', battleTurn.aiResolution);
+        console.log('  Will resolve?', bothReady && !battleTurn.aiResolution);
         if (bothReady && !battleTurn.aiResolution) {
             console.log(`🎲 Both players ready for Turn ${battle.currentTurn} - Battle ${battle.id}`);
             await processTurnResolution(battle, battleTurn, client);
