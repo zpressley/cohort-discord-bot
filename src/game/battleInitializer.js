@@ -31,13 +31,13 @@ async function initializeBattle(battle, player1Commander, player2Commander) {
     // Deploy units to starting positions
     const p1Units = deployUnitsToStartingPositions(
         player1Commander.armyComposition,
-        map.startingPositions.player1,
+        map.deployment.north.coords,
         'player1'
     );
-    
+
     const p2Units = deployUnitsToStartingPositions(
         player2Commander.armyComposition,
-        map.startingPositions.player2,
+        map.deployment.south.coords,
         'player2'
     );
     
