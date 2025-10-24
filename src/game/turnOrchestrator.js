@@ -156,7 +156,7 @@ async function processTurn(battle, player1Order, player2Order, map) {
                 };
             }
         }
-
+        
         // PHASE 3: Execute movements (existing code continues here)
         console.log('\n🚶 Phase 2: Processing movement...');
         const { partitionActions } = require('./engine/adapters/schemaAdapter');
@@ -200,8 +200,8 @@ async function processTurn(battle, player1Order, player2Order, map) {
             `${u.unitId} at ${u.position}`
         ));
         
-        // PHASE 2.5: Update commander positions
-        console.log('\n📍 Phase 2.5: Updating commander positions...');
+        // PHASE 3.5: Update commander positions
+        console.log('\n📍 Phase 3.5: Updating commander positions...');
         try {
             // Update P1 commanders
             for (const unit of movementResults.newPositions.player1) {
@@ -334,7 +334,58 @@ async function processTurn(battle, player1Order, player2Order, map) {
         } catch (e) {
             console.warn('Commander capture risk check failed:', e.message);
         }
-        
+        // PHASE 5.5: Check commander capture risk
+        console.log('\n⚠️ Phase 5.5: Checking commander status...');
+        try {
+            const { checkCommanderCaptureRisk } = require('./commandSystem/commanderManager');
+            
+            const captureEvents = [];
+            
+            // Check each player's units for commander risk
+            for (const unit of updatedPositions.player1) {
+                const risk = await checkCommanderCaptureRisk(
+                    battle.id,
+                    battle.player1Id,
+                    unit.unitId,
+                    unit.currentStrength,
+                    unit.maxStrength || unit.currentStrength
+                );
+                if (risk) {
+                    captureEvents.push({ 
+                        player: 'player1', 
+                        commander: risk,
+                        unit: unit 
+                    });
+                }
+            }
+            
+            for (const unit of updatedPositions.player2) {
+                const risk = await checkCommanderCaptureRisk(
+                    battle.id,
+                    battle.player2Id,
+                    unit.unitId,
+                    unit.currentStrength,
+                    unit.maxStrength || unit.currentStrength
+                );
+                if (risk) {
+                    captureEvents.push({ 
+                        player: 'player2', 
+                        commander: risk,
+                        unit: unit 
+                    });
+                }
+            }
+            
+            if (captureEvents.length > 0) {
+                console.log(`  🚨 ${captureEvents.length} commander(s) at risk of capture!`);
+                // TODO: Trigger player decision prompt via Discord
+                // For now, store in turn results for later handling
+                turnResults.commanderAtRisk = captureEvents;
+            }
+        } catch (err) {
+            console.warn('  Commander capture check failed:', err.message);
+        }
+
         // PHASE 6: Check victory conditions
         console.log('\n🏆 Phase 6: Checking victory conditions...');
         const victoryCheck = checkVictoryConditions(
@@ -447,11 +498,12 @@ function applyCasualties(positions, combatResults) {
         console.log(`\n  Processing combat ${idx + 1}/${combatResults.length}:`);
         
         // Extract unit IDs from combat engagement context
-        const attackerUnitId = combat.attacker?.unit?.unitId;
-        const defenderUnitId = combat.defender?.unit?.unitId;
+        const attackerUnitId = combat.attackerUnit?.unitId;
+        const defenderUnitId = combat.defenderUnit?.unitId;
         
         if (!attackerUnitId || !defenderUnitId) {
             console.error(`    ⚠️ Combat ${idx} missing unit IDs - skipping`);
+            console.error('    Combat structure:', JSON.stringify(combat, null, 2).slice(0, 300));
             return;
         }
         
@@ -463,32 +515,38 @@ function applyCasualties(positions, combatResults) {
         
         console.log(`    Sides: attacker in ${attackerSide}, defender in ${defenderSide}`);
         
+        // Extract total casualties from new structure
+        const attackerCasualties = combat.result?.casualties?.attacker?.total || 0;
+        const defenderCasualties = combat.result?.casualties?.defender?.total || 0;
+        
+        console.log(`    Casualties to apply: Attacker=${attackerCasualties}, Defender=${defenderCasualties}`);
+        
         // Apply attacker casualties by UNIT ID
-        const attackerIndex = updated[attackerSide].findIndex(u => u.unitId === attackerUnitId);
-        if (attackerIndex >= 0 && combat.result.casualties.attacker.length > 0) {
-            const totalCasualties = combat.result.casualties.attacker.reduce(
-                (sum, cas) => sum + (cas.casualties || 0), 0
-            );
-            
-            const before = updated[attackerSide][attackerIndex].currentStrength;
-            updated[attackerSide][attackerIndex].currentStrength -= totalCasualties;
-            const after = updated[attackerSide][attackerIndex].currentStrength;
-            
-            console.log(`    ${attackerUnitId}: ${before} → ${after} (-${totalCasualties})`);
+        if (attackerCasualties > 0) {
+            const attackerIndex = updated[attackerSide].findIndex(u => u.unitId === attackerUnitId);
+            if (attackerIndex >= 0) {
+                const before = updated[attackerSide][attackerIndex].currentStrength;
+                updated[attackerSide][attackerIndex].currentStrength = Math.max(0, before - attackerCasualties);
+                const after = updated[attackerSide][attackerIndex].currentStrength;
+                
+                console.log(`    ${attackerUnitId}: ${before} → ${after} (-${attackerCasualties})`);
+            } else {
+                console.warn(`    ⚠️ Attacker ${attackerUnitId} not found in ${attackerSide}`);
+            }
         }
         
         // Apply defender casualties by UNIT ID
-        const defenderIndex = updated[defenderSide].findIndex(u => u.unitId === defenderUnitId);
-        if (defenderIndex >= 0 && combat.result.casualties.defender.length > 0) {
-            const totalCasualties = combat.result.casualties.defender.reduce(
-                (sum, cas) => sum + (cas.casualties || 0), 0
-            );
-            
-            const before = updated[defenderSide][defenderIndex].currentStrength;
-            updated[defenderSide][defenderIndex].currentStrength -= totalCasualties;
-            const after = updated[defenderSide][defenderIndex].currentStrength;
-            
-            console.log(`    ${defenderUnitId}: ${before} → ${after} (-${totalCasualties})`);
+        if (defenderCasualties > 0) {
+            const defenderIndex = updated[defenderSide].findIndex(u => u.unitId === defenderUnitId);
+            if (defenderIndex >= 0) {
+                const before = updated[defenderSide][defenderIndex].currentStrength;
+                updated[defenderSide][defenderIndex].currentStrength = Math.max(0, before - defenderCasualties);
+                const after = updated[defenderSide][defenderIndex].currentStrength;
+                
+                console.log(`    ${defenderUnitId}: ${before} → ${after} (-${defenderCasualties})`);
+            } else {
+                console.warn(`    ⚠️ Defender ${defenderUnitId} not found in ${defenderSide}`);
+            }
         }
     });
 

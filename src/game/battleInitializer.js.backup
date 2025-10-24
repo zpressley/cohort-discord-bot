@@ -1,6 +1,6 @@
 // src/game/battleInitializer.js
 // Initialize battles with proper unit deployment and state setup
-// Version: 1.0.1 - Fixed commander creation order
+// Version: 1.0.0
 
 const { RIVER_CROSSING_MAP } = require('./maps/riverCrossing');
 
@@ -34,24 +34,19 @@ async function initializeBattle(battle, player1Commander, player2Commander) {
         const { getAllWeapons, TROOP_QUALITY } = require('./armyData');
         const allWeapons = getAllWeapons();
         const eliteSize = 80;
-        
+
         const normalize = (ac) => (typeof ac === 'string' ? JSON.parse(ac) : ac) || { units: [] };
         player1Commander.armyComposition = normalize(player1Commander.armyComposition);
         player2Commander.armyComposition = normalize(player2Commander.armyComposition);
-        
-        if (!Array.isArray(player1Commander.armyComposition.units)) {
-            player1Commander.armyComposition.units = [];
-        }
-        if (!Array.isArray(player2Commander.armyComposition.units)) {
-            player2Commander.armyComposition.units = [];
-        }
-        
+
+        if (!Array.isArray(player1Commander.armyComposition.units)) player1Commander.armyComposition.units = [];
+        if (!Array.isArray(player2Commander.armyComposition.units)) player2Commander.armyComposition.units = [];
+
         const hasElite1 = player1Commander.armyComposition.units.some(u => u && u.isElite);
         if (!hasElite1) {
             const elite = getEliteUnitForCulture(player1Commander.culture, eliteSize, allWeapons, TROOP_QUALITY);
             if (elite) player1Commander.armyComposition.units.unshift(elite);
         }
-        
         const hasElite2 = player2Commander.armyComposition.units.some(u => u && u.isElite);
         if (!hasElite2) {
             const elite = getEliteUnitForCulture(player2Commander.culture, eliteSize, allWeapons, TROOP_QUALITY);
@@ -60,20 +55,46 @@ async function initializeBattle(battle, player1Commander, player2Commander) {
     } catch (e) {
         console.warn('Elite unit injection skipped:', e.message);
     }
-    
+
     // Deploy units to starting positions
     const p1Units = deployUnitsToStartingPositions(
         player1Commander.armyComposition,
         map.deployment.north.coords,
         'player1'
     );
-    
+
     const p2Units = deployUnitsToStartingPositions(
         player2Commander.armyComposition,
         map.deployment.south.coords,
         'player2'
     );
     
+    // After battle is created and initial positions are set
+    const { createBattleCommander } = require('./commandSystem/commanderManager');
+
+    const p1Elite = battleState.player1.unitPositions.find(u => 
+        u.isElite || u.unitId.includes('elite')
+    );
+    const p2Elite = battleState.player2.unitPositions.find(u => 
+        u.isElite || u.unitId.includes('elite')
+    );
+
+    // Create commanders
+    await createBattleCommander(
+        battle.id,
+        player1Id,
+        BattleState.player1.culture,
+        p1Elite?.unitId || initialBattleState.player1.unitPositions[0]?.unitId,
+        p1Elite?.position || initialBattleState.player1.unitPositions[0]?.position
+    );
+
+    await createBattleCommander(
+        battle.id,
+        player2Id,
+        BattleState.player2.culture,
+        p2Elite?.unitId || initialBattleState.player2.unitPositions[0]?.unitId,
+        p2Elite?.position || initialBattleState.player2.unitPositions[0]?.position
+    );
     console.log(`  Deployed: P1 ${p1Units.length} units, P2 ${p2Units.length} units`);
     
     // Initialize complete battle state
@@ -90,7 +111,7 @@ async function initializeBattle(battle, player1Commander, player2Commander) {
             army: player1Commander.armyComposition,
             unitPositions: p1Units,
             commander: {
-                position: p1Units[0].position, // Start with first unit (usually elite)
+                position: p1Units[0].position, // Start with elite unit
                 attachedTo: p1Units[0].unitId,
                 status: 'active'
             },
@@ -122,62 +143,15 @@ async function initializeBattle(battle, player1Commander, player2Commander) {
     // Compute initial visibility so each player can see their own forces and any spotted enemies
     try {
         const { calculateVisibility } = require('./fogOfWar');
-        const p1Vis = calculateVisibility(
-            battleState.player1.unitPositions, 
-            battleState.player2.unitPositions, 
-            map.terrain, 
-            battle.weather || 'clear'
-        );
-        const p2Vis = calculateVisibility(
-            battleState.player2.unitPositions, 
-            battleState.player1.unitPositions, 
-            map.terrain, 
-            battle.weather || 'clear'
-        );
+        const p1Vis = calculateVisibility(battleState.player1.unitPositions, battleState.player2.unitPositions, map.terrain, battle.weather || 'clear');
+        const p2Vis = calculateVisibility(battleState.player2.unitPositions, battleState.player1.unitPositions, map.terrain, battle.weather || 'clear');
         battleState.player1.visibleEnemyPositions = p1Vis.visibleEnemyPositions;
         battleState.player2.visibleEnemyPositions = p2Vis.visibleEnemyPositions;
     } catch (e) {
         console.warn('Initial visibility calculation failed:', e.message);
     }
-    
+
     console.log('✅ Battle state initialized');
-    
-    // Create battle commanders in database (AFTER battleState is built)
-    try {
-        const { createBattleCommander } = require('./commandSystem/commanderManager');
-        
-        // Find elite units (first unit is usually elite due to unshift above)
-        const p1Elite = battleState.player1.unitPositions.find(u => 
-            u.isElite || u.unitId.includes('elite')
-        ) || battleState.player1.unitPositions[0];
-        
-        const p2Elite = battleState.player2.unitPositions.find(u => 
-            u.isElite || u.unitId.includes('elite')
-        ) || battleState.player2.unitPositions[0];
-        
-        // Create P1 commander in database
-        await createBattleCommander(
-            battle.id,
-            battle.player1Id,
-            battleState.player1.culture,
-            p1Elite.unitId,
-            p1Elite.position
-        );
-        
-        // Create P2 commander in database
-        await createBattleCommander(
-            battle.id,
-            battle.player2Id,
-            battleState.player2.culture,
-            p2Elite.unitId,
-            p2Elite.position
-        );
-        
-        console.log('✅ Battle commanders created in database');
-    } catch (err) {
-        console.warn('⚠️ Commander creation failed:', err.message);
-        // Continue anyway - in-memory commander state exists in battleState
-    }
     
     return battleState;
 }
@@ -227,13 +201,9 @@ function deployUnitsToStartingPositions(armyComposition, startingZone, side) {
             position: position,
             side: side,
             
-            // Type - use both fields for compatibility
-            type: unit.type || unit.unitType || 'infantry',
-            unitType: unit.unitType || unit.type || 'infantry',
-            
             // Strength
-            currentStrength: unit.quality?.size || 100,
-            maxStrength: unit.quality?.size || 100,
+            currentStrength: unit.quality?.size || unit.currentStrength || 100,
+            maxStrength: unit.quality?.size || unit.maxStrength || 100,
             
             // Equipment (preserve original structure from army builder)
             primaryWeapon: unit.primaryWeapon,
@@ -246,7 +216,8 @@ function deployUnitsToStartingPositions(armyComposition, startingZone, side) {
             qualityType: unit.qualityType || 'professional',
             mounted: unit.mounted || false,
             hasRanged: isRangedUnit(unit.primaryWeapon),
-            isElite: unit.isElite || false,
+            isElite: !!unit.isElite,
+            eliteName: unit.eliteName || undefined,
             
             // Movement state
             movementRemaining: unit.mounted ? 5 : 3,
@@ -280,8 +251,7 @@ function isRangedUnit(primaryWeapon) {
     
     const rangedWeapons = [
         'Composite Bow', 'Self Bow', 'Crossbow', 'Han Chinese Crossbow',
-        'Self-Bow', // Handle hyphenated versions
-        'Sling', 'Javelin', 'Heavy Javelin', 'Light Javelin', 'Roman Pilum',
+        'Sling', 'Javelin', 'Heavy Javelin', 'Roman Pilum',
         'Throwing Axe', 'Throwing Spear'
     ];
     
