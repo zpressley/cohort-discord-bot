@@ -67,7 +67,7 @@ async function generateBriefingEmbed(battleState, playerSide, commander, eliteUn
 /**
  * Generate ASCII map separately (as code block message)
  */
-function generateMapMessage(battleState, playerSide) {
+function generateMapMessage(battleState, playerSide, view = 'default') {
     const playerData = battleState[playerSide] || {};
 
     const friendlyUnits = Array.isArray(playerData.unitPositions) ? playerData.unitPositions : [];
@@ -85,14 +85,30 @@ function generateMapMessage(battleState, playerSide) {
         player2Units: visibleEnemyUnits
     };
 
-    // Viewport follows commander (default)
-    const commanderPos = playerData?.commander?.position || friendlyUnits[0]?.position || 'K10';
+    // Viewport based on preference
     const { parseCoord, generateEmojiMapViewport } = require('./maps/mapUtils');
-    const p = parseCoord(commanderPos) || { row: 9, col: 9 };
-    const top = Math.max(0, Math.min(20 - 15, p.row - Math.floor(15 / 2)));
-    const left = Math.max(0, Math.min(20 - 15, p.col - Math.floor(15 / 2)));
+    const GRID = 20, H = 15, W = 15;
+    function clamp(v, lo, hi) { return Math.max(lo, Math.min(hi, v)); }
 
-    const mapView = generateEmojiMapViewport(mapData, { top, left, width: 15, height: 15 });
+    let top = 0, left = 0;
+    if (view === 'center') {
+        top = Math.floor((GRID - H) / 2); left = Math.floor((GRID - W) / 2);
+    } else if (view === 'nw') { top = 0; left = 0; }
+    else if (view === 'ne') { top = 0; left = GRID - W; }
+    else if (view === 'sw') { top = GRID - H; left = 0; }
+    else if (view === 'se') { top = GRID - H; left = GRID - W; }
+    else { // default follow commander
+        const commanderPos = playerData?.commander?.position || friendlyUnits[0]?.position || 'K10';
+        const p = parseCoord(commanderPos) || { row: 9, col: 9 };
+        top = clamp(p.row - Math.floor(H / 2), 0, GRID - H);
+        left = clamp(p.col - Math.floor(W / 2), 0, GRID - W);
+    }
+
+    // Build overlays: X for intel older than 1 turn
+    const overlays = Array.isArray(playerData.intelMemory)
+      ? playerData.intelMemory.filter(e => (battleState.currentTurn - (e.lastSeenTurn || 0)) >= 2).map(e => e.position)
+      : [];
+    const mapView = generateEmojiMapViewport(mapData, { top, left, width: W, height: H }, overlays);
     return `**MAP:**\n\`\`\`\n${mapView}\n\`\`\``;
 }
 
@@ -100,24 +116,34 @@ function generateMapMessage(battleState, playerSide) {
  * Generate intelligence report from visibility data
  */
 function generateIntelligenceReport(playerData, battleState) {
-    const visibleEnemies = playerData.visibleEnemyPositions || [];
-    
-    if (visibleEnemies.length === 0) {
-        return '👁️ **No enemy contact**\n' +
-               'No enemy forces detected. They may be beyond visual range or concealed.';
+    const mem = Array.isArray(playerData.intelMemory) ? playerData.intelMemory : [];
+    const friendlyPos = playerData.unitPositions?.[0]?.position;
+
+    if (mem.length === 0) {
+        return '👁️ No enemy contact';
     }
-    
-    const reports = visibleEnemies.map(enemy => {
-        const friendlyPos = playerData.unitPositions[0]?.position;
-        const distance = friendlyPos ? calculateDistance(friendlyPos, enemy.position) : '?';
-        
-        return `👁️ **Enemy Spotted at ${enemy.position}**\n` +
-               `   Distance: ${distance} tiles\n` +
-               `   Estimated: ~${enemy.estimatedStrength || 100} troops\n` +
-               `   Confidence: ${enemy.confidence || 'MEDIUM'}`;
-    });
-    
-    return reports.join('\n\n');
+
+    const lines = mem
+      .sort((a,b) => (b.lastSeenTurn||0) - (a.lastSeenTurn||0))
+      .slice(0, 8) // keep tight
+      .map(entry => {
+        const age = (battleState.currentTurn || 0) - (entry.lastSeenTurn || 0);
+        const posPhrase = age === 0 ? 'at' : age === 1 ? 'last seen at' : 'last known at';
+        const terrain = getTerrainAtPosition(battleState.map?.terrain, entry.position);
+        const dist = friendlyPos ? calculateDistance(friendlyPos, entry.position) : '?';
+        const emoji = entry.unitClass === 'cavalry' ? '🟠' : '🟧';
+        const detail = (entry.detailLevel||'low').toUpperCase();
+        const posConf = age === 0 ? 'IN SIGHT' : (age === 1 ? 'RECENT' : 'STALE');
+        // strength text
+        let strengthTxt = 'strength unknown';
+        if (entry.detailLevel === 'high' && typeof entry.estimatedStrength === 'number') strengthTxt = `${entry.estimatedStrength} men`;
+        else if (entry.detailLevel === 'medium' && typeof entry.estimatedStrength === 'number') strengthTxt = `≈${entry.estimatedStrength}`;
+        else if (entry.detailLevel === 'low') strengthTxt = 'size unclear';
+        const unitLabel = entry.unitClass === 'cavalry' ? 'Horsemen' : (entry.unitClass === 'infantry' ? 'Infantry' : 'Forces');
+        return `${emoji} Enemy ${unitLabel} — ${strengthTxt} — ${posPhrase} ${entry.position} (${terrain}); Detail ${detail}, Pos ${posConf}`;
+      });
+
+    return lines.join('\n');
 }
 
 /**

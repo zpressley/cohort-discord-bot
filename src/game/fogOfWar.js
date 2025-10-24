@@ -5,15 +5,15 @@ const { calculateEuclideanDistance } = require('./maps/mapUtils');
 
 const DETECTION_RANGES = {
     // Base spotting (clear weather, ground level)
-    standard: 8,      // 400m - can see movement
-    scouts: 12,       // 600m - trained observers
-    elevated: 4,      // +200m bonus from hills
+    standard: 11,     // 550m - movement detectable at long range (low confidence)
+    scouts: 13,       // scouts see slightly farther
+    elevated: 2,      // modest hill bonus to align with 50m tiles
     
     // Identification threshold (tell unit type)
-    identifyDistance: 5,  // 250m
+    identifyDistance: 9,   // 450m → medium confidence (5–9 tiles)
     
     // Detail threshold (exact numbers, equipment)
-    detailDistance: 3,    // 150m
+    detailDistance: 4,     // 200m → high confidence (≤4 tiles)
     
     // Weather penalties (apply to ALL ranges)
     weatherModifiers: {

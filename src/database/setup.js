@@ -53,6 +53,7 @@ async function setupDatabase() {
             // Existing database with data - minimal schema ensure (017)
             console.log('📂 Using existing database (no sync)...');
             await ensureBattleSchema();
+            await ensureCommanderSchema();
         }
         
         console.log('✅ Database tables ready.');
@@ -81,6 +82,21 @@ async function ensureBattleSchema() {
         }
     } catch (e) {
         console.warn('Schema ensure skipped or failed:', e.message);
+    }
+}
+
+async function ensureCommanderSchema() {
+    try {
+        const [rows] = await sequelize.query("PRAGMA table_info('Commanders')");
+        const cols = new Set(rows.map(r => r.name));
+        const toAdd = [];
+        if (!cols.has('preferences')) toAdd.push("ALTER TABLE Commanders ADD COLUMN preferences TEXT");
+        for (const sql of toAdd) {
+            console.log('🛠️ Applying migration:', sql);
+            await sequelize.query(sql);
+        }
+    } catch (e) {
+        console.warn('Commander schema ensure skipped or failed:', e.message);
     }
 }
 

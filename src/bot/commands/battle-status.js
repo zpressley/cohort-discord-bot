@@ -2,7 +2,7 @@
 // Check current battle status and tactical situation
 // Version: 1.0.0
 
-const { SlashCommandBuilder, EmbedBuilder } = require('discord.js');
+const { SlashCommandBuilder, EmbedBuilder, MessageFlags } = require('discord.js');
 const { Op } = require('sequelize');
 
 module.exports = {
@@ -30,7 +30,7 @@ const { models } = require('../../database/setup');
                 await interaction.reply({
                     content: '📋 **No Active Battle**\n\nYou are not currently in an active battle.\n\n' +
                              'Use `/lobby` or `/create-game` to start a new battle!',
-                    ephemeral: true
+                    flags: MessageFlags.Ephemeral
                 });
                 return;
             }
@@ -53,16 +53,17 @@ const { models } = require('../../database/setup');
                 battle.currentTurn
             );
             const meta = `\n⏱️ Battle Info\nScenario: ${battle.scenario.replace('_', ' ')}\nTurn: ${battle.currentTurn} / ${battle.maxTurns}\nWeather: ${battle.weather.replace('_', ' ')}`;
-            const map = generateMapMessage(battle.battleState, playerSide);
+            const viewPref = (commander?.preferences && commander.preferences.mapView) || 'default';
+            const map = generateMapMessage(battle.battleState, playerSide, viewPref);
             
-            await interaction.reply({ content: text + '\n' + meta, ephemeral: true });
-            await interaction.followUp({ content: map, ephemeral: true });
+            await interaction.reply({ content: text + '\n' + meta, flags: MessageFlags.Ephemeral });
+            await interaction.followUp({ content: map, flags: MessageFlags.Ephemeral });
             
         } catch (error) {
             console.error('Battle status command error:', error);
             await interaction.reply({
                 content: '❌ Error retrieving battle status.',
-                ephemeral: true
+                flags: MessageFlags.Ephemeral
             });
         }
     }

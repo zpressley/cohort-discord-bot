@@ -529,8 +529,29 @@ function generateEmojiMap(mapData) {
  * Generate a 15x15 emoji viewport from a 20x20 map
  * view = { top: number, left: number, width: 15, height: 15 }
  */
-function generateEmojiMapViewport(mapData, view) {
+function generateEmojiMapViewport(mapData, view, overlays = []) {
     const full = generateEmojiGrid(mapData);
+
+    // Overlay last-known positions with 'X' if not currently showing a unit icon
+    try {
+        const unitEmojis = new Set([
+            UNIT_EMOJIS.friendly.infantry,
+            UNIT_EMOJIS.friendly.cavalry,
+            UNIT_EMOJIS.friendly.commander,
+            UNIT_EMOJIS.enemy.infantry,
+            UNIT_EMOJIS.enemy.cavalry,
+            UNIT_EMOJIS.enemy.commander
+        ]);
+        for (const pos of overlays || []) {
+            const p = parseCoord(pos);
+            if (!p) continue;
+            const current = full[p.row][p.col];
+            if (!unitEmojis.has(current)) {
+                full[p.row][p.col] = 'X';
+            }
+        }
+    } catch (_) {}
+
     const top = Math.max(0, Math.min(20 - (view.height || 15), view.top || 0));
     const left = Math.max(0, Math.min(20 - (view.width || 15), view.left || 0));
     const h = view.height || 15;
@@ -558,7 +579,7 @@ function generateEmojiMapViewport(mapData, view) {
         out += '│\n';
     }
     out += '  └' + '─'.repeat(w * 2) + '┘\n';
-    out += 'Legend: 🔵 Yours, 🟠 Enemy, ~ river, = ford, ^ hill, T forest';
+    out += 'Legend: 🔵 Yours, 🟠 Enemy, X last known, ~ river, = ford, ^ hill, T forest';
     return out;
 }
 

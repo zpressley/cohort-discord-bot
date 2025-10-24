@@ -178,8 +178,114 @@ ${context.combatResults || 'Battle continues with both sides holding position.'}
 *The commanders prepare their next moves as the ancient warfare continues...*`;
 }
 
+async function generateOfficerTurnSummary(context, aiProvider = 'auto') {
+    // Context: { culture, movesText, combats, casualties, detectedEnemies, tone }
+    try {
+        if (aiProvider === 'auto') aiProvider = (process.env.GROQ_API_KEY ? 'groq' : (process.env.OPENAI_API_KEY ? 'openai' : 'template'));
+        const CULTURE_VOICES = {
+            'Roman': 'Roman centurion: terse, disciplined, professional, battlefield commands, no flourish.',
+            'Celtic': 'Celtic champion: bold, spirited, boastful, poetic edge, but keep one sentence.',
+            'Han': 'Han Chinese general: formal, precise, strategic, measured diction.',
+            'Macedonian': 'Macedonian officer: confident, tactical, phalanx-minded.',
+            'Spartan': 'Spartan lochagos: laconic, minimal words, absolute resolve.',
+            'Sarmatian': 'Steppe cavalry officer: mobile, situational, succinct.',
+            'Berber': 'Desert raider: practical, terrain-aware, swift cadence.'
+        };
+        const culture = (context.culture || '').toLowerCase();
+        let voice = CULTURE_VOICES.Roman;
+        if (culture.includes('roman')) voice = CULTURE_VOICES.Roman;
+        else if (culture.includes('celt')) voice = CULTURE_VOICES.Celtic;
+        else if (culture.includes('han')) voice = CULTURE_VOICES.Han;
+        else if (culture.includes('macedon')) voice = CULTURE_VOICES.Macedonian;
+        else if (culture.includes('spartan')) voice = CULTURE_VOICES.Spartan;
+        else if (culture.includes('sarmatian')) voice = CULTURE_VOICES.Sarmatian;
+        else if (culture.includes('berber')) voice = CULTURE_VOICES.Berber;
+
+        const systemStyle = `You are a ${context.culture || 'Roman'} officer. ${voice} Reply in ONE short sentence (max 18 words), present tense, no emojis.`;
+        const userMsg = `Turn summary: moves=\n${context.movesText || 'none'}\ncombats=${context.combats||0}, casualties=${context.casualties||0}, enemiesDetected=${context.detectedEnemies||0}.`;
+
+        if (aiProvider === 'groq' && groq) {
+            const resp = await groq.chat.completions.create({
+                model: 'llama-3.1-8b-instant',
+                messages: [ { role: 'system', content: systemStyle }, { role: 'user', content: userMsg } ],
+                max_tokens: 50, temperature: 0.5
+            });
+            return resp.choices?.[0]?.message?.content?.trim();
+        }
+        if (aiProvider === 'openai' && openai) {
+            const resp = await openai.chat.completions.create({
+                model: 'gpt-4o-mini',
+                messages: [ { role: 'system', content: systemStyle }, { role: 'user', content: userMsg } ],
+                max_tokens: 40, temperature: 0.5
+            });
+            return resp.choices?.[0]?.message?.content?.trim();
+        }
+        // Template fallback
+        if ((context.combats||0) > 0) return 'Contact made; lines engaged and holding.';
+        if ((context.movesText||'').length > 0) return 'Units maneuvered to new positions; no contact reported.';
+        return 'Holding positions; scouts report nothing significant.';
+    } catch (e) {
+        console.warn('Officer summary AI failed:', e.message);
+        if ((context.combats||0) > 0) return 'Contact made; lines engaged and holding.';
+        if ((context.movesText||'').length > 0) return 'Units maneuvered to new positions; no contact reported.';
+        return 'Holding positions; scouts report nothing significant.';
+    }
+}
+
+async function generateOrderAcknowledgement(context, aiProvider = 'auto') {
+    // context: { culture, phrases }
+    try {
+        if (aiProvider === 'auto') aiProvider = (process.env.GROQ_API_KEY ? 'groq' : (process.env.OPENAI_API_KEY ? 'openai' : 'template'));
+        const CULTURE_VOICES = {
+            'Roman': 'Roman centurion: disciplined, professional, concise, first-person plural where fitting.',
+            'Celtic': 'Celtic champion: spirited, confident, plain words, one sentence.',
+            'Han': 'Han officer: formal, precise, one sentence.',
+            'Macedonian': 'Macedonian phalangarch: confident and tactical.',
+            'Spartan': 'Spartan: laconic, very short.',
+            'Sarmatian': 'Steppe rider: practical, direct.',
+            'Berber': 'Desert captain: terrain-aware, brisk.'
+        };
+        const culture = (context.culture || '').toLowerCase();
+        let voice = CULTURE_VOICES.Roman;
+        if (culture.includes('roman')) voice = CULTURE_VOICES.Roman;
+        else if (culture.includes('celt')) voice = CULTURE_VOICES.Celtic;
+        else if (culture.includes('han')) voice = CULTURE_VOICES.Han;
+        else if (culture.includes('macedon')) voice = CULTURE_VOICES.Macedonian;
+        else if (culture.includes('spartan')) voice = CULTURE_VOICES.Spartan;
+        else if (culture.includes('sarmatian')) voice = CULTURE_VOICES.Sarmatian;
+        else if (culture.includes('berber')) voice = CULTURE_VOICES.Berber;
+
+        const systemStyle = `You are an officer acknowledging orders. ${voice} Reply in ONE sentence, present tense, no emojis. Quote-style not needed, start directly.`;
+        const userMsg = `Orders summary: ${context.phrases}`;
+
+        if (aiProvider === 'groq' && groq) {
+            const resp = await groq.chat.completions.create({
+                model: 'llama-3.1-8b-instant',
+                messages: [ { role: 'system', content: systemStyle }, { role: 'user', content: userMsg } ],
+                max_tokens: 70, temperature: 0.5
+            });
+            return resp.choices?.[0]?.message?.content?.trim();
+        }
+        if (aiProvider === 'openai' && openai) {
+            const resp = await openai.chat.completions.create({
+                model: 'gpt-4o-mini',
+                messages: [ { role: 'system', content: systemStyle }, { role: 'user', content: userMsg } ],
+                max_tokens: 70, temperature: 0.5
+            });
+            return resp.choices?.[0]?.message?.content?.trim();
+        }
+        // Template fallback
+        return `Yes, sir: ${context.phrases}.`;
+    } catch (e) {
+        console.warn('Order acknowledgement AI failed:', e.message);
+        return `Yes, sir: ${context.phrases}.`;
+    }
+}
+
 module.exports = {
     initializeAI,
     generateBattleNarrative,
-    selectBestProvider
+    selectBestProvider,
+    generateOfficerTurnSummary,
+    generateOrderAcknowledgement
 };

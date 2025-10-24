@@ -81,8 +81,16 @@ function calculateTotalDefenseRating(force) {
         };
         
         
-        const unitDefense = calculateDefenseRating(combatUnit, {});
+        let unitDefense = calculateDefenseRating(combatUnit, {});
         
+        // Morale penalty for broken units
+        if (unit.isBroken || unit.status === 'broken') {
+            unitDefense = Math.max(0, Math.round(unitDefense * 0.5));
+        }
+        // Formation change vulnerability
+        if (unit.formationChanging && unit.formationChanging.remaining > 0) {
+            unitDefense = Math.max(0, unitDefense + (unit.formationChanging.penalty || -3));
+        }
         
         // Weight by unit size
         const unitSize = unit.quality?.size || 100;

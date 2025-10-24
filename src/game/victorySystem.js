@@ -15,6 +15,39 @@ const { EmbedBuilder } = require('discord.js');
 function checkVictoryConditions(positions, turnNumber, objectives, maxTurns = 12) {
     const p1Units = positions.player1 || [];
     const p2Units = positions.player2 || [];
+
+    // Objective control (VIC-002)
+    try {
+        if (objectives && Array.isArray(objectives.controlPoints)) {
+            const ctrl = objectives.controlPoints;
+            const within = (unit, cp) => {
+                const { parseCoord, calculateDistance } = require('./maps/mapUtils');
+                const d = calculateDistance(unit.position, cp.coord);
+                return d <= (cp.controlRadius || 0);
+            };
+            const p1Control = ctrl.filter(cp => p1Units.some(u => within(u, cp))).length;
+            const p2Control = ctrl.filter(cp => p2Units.some(u => within(u, cp))).length;
+            const majority = Math.floor(ctrl.length / 2) + 1;
+            if (p1Control >= majority) {
+                return {
+                    achieved: true,
+                    winner: 'player1',
+                    reason: 'objective_capture',
+                    description: `Controlled ${p1Control}/${ctrl.length} objectives`
+                };
+            }
+            if (p2Control >= majority) {
+                return {
+                    achieved: true,
+                    winner: 'player2',
+                    reason: 'objective_capture',
+                    description: `Controlled ${p2Control}/${ctrl.length} objectives`
+                };
+            }
+        }
+    } catch (e) {
+        console.warn('Objective control check failed:', e.message);
+    }
     
     // ANNIHILATION VICTORY - All units destroyed
     if (p1Units.length === 0) {

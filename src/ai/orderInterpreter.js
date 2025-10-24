@@ -139,14 +139,10 @@ async function interpretOrders(orderText, battleState, playerSide, map, battleCo
         culture: battleState[playerSide].culture
     };
     
-  const prompt = buildOrderInterpretationPrompt(orderText, context);
-  let aiResponse;
-  const AI_ENABLED = (process.env.AI_ENABLED || 'false').toLowerCase() === 'true';
-  if (AI_ENABLED) {
-    aiResponse = await callAIForOrderParsing(prompt, playerUnits);
-  } else {
-    aiResponse = { actions: simpleKeywordActions(orderText, playerUnits, map) };
-  }
+  const normalized = normalizeOrderText(orderText);
+  const prompt = buildOrderInterpretationPrompt(normalized, context);
+  // Always use deterministic parser (no external calls); it can handle multi-orders and targeting
+  const aiResponse = await callAIForOrderParsing(prompt, playerUnits);
 
   // Validate AI-suggested actions against rules
     const validatedActions = [];
@@ -321,6 +317,12 @@ Return ONLY valid JSON, no other text.`;
  */
 function determineTargetUnits(orderText, yourUnits) {
     const lowerOrder = orderText.toLowerCase();
+    // Leading coordinate implies the unit at that tile (e.g., "G14 move to I11")
+    const leadCoord = orderText.match(/^\s*([A-T]\d{1,2})\b/i)?.[1]?.toUpperCase();
+    if (leadCoord) {
+        const match = yourUnits.filter(u => (u.position || '').toUpperCase() === leadCoord);
+        if (match.length > 0) return match;
+    }
     
     console.log(`  👥 Targeting: `, { end: '' });
     
@@ -347,7 +349,10 @@ function determineTargetUnits(orderText, yourUnits) {
     }
     
     // Check for position-based "unit at X"
-    const posMatch = orderText.match(/unit at ([A-T]\d{1,2})/i);
+    // Accept variants like "unit at F11", "infantry at F11", or "at F11"
+    let posMatch = orderText.match(/(?:\b(?:unit|infantry|cavalry)\s+at\s+|\bat\s+)([A-T]\d{1,2})/i);
+    // Also support "H12 unit ..." phrasing
+    if (!posMatch) posMatch = orderText.match(/\b([A-T]\d{1,2})\b\s+unit\b/i);
     if (posMatch) {
         const pos = posMatch[1].toUpperCase();
         const filtered = yourUnits.filter(u => u.position.toUpperCase() === pos);
@@ -533,6 +538,25 @@ async function callAIForOrderParsing(prompt, realBattleUnits = null) {
         };
     }
     
+    // Hold/Stay targeted by coordinate (e.g., "J11 unit hold the ford")
+    const holdByCoord = orderText.match(/\b([A-T]\d{1,2})\b\s+unit\s+(hold|stay|wait)/i);
+    if (holdByCoord) {
+        const tile = holdByCoord[1].toUpperCase();
+        const filteredUnits = yourUnits.filter(u => (u.position || '').toUpperCase() === tile);
+        const actions = filteredUnits.map(unit => ({
+            type: 'move', // no-op, hold position
+            unitId: unit.unitId,
+            currentPosition: unit.position,
+            targetPosition: unit.position,
+            reasoning: 'Holding the ford'
+        }));
+        return {
+            actions,
+            validation: { isValid: true, errors: [], warnings: [] },
+            officerComment: `${filteredUnits.length} unit(s) holding at ${tile}.`
+        };
+    }
+
     // Check for position-filtered orders (e.g., "unit at F5 move to M5")
     const positionFilter = orderText.match(/unit at ([A-T]\d{1,2})/i);
     
@@ -559,7 +583,7 @@ async function callAIForOrderParsing(prompt, realBattleUnits = null) {
         let targetPosition = null;
         
         // Look for coordinate after filter
-        const destMatch = afterFilter.match(/\b([A-T]\d{1,2})\b/i);
+        const destMatch = afterFilter.replace(/\btot\b/gi,' to ').match(/\b([A-T]\d{1,2})\b/i);
         if (destMatch) {
             targetPosition = destMatch[1].toUpperCase();
             console.log(`  🎯 Destination: ${targetPosition}`);
@@ -611,6 +635,25 @@ async function callAIForOrderParsing(prompt, realBattleUnits = null) {
         };
     }
     
+    // Attack/Fire commands (e.g., "fire on enemy at J11", "attack the ford at J11")
+    const fireMatch = orderText.match(/\b(fire|shoot|loose|attack)\b.*?\bat\s+([A-T]\d{1,2})/i);
+    if (fireMatch) {
+        const targetPos = fireMatch[2].toUpperCase();
+        const actions = targetUnits.map(unit => ({
+            type: 'move', // move toward/onto target; combat engine handles ranged if applicable
+            unitId: unit.unitId,
+            currentPosition: unit.position,
+            targetPosition: targetPos,
+            modifier: { engage: true },
+            reasoning: `${fireMatch[1].toLowerCase()} at ${targetPos}`
+        }));
+        return {
+            actions,
+            validation: { isValid: true, errors: [], warnings: [] },
+            officerComment: `${targetUnits.length} unit(s) engaging at ${targetPos}.`
+        };
+    }
+
     // Direction-based movement
     let direction = null;
     if (lowerOrder.includes('south')) direction = 'south';
@@ -687,7 +730,7 @@ async function callAIForOrderParsing(prompt, realBattleUnits = null) {
 }
 
 function simpleKeywordActions(orderText, targetUnits, map) {
-  const lower = orderText.toLowerCase();
+  const lower = normalizeOrderText(orderText).toLowerCase();
   const actions = [];
   // coordinate match
   const coord = orderText.match(/\b([A-T]\d{1,2})\b/i)?.[1]?.toUpperCase();
@@ -753,6 +796,17 @@ function moveInDirection(fromCoord, direction, distance) {
     return coordToString({ row: newRow, col: newCol });
 }
 
+
+/**
+ * Normalize common typos and spacing in order text
+ */
+function normalizeOrderText(text) {
+  if (!text) return '';
+  return text
+    .replace(/\btot\b/gi, ' to ') // common typo
+    .replace(/\s+/g, ' ')
+    .trim();
+}
 
 /**
  * Generate default officer comment by culture

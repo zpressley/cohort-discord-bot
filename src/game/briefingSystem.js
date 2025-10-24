@@ -39,7 +39,8 @@ async function sendInitialBriefings(battle, battleState, client) {
 
             const { generateBriefingText, generateMapMessage } = require('./briefingGenerator');
             const briefingTextP1 = await generateBriefingText(battleState, 'player1', p1Commander, p1Elite, 1);
-            const mapP1 = generateMapMessage(battleState, 'player1');
+            const p1View = (p1Commander?.preferences && p1Commander.preferences.mapView) || 'default';
+            const mapP1 = generateMapMessage(battleState, 'player1', p1View);
 
             await player1.send(briefingTextP1);
             await player1.send(mapP1);
@@ -53,7 +54,8 @@ async function sendInitialBriefings(battle, battleState, client) {
 
             const { generateBriefingText, generateMapMessage } = require('./briefingGenerator');
             const briefingTextP2 = await generateBriefingText(battleState, 'player2', p2Commander, p2Elite, 1);
-            const mapP2 = generateMapMessage(battleState, 'player2');
+            const p2View = (p2Commander?.preferences && p2Commander.preferences.mapView) || 'default';
+            const mapP2 = generateMapMessage(battleState, 'player2', p2View);
 
             await player2.send(briefingTextP2);
             await player2.send(mapP2);
@@ -93,7 +95,8 @@ async function sendNextTurnBriefings(battle, battleState, client) {
             const player1 = await client.users.fetch(battle.player1Id);
             const { generateBriefingText, generateMapMessage } = require('./briefingGenerator');
             const p1Text = await generateBriefingText(battleState, 'player1', p1Commander, p1Elite, battle.currentTurn);
-            const p1Map = generateMapMessage(battleState, 'player1');
+            const p1View = (p1Commander?.preferences && p1Commander.preferences.mapView) || 'default';
+            const p1Map = generateMapMessage(battleState, 'player1', p1View);
             await player1.send(p1Text);
             await player1.send(p1Map);
         }
@@ -103,7 +106,8 @@ async function sendNextTurnBriefings(battle, battleState, client) {
             const player2 = await client.users.fetch(battle.player2Id);
             const { generateBriefingText, generateMapMessage } = require('./briefingGenerator');
             const p2Text = await generateBriefingText(battleState, 'player2', p2Commander, p2Elite, battle.currentTurn);
-            const p2Map = generateMapMessage(battleState, 'player2');
+            const p2View = (p2Commander?.preferences && p2Commander.preferences.mapView) || 'default';
+            const p2Map = generateMapMessage(battleState, 'player2', p2View);
             await player2.send(p2Text);
             await player2.send(p2Map);
         }

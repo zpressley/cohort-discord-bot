@@ -176,8 +176,8 @@ function deployUnitsToStartingPositions(armyComposition, startingZone, side) {
             side: side,
             
             // Strength
-            currentStrength: unit.quality?.size || 100,
-            maxStrength: unit.quality?.size || 100,
+            currentStrength: unit.quality?.size || unit.currentStrength || 100,
+            maxStrength: unit.quality?.size || unit.maxStrength || 100,
             
             // Equipment (preserve original structure from army builder)
             primaryWeapon: unit.primaryWeapon,
@@ -190,6 +190,8 @@ function deployUnitsToStartingPositions(armyComposition, startingZone, side) {
             qualityType: unit.qualityType || 'professional',
             mounted: unit.mounted || false,
             hasRanged: isRangedUnit(unit.primaryWeapon),
+            isElite: !!unit.isElite,
+            eliteName: unit.eliteName || undefined,
             
             // Movement state
             movementRemaining: unit.mounted ? 5 : 3,

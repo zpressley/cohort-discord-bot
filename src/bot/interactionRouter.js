@@ -1,5 +1,5 @@
 // src/bot/interactionRouter.js (current code-015)
-const { Events } = require('discord.js');
+const { Events, MessageFlags } = require('discord.js');
 
 async function handle(interaction, client) {
   try {
@@ -19,6 +19,10 @@ async function handle(interaction, client) {
         const { handleGameInteractions } = require('./gameInteractionHandler');
         return await handleGameInteractions(interaction);
       }
+      if (interaction.customId === 'map-view-select') {
+        const { handleSelect } = require('./commands/map');
+        return await handleSelect(interaction);
+      }
       const { handleArmyBuilderInteractions } = require('./armyInteractionHandler');
       return await handleArmyBuilderInteractions(interaction);
     }
@@ -27,6 +31,10 @@ async function handle(interaction, client) {
       if (interaction.customId.startsWith('lobby-')) {
         const { handleLobbyInteractions } = require('./lobbyInteractionHandler');
         return await handleLobbyInteractions(interaction);
+      }
+      if (interaction.customId.startsWith('commander-choice-')) {
+        const { handle } = require('./commands/commanderChoice');
+        return await handle(interaction);
       }
       if (interaction.customId === 'select-culture') {
         const { handleArmyInteractions } = require('./armyInteractionHandler');
@@ -58,9 +66,9 @@ async function handle(interaction, client) {
     console.error('Interaction router error:', error);
     const errorMessage = 'There was an error processing this interaction!';
     if (interaction.replied || interaction.deferred) {
-      await interaction.followUp({ content: errorMessage, ephemeral: true });
+      await interaction.followUp({ content: errorMessage, flags: MessageFlags.Ephemeral });
     } else {
-      await interaction.reply({ content: errorMessage, ephemeral: true });
+      await interaction.reply({ content: errorMessage, flags: MessageFlags.Ephemeral });
     }
   }
 }

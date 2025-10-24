@@ -1,0 +1,1446 @@
+# WARP Implementation Fixes - Cohort Discord Bot
+
+**Document Version:** 1.0  
+**Date:** January 2025  
+**Priority:** Critical path items first, then high-priority enhancements
+
+---
+
+## 🎯 Overview
+
+This document provides step-by-step instructions for fixing issues in the current WARP-assisted implementation. Each section includes:
+- **Problem Description** - What's wrong and why
+- **Files to Modify/Create** - Exact file paths
+- **Code Changes** - Complete function replacements (no snippets)
+- **Testing Strategy** - How to verify the fix works
+
+---
+
+## 🔴 CRITICAL PRIORITY FIXES
+
+These must be completed before the game is playable.
+
+---
+
+### FIX #1: Casualty Application Bug in turnOrchestrator.js
+
+**Problem:** Casualties are matched by position only, causing incorrect unit damage when multiple units occupy the same tile.
+
+**File:** `src/game/turnOrchestrator.js`
+
+**Line:** 148-180 (applyCasualties function)
+
+**Old Code:**
+```javascript
+function applyCasualties(positions, combatResults) {
+    const updated = {
+        player1: [...positions.player1],
+        player2: [...positions.player2]
+    };
+    
+    combatResults.forEach(combat => {
+        const attackerSide = combat.result.casualties.attacker[0]?.side || 'player1';
+        const defenderSide = attackerSide === 'player1' ? 'player2' : 'player1';
+        
+        // Apply attacker casualties
+        combat.result.casualties.attacker.forEach(cas => {
+            const unitIndex = updated[attackerSide].findIndex(u => 
+                u.position === combat.location  // BUG: matches by position only
+            );
+            if (unitIndex >= 0) {
+                updated[attackerSide][unitIndex].currentStrength -= cas.casualties;
+            }
+        });
+        
+        // Apply defender casualties
+        combat.result.casualties.defender.forEach(cas => {
+            const unitIndex = updated[defenderSide].findIndex(u => 
+                u.position === combat.location  // BUG: matches by position only
+            );
+            if (unitIndex >= 0) {
+                updated[defenderSide][unitIndex].currentStrength -= cas.casualties;
+            }
+        });
+    });
+    
+    // Remove destroyed units
+    updated.player1 = updated.player1.filter(u => u.currentStrength > 0);
+    updated.player2 = updated.player2.filter(u => u.currentStrength > 0);
+    
+    return updated;
+}
+```
+
+**New Code:**
+```javascript
+function applyCasualties(positions, combatResults) {
+    console.log('DEBUG applyCasualties INPUT:');
+    console.log('  positions.player1:', positions.player1?.length || 0);
+    console.log('  positions.player2:', positions.player2?.length || 0);
+    console.log('  combatResults:', combatResults.length);
+    
+    const updated = {
+        player1: [...positions.player1],
+        player2: [...positions.player2]
+    };
+    
+    combatResults.forEach((combat, idx) => {
+        console.log(`  Processing combat ${idx} at ${combat.location}`);
+        
+        // Extract unit IDs from combat context
+        const attackerUnitId = combat.attacker?.unit?.unitId;
+        const defenderUnitId = combat.defender?.unit?.unitId;
+        
+        if (!attackerUnitId || !defenderUnitId) {
+            console.warn(`  ⚠️ Combat ${idx} missing unit IDs, skipping`);
+            return;
+        }
+        
+        // Determine sides
+        const attackerSide = attackerUnitId.startsWith('player1') ? 'player1' : 'player2';
+        const defenderSide = attackerSide === 'player1' ? 'player2' : 'player1';
+        
+        // Apply attacker casualties
+        const attackerIndex = updated[attackerSide].findIndex(u => u.unitId === attackerUnitId);
+        if (attackerIndex >= 0 && combat.result.casualties.attacker.length > 0) {
+            const totalCasualties = combat.result.casualties.attacker.reduce(
+                (sum, cas) => sum + cas.casualties, 0
+            );
+            updated[attackerSide][attackerIndex].currentStrength -= totalCasualties;
+            console.log(`  Attacker ${attackerUnitId}: -${totalCasualties} casualties`);
+        }
+        
+        // Apply defender casualties
+        const defenderIndex = updated[defenderSide].findIndex(u => u.unitId === defenderUnitId);
+        if (defenderIndex >= 0 && combat.result.casualties.defender.length > 0) {
+            const totalCasualties = combat.result.casualties.defender.reduce(
+                (sum, cas) => sum + cas.casualties, 0
+            );
+            updated[defenderSide][defenderIndex].currentStrength -= totalCasualties;
+            console.log(`  Defender ${defenderUnitId}: -${totalCasualties} casualties`);
+        }
+    });
+
+    // Remove destroyed units (≤0 strength)
+    const p1Before = updated.player1.length;
+    const p2Before = updated.player2.length;
+    
+    updated.player1 = updated.player1.filter(u => u.currentStrength > 0);
+    updated.player2 = updated.player2.filter(u => u.currentStrength > 0);
+    
+    const p1Destroyed = p1Before - updated.player1.length;
+    const p2Destroyed = p2Before - updated.player2.length;
+    
+    if (p1Destroyed > 0) console.log(`  💀 Player 1: ${p1Destroyed} units destroyed`);
+    if (p2Destroyed > 0) console.log(`  💀 Player 2: ${p2Destroyed} units destroyed`);
+    
+    return updated;
+}
+```
+
+**Testing:**
+```bash
+node src/tests/balance/quickImprovedTest.js
+```
+Verify that casualties are applied to the correct units and multiple units at the same position are handled separately.
+
+---
+
+### FIX #2: Order Interpreter - Fix Unit Selection
+
+**Problem:** Order interpreter always selects first unit instead of matching unit type/name from player's order.
+
+**File:** `src/ai/orderInterpreter.js`
+
+**Line:** 113-180 (callAIForOrderParsing function)
+
+**Old Code:**
+```javascript
+async function callAIForOrderParsing(prompt) {
+    const yourUnits = JSON.parse(prompt.match(/Your Units: (\[.*?\])/s)?.[1] || '[]');
+    const orderText = prompt.match(/\*\*PLAYER ORDER:\*\* "(.*?)"/)?.[1] || '';
+    
+    if (yourUnits.length === 0) {
+        return { actions: [], validation: { isValid: true, errors: [], warnings: [] }, officerComment: 'No units available.' };
+    }
+    
+    const unit = yourUnits[0];  // BUG: Always picks first unit
+    const lowerOrder = orderText.toLowerCase();
+    
+    // ... rest of function
+}
+```
+
+**New Code:**
+```javascript
+async function callAIForOrderParsing(prompt) {
+    const yourUnits = JSON.parse(prompt.match(/Your Units: (\[.*?\])/s)?.[1] || '[]');
+    const orderText = prompt.match(/\*\*PLAYER ORDER:\*\* "(.*?)"/)?.[1] || '';
+    
+    if (yourUnits.length === 0) {
+        return { 
+            actions: [], 
+            validation: { isValid: true, errors: [], warnings: [] }, 
+            officerComment: 'No units available.' 
+        };
+    }
+    
+    const lowerOrder = orderText.toLowerCase();
+    
+    // Select which unit(s) this order applies to
+    const targetUnits = selectTargetUnits(orderText, yourUnits);
+    
+    if (targetUnits.length === 0) {
+        // Default to all units if no specific unit mentioned
+        targetUnits.push(...yourUnits);
+    }
+    
+    const actions = [];
+    
+    // FIRST: Check for explicit coordinates in order
+    const coordMatch = orderText.match(/\b([A-O]\d{1,2})\b/i);
+    const targetPosition = coordMatch ? coordMatch[1].toUpperCase() : null;
+    
+    for (const unit of targetUnits) {
+        let destination = targetPosition || unit.position; // Default: hold position
+        
+        // If no explicit coordinate, parse direction/keyword
+        if (!targetPosition) {
+            if (lowerOrder.includes('south')) destination = moveInDirection(unit.position, 'south', 3);
+            if (lowerOrder.includes('north')) destination = moveInDirection(unit.position, 'north', 3);
+            if (lowerOrder.includes('east')) destination = moveInDirection(unit.position, 'east', 3);
+            if (lowerOrder.includes('west')) destination = moveInDirection(unit.position, 'west', 3);
+            
+            // Parse specific targets
+            if (lowerOrder.includes('river') || lowerOrder.includes('ford')) destination = 'F11';
+            if (lowerOrder.includes('hill')) destination = 'B5';
+        }
+        
+        // Only create action if unit is actually moving
+        if (destination !== unit.position) {
+            actions.push({
+                type: 'move',
+                unitId: unit.id,
+                currentPosition: unit.position,
+                targetPosition: destination,
+                reasoning: `Moving ${unit.type || 'unit'} to ${destination}`
+            });
+        }
+    }
+    
+    // If no movement actions generated, create hold action for first unit
+    if (actions.length === 0) {
+        actions.push({
+            type: 'hold',
+            unitId: yourUnits[0].id,
+            currentPosition: yourUnits[0].position,
+            reasoning: 'Holding position as no clear movement directive given'
+        });
+    }
+    
+    return {
+        actions,
+        validation: {
+            isValid: true,
+            errors: [],
+            warnings: actions.length === 0 ? ['No movement detected in order'] : []
+        },
+        officerComment: generateCommentForActions(actions, yourUnits)
+    };
+}
+
+/**
+ * Select which units the order applies to based on keywords
+ * @param {string} orderText - Player's order
+ * @param {Array} units - Available units
+ * @returns {Array} Units that match the order
+ */
+function selectTargetUnits(orderText, units) {
+    const lowerOrder = orderText.toLowerCase();
+    const matched = [];
+    
+    // Unit type keywords
+    const keywords = {
+        infantry: ['infantry', 'foot', 'legion', 'phalanx', 'soldiers', 'troops'],
+        cavalry: ['cavalry', 'horse', 'riders', 'mounted'],
+        archers: ['archers', 'bowmen', 'shooters', 'missile'],
+        elite: ['elite', 'guard', 'praetorian', 'companions', 'sacred band'],
+        all: ['all', 'everyone', 'army', 'force']
+    };
+    
+    // Check for "all units" command
+    if (keywords.all.some(kw => lowerOrder.includes(kw))) {
+        return units; // Return all units
+    }
+    
+    // Match by unit type
+    for (const [type, words] of Object.entries(keywords)) {
+        if (words.some(kw => lowerOrder.includes(kw))) {
+            const typeMatches = units.filter(u => {
+                const unitType = (u.type || '').toLowerCase();
+                return unitType.includes(type) || type === 'infantry' && !unitType.includes('cavalry');
+            });
+            matched.push(...typeMatches);
+        }
+    }
+    
+    // Remove duplicates
+    return [...new Set(matched)];
+}
+
+/**
+ * Generate officer comment based on actions taken
+ */
+function generateCommentForActions(actions, units) {
+    if (actions.length === 0) return 'Standing by for orders.';
+    
+    if (actions.length === 1) {
+        return `Acknowledged. Moving to ${actions[0].targetPosition}.`;
+    }
+    
+    return `Acknowledged. ${actions.length} units moving into position.`;
+}
+```
+
+**Add this function** (should already exist in file around line 150):
+```javascript
+function moveInDirection(fromCoord, direction, distance) {
+    const { parseCoord, coordToString } = require('../game/maps/mapUtils');
+    const pos = parseCoord(fromCoord);
+    
+    const vectors = {
+        north: { row: -distance, col: 0 },
+        south: { row: +distance, col: 0 },
+        east: { row: 0, col: +distance },
+        west: { row: 0, col: -distance }
+    };
+    
+    const vec = vectors[direction] || { row: 0, col: 0 };
+    const newRow = Math.max(0, Math.min(14, pos.row + vec.row));
+    const newCol = Math.max(0, Math.min(14, pos.col + vec.col));
+    
+    return coordToString({ row: newRow, col: newCol });
+}
+```
+
+**Testing:**
+```bash
+# Test with different order types
+node -e "
+const { interpretOrders } = require('./src/ai/orderInterpreter');
+const testState = {
+  player1: {
+    unitPositions: [
+      { unitId: 'p1_infantry', type: 'infantry', position: 'H8' },
+      { unitId: 'p1_cavalry', type: 'cavalry', position: 'H9' }
+    ]
+  }
+};
+
+(async () => {
+  const result = await interpretOrders('infantry advance to ford', testState, 'player1', {});
+  console.log('Result:', JSON.stringify(result, null, 2));
+})();
+"
+```
+
+---
+
+### FIX #3: Fix Direction Parsing Inversions
+
+**Problem:** "South" and "North" directions may be inverted based on how coordinates are displayed to players.
+
+**File:** `src/ai/orderInterpreter.js`
+
+**Line:** Already fixed in FIX #2 above with `moveInDirection` function
+
+**Verification Needed:**
+```javascript
+// Test that directions work correctly
+const testCases = [
+    { from: 'H8', direction: 'north', distance: 3, expected: 'H5' },
+    { from: 'H8', direction: 'south', distance: 3, expected: 'H11' },
+    { from: 'H8', direction: 'east', distance: 3, expected: 'K8' },
+    { from: 'H8', direction: 'west', distance: 3, expected: 'E8' }
+];
+```
+
+**If directions are wrong** (players see different grid orientation), change vectors in `moveInDirection`:
+```javascript
+const vectors = {
+    north: { row: +distance, col: 0 },    // Swap + and - if inverted
+    south: { row: -distance, col: 0 },    // Swap + and - if inverted
+    east: { row: 0, col: +distance },     // Usually correct
+    west: { row: 0, col: -distance }      // Usually correct
+};
+```
+
+---
+
+## 🟡 HIGH PRIORITY FIXES
+
+These enable critical gameplay features.
+
+---
+
+### FIX #4: Create Commander Entity System (CMD-003)
+
+**Problem:** Commander doesn't exist as a separate entity. Units operate without command structure.
+
+**Files to Create:**
+1. `src/game/commandSystem/commanderEntity.js`
+2. `src/game/commandSystem/commandRanges.js`
+3. `src/game/capture/captureSystem.js`
+
+**Create:** `src/game/commandSystem/commanderEntity.js`
+
+```javascript
+// src/game/commandSystem/commanderEntity.js
+// Commander as non-combatant entity with capture mechanics
+
+/**
+ * Commander entity definition and behavior
+ */
+class Commander {
+    constructor(playerSide, culture, attachedToUnitId) {
+        this.id = `${playerSide}_commander`;
+        this.playerSide = playerSide;
+        this.culture = culture;
+        this.attachedToUnitId = attachedToUnitId; // Default: elite unit
+        this.position = null; // Derived from attached unit
+        this.isCaptured = false;
+        this.canReattach = this.canReattachByCulture(culture);
+    }
+    
+    /**
+     * Determine if culture allows commander to detach from elite
+     */
+    canReattachByCulture(culture) {
+        const restrictedCultures = [
+            'Celtic',
+            'Germanic Confederations',
+            'Spartan City-State'
+        ];
+        return !restrictedCultures.includes(culture);
+    }
+    
+    /**
+     * Update commander position based on attached unit
+     */
+    updatePosition(units) {
+        const attachedUnit = units.find(u => u.unitId === this.attachedToUnitId);
+        if (attachedUnit) {
+            this.position = attachedUnit.position;
+        }
+        return this.position;
+    }
+    
+    /**
+     * Check if commander can be captured
+     */
+    checkCaptureCondition(units, enemyUnits) {
+        if (this.isCaptured) return { canCapture: false };
+        
+        const attachedUnit = units.find(u => u.unitId === this.attachedToUnitId);
+        if (!attachedUnit) {
+            return { canCapture: true, reason: 'attached_unit_destroyed' };
+        }
+        
+        // Elite unit below 25% strength
+        const strengthPercent = attachedUnit.currentStrength / attachedUnit.maxStrength;
+        if (strengthPercent < 0.25) {
+            // Check if enemy adjacent
+            const enemyAdjacent = enemyUnits.some(enemy => {
+                const distance = calculateDistance(this.position, enemy.position);
+                return distance <= 1;
+            });
+            
+            if (enemyAdjacent) {
+                return { 
+                    canCapture: true, 
+                    reason: 'elite_overrun',
+                    strength: strengthPercent 
+                };
+            }
+        }
+        
+        return { canCapture: false };
+    }
+    
+    /**
+     * Attempt escape when capture triggered
+     */
+    attemptEscape(friendlyUnits) {
+        const escapeChance = 0.30; // 30% base chance
+        const roll = Math.random();
+        
+        if (roll < escapeChance) {
+            // Find nearest friendly unit
+            const nearest = findNearestUnit(this.position, friendlyUnits);
+            if (nearest) {
+                return {
+                    success: true,
+                    escapedTo: nearest.unitId,
+                    newPosition: nearest.position
+                };
+            }
+        }
+        
+        return { success: false };
+    }
+    
+    /**
+     * Handle commander capture
+     */
+    capture() {
+        this.isCaptured = true;
+        this.attachedToUnitId = null;
+        return {
+            captured: true,
+            commanderId: this.id,
+            playerSide: this.playerSide
+        };
+    }
+}
+
+/**
+ * Calculate distance between two coordinates
+ */
+function calculateDistance(pos1, pos2) {
+    const { parseCoord } = require('../maps/mapUtils');
+    const p1 = parseCoord(pos1);
+    const p2 = parseCoord(pos2);
+    return Math.abs(p1.row - p2.row) + Math.abs(p1.col - p2.col);
+}
+
+/**
+ * Find nearest friendly unit for escape
+ */
+function findNearestUnit(position, units) {
+    let nearest = null;
+    let minDistance = Infinity;
+    
+    for (const unit of units) {
+        const distance = calculateDistance(position, unit.position);
+        if (distance < minDistance) {
+            minDistance = distance;
+            nearest = unit;
+        }
+    }
+    
+    return nearest;
+}
+
+/**
+ * Initialize commanders for both players
+ */
+function initializeCommanders(battleState) {
+    const p1EliteUnit = battleState.player1.unitPositions.find(u => 
+        u.unitId.includes('elite') || u.isElite
+    );
+    const p2EliteUnit = battleState.player2.unitPositions.find(u => 
+        u.unitId.includes('elite') || u.isElite
+    );
+    
+    battleState.player1.commander = new Commander(
+        'player1',
+        battleState.player1.culture,
+        p1EliteUnit?.unitId || battleState.player1.unitPositions[0]?.unitId
+    );
+    
+    battleState.player2.commander = new Commander(
+        'player2',
+        battleState.player2.culture,
+        p2EliteUnit?.unitId || battleState.player2.unitPositions[0]?.unitId
+    );
+    
+    // Update positions
+    battleState.player1.commander.updatePosition(battleState.player1.unitPositions);
+    battleState.player2.commander.updatePosition(battleState.player2.unitPositions);
+    
+    return battleState;
+}
+
+/**
+ * Check for capture events after casualties applied
+ */
+function checkCommanderCaptures(battleState) {
+    const captures = [];
+    
+    // Check player 1 commander
+    const p1Capture = battleState.player1.commander.checkCaptureCondition(
+        battleState.player1.unitPositions,
+        battleState.player2.unitPositions
+    );
+    
+    if (p1Capture.canCapture) {
+        captures.push({
+            commander: battleState.player1.commander,
+            reason: p1Capture.reason,
+            options: ['escape', 'die_with_men', 'surrender']
+        });
+    }
+    
+    // Check player 2 commander
+    const p2Capture = battleState.player2.commander.checkCaptureCondition(
+        battleState.player2.unitPositions,
+        battleState.player1.unitPositions
+    );
+    
+    if (p2Capture.canCapture) {
+        captures.push({
+            commander: battleState.player2.commander,
+            reason: p2Capture.reason,
+            options: ['escape', 'die_with_men', 'surrender']
+        });
+    }
+    
+    return captures;
+}
+
+module.exports = {
+    Commander,
+    initializeCommanders,
+    checkCommanderCaptures,
+    calculateDistance,
+    findNearestUnit
+};
+```
+
+**Integrate into turnOrchestrator.js:**
+
+In `processTurn` function, add after casualties phase (before victory check):
+
+```javascript
+// PHASE 5.5: Check for commander captures
+console.log('\n👑 Phase 5.5: Checking commander status...');
+const { checkCommanderCaptures } = require('./commandSystem/commanderEntity');
+
+// Update commander positions
+battleState.player1.commander?.updatePosition(updatedPositions.player1);
+battleState.player2.commander?.updatePosition(updatedPositions.player2);
+
+const captureEvents = checkCommanderCaptures({
+    ...battleState,
+    player1: { ...battleState.player1, unitPositions: updatedPositions.player1 },
+    player2: { ...battleState.player2, unitPositions: updatedPositions.player2 }
+});
+
+if (captureEvents.length > 0) {
+    console.log(`  ⚠️ ${captureEvents.length} commander(s) at risk of capture`);
+    // TODO: Trigger player decision prompt (escape/surrender/die)
+    // For now, log and continue
+}
+```
+
+**Testing:**
+```bash
+# Test commander creation
+node -e "
+const { initializeCommanders } = require('./src/game/commandSystem/commanderEntity');
+const state = {
+  player1: { 
+    unitPositions: [{ unitId: 'p1_elite', isElite: true, position: 'H8' }],
+    culture: 'Roman Republic'
+  },
+  player2: {
+    unitPositions: [{ unitId: 'p2_elite', isElite: true, position: 'H12' }],
+    culture: 'Celtic'
+  }
+};
+const result = initializeCommanders(state);
+console.log('P1 Commander:', result.player1.commander);
+console.log('P2 Commander:', result.player2.commander);
+"
+```
+
+---
+
+### FIX #5: Implement Mission Persistence (MISS-001)
+
+**Problem:** Multi-turn movement orders don't persist. Units stop after one turn even if destination is 10+ tiles away.
+
+**File:** `src/game/turnOrchestrator.js`
+
+**Add new Phase 1.5** between order interpretation and movement execution:
+
+```javascript
+// In processTurn(), after Phase 1, add:
+
+// PHASE 1.5: Mission Continuation (for units without new orders)
+console.log('\n🎯 Phase 1.5: Checking active missions...');
+const { continueMissions } = require('./missionSystem');
+
+const p1Continued = continueMissions(
+    battleState.player1.unitPositions,
+    p1Interpretation.validatedActions,
+    'player1'
+);
+
+const p2Continued = continueMissions(
+    battleState.player2.unitPositions,
+    p2Interpretation.validatedActions,
+    'player2'
+);
+
+// Merge continued missions with new orders
+const p1AllActions = [...p1Interpretation.validatedActions, ...p1Continued];
+const p2AllActions = [...p2Interpretation.validatedActions, ...p2Continued];
+
+console.log(`  P1: ${p1Continued.length} missions continuing`);
+console.log(`  P2: ${p2Continued.length} missions continuing`);
+```
+
+**Create:** `src/game/missionSystem.js`
+
+```javascript
+// src/game/missionSystem.js
+// Multi-turn mission persistence and auto-continuation
+
+/**
+ * Continue active missions for units that didn't receive new orders
+ * @param {Array} units - Unit positions with mission data
+ * @param {Array} newActions - New actions from this turn's orders
+ * @param {string} playerSide - 'player1' or 'player2'
+ * @returns {Array} Continued movement actions
+ */
+function continueMissions(units, newActions, playerSide) {
+    const continuedActions = [];
+    
+    for (const unit of units) {
+        // Skip if unit received new order this turn
+        const hasNewOrder = newActions.some(a => a.unitId === unit.unitId);
+        if (hasNewOrder) {
+            // Clear any active mission (new order overrides)
+            if (unit.activeMission) {
+                delete unit.activeMission;
+            }
+            continue;
+        }
+        
+        // Check if unit has active mission
+        if (unit.activeMission) {
+            const mission = unit.activeMission;
+            
+            // Check if mission already complete
+            if (unit.position === mission.target) {
+                console.log(`  Mission complete: ${unit.unitId} reached ${mission.target}`);
+                delete unit.activeMission;
+                continue;
+            }
+            
+            // Continue toward target
+            const nextStep = calculateNextMissionStep(unit, mission);
+            
+            if (nextStep) {
+                continuedActions.push({
+                    type: 'move',
+                    unitId: unit.unitId,
+                    currentPosition: unit.position,
+                    targetPosition: nextStep.position,
+                    validation: { 
+                        valid: true, 
+                        movementRemaining: nextStep.movementRemaining 
+                    },
+                    isMissionContinuation: true,
+                    missionTarget: mission.target
+                });
+                
+                console.log(`  ${unit.unitId}: Continuing mission to ${mission.target} (next: ${nextStep.position})`);
+            }
+        }
+    }
+    
+    return continuedActions;
+}
+
+/**
+ * Calculate next step toward mission target
+ */
+function calculateNextMissionStep(unit, mission) {
+    const { calculatePath } = require('./movementSystem');
+    
+    // Get path from current position to target
+    const path = calculatePath(unit.position, mission.target, map);
+    
+    if (!path || path.length === 0) {
+        console.warn(`  ⚠️ No path found for ${unit.unitId} to ${mission.target}`);
+        return null;
+    }
+    
+    // Move as far as possible toward target
+    const movementRange = unit.movementRemaining || (unit.mounted ? 5 : 3);
+    const nextPosition = path[Math.min(movementRange - 1, path.length - 1)];
+    
+    return {
+        position: nextPosition,
+        movementRemaining: movementRange - 1, // Simplified
+        remainingDistance: path.length - 1
+    };
+}
+
+/**
+ * Create mission when order targets distant location
+ * @param {Object} action - Validated movement action
+ * @param {Object} unit - Unit that will execute mission
+ * @returns {Object} Mission data structure
+ */
+function createMission(action, unit) {
+    const { calculateDistance } = require('./commandSystem/commanderEntity');
+    const distance = calculateDistance(unit.position, action.targetPosition);
+    
+    // Only create mission if target is beyond 1-turn movement
+    const movementRange = unit.movementRemaining || (unit.mounted ? 5 : 3);
+    
+    if (distance <= movementRange) {
+        return null; // Can reach in one turn, no mission needed
+    }
+    
+    return {
+        type: 'move_to_destination',
+        target: action.targetPosition,
+        createdTurn: unit.currentTurn || 1,
+        contingencies: action.contingencies || []
+    };
+}
+
+/**
+ * Store mission on unit
+ */
+function assignMission(unit, mission) {
+    unit.activeMission = mission;
+    console.log(`  Mission assigned to ${unit.unitId}: Move to ${mission.target}`);
+    return unit;
+}
+
+module.exports = {
+    continueMissions,
+    calculateNextMissionStep,
+    createMission,
+    assignMission
+};
+```
+
+**Integrate mission creation in orderInterpreter.js:**
+
+After validation succeeds in `interpretOrders`:
+
+```javascript
+// After validatedActions array is built:
+const { createMission, assignMission } = require('../game/missionSystem');
+
+for (const action of validatedActions) {
+    if (action.type === 'move') {
+        const unit = playerUnits.find(u => u.unitId === action.unitId);
+        const mission = createMission(action, unit);
+        
+        if (mission) {
+            assignMission(unit, mission);
+        }
+    }
+}
+```
+
+**Testing:**
+```bash
+# Test mission creation and continuation
+node -e "
+const { createMission, continueMissions } = require('./src/game/missionSystem');
+
+const unit = { unitId: 'p1_inf', position: 'A1', movementRemaining: 3 };
+const action = { targetPosition: 'O15', unitId: 'p1_inf' };
+
+const mission = createMission(action, unit);
+console.log('Mission created:', mission);
+
+unit.activeMission = mission;
+const continued = continueMissions([unit], [], 'player1');
+console.log('Continued actions:', continued);
+"
+```
+
+---
+
+### FIX #6: Expand Victory Conditions (VIC-002)
+
+**Problem:** Only checks annihilation. Needs objective control, morale collapse, surrender.
+
+**File:** `src/game/turnOrchestrator.js`
+
+**Replace** `checkVictoryConditions` function (lines 192-234):
+
+```javascript
+/**
+ * Check all victory conditions
+ * @param {Object} positions - Current unit positions
+ * @param {number} turnNumber - Current turn
+ * @param {Object} objectives - Map objectives (fords, hills, etc.)
+ * @param {Object} battleState - Full battle state for morale checks
+ * @returns {Object} Victory result if achieved
+ */
+function checkVictoryConditions(positions, turnNumber, objectives, battleState) {
+    // Don't end battle in first 3 turns unless complete annihilation
+    if (turnNumber < 3) {
+        const p1Exists = positions.player1.length > 0;
+        const p2Exists = positions.player2.length > 0;
+        
+        if (!p1Exists) {
+            return { achieved: true, winner: 'player2', reason: 'early_annihilation' };
+        }
+        if (!p2Exists) {
+            return { achieved: true, winner: 'player1', reason: 'early_annihilation' };
+        }
+        
+        return { achieved: false };
+    }
+    
+    // Calculate force strengths
+    const p1Strength = positions.player1.reduce((sum, u) => sum + u.currentStrength, 0);
+    const p2Strength = positions.player2.reduce((sum, u) => sum + u.currentStrength, 0);
+    
+    const p1Original = positions.player1.reduce((sum, u) => 
+        sum + (u.maxStrength || u.currentStrength), 0
+    );
+    const p2Original = positions.player2.reduce((sum, u) => 
+        sum + (u.maxStrength || u.currentStrength), 0
+    );
+    
+    // 1. ANNIHILATION VICTORY
+    if (p1Strength <= 0) {
+        return { 
+            achieved: true, 
+            winner: 'player2', 
+            reason: 'enemy_destroyed',
+            description: 'Complete destruction of enemy forces'
+        };
+    }
+    if (p2Strength <= 0) {
+        return { 
+            achieved: true, 
+            winner: 'player1', 
+            reason: 'enemy_destroyed',
+            description: 'Complete destruction of enemy forces'
+        };
+    }
+    
+    // 2. CATASTROPHIC CASUALTIES (>75%)
+    const p1Remaining = p1Strength / p1Original;
+    const p2Remaining = p2Strength / p2Original;
+    
+    if (p1Remaining < 0.25) {
+        return { 
+            achieved: true, 
+            winner: 'player2', 
+            reason: 'catastrophic_casualties',
+            casualtyPercent: Math.round((1 - p1Remaining) * 100)
+        };
+    }
+    if (p2Remaining < 0.25) {
+        return { 
+            achieved: true, 
+            winner: 'player1', 
+            reason: 'catastrophic_casualties',
+            casualtyPercent: Math.round((1 - p2Remaining) * 100)
+        };
+    }
+    
+    // 3. MORALE COLLAPSE (>50% units broken + commander isolated)
+    const p1Broken = countBrokenUnits(positions.player1, battleState?.player1);
+    const p2Broken = countBrokenUnits(positions.player2, battleState?.player2);
+    
+    const p1BreakPercent = positions.player1.length > 0 ? p1Broken / positions.player1.length : 0;
+    const p2BreakPercent = positions.player2.length > 0 ? p2Broken / positions.player2.length : 0;
+    
+    if (p1BreakPercent > 0.5) {
+        return {
+            achieved: true,
+            winner: 'player2',
+            reason: 'morale_collapse',
+            brokenUnits: p1Broken,
+            totalUnits: positions.player1.length
+        };
+    }
+    if (p2BreakPercent > 0.5) {
+        return {
+            achieved: true,
+            winner: 'player1',
+            reason: 'morale_collapse',
+            brokenUnits: p2Broken,
+            totalUnits: positions.player2.length
+        };
+    }
+    
+    // 4. OBJECTIVE CONTROL (if scenario has objectives)
+    if (objectives && objectives.controlPoints) {
+        const objectiveResult = checkObjectiveControl(
+            positions,
+            objectives,
+            battleState
+        );
+        
+        if (objectiveResult.achieved) {
+            return objectiveResult;
+        }
+    }
+    
+    // 5. COMMANDER CAPTURED (handled elsewhere, but check here too)
+    if (battleState?.player1?.commander?.isCaptured) {
+        return {
+            achieved: true,
+            winner: 'player2',
+            reason: 'commander_captured'
+        };
+    }
+    if (battleState?.player2?.commander?.isCaptured) {
+        return {
+            achieved: true,
+            winner: 'player1',
+            reason: 'commander_captured'
+        };
+    }
+    
+    return { achieved: false };
+}
+
+/**
+ * Count units that have broken morale
+ */
+function countBrokenUnits(units, playerState) {
+    if (!playerState || !playerState.morale) return 0;
+    
+    return units.filter(u => {
+        const unitMorale = u.morale || playerState.morale || 100;
+        const breakThreshold = getBreakThreshold(u.qualityType);
+        return unitMorale < breakThreshold;
+    }).length;
+}
+
+/**
+ * Get morale break threshold by unit quality
+ */
+function getBreakThreshold(qualityType) {
+    const thresholds = {
+        'levy': 30,
+        'militia': 40,
+        'professional': 50,
+        'veteran': 60,
+        'elite': 70
+    };
+    return thresholds[qualityType] || 50;
+}
+
+/**
+ * Check objective-based victory (fords, hills, etc.)
+ */
+function checkObjectiveControl(positions, objectives, battleState) {
+    const controlPoints = objectives.controlPoints || [];
+    const requiredTurns = objectives.turnsToWin || 3;
+    
+    // Count control by each side
+    let p1Control = 0;
+    let p2Control = 0;
+    
+    for (const objective of controlPoints) {
+        const controller = getObjectiveController(objective.position, positions);
+        
+        if (controller === 'player1') {
+            p1Control++;
+            objective.player1Turns = (objective.player1Turns || 0) + 1;
+        } else if (controller === 'player2') {
+            p2Control++;
+            objective.player2Turns = (objective.player2Turns || 0) + 1;
+        } else {
+            // Contested or uncontrolled
+            objective.player1Turns = 0;
+            objective.player2Turns = 0;
+        }
+    }
+    
+    // Check if either side has held majority for required turns
+    const majority = Math.ceil(controlPoints.length / 2);
+    
+    if (p1Control >= majority) {
+        const minTurns = Math.min(...controlPoints
+            .filter(obj => obj.player1Turns > 0)
+            .map(obj => obj.player1Turns)
+        );
+        
+        if (minTurns >= requiredTurns) {
+            return {
+                achieved: true,
+                winner: 'player1',
+                reason: 'objective_control',
+                controlledPoints: p1Control,
+                totalPoints: controlPoints.length,
+                turnsHeld: minTurns
+            };
+        }
+    }
+    
+    if (p2Control >= majority) {
+        const minTurns = Math.min(...controlPoints
+            .filter(obj => obj.player2Turns > 0)
+            .map(obj => obj.player2Turns)
+        );
+        
+        if (minTurns >= requiredTurns) {
+            return {
+                achieved: true,
+                winner: 'player2',
+                reason: 'objective_control',
+                controlledPoints: p2Control,
+                totalPoints: controlPoints.length,
+                turnsHeld: minTurns
+            };
+        }
+    }
+    
+    return { achieved: false };
+}
+
+/**
+ * Determine who controls an objective point
+ */
+function getObjectiveController(objectivePosition, positions) {
+    const { calculateDistance } = require('./commandSystem/commanderEntity');
+    const controlRadius = 1; // Adjacent tile = control
+    
+    const p1Adjacent = positions.player1.filter(u => 
+        calculateDistance(u.position, objectivePosition) <= controlRadius
+    ).length;
+    
+    const p2Adjacent = positions.player2.filter(u => 
+        calculateDistance(u.position, objectivePosition) <= controlRadius
+    ).length;
+    
+    if (p1Adjacent > p2Adjacent) return 'player1';
+    if (p2Adjacent > p1Adjacent) return 'player2';
+    return 'contested';
+}
+```
+
+**Update the call to checkVictoryConditions** in `processTurn`:
+
+```javascript
+// OLD:
+const victoryCheck = checkVictoryConditions(
+    updatedPositions,
+    battle.currentTurn,
+    map.objectives
+);
+
+// NEW:
+const victoryCheck = checkVictoryConditions(
+    updatedPositions,
+    battle.currentTurn,
+    map.objectives,
+    newBattleState  // Pass full battle state for morale checks
+);
+```
+
+**Testing:**
+```bash
+# Test victory condition detection
+node -e "
+const { checkVictoryConditions } = require('./src/game/turnOrchestrator');
+
+const positions = {
+  player1: [{ currentStrength: 20, maxStrength: 100 }],
+  player2: [{ currentStrength: 80, maxStrength: 100 }]
+};
+
+const result = checkVictoryConditions(positions, 5, {}, {});
+console.log('Victory check:', result);
+"
+```
+
+---
+
+## 🟢 MEDIUM PRIORITY FIXES
+
+Improve gameplay but not critical for basic functionality.
+
+---
+
+### FIX #7: Dynamic Map Data in Order Prompts
+
+**Problem:** Order interpreter prompt hard-codes River Crossing map details.
+
+**File:** `src/ai/orderInterpreter.js`
+
+**Replace** `buildOrderInterpretationPrompt` function (lines 42-84):
+
+```javascript
+function buildOrderInterpretationPrompt(orderText, context) {
+    // Extract map dimensions
+    const maxRow = context.mapTerrain?.length || 15;
+    const maxCol = context.mapTerrain?.[0]?.length || 15;
+    const colLetter = String.fromCharCode(64 + maxCol); // A-O for 15
+    
+    // Build terrain description from actual map
+    const terrainDescription = buildTerrainDescription(context.mapTerrain);
+    
+    // Build objective list
+    const objectiveDescription = buildObjectiveDescription(context.objectives);
+    
+    return `You are a tactical AI for an ancient warfare game. Parse the player's order into game actions.
+
+**PLAYER ORDER:** "${orderText}"
+
+**CURRENT SITUATION:**
+- Turn: ${context.currentTurn}
+- Culture: ${context.culture}
+- Your Units: ${JSON.stringify(context.yourUnits.map(u => ({
+    id: u.unitId,
+    type: u.unitType,
+    position: u.position,
+    strength: u.currentStrength,
+    movementRange: u.movementRemaining
+})))}
+
+**MAP INFORMATION:**
+- Size: ${maxRow}x${maxCol} grid (A1 to ${colLetter}${maxRow})
+${terrainDescription}
+${objectiveDescription}
+
+**MOVEMENT RULES:**
+- Plains: 1 move per tile
+- Road: 0.5 move (2x speed)
+- Hill: 1.5 move (slower)
+- Forest: 2 moves
+- Marsh: 3 moves (very slow)
+- River: Cannot cross except at fords
+
+**YOUR TASK:**
+Parse the order into specific game actions. Return JSON only:
+
+{
+  "actions": [
+    {
+      "type": "move",
+      "unitId": "player1_unit_0",
+      "currentPosition": "current position",
+      "targetPosition": "target position",
+      "reasoning": "Brief explanation"
+    }
+  ],
+  "validation": {
+    "isValid": true,
+    "errors": [],
+    "warnings": []
+  },
+  "officerComment": "Cultural officer response (1-2 sentences)"
+}
+
+**CRITICAL RULES:**
+- DO NOT invent enemy positions
+- DO NOT assume movement succeeds (I will validate)
+- DO NOT exceed unit movement ranges
+- Match the cultural officer personality
+- Keep officer comment to 1-2 sentences
+
+Return ONLY valid JSON, no other text.`;
+}
+
+/**
+ * Build human-readable terrain description from map data
+ */
+function buildTerrainDescription(terrain) {
+    if (!terrain) return '- Terrain: Unknown (generic battlefield)';
+    
+    const features = [];
+    
+    // Scan map for features
+    terrain.forEach((row, r) => {
+        row.forEach((tile, c) => {
+            const pos = coordToString({ row: r, col: c });
+            
+            if (tile === 'river') {
+                features.push(`River at ${pos}`);
+            } else if (tile === 'ford') {
+                features.push(`Ford (river crossing) at ${pos}`);
+            } else if (tile === 'hill') {
+                features.push(`Hill at ${pos}`);
+            } else if (tile === 'forest') {
+                features.push(`Forest at ${pos}`);
+            } else if (tile === 'marsh') {
+                features.push(`Marsh at ${pos}`);
+            }
+        });
+    });
+    
+    if (features.length === 0) {
+        return '- Terrain: Open plains';
+    }
+    
+    // Group similar features
+    const grouped = {};
+    features.forEach(f => {
+        const type = f.split(' at ')[0];
+        if (!grouped[type]) grouped[type] = [];
+        grouped[type].push(f.split(' at ')[1]);
+    });
+    
+    const lines = Object.entries(grouped).map(([type, positions]) => {
+        if (positions.length <= 3) {
+            return `- ${type}: ${positions.join(', ')}`;
+        } else {
+            return `- ${type}: ${positions.length} locations`;
+        }
+    });
+    
+    return lines.join('\n');
+}
+
+/**
+ * Build objective description
+ */
+function buildObjectiveDescription(objectives) {
+    if (!objectives || !objectives.controlPoints) {
+        return '- Objectives: Destroy enemy forces';
+    }
+    
+    const points = objectives.controlPoints.map(obj => 
+        `${obj.name || 'Control point'} at ${obj.position}`
+    ).join(', ');
+    
+    return `- Objectives: Control ${points}`;
+}
+
+/**
+ * Helper to convert {row, col} to grid coordinate string
+ */
+function coordToString(pos) {
+    const { coordToString: mapCoordToString } = require('../game/maps/mapUtils');
+    return mapCoordToString(pos);
+}
+```
+
+**Testing:**
+```bash
+# Verify map-specific prompts
+node -e "
+const { buildOrderInterpretationPrompt } = require('./src/ai/orderInterpreter');
+const context = {
+  mapTerrain: [
+    ['plains', 'ford', 'plains'],
+    ['hill', 'plains', 'river']
+  ],
+  objectives: { controlPoints: [{ name: 'Ford', position: 'B1' }] }
+};
+const prompt = buildOrderInterpretationPrompt('advance', context);
+console.log(prompt.slice(0, 500));
+"
+```
+
+---
+
+## 📝 TESTING CHECKLIST
+
+After implementing fixes, run these tests in order:
+
+### 1. Unit Tests
+```bash
+npm run test:schemas
+npm run test:core
+```
+
+### 2. Specific Fix Tests
+```bash
+# Test casualty application
+node src/tests/balance/quickImprovedTest.js
+
+# Test order interpretation
+node src/tests/commander/naturalLanguageTest.js
+
+# Test commander system
+node src/tests/commander/commanderTest.js
+```
+
+### 3. Integration Test
+```bash
+# Run full turn simulation
+node scripts/turnSmokeTest.js
+```
+
+### 4. Discord Bot Test
+```bash
+# Start bot in dev mode
+DISCORD_TOKEN=your_token npm run dev
+
+# In Discord:
+/create-game river-crossing
+# React to join, then build armies, then submit orders
+```
+
+---
+
+## 🚨 COMMON PITFALLS
+
+### Pitfall #1: Missing Imports
+**Symptom:** `Cannot find module` errors
+
+**Solution:** Always check file exists before requiring:
+```javascript
+const fs = require('fs');
+const path = './src/game/newModule.js';
+if (!fs.existsSync(path)) {
+    console.error(`Missing file: ${path}`);
+}
+```
+
+### Pitfall #2: Circular Dependencies
+**Symptom:** `undefined` when calling functions
+
+**Solution:** Move shared utilities to separate file:
+```javascript
+// BAD: A requires B, B requires A
+// GOOD: A and B both require utils.js
+```
+
+### Pitfall #3: Database State Desync
+**Symptom:** Unit positions wrong after reload
+
+**Solution:** Always save complete battleState:
+```javascript
+await battle.update({
+    battleState: JSON.stringify(newBattleState),
+    currentTurn: battle.currentTurn + 1
+});
+```
+
+---
+
+## 📦 DEPLOYMENT CHECKLIST
+
+Before pushing to production:
+
+- [ ] All tests pass
+- [ ] No console.error in logs
+- [ ] Database migrations run successfully
+- [ ] Discord bot connects without errors
+- [ ] Sample battle completes full turn cycle
+- [ ] Casualties apply correctly
+- [ ] Victory conditions trigger appropriately
+- [ ] Commander capture events work
+- [ ] Mission persistence functions
+- [ ] Order interpretation handles edge cases
+
+---
+
+## 📞 SUPPORT
+
+If you encounter issues:
+
+1. Check GitHub Issues for similar problems
+2. Run `node src/checkBattles.js` to inspect database state
+3. Review logs in console output
+4. Test isolated functions with node -e "..." snippets
+
+---
+
+**END OF DOCUMENT**
+
+Version: 1.0  
+Last Updated: January 2025  
+Maintained by: Cohort Development Team

@@ -54,6 +54,11 @@ function detectCombatTriggers(player1Units, player2Units) {
  * @returns {Object} Combat modifiers from positioning
  */
 function calculatePositionalModifiers(attacker, defender, allUnits, map) {
+    // Apply formation change vulnerability to defense directly on defender
+    if (defender.formationChanging && defender.formationChanging.remaining > 0) {
+        defender.positionModifiers = defender.positionModifiers || {};
+        defender.positionModifiers.defense = (defender.positionModifiers.defense || 0) - 3;
+    }
     const modifiers = {
         attacker: { attack: 0, defense: 0 },
         defender: { attack: 0, defense: 0 },
@@ -238,74 +243,84 @@ function processMovementPhase(player1Movements, player2Movements, battleState, m
     if (battleState.player2?.unitPositions?.[0]) {
         console.log('  P2 battleState unit[0] unitId:', battleState.player2.unitPositions[0].unitId);
     }
-    
-    // Execute all movements
-    const newPlayer1Positions = battleState.player1.unitPositions.map(unit => {
-        const movement = player1Movements.find(m => m.unitId === unit.unitId);
-        console.log(`  Checking unit ${unit.unitId}: movement found = ${!!movement}`);
-        
-        if (movement && movement.validation.valid) {
-            // March-001: group march moves only one step along path to keep cohesion
-            let nextPos = movement.finalPosition || movement.targetPosition;
-            let movementRemaining = movement.validation.movementRemaining;
-            if (movement.modifier?.groupMarch && Array.isArray(movement.validation.path) && movement.validation.path.length > 1) {
-                nextPos = movement.validation.path[1]; // first step only
-                // assume step cost 1 for now
-                movementRemaining = Math.max(0, (unit.movementRemaining || 3) - 1);
-            }
-            const updatedUnit = {
-                ...unit,
-                position: nextPos,
-                movementRemaining,
-                hasMoved: true
-            };
-            
-            // Handle mission storage
-            if (movement.newMission) {
-                updatedUnit.activeMission = movement.newMission;
-                console.log(`    📋 New mission assigned: ${movement.newMission.target}`);
-            } else if (unit.activeMission) {
-                // Keep existing mission if no new one
-                updatedUnit.activeMission = unit.activeMission;
-            }
-            
-            console.log(`    ✅ Moving ${unit.unitId} to ${updatedUnit.position}`);
-            return updatedUnit;
+
+    // Initiative-based movement ordering (MOVE-002)
+    function speedTierFor(unit) {
+        const qt = (unit.qualityType || '').toLowerCase();
+        if (qt.includes('scout')) return 1;           // scouts first
+        if (unit.mounted) return 2;                   // cavalry
+        if (qt.includes('light')) return 3;           // light infantry
+        if (qt.includes('heavy')) return 4;           // heavy infantry
+        return 3;                                     // default infantry
+    }
+
+    // Working copies of positions for collision checks
+    const p1Map = new Map((battleState.player1.unitPositions || []).map(u => [u.unitId, { ...u }]));
+    const p2Map = new Map((battleState.player2.unitPositions || []).map(u => [u.unitId, { ...u }]));
+
+    // Build combined move list with initiative
+    const combined = [];
+    for (const m of player1Movements) {
+        const u = p1Map.get(m.unitId);
+        if (!u || !m.validation?.valid) continue;
+        combined.push({ side: 'player1', unit: u, move: m, tier: speedTierFor(u), rand: Math.random() });
+    }
+    for (const m of player2Movements) {
+        const u = p2Map.get(m.unitId);
+        if (!u || !m.validation?.valid) continue;
+        combined.push({ side: 'player2', unit: u, move: m, tier: speedTierFor(u), rand: Math.random() });
+    }
+
+    // Sort by tier asc, then random for tie-break
+    combined.sort((a, b) => (a.tier - b.tier) || (a.rand - b.rand));
+
+    // Track occupied tiles per side to resolve collisions (faster arrives first)
+    const occupied = {
+        player1: new Set((battleState.player1.unitPositions || []).map(u => u.position)),
+        player2: new Set((battleState.player2.unitPositions || []).map(u => u.position))
+    };
+
+    // Execute moves in order
+    for (const item of combined) {
+        const { side, unit, move } = item;
+        let nextPos = move.finalPosition || move.targetPosition;
+        let movementRemaining = move.validation.movementRemaining;
+        if (move.modifier?.groupMarch && Array.isArray(move.validation.path) && move.validation.path.length > 1) {
+            nextPos = move.validation.path[1];
+            movementRemaining = Math.max(0, (unit.movementRemaining || 3) - 1);
         }
-        return unit;
-    });
-    
-    const newPlayer2Positions = battleState.player2.unitPositions.map(unit => {
-        const movement = player2Movements.find(m => m.unitId === unit.unitId);
-    
-        if (movement && movement.validation.valid) {
-            let nextPos = movement.finalPosition || movement.targetPosition;
-            let movementRemaining = movement.validation.movementRemaining;
-            if (movement.modifier?.groupMarch && Array.isArray(movement.validation.path) && movement.validation.path.length > 1) {
-                nextPos = movement.validation.path[1];
-                movementRemaining = Math.max(0, (unit.movementRemaining || 3) - 1);
-            }
-            const updatedUnit = {
-                ...unit,
-                position: nextPos,
-                movementRemaining,
-                hasMoved: true
-            };
-            
-            // Handle mission storage
-            if (movement.newMission) {
-                updatedUnit.activeMission = movement.newMission;
-                console.log(`    📋 New mission assigned: ${movement.newMission.target}`);
-            } else if (unit.activeMission) {
-                // Keep existing mission if no new one
-                updatedUnit.activeMission = unit.activeMission;
-            }
-            
-            return updatedUnit;
+
+        // Collision: if friendly already occupies target due to earlier move, hold position
+        if (occupied[side].has(nextPos)) {
+            console.log(`    ⛔ Collision on ${nextPos} for ${unit.unitId}, holding position`);
+            nextPos = unit.position;
+        } else {
+            // Update occupied sets
+            occupied[side].delete(unit.position);
+            occupied[side].add(nextPos);
         }
-        return unit;
-    });
-    
+
+        const updated = {
+            ...unit,
+            position: nextPos,
+            movementRemaining,
+            hasMoved: true
+        };
+
+        if (move.newMission) {
+            updated.activeMission = move.newMission;
+            console.log(`    📋 New mission assigned: ${move.newMission.target}`);
+        } else if (unit.activeMission) {
+            updated.activeMission = unit.activeMission;
+        }
+
+        if (side === 'player1') p1Map.set(unit.unitId, updated);
+        else p2Map.set(unit.unitId, updated);
+    }
+
+    const newPlayer1Positions = Array.from(p1Map.values());
+    const newPlayer2Positions = Array.from(p2Map.values());
+
     // Stack-001: compression penalties for stacked friendly units
     function applyStackCompression(units) {
         const byTile = new Map();

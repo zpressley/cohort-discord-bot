@@ -8,38 +8,62 @@
  * @param {string} originalOrder - Original order text
  * @returns {string} Formatted feedback message
  */
-function generateOrderFeedback(validatedActions, originalOrder) {
+async function generateOrderFeedback(validatedActions, originalOrder, options = {}) {
+    const units = options.units || [];
+    const culture = options.culture || 'Roman';
+
     if (!validatedActions || validatedActions.length === 0) {
         return generateNoActionsFoundFeedback(originalOrder);
     }
     
-    let feedback = '✅ **Orders Understood:**\n\n';
-    
-    validatedActions.forEach((action, index) => {
+    // Build phrases like "archers to [E4], cavalry to [D3] to support swordsmen at [D6]"
+    const phrases = [];
+    const pickLabel = (u) => {
+        if (!u) return 'units';
+        const primary = (u.primaryWeapon?.name || '').toLowerCase();
+        if (primary.includes('bow') || primary.includes('sling')) return 'archers';
+        if (u.mounted) return 'cavalry';
+        return 'swordsmen';
+    };
+
+    const unitById = Object.fromEntries(units.map(u => [u.unitId, u]));
+
+    for (const action of validatedActions) {
         if (action.type === 'move') {
-            const unitName = formatUnitName(action.unitId);
-            feedback += `${index + 1}. Move **${unitName}** to **${action.targetPosition}**\n`;
-            
-            if (action.validation && !action.validation.valid) {
-                feedback += `   ⚠️ ${action.validation.reason}\n`;
-            }
+            const u = unitById[action.unitId];
+            const label = pickLabel(u);
+            const engage = action.modifier?.engage ? ' to attack' : '';
+            phrases.push(`${label} to [${action.targetPosition}]${engage}`);
         } else if (action.type === 'attack') {
-            const unitName = formatUnitName(action.unitId);
-            feedback += `${index + 1}. **${unitName}** attacks **${action.target}**\n`;
+            const u = unitById[action.unitId];
+            const label = pickLabel(u);
+            const target = action.targetPosition || action.target || 'target';
+            phrases.push(`${label} attack at [${target}]`);
         } else if (action.type === 'formation') {
-            const unitName = formatUnitName(action.unitId);
-            feedback += `${index + 1}. **${unitName}** forms **${action.formationType}**\n`;
+            const u = unitById[action.unitId];
+            const label = pickLabel(u);
+            phrases.push(`${label} form ${action.formationType}`);
         } else if (action.type === 'hold') {
-            const unitName = formatUnitName(action.unitId);
-            feedback += `${index + 1}. **${unitName}** holds position\n`;
-        } else {
-            feedback += `${index + 1}. ${action.type} - ${action.description || 'Unknown action'}\n`;
+            const u = unitById[action.unitId];
+            const label = pickLabel(u);
+            phrases.push(`${label} hold position`);
         }
-    });
-    
-    feedback += '\n*Waiting for enemy response...*';
-    
-    return feedback;
+    }
+
+    // Join phrases into a readable summary
+    const text = phrases.length === 0
+      ? `No actionable orders parsed from: "${originalOrder}"`
+      : phrases.length === 1
+        ? phrases[0]
+        : `${phrases.slice(0, -1).join(', ')} and ${phrases[phrases.length - 1]}`;
+
+    try {
+        const { generateOrderAcknowledgement } = require('../ai/aiManager');
+        const ack = await generateOrderAcknowledgement({ culture, phrases: text });
+        return `Orders:\n\n"${ack}"`;
+    } catch {
+        return `Orders:\n\n"Yes, sir: ${text}."`;
+    }
 }
 
 /**

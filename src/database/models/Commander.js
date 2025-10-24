@@ -30,6 +30,11 @@ module.exports = (sequelize) => {
             allowNull: true,
             defaultValue: null
         },
+        // Persisted user preferences (e.g., map view)
+        preferences: {
+            type: DataTypes.JSON,
+            defaultValue: {}
+        },
         rank: {
             type: DataTypes.ENUM(
                 'Recruit',      // 0-2 battles

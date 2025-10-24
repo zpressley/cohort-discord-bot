@@ -162,8 +162,28 @@ async function processTurn(battle, player1Order, player2Order, map) {
         const { partitionActions } = require('./engine/adapters/schemaAdapter');
         const p1Parts = partitionActions(p1Interpretation.validatedActions);
         const p2Parts = partitionActions(p2Interpretation.validatedActions);
-        const p1Moves = p1Parts.moves;
-        const p2Moves = p2Parts.moves;
+
+        // FORM-002: Apply formation changes and block movement if changing
+        try {
+            const { applyFormationActions } = require('./formations');
+            const updatedP1 = applyFormationActions(battleState, 'player1', p1Parts.formations, map);
+            const updatedP2 = applyFormationActions(battleState, 'player2', p2Parts.formations, map);
+            battleState.player1.unitPositions = updatedP1;
+            battleState.player2.unitPositions = updatedP2;
+        } catch (e) {
+            console.warn('Formation application failed:', e.message);
+        }
+
+        let p1Moves = p1Parts.moves;
+        let p2Moves = p2Parts.moves;
+        // Remove moves for units currently changing formation
+        const isChanging = (side, unitId) => {
+            const arr = battleState[side]?.unitPositions || [];
+            const u = arr.find(x => x.unitId === unitId);
+            return !!(u && u.formationChanging && u.formationChanging.remaining > 0);
+        };
+        p1Moves = p1Moves.filter(m => !isChanging('player1', m.unitId));
+        p2Moves = p2Moves.filter(m => !isChanging('player2', m.unitId));
         console.log('  Filtered P1 moves:', p1Moves.length);
         console.log('  Filtered P2 moves:', p2Moves.length);
         
@@ -209,6 +229,39 @@ async function processTurn(battle, player1Order, player2Order, map) {
             movementResults.newPositions.player1,
             map.terrain
         );
+
+        // Update per-side intel memory (FOW-002)
+        function updateIntelMemory(side, visibility, currentTurn) {
+            const mem = Array.isArray(battleState[side].intelMemory) ? battleState[side].intelMemory : [];
+            const byPos = new Map(mem.map(m => [m.position, m]));
+            function upsert(entry, level) {
+                const pos = entry.position;
+                const prev = byPos.get(pos) || { position: pos, firstSeenTurn: currentTurn };
+                const unitType = (entry.unitType || '').toLowerCase();
+                const unitClass = unitType.includes('cav') || unitType.includes('horse') ? 'cavalry' : (unitType ? 'infantry' : 'unknown');
+                const est = entry.exactStrength || entry.estimatedStrength || prev.estimatedStrength || 'unknown';
+                const out = {
+                    ...prev,
+                    position: pos,
+                    unitClass,
+                    detailLevel: level, // 'high' | 'medium' | 'low'
+                    lastSeenTurn: currentTurn,
+                    estimatedStrength: est,
+                    confidence: (entry.confidence || (level==='high'?'HIGH':level==='medium'?'MEDIUM':'LOW'))
+                };
+                byPos.set(pos, out);
+            }
+            (visibility.intelligence.detailed || []).forEach(c => upsert(c, 'high'));
+            (visibility.intelligence.identified || []).forEach(c => upsert(c, 'medium'));
+            (visibility.intelligence.spotted || []).forEach(c => upsert(c, 'low'));
+            battleState[side].intelMemory = Array.from(byPos.values());
+        }
+        try {
+            updateIntelMemory('player1', p1Visibility, battle.currentTurn);
+            updateIntelMemory('player2', p2Visibility, battle.currentTurn);
+        } catch (e) {
+            console.warn('Intel memory update failed:', e.message);
+        }
         
         // PHASE 4: Resolve combat (if any engagements detected)
         console.log('\n⚔️ Phase 4: Resolving combat...');
@@ -243,11 +296,44 @@ async function processTurn(battle, player1Order, player2Order, map) {
         
         // PHASE 5: Update unit strengths (casualties)
         console.log('\n💀 Phase 5: Applying casualties...');
-        const updatedPositions = applyCasualties(
+        let updatedPositions = applyCasualties(
             movementResults.newPositions,
             combatResults,
             movementResults
         )
+
+        // Morale checks (MORALE-001)
+        try {
+            const { evaluateAndFlagBreaks } = require('./morale');
+            updatedPositions = evaluateAndFlagBreaks(updatedPositions);
+        } catch (e) {
+            console.warn('Morale evaluation failed:', e.message);
+        }
+
+        // Commander capture risk (CMD-003)
+        try {
+            const { getAdjacentCoords } = require('./maps/mapUtils');
+            function markAtRisk(side) {
+                const commanderState = battleState[side]?.commander;
+                if (!commanderState) return;
+                const unit = updatedPositions[side].find(u => u.unitId === commanderState.attachedTo);
+                if (!unit) return;
+                const max = unit.maxStrength || 100; const cur = Math.max(0, unit.currentStrength || 0);
+                const strengthPct = cur / max;
+                if (strengthPct >= 0.25) return;
+                // Enemy adjacency
+                const enemySide = side === 'player1' ? 'player2' : 'player1';
+                const adj = new Set(getAdjacentCoords(unit.position));
+                const enemyAdjacent = (updatedPositions[enemySide] || []).some(eu => adj.has(eu.position));
+                if (enemyAdjacent) {
+                    battleState[side].commander.status = 'at_risk';
+                }
+            }
+            markAtRisk('player1');
+            markAtRisk('player2');
+        } catch (e) {
+            console.warn('Commander capture risk check failed:', e.message);
+        }
         
         // PHASE 6: Check victory conditions
         console.log('\n🏆 Phase 6: Checking victory conditions...');

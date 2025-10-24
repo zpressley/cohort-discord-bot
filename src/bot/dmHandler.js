@@ -142,7 +142,9 @@ async function processPlayerOrder(message, battle, playerId, playerSide, client)
 
         try {
             const interpretation = await interpretOrders(orderText, battle.battleState, playerSide, map);
-            const feedback = generateOrderFeedback(interpretation.validatedActions, orderText);
+            const commander = await models.Commander.findByPk(playerId);
+            const units = battle.battleState?.[playerSide]?.unitPositions || [];
+            const feedback = await generateOrderFeedback(interpretation.validatedActions, orderText, { units, culture: commander?.culture || 'Roman' });
             
             await message.reply(feedback);
             
@@ -346,38 +348,77 @@ async function sendTurnResults(battle, battleTurn, narrative, turnResults, clien
 // Send to player 1 (skip TEST users)
         if (!battle.player1Id.startsWith('TEST_')) {
             const { queuedDM } = require('./utils/dmQueue');
-            const shortLine = combats > 0
-                ? `Contact reported. Engagements: ${combats}.`
-                : (mvP1 > 0 ? 'Units maneuvered; no contact.' : 'Holding positions.');
-            const officerSummary = p1MoveSummary === '—' ? shortLine : p1MoveSummary;
+            const { generateOfficerTurnSummary } = require('../ai/aiManager');
+            const fallbackLine = combats > 0 ? `Contact reported. Engagements: ${combats}.` : (mvP1 > 0 ? 'Units maneuvered; no contact.' : 'Holding positions.');
+            const movesText = p1MoveSummary === '—' ? '' : p1MoveSummary;
+            const aiOfficer = await generateOfficerTurnSummary({
+                culture: battle.battleState?.player1?.army?.culture || battle.player1Culture || 'Roman',
+                movesText,
+                combats,
+                casualties: casP1,
+                detectedEnemies: turnResults.intelligence?.player1Detected || 0
+            });
+            const officerLine = aiOfficer || fallbackLine;
             const p1Text = [
                 `⚔️ Turn ${battleTurn.turnNumber} — Report`,
-                officerSummary,
+                officerLine,
                 '',
                 narrativeText
             ].join('\n').slice(0, 4000);
             queuedDM(battle.player1Id, p1Text, client);
+            // Map will be included in the upcoming War Council briefing to avoid duplicates
             console.log('Results enqueued to player 1');
         }
         
         // Send to player 2 (skip TEST users)
         if (battle.player2Id && !battle.player2Id.startsWith('TEST_')) {
             const { queuedDM } = require('./utils/dmQueue');
-            const shortLine2 = combats > 0
-                ? `Contact reported. Engagements: ${combats}.`
-                : (mvP2 > 0 ? 'Units maneuvered; no contact.' : 'Holding positions.');
-            const officerSummary2 = p2MoveSummary === '—' ? shortLine2 : p2MoveSummary;
+            const { generateOfficerTurnSummary: gen2 } = require('../ai/aiManager');
+            const fallbackLine2 = combats > 0 ? `Contact reported. Engagements: ${combats}.` : (mvP2 > 0 ? 'Units maneuvered; no contact.' : 'Holding positions.');
+            const movesText2 = p2MoveSummary === '—' ? '' : p2MoveSummary;
+            const aiOfficer2 = await gen2({
+                culture: battle.battleState?.player2?.army?.culture || battle.player2Culture || 'Celtic',
+                movesText: movesText2,
+                combats,
+                casualties: casP2,
+                detectedEnemies: turnResults.intelligence?.player2Detected || 0
+            });
+            const officerLine2 = aiOfficer2 || fallbackLine2;
             const p2Text = [
                 `⚔️ Turn ${battleTurn.turnNumber} — Report`,
-                officerSummary2,
+                officerLine2,
                 '',
                 narrativeText
             ].join('\n').slice(0, 4000);
             queuedDM(battle.player2Id, p2Text, client);
+            // Map will be included in the upcoming War Council briefing to avoid duplicates
             console.log('Results enqueued to player 2');
         }
         
         console.log(`Turn ${battleTurn.turnNumber} results processing complete`);
+
+        // Commander capture negotiation prompt if at risk
+        try {
+            const { ActionRowBuilder, ButtonBuilder, ButtonStyle } = require('discord.js');
+            const mkButtons = (battle, side) => {
+                const row = new ActionRowBuilder().addComponents(
+                    new ButtonBuilder().setCustomId(`commander-choice-escape-${battle.id}-${side}`).setLabel('Attempt Escape').setStyle(ButtonStyle.Primary),
+                    new ButtonBuilder().setCustomId(`commander-choice-die-${battle.id}-${side}`).setLabel('Fight to Death').setStyle(ButtonStyle.Danger),
+                    new ButtonBuilder().setCustomId(`commander-choice-surrender-${battle.id}-${side}`).setLabel('Surrender').setStyle(ButtonStyle.Secondary)
+                );
+                return [row];
+            };
+            if (battle.battleState?.player1?.commander?.status === 'at_risk' && !battle.player1Id.startsWith('TEST_')) {
+                const p1 = await client.users.fetch(battle.player1Id);
+                await p1.send({ content: 'Your commander is at risk. Choose a course of action:', components: mkButtons(battle, 'player1') });
+            }
+            if (battle.battleState?.player2?.commander?.status === 'at_risk' && battle.player2Id && !battle.player2Id.startsWith('TEST_')) {
+                const p2 = await client.users.fetch(battle.player2Id);
+                await p2.send({ content: 'Your commander is at risk. Choose a course of action:', components: mkButtons(battle, 'player2') });
+            }
+        } catch (e) {
+            console.warn('Commander negotiation prompt failed:', e.message);
+        }
         
     } catch (error) {
         console.error('Error sending turn results:', error);
