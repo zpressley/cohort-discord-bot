@@ -260,7 +260,7 @@ function buildOrderInterpretationPrompt(orderText, context) {
 - Culture: ${context.culture}
 - Your Units: ${JSON.stringify(context.yourUnits.map(u => ({
     id: u.unitId,
-    type: u.unitType,
+    type: u.type || u.unitType,
     position: u.position,
     strength: u.currentStrength,
     movementRange: u.movementRemaining
@@ -431,14 +431,12 @@ function splitMultipleOrders(orderText) {
 }
 
 /**
- * Enhanced callAIForOrderParsing - handles multiple units and orders
+ * Call AI for order parsing (placeholder for real AI integration)
+ * Fixed: Now selects correct units based on order keywords
  */
-async function callAIForOrderParsing(prompt, realBattleUnits = null) {
-    // Use real battle units if provided, otherwise parse from prompt
-    const yourUnits = realBattleUnits || JSON.parse(prompt.match(/Your Units: (\[.*?\])/s)?.[1] || '[]');
+async function callAIForOrderParsing(prompt) {
+    const yourUnits = JSON.parse(prompt.match(/Your Units: (\[.*?\])/s)?.[1] || '[]');
     const orderText = prompt.match(/\*\*PLAYER ORDER:\*\* "(.*?)"/)?.[1] || '';
-    
-    console.log('  🔍 Parsing order:', orderText);
     
     if (yourUnits.length === 0) {
         return { 
@@ -448,285 +446,185 @@ async function callAIForOrderParsing(prompt, realBattleUnits = null) {
         };
     }
     
-    // Check for multi-orders separated by commas
-    const orders = splitMultipleOrders(orderText);
+    const lowerOrder = orderText.toLowerCase();
     
-    if (orders.length > 1) {
-        console.log(`  📋 Multi-order detected: ${orders.length} commands`);
+    // STEP 1: Determine which units this order targets
+    let targetUnits = selectTargetUnits(orderText, yourUnits);
+    
+    // If no specific units matched, default to all units
+    if (targetUnits.length === 0) {
+        console.log('  No specific unit types matched, applying to all units');
+        targetUnits = [...yourUnits];
+    } else {
+        console.log(`  Order targets ${targetUnits.length} unit(s):`, targetUnits.map(u => u.id));
+    }
+    
+    const actions = [];
+    
+    // STEP 2: Check for explicit coordinates in order
+    const coordMatch = orderText.match(/\b([A-O]\d{1,2})\b/i);
+    const explicitTarget = coordMatch ? coordMatch[1].toUpperCase() : null;
+    
+    if (explicitTarget) {
+        console.log(`  Explicit coordinate detected: ${explicitTarget}`);
+    }
+    
+    // STEP 3: Process each target unit
+    for (const unit of targetUnits) {
+        let destination = explicitTarget || unit.position;
         
-        // Process each sub-order separately
-        const allActions = [];
-        for (const singleOrder of orders) {
-            const singlePrompt = prompt.replace(orderText, singleOrder);
-            const result = await callAIForOrderParsing(singlePrompt, realBattleUnits);
-            allActions.push(...result.actions);
+        // If no explicit coordinate, parse direction/keywords
+        if (!explicitTarget) {
+            if (lowerOrder.includes('south')) {
+                destination = moveInDirection(unit.position, 'south', 3);
+                console.log(`  ${unit.id}: Parsed 'south' → ${destination}`);
+            } else if (lowerOrder.includes('north')) {
+                destination = moveInDirection(unit.position, 'north', 3);
+                console.log(`  ${unit.id}: Parsed 'north' → ${destination}`);
+            } else if (lowerOrder.includes('east')) {
+                destination = moveInDirection(unit.position, 'east', 3);
+                console.log(`  ${unit.id}: Parsed 'east' → ${destination}`);
+            } else if (lowerOrder.includes('west')) {
+                destination = moveInDirection(unit.position, 'west', 3);
+                console.log(`  ${unit.id}: Parsed 'west' → ${destination}`);
+            } else if (lowerOrder.includes('river') || lowerOrder.includes('ford')) {
+                destination = 'F11';
+                console.log(`  ${unit.id}: Parsed 'ford/river' → ${destination}`);
+            } else if (lowerOrder.includes('hill')) {
+                destination = 'B5';
+                console.log(`  ${unit.id}: Parsed 'hill' → ${destination}`);
+            }
         }
         
-        return {
-            actions: allActions,
-            validation: { isValid: true, errors: [], warnings: [] },
-            officerComment: `${allActions.length} unit(s) executing orders.`
-        };
-    }
-    
-    // Single order processing
-    const lowerOrder = orderText.toLowerCase().trim();
-    
-    // Determine target units (pass actual battle units with mounted property)
-    let targetUnits = determineTargetUnits(orderText, yourUnits);
-    
-    // Check for overrides (e.g., "all units move south, northern unit hold")
-    const overrideMatch = orderText.match(/,\s*(\w+)\s+unit\s+(hold|stay|wait)/i);
-    if (overrideMatch && targetUnits.length > 1) {
-        const direction = overrideMatch[1].toLowerCase();
-        console.log(`  🚫 Override: ${direction} unit to ${overrideMatch[2]}`);
-        
-        let excludeUnit = null;
-        
-        if (direction === 'northern' || direction === 'northernmost') {
-            excludeUnit = targetUnits.reduce((n, u) => 
-                parseCoord(u.position).row < parseCoord(n.position).row ? u : n
-            );
-        } else if (direction === 'southern' || direction === 'southernmost') {
-            excludeUnit = targetUnits.reduce((s, u) => 
-                parseCoord(u.position).row > parseCoord(s.position).row ? u : s
-            );
-        } else if (direction === 'western' || direction === 'westernmost') {
-            excludeUnit = targetUnits.reduce((w, u) => 
-                parseCoord(u.position).col < parseCoord(w.position).col ? u : w
-            );
-        } else if (direction === 'eastern' || direction === 'easternmost') {
-            excludeUnit = targetUnits.reduce((e, u) => 
-                parseCoord(u.position).col > parseCoord(e.position).col ? u : e
-            );
-        }
-        
-        if (excludeUnit) {
-            console.log(`    Excluding ${excludeUnit.unitId}`);
-            targetUnits = targetUnits.filter(u => u.unitId !== excludeUnit.unitId);
-        }
-    }
-    
-    
-    // Check for explicit "hold" - return empty to let Phase 1.5 handle missions
-    if (lowerOrder === 'hold' || lowerOrder === 'wait' || lowerOrder === 'stay') {
-        return {
-            actions: [],
-            validation: { isValid: true, errors: [], warnings: [] },
-            officerComment: 'Standing by.'
-        };
-    }
-    
-    // Check for mission continuation keywords
-    const continueKeywords = ['continue', 'resume', 'proceed', 'carry on'];
-    const hasContinue = continueKeywords.some(kw => lowerOrder.includes(kw));
-    
-    if (hasContinue || lowerOrder === 'yes') {
-        console.log('  🔄 Mission continuation detected');
-        
-        const actions = targetUnits.map(unit => ({
-            type: 'continue_mission',
-            unitId: unit.unitId,
-            currentPosition: unit.position,
-            reasoning: 'Continuing mission as ordered'
-        }));
-        
-        return {
-            actions,
-            validation: { isValid: true, errors: [], warnings: [] },
-            officerComment: `${targetUnits.length} unit(s) resuming mission.`
-        };
-    }
-    
-    // Hold/Stay targeted by coordinate (e.g., "J11 unit hold the ford")
-    const holdByCoord = orderText.match(/\b([A-T]\d{1,2})\b\s+unit\s+(hold|stay|wait)/i);
-    if (holdByCoord) {
-        const tile = holdByCoord[1].toUpperCase();
-        const filteredUnits = yourUnits.filter(u => (u.position || '').toUpperCase() === tile);
-        const actions = filteredUnits.map(unit => ({
-            type: 'move', // no-op, hold position
-            unitId: unit.unitId,
-            currentPosition: unit.position,
-            targetPosition: unit.position,
-            reasoning: 'Holding the ford'
-        }));
-        return {
-            actions,
-            validation: { isValid: true, errors: [], warnings: [] },
-            officerComment: `${filteredUnits.length} unit(s) holding at ${tile}.`
-        };
-    }
-
-    // Check for position-filtered orders (e.g., "unit at F5 move to M5")
-    const positionFilter = orderText.match(/unit at ([A-T]\d{1,2})/i);
-    
-    if (positionFilter) {
-        const filterPos = positionFilter[1].toUpperCase();
-        console.log(`  📍 Position filter: ${filterPos}`);
-        
-        // Find ALL units at this position (handles stacked units)
-        const filteredUnits = targetUnits.filter(u => u.position.toUpperCase() === filterPos);
-        
-        if (filteredUnits.length === 0) {
-            return {
-                actions: [],
-                validation: { isValid: false, errors: [`No unit at ${filterPos}`], warnings: [] },
-                officerComment: `No unit found at ${filterPos}.`
-            };
-        }
-        
-        // Extract destination AFTER the position filter phrase
-        const afterFilter = orderText.substring(
-            orderText.indexOf(positionFilter[0]) + positionFilter[0].length
-        );
-        
-        let targetPosition = null;
-        
-        // Look for coordinate after filter
-        const destMatch = afterFilter.replace(/\btot\b/gi,' to ').match(/\b([A-T]\d{1,2})\b/i);
-        if (destMatch) {
-            targetPosition = destMatch[1].toUpperCase();
-            console.log(`  🎯 Destination: ${targetPosition}`);
+        // Only create action if unit is actually moving
+        if (destination !== unit.position) {
+            actions.push({
+                type: 'move',
+                unitId: unit.id,
+                currentPosition: unit.position,
+                targetPosition: destination,
+                reasoning: `${unit.type || 'Unit'} moving to ${destination}`
+            });
         } else {
-            // Check for direction after filter
-            const afterLower = afterFilter.toLowerCase();
-            if (afterLower.includes('north')) targetPosition = moveInDirection(filteredUnits[0].position, 'north', 3);
-            else if (afterLower.includes('south')) targetPosition = moveInDirection(filteredUnits[0].position, 'south', 3);
-            else if (afterLower.includes('east')) targetPosition = moveInDirection(filteredUnits[0].position, 'east', 3);
-            else if (afterLower.includes('west')) targetPosition = moveInDirection(filteredUnits[0].position, 'west', 3);
-            else targetPosition = filteredUnits[0].position;
+            console.log(`  ${unit.id}: No movement (already at ${destination})`);
         }
-        
-        // Create actions for ALL filtered units
-        const actions = filteredUnits.map(unit => ({
-            type: 'move',
-            unitId: unit.unitId,
-            currentPosition: unit.position,
-            targetPosition: targetPosition,
-            reasoning: `Unit at ${filterPos} → ${targetPosition}`
-        }));
-        
-        return {
-            actions,
-            validation: { isValid: true, errors: [], warnings: [] },
-            officerComment: `${filteredUnits.length} unit(s) at ${filterPos} → ${targetPosition}.`
-        };
     }
     
-    // Check for explicit coordinates (no position filter)
-    const coordMatch = orderText.match(/\b([A-T]\d{1,2})\b/i);
-    if (coordMatch) {
-        const targetPosition = coordMatch[1].toUpperCase();
-        const isGroupMarch = /(march together|advance together|keep formation|move as one|group march)/i.test(orderText);
-        
-        const actions = targetUnits.map(unit => ({
-            type: 'move',
-            unitId: unit.unitId,
-            currentPosition: unit.position,
-            targetPosition: targetPosition,
-            modifier: isGroupMarch ? { groupMarch: true } : undefined,
-            reasoning: isGroupMarch ? `Group march to ${targetPosition}` : `Moving to ${targetPosition}`
-        }));
-        
-        return {
-            actions,
-            validation: { isValid: true, errors: [], warnings: [] },
-            officerComment: `${targetUnits.length} unit(s) ${isGroupMarch ? 'march together' : '→'} ${targetPosition}.`
-        };
+    // If no actions generated, create hold order for first unit
+    if (actions.length === 0) {
+        actions.push({
+            type: 'hold',
+            unitId: yourUnits[0].id,
+            currentPosition: yourUnits[0].position,
+            reasoning: 'Holding position - no clear movement directive'
+        });
     }
-    
-    // Attack/Fire commands (e.g., "fire on enemy at J11", "attack the ford at J11")
-    const fireMatch = orderText.match(/\b(fire|shoot|loose|attack)\b.*?\bat\s+([A-T]\d{1,2})/i);
-    if (fireMatch) {
-        const targetPos = fireMatch[2].toUpperCase();
-        const actions = targetUnits.map(unit => ({
-            type: 'move', // move toward/onto target; combat engine handles ranged if applicable
-            unitId: unit.unitId,
-            currentPosition: unit.position,
-            targetPosition: targetPos,
-            modifier: { engage: true },
-            reasoning: `${fireMatch[1].toLowerCase()} at ${targetPos}`
-        }));
-        return {
-            actions,
-            validation: { isValid: true, errors: [], warnings: [] },
-            officerComment: `${targetUnits.length} unit(s) engaging at ${targetPos}.`
-        };
-    }
-
-    // Direction-based movement
-    let direction = null;
-    if (lowerOrder.includes('south')) direction = 'south';
-    else if (lowerOrder.includes('north')) direction = 'north';
-    else if (lowerOrder.includes('east')) direction = 'east';
-    else if (lowerOrder.includes('west')) direction = 'west';
-    
-    if (direction) {
-        const isGroupMarch = /(march together|advance together|keep formation|move as one|group march)/i.test(orderText);
-        const step = isGroupMarch ? 1 : 3;
-        const actions = targetUnits.map(unit => ({
-            type: 'move',
-            unitId: unit.unitId,
-            currentPosition: unit.position,
-            targetPosition: moveInDirection(unit.position, direction, step),
-            modifier: isGroupMarch ? { groupMarch: true } : undefined,
-            reasoning: isGroupMarch ? `Group march ${direction}` : `Moving ${direction}`
-        }));
-        
-        return {
-            actions,
-            validation: { isValid: true, errors: [], warnings: [] },
-            officerComment: isGroupMarch ? `${targetUnits.length} unit(s) march ${direction} together.` : `${targetUnits.length} unit(s) → ${direction}.`
-        };
-    }
-    
-    // Landmark-based
-    if (lowerOrder.includes('ford')) {
-        const actions = targetUnits.map(unit => ({
-            type: 'move',
-            unitId: unit.unitId,
-            currentPosition: unit.position,
-            targetPosition: 'I11',
-            reasoning: 'Moving to ford'
-        }));
-        
-        return {
-            actions,
-            validation: { isValid: true, errors: [], warnings: [] },
-            officerComment: `${targetUnits.length} unit(s) → ford.`
-        };
-    }
-    
-    if (lowerOrder.includes('hill')) {
-        const actions = targetUnits.map(unit => ({
-            type: 'move',
-            unitId: unit.unitId,
-            currentPosition: unit.position,
-            targetPosition: 'B5',
-            reasoning: 'Moving to hill'
-        }));
-        
-        return {
-            actions,
-            validation: { isValid: true, errors: [], warnings: [] },
-            officerComment: `${targetUnits.length} unit(s) → hill.`
-        };
-    }
-    
-    // Default: hold position for unrecognized orders
-    const actions = targetUnits.map(unit => ({
-        type: 'move',
-        unitId: unit.unitId,
-        currentPosition: unit.position,
-        targetPosition: unit.position,
-        reasoning: 'Holding position'
-    }));
     
     return {
         actions,
-        validation: { isValid: true, errors: [], warnings: [] },
-        officerComment: 'Holding position.'
+        validation: { 
+            isValid: true, 
+            errors: [], 
+            warnings: actions.length === 0 ? ['No movement detected in order'] : []
+        },
+        officerComment: generateOfficerComment(actions, targetUnits.length)
     };
+}
+
+/**
+ * Select which units the order applies to based on keywords
+ */
+function selectTargetUnits(orderText, units) {
+    const lower = orderText.toLowerCase();
+    
+    // Check for "all" keyword first
+    if (/\b(all|everyone|army|force|troops)\b/.test(lower)) {
+        console.log('  Matched: ALL units');
+        return units;
+    }
+    
+    const matched = [];
+    
+    // Check for cavalry
+    if (/\b(cavalry|horse|rider|mount|chariot)\b/.test(lower)) {
+        console.log('  Keyword matched: cavalry');
+        const cavMatches = units.filter(u => {
+            const unitType = (u.type || '').toLowerCase();
+            return unitType.includes('cavalry') || unitType.includes('horse');
+        });
+        console.log(`    Found ${cavMatches.length} cavalry unit(s)`);
+        matched.push(...cavMatches);
+    }
+    
+    // Check for archers
+    if (/\b(archer|bow|shoot|missile|sling)\b/.test(lower)) {
+        console.log('  Keyword matched: archers');
+        const archMatches = units.filter(u => {
+            const unitType = (u.type || '').toLowerCase();
+            return unitType.includes('archer') || unitType.includes('bow');
+        });
+        console.log(`    Found ${archMatches.length} archer unit(s)`);
+        matched.push(...archMatches);
+    }
+    
+    // Check for elite
+    if (/\b(elite|guard|veteran|champion|praetorian|immortal|sacred)\b/.test(lower)) {
+        console.log('  Keyword matched: elite');
+        const eliteMatches = units.filter(u => {
+            const unitType = (u.type || '').toLowerCase();
+            return unitType.includes('elite') || unitType.includes('guard') || unitType.includes('veteran');
+        });
+        console.log(`    Found ${eliteMatches.length} elite unit(s)`);
+        matched.push(...eliteMatches);
+    }
+    
+    // Check for infantry LAST (matches anything not already matched)
+    if (/\b(infantry|foot|legion|phalanx|spear|sword)\b/.test(lower)) {
+        console.log('  Keyword matched: infantry');
+        const infMatches = units.filter(u => {
+            const unitType = (u.type || '').toLowerCase();
+            // Match explicit infantry types
+            if (unitType.includes('infantry') || unitType.includes('legion') || unitType.includes('phalanx')) {
+                return true;
+            }
+            // Exclude specialized types
+            const isSpecialized = unitType.includes('cavalry') || 
+                                unitType.includes('horse') ||
+                                unitType.includes('archer') || 
+                                unitType.includes('bow') ||
+                                unitType.includes('elite') ||
+                                unitType.includes('guard');
+            // Infantry = has a type field AND not specialized
+            return unitType.length > 0 && !isSpecialized;
+        });
+        console.log(`    Found ${infMatches.length} infantry unit(s)`);
+        matched.push(...infMatches);
+    }
+    
+    // Remove duplicates by unit ID
+    const unique = [...new Map(matched.map(u => [u.id || u.unitId, u])).values()];
+    return unique;
+}
+
+/**
+ * Generate officer comment based on actions
+ */
+function generateOfficerComment(actions, affectedUnits) {
+    if (actions.length === 0) return 'Awaiting orders, Commander.';
+    
+    if (actions.length === 1) {
+        const action = actions[0];
+        if (action.type === 'hold') {
+            return 'Holding position.';
+        }
+        return `Acknowledged. Moving to ${action.targetPosition}.`;
+    }
+    
+    if (actions.length === affectedUnits) {
+        return `All units moving into position.`;
+    }
+    
+    return `${actions.length} unit(s) moving as ordered.`;
 }
 
 function simpleKeywordActions(orderText, targetUnits, map) {
