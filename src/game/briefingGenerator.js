@@ -117,31 +117,47 @@ function generateMapMessage(battleState, playerSide, view = 'default') {
  */
 function generateIntelligenceReport(playerData, battleState) {
     const mem = Array.isArray(playerData.intelMemory) ? playerData.intelMemory : [];
-    const friendlyPos = playerData.unitPositions?.[0]?.position;
-
+    
     if (mem.length === 0) {
-        return '👁️ No enemy contact';
+        return '❓ No enemy contact';
     }
 
+    const currentTurn = battleState.currentTurn || 0;
+    
+    // Load formatters
+    const { getUnitTypeEmoji, formatIntelConfidence, formatStrengthEstimate } = require('./briefingFormatters');
+    
     const lines = mem
-      .sort((a,b) => (b.lastSeenTurn||0) - (a.lastSeenTurn||0))
-      .slice(0, 8) // keep tight
-      .map(entry => {
-        const age = (battleState.currentTurn || 0) - (entry.lastSeenTurn || 0);
-        const posPhrase = age === 0 ? 'at' : age === 1 ? 'last seen at' : 'last known at';
-        const terrain = getTerrainAtPosition(battleState.map?.terrain, entry.position);
-        const dist = friendlyPos ? calculateDistance(friendlyPos, entry.position) : '?';
-        const emoji = entry.unitClass === 'cavalry' ? '🟠' : '🟧';
-        const detail = (entry.detailLevel||'low').toUpperCase();
-        const posConf = age === 0 ? 'IN SIGHT' : (age === 1 ? 'RECENT' : 'STALE');
-        // strength text
-        let strengthTxt = 'strength unknown';
-        if (entry.detailLevel === 'high' && typeof entry.estimatedStrength === 'number') strengthTxt = `${entry.estimatedStrength} men`;
-        else if (entry.detailLevel === 'medium' && typeof entry.estimatedStrength === 'number') strengthTxt = `≈${entry.estimatedStrength}`;
-        else if (entry.detailLevel === 'low') strengthTxt = 'size unclear';
-        const unitLabel = entry.unitClass === 'cavalry' ? 'Horsemen' : (entry.unitClass === 'infantry' ? 'Infantry' : 'Forces');
-        return `${emoji} Enemy ${unitLabel} — ${strengthTxt} — ${posPhrase} ${entry.position} (${terrain}); Detail ${detail}, Pos ${posConf}`;
-      });
+        .sort((a, b) => (b.lastSeenTurn || 0) - (a.lastSeenTurn || 0))
+        .slice(0, 8)
+        .map(entry => {
+            // Get emoji
+            const emoji = getUnitTypeEmoji(entry.unitClass);
+            
+            // Format unit type
+            const unitClass = entry.unitClass || 'Infantry';
+            const unitType = unitClass.split('_').map(w => 
+                w.charAt(0).toUpperCase() + w.slice(1)
+            ).join(' ');
+            
+            // Format strength
+            const strength = formatStrengthEstimate(
+                entry.estimatedStrength, 
+                entry.detailLevel
+            );
+            
+            // Format position confidence
+            const turnsSince = currentTurn - (entry.lastSeenTurn || currentTurn);
+            const positionPhrase = formatIntelConfidence(
+                entry.detailLevel,
+                turnsSince
+            );
+            
+            // Get terrain
+            const terrain = getTerrainAtPosition(battleState.map?.terrain, entry.position);
+            
+            return `${emoji} Enemy ${unitType} — ${strength} — ${positionPhrase} ${entry.position} (${terrain})`;
+        });
 
     return lines.join('\n');
 }
@@ -186,7 +202,8 @@ function formatUnitList(units, terrain) {
     }
 
     return units.map(unit => {
-        const emoji = unit.isElite ? '🔷' : (unit.mounted ? '🔵' : '🟦');
+        const { getFriendlyUnitEmoji } = require('./briefingFormatters');
+        const emoji = getFriendlyUnitEmoji(unit);
         const weapon = simplifyWeaponName(unit.primaryWeapon?.name);
         const typeBase = unit.mounted ? 'Cavalry' : 'Infantry';
         const eliteSuffix = unit.isElite ? ` (${unit.eliteName || 'Elite'})` : '';
