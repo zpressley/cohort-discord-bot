@@ -4,6 +4,8 @@
 const { EmbedBuilder } = require('discord.js');
 const { generateASCIIMap } = require('./maps/mapUtils');
 const { calculateDistance } = require('./maps/mapUtils');
+const { getOfficerRoster } = require('./officers/namingSystem');
+const { formatOfficersForBriefing } = require('./officers/rosterDisplay');
 
 /**
  * Generate turn briefing TEXT (no embeds) for mobile readability
@@ -33,6 +35,20 @@ async function generateBriefingText(battleState, playerSide, commander, eliteUni
     lines.push('INTELLIGENCE:');
     lines.push(intelligence);
     lines.push('');
+    const { getOfficerRoster } = require('./officers/namingSystem');
+    const { formatOfficersForBriefing } = require('./officers/rosterDisplay');
+
+    const officers = getOfficerRoster(battleState, playerSide);
+    const officerSection = formatOfficersForBriefing(officers);
+
+    if (officerSection) {
+        lines.push('───────────────────────────────────────');
+        lines.push('OFFICERS AVAILABLE FOR COUNSEL:');
+        lines.push(officerSection);
+        lines.push('');
+        lines.push('*Type "officers" for full roster*');
+        lines.push('');
+    }
     lines.push(`${officerName} reports:`);
     lines.push(officerComment);
     lines.push('');

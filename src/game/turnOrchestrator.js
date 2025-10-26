@@ -407,6 +407,9 @@ async function processTurn(battle, player1Order, player2Order, map) {
             battleState,
             battle.currentTurn
         );
+
+        
+
         // DEBUG: Check what we're returning
         const newBattleState = {
             ...battleState,
@@ -422,6 +425,24 @@ async function processTurn(battle, player1Order, player2Order, map) {
             }
         };
         
+        // PHASE 8: Officer name assignments (Battle 3+)
+        console.log('\n👤 Phase 8: Officer name assignments...');
+        try {
+            const { assignOfficerNames } = require('./officers/namingSystem');
+            
+            newBattleState.player1.unitPositions = assignOfficerNames(
+                newBattleState.player1.unitPositions,
+                newBattleState.player1.culture
+            );
+            
+            newBattleState.player2.unitPositions = assignOfficerNames(
+                newBattleState.player2.unitPositions,
+                newBattleState.player2.culture
+            );
+        } catch (err) {
+            console.warn('Officer naming skipped:', err.message);
+        }
+
         // Compute simple state diffs for telemetry
         const diffs = computeStateDiffs(battleState, updatedPositions);
 

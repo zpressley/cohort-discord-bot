@@ -8,6 +8,9 @@ const { calculateDistance, getAdjacentCoords } = require('../game/maps/mapUtils'
 const { sendNextTurnBriefings } = require('../game/briefingSystem');
 const { createVictoryAnnouncement, updateCommanderRecords } = require('../game/victorySystem');
 const { generateOrderFeedback } = require('../game/orderFeedback');
+const { getOfficerRoster } = require('../game/officers/namingSystem');
+const { formatOfficerRoster } = require('../game/officers/rosterDisplay');
+
 
 // Track processed messages to prevent duplicates
 const processedMessages = new Set();
@@ -49,7 +52,29 @@ async function handleDMCommand(message, client) {
         const userId = message.author.id;
 
         const isQuestion = (text) => /\?\s*$/.test(text.trim()) || /^(ask|should|do we|can we|what|where|why|how)\b/i.test(text.trim());
-        
+
+        // Status/briefing command
+        if (/^(status|sitrep|briefing)$/i.test(message.content.trim())) {
+            const { generateBriefingText } = require('../game/briefingGenerator');
+            const { models } = require('../database/setup');
+            
+            const commanderId = playerSide === 'player1' ? 
+                activeBattle.player1Id : activeBattle.player2Id;
+            const commander = await models.Commander.findByPk(commanderId);
+            
+            const briefing = await generateBriefingText(
+                activeBattle.battleState,
+                playerSide,
+                commander,
+                null,
+                activeBattle.currentTurn
+            );
+            
+            await message.reply(`**📋 Turn ${activeBattle.currentTurn} - Current Situation:**\n\n${briefing}`);
+            return;
+        }
+
+
         const activeBattle = await models.Battle.findOne({
             where: {
                 status: 'in_progress',
@@ -69,6 +94,14 @@ async function handleDMCommand(message, client) {
         }
         
         const playerSide = activeBattle.player1Id === userId ? 'player1' : 'player2';
+        
+        // Officer roster command
+        if (/^officers?$/i.test(message.content.trim())) {
+            const roster = getOfficerRoster(activeBattle.battleState, playerSide);
+            const formatted = formatOfficerRoster(roster);
+            await message.reply(formatted);
+            return;
+        }
         
         // Check if this is a question or an order
         if (isQuestion(message.content)) {
