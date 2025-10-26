@@ -51,6 +51,28 @@ async function handleDMCommand(message, client) {
         const { answerTacticalQuestion } = require('../ai/officerQA');
         const userId = message.author.id;
 
+        // 1. Load activeBattle FIRST
+        const activeBattle = await models.Battle.findOne({
+            where: {
+                status: 'in_progress',
+                [Op.or]: [
+                    { player1Id: userId },
+                    { player2Id: userId }
+                ]
+            }
+        });
+
+        if (!activeBattle) {
+            await message.reply(
+                'You are not currently in an active battle.\n\n' +
+                'Use `/lobby` in a server channel to create or join battles!'
+            );
+            return;
+        }
+
+        // 2. Determine playerSide
+        const playerSide = activeBattle.player1Id === userId ? 'player1' : 'player2';
+
         const isQuestion = (text) => /\?\s*$/.test(text.trim()) || /^(ask|should|do we|can we|what|where|why|how)\b/i.test(text.trim());
 
         // Status/briefing command
@@ -74,27 +96,6 @@ async function handleDMCommand(message, client) {
             return;
         }
 
-
-        const activeBattle = await models.Battle.findOne({
-            where: {
-                status: 'in_progress',
-                [Op.or]: [
-                    { player1Id: userId },
-                    { player2Id: userId }
-                ]
-            }
-        });
-        
-        if (!activeBattle) {
-            await message.reply(
-                'You are not currently in an active battle.\n\n' +
-                'Use `/lobby` in a server channel to create or join battles!'
-            );
-            return;
-        }
-        
-        const playerSide = activeBattle.player1Id === userId ? 'player1' : 'player2';
-        
         // Officer roster command
         if (/^officers?$/i.test(message.content.trim())) {
             const roster = getOfficerRoster(activeBattle.battleState, playerSide);
@@ -102,7 +103,7 @@ async function handleDMCommand(message, client) {
             await message.reply(formatted);
             return;
         }
-        
+
         // Check if this is a question or an order
         if (isQuestion(message.content)) {
             // Answer question as officer

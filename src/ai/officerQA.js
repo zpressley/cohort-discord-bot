@@ -44,41 +44,39 @@ async function answerTacticalQuestion(question, battleState, playerSide, eliteUn
 function buildOfficerQuestionPrompt(question, visibleState, memories, culture) {
     const culturalPersonality = getCulturalPersonality(culture);
     
-    return `You are ${culturalPersonality.officerName}, ${culturalPersonality.description}.
+    const enemyList = formatVisibleIntel(visibleState.enemyForces);
+    
+    return `You are ${culturalPersonality.officerName}. Commander asks: "${question}"
 
-**COMMANDER'S QUESTION:** "${question}"
+VISIBLE ENEMIES:
+${enemyList}
 
-**WHAT YOU CAN SEE (Current battlefield situation):**
-${JSON.stringify(visibleState.enemyForces, null, 2)}
+WEATHER: ${visibleState.weather} • TURN: ${visibleState.turnNumber}
 
-**YOUR FORCES:**
-${JSON.stringify(visibleState.yourForces.units, null, 2)}
+${memories.length > 0 ? `PAST EXPERIENCE: ${memories[0].description}` : ''}
 
-**TERRAIN & CONDITIONS:**
-- Weather: ${visibleState.weather}
-- Turn: ${visibleState.turnNumber}
-- Map: River Crossing (15x15 grid)
+CRITICAL - MAXIMUM 15 WORDS TOTAL:
+- ${culturalPersonality.speechStyle}
+- Direct answer only
+- Reference positions if relevant
+- If unknown: "Haven't seen any, sir"
 
-**YOUR EXPERIENCE (Veteran memories):**
-${memories.length > 0 ? memories.map(m => `- ${m.description}`).join('\n') : 'No relevant past battles'}
-
-**RESPONSE GUIDELINES:**
-1. Answer ONLY based on visible information above (fog of war applies)
-2. DO NOT invent enemy positions or strengths
-3. If you don't know something, say so: "Scouts haven't reported yet, sir"
-4. Match cultural personality: ${culturalPersonality.speechStyle}
-5. Keep response to 2-4 sentences maximum
-6. Reference veteran memories when relevant
-7. Provide tactical advice based on actual visible situation
-
-Return JSON:
-{
-  "answer": "Your 2-4 sentence response in character",
-  "confidence": "high/medium/low",
-  "basedOn": ["what information you used to answer"]
+ONE BRIEF SENTENCE. NO explanations. NO recommendations unless asked.`;
 }
-
-Response must be authentic to ${culture} military culture. ${culturalPersonality.additional}`;
+function formatVisibleIntel(enemyForces) {
+    if (!enemyForces) return 'No enemy contact';
+    
+    const allUnits = [
+        ...(enemyForces.detectedUnits || []),
+        ...(enemyForces.estimatedUnits || []),
+        ...(enemyForces.suspectedActivity || [])
+    ];
+    
+    if (allUnits.length === 0) return 'No enemy contact';
+    
+    return allUnits.slice(0, 5).map(e => 
+        `- ${e.unitType || e.unitClass || 'Infantry'} at ${e.position}`
+    ).join('\n');
 }
 
 /**
@@ -176,19 +174,27 @@ function getRelevantMemories(eliteUnit, question, battleState) {
 }
 
 /**
- * Call AI for question answering (placeholder)
+ * Call AI for officer question answering
  */
 async function callAIForQuestion(prompt) {
-    // TODO: Connect to aiManager
-    // const aiManager = require('./aiManager');
-    // const response = await aiManager.generateContent(prompt, 'gpt-4o-mini');
-    // return JSON.parse(response);
+    const { generateOfficerResponse } = require('./aiManager');
     
-    return {
-        answer: 'Template response - AI not connected',
-        confidence: 'medium',
-        basedOn: ['visible enemy positions', 'terrain']
-    };
+    try {
+        const response = await generateOfficerResponse(prompt, 'groq');
+        
+        return {
+            answer: response.trim(),
+            confidence: 'medium',
+            basedOn: ['visible intel']
+        };
+    } catch (err) {
+        console.error('Officer Q&A failed:', err);
+        return {
+            answer: 'Apologies, Commander - battle noise interfering. Rephrase?',
+            confidence: 'low',
+            basedOn: []
+        };
+    }
 }
 
 /**
@@ -202,5 +208,6 @@ module.exports = {
     answerTacticalQuestion,
     buildOfficerQuestionPrompt,
     getCulturalPersonality,
-    getRelevantMemories
+    getRelevantMemories,
+    formatVisibleIntel
 };

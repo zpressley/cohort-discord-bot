@@ -282,10 +282,35 @@ async function generateOrderAcknowledgement(context, aiProvider = 'auto') {
     }
 }
 
+async function generateOfficerResponse(prompt, provider = 'groq') {
+    if (provider === 'groq' && groq) {
+        const resp = await groq.chat.completions.create({
+            model: 'llama-3.1-8b-instant',
+            messages: [{ role: 'user', content: prompt }],
+            max_tokens: 200,
+            temperature: 0.7
+        });
+        return resp.choices[0].message.content.trim();
+    }
+    
+    if (openai) {
+        const resp = await openai.chat.completions.create({
+            model: 'gpt-4o-mini',
+            messages: [{ role: 'user', content: prompt }],
+            max_tokens: 200,
+            temperature: 0.7
+        });
+        return resp.choices[0].message.content.trim();
+    }
+    
+    return 'AI not available, Commander.';
+}
+
 module.exports = {
     initializeAI,
     generateBattleNarrative,
     selectBestProvider,
     generateOfficerTurnSummary,
-    generateOrderAcknowledgement
+    generateOrderAcknowledgement,
+    generateOfficerResponse
 };

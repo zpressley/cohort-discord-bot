@@ -43,6 +43,13 @@ const DETECTION_RANGES = {
  * @returns {Object} Tiered visibility information
  */
 function calculateVisibility(playerUnits, enemyUnits, terrain, weather = 'clear') {
+    // Validate inputs
+    if (!Array.isArray(playerUnits)) playerUnits = [];
+    if (!Array.isArray(enemyUnits)) enemyUnits = [];
+    if (!terrain || typeof terrain !== 'object') {
+        terrain = { hill: [], forest: [], marsh: [], river: [], road: [] };
+    }
+    
     const visibleEnemyPositions = new Set();
     const intelligence = {
         spotted: [],      // Movement detected (long range)
@@ -56,12 +63,12 @@ function calculateVisibility(playerUnits, enemyUnits, terrain, weather = 'clear'
     playerUnits.forEach(unit => {
         // Calculate unit's effective ranges
         const isScout = unit.unitType?.toLowerCase().includes('scout');
-        const isElevated = terrain.hill && terrain.hill.includes(unit.position);
+        const isElevated = terrain?.hill?.includes(unit.position) || false;
         const unitTerrain = getUnitTerrain(unit.position, terrain);
         
         const baseSpotRange = isScout ? DETECTION_RANGES.scouts : DETECTION_RANGES.standard;
         const elevationBonus = isElevated ? DETECTION_RANGES.elevated : 0;
-        const terrainPenalty = DETECTION_RANGES.terrainModifiers[unitTerrain] || 0;
+        const terrainPenalty = DETECTION_RANGES?.terrainModifiers?.[unitTerrain] || 0;
         
         const effectiveSpotRange = baseSpotRange + elevationBonus + weatherPenalty + terrainPenalty;
         const effectiveIdentifyRange = DETECTION_RANGES.identifyDistance + (elevationBonus / 2) + weatherPenalty;
