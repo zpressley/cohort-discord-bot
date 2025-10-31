@@ -1,5 +1,7 @@
 const { EmbedBuilder, ActionRowBuilder, ButtonBuilder, ButtonStyle } = require('discord.js');
 const { Op } = require('sequelize');
+// Store pending orders for warning confirmations
+const pendingOrders = new Map();
 
 async function handleGameInteractions(interaction) {
     console.log('Game interaction received:', interaction.customId);
@@ -15,6 +17,13 @@ async function handleGameInteractions(interaction) {
         } else if (interaction.customId.startsWith('ready-for-battle-')) {
             await handleReadyForBattle(interaction);
         }
+        // ===== ADD THESE NEW HANDLERS =====
+        else if (interaction.customId.startsWith('confirm_order_')) {
+            await handleWarningConfirmation(interaction);
+        } else if (interaction.customId.startsWith('cancel_order_')) {
+            await handleWarningCancellation(interaction);
+        }
+        // ===== END NEW HANDLERS =====
         
     } catch (error) {
         console.error('Game interaction error:', error);
@@ -351,6 +360,106 @@ function createDetailedTacticalBriefing(battle, scenario) {
     };
 }
 
+/**
+ * Handle veteran warning confirmation - proceed with risky orders
+ */
+async function handleWarningConfirmation(interaction) {
+    const { models } = require('../database/setup');
+    
+    const battleId = parseInt(interaction.customId.split('_')[2]);
+    const battle = await models.Battle.findByPk(battleId);
+    
+    if (!battle) {
+        await interaction.reply({ 
+            content: 'Battle not found. It may have ended.', 
+            ephemeral: true 
+        });
+        return;
+    }
+    
+    const playerSide = battle.player1Id === interaction.user.id ? 'player1' : 'player2';
+    const orderKey = `${battleId}_${playerSide}`;
+    const pendingOrder = pendingOrders.get(orderKey);
+    
+    if (!pendingOrder) {
+        await interaction.reply({ 
+            content: 'Order expired. Please resubmit your command.', 
+            ephemeral: true 
+        });
+        return;
+    }
+    
+    // Update the warning message to show confirmation
+    await interaction.update({ 
+        content: `✅ **Proceeding with orders despite warnings...**\n\n` +
+                 `*Order:* "${pendingOrder}"\n\n` +
+                 `*Your officers salute and prepare to execute your commands.*`, 
+        components: [] 
+    });
+    
+    // Process the order by importing dmHandler's processPlayerOrder
+    const { processPlayerOrder } = require('./dmHandler');
+    
+    // Create a fake message object that processPlayerOrder expects
+    const fakeMessage = {
+        content: pendingOrder,
+        author: interaction.user,
+        id: `${interaction.id}_confirmed`,
+        reply: async (content) => {
+            // Send as followUp so it appears as a new message
+            return interaction.followUp(content);
+        }
+    };
+    
+    console.log(`Processing confirmed order for ${playerSide}: "${pendingOrder}"`);
+    
+    try {
+        await processPlayerOrder(fakeMessage, battle, interaction.user.id, playerSide, interaction.client);
+        pendingOrders.delete(orderKey);
+    } catch (error) {
+        console.error('Error processing confirmed order:', error);
+        await interaction.followUp({
+            content: '⚠️ Error processing your order. Please try again.',
+            ephemeral: true
+        });
+    }
+}
+
+/**
+ * Handle veteran warning cancellation - cancel risky orders
+ */
+async function handleWarningCancellation(interaction) {
+    const { models } = require('../database/setup');
+    
+    const battleId = parseInt(interaction.customId.split('_')[2]);
+    const battle = await models.Battle.findByPk(battleId);
+    
+    if (!battle) {
+        await interaction.reply({ 
+            content: 'Battle not found.', 
+            ephemeral: true 
+        });
+        return;
+    }
+    
+    const playerSide = battle.player1Id === interaction.user.id ? 'player1' : 'player2';
+    const orderKey = `${battleId}_${playerSide}`;
+    
+    // Update the message to show cancellation
+    await interaction.update({ 
+        content: `❌ **Orders cancelled.**\n\n` +
+                 `*Your officers await new commands.*\n\n` +
+                 `Submit revised orders in this DM when ready.`, 
+        components: [] 
+    });
+    
+    // Clear the pending order
+    pendingOrders.delete(orderKey);
+    
+    console.log(`Order cancelled by ${playerSide} in battle ${battleId}`);
+}
+
 module.exports = {
-    handleGameInteractions
+    handleGameInteractions,
+    pendingOrders
 };

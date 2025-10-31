@@ -204,10 +204,82 @@ function getOfficerName(culture) {
     return getCulturalPersonality(culture).officerName;
 }
 
+/**
+ * Generate veteran warning using Groq AI
+ */
+async function generateVeteranWarning(veteran, triggers, orderText, battleState, playerSide) {
+    const triggerContext = triggers.map(t => {
+        switch(t.type) {
+            case 'historical_knowledge':
+                return `You have fought ${t.context.enemyCulture} before and know their tactics`;
+            case 'battle_memory':
+                return `This reminds you of ${t.context.memory.memory.description} - outcome was ${t.context.memory.outcome}`;
+            case 'morale_concern':
+                return `Current morale is ${t.context.unitMorale}% - ${t.context.issue}`;
+            case 'tactical_risk':
+                return `Tactical risk detected: ${t.context.risk}`;
+            default:
+                return '';
+        }
+    }).join('. ');
+    
+    const prompt = `You are ${veteran.name}, a veteran officer with ${veteran.battles} battles of experience.
+
+Order received: "${orderText}"
+
+Context: ${triggerContext}
+
+Generate a SHORT warning (2-3 sentences max) that:
+- Expresses concern about the order
+- References specific experience/knowledge
+- Stays in character (gruff veteran, not flowery)
+- Ends with acknowledgment you'll follow orders if commanded
+
+Example: "Sir, I've seen this before against the Celts at Alesia. They baited us into the woods and slaughtered us. Your call, but I recommend caution."
+
+Generate the warning:`;
+
+    try {
+        if (process.env.GROQ_API_KEY) {
+            const Groq = require('groq-sdk');
+            const groq = new Groq({ apiKey: process.env.GROQ_API_KEY });
+            
+            const response = await groq.chat.completions.create({
+                model: "llama-3.1-8b-instant",  // YOUR MODEL
+                messages: [
+                    { role: "system", content: "You are a gruff, experienced ancient warfare veteran officer. Keep responses brief (2-3 sentences)." },
+                    { role: "user", content: prompt }
+                ],
+                max_tokens: 150,
+                temperature: 0.8
+            });
+            
+            return response.choices[0].message.content.trim();
+        }
+        
+        throw new Error('Groq API key not configured');
+        
+    } catch (error) {
+        console.error('AI warning generation failed:', error.message);
+        // Fallback template based on trigger type
+        const trigger = triggers[0];
+        if (trigger.type === 'battle_memory') {
+            return `Sir, this reminds me of ${trigger.context.memory.memory.description}. That ended in ${trigger.context.memory.outcome}. I'll follow your orders, but we should be cautious.`;
+        }
+        if (trigger.type === 'morale_concern') {
+            return `Commander, the men are wavering. Morale is low - this order may break them. Your command is law, but I must warn you.`;
+        }
+        return `Sir, I have concerns about this order based on my experience. This carries significant risk. But I'll follow your command if you insist.`;
+    }
+}
+
+
+
 module.exports = {
     answerTacticalQuestion,
     buildOfficerQuestionPrompt,
     getCulturalPersonality,
     getRelevantMemories,
+    generateVeteranWarning,
     formatVisibleIntel
 };

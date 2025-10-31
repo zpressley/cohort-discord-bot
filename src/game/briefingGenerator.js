@@ -1,270 +1,210 @@
-// src/game/briefingGenerator.js - FIXED VERSION
-// Remove map from embed to avoid 1024 character limit
+// src/game/briefingGenerator.js
+// AI-powered narrative briefings (Gupta-style)
 
-const { EmbedBuilder } = require('discord.js');
-const { generateASCIIMap } = require('./maps/mapUtils');
-const { calculateDistance } = require('./maps/mapUtils');
-const { getOfficerRoster } = require('./officers/namingSystem');
-const { formatOfficersForBriefing } = require('./officers/rosterDisplay');
+const { generateASCIIMap, calculateDistance } = require('./maps/mapUtils');
+const { callGroqAI } = require('../ai/officerQA');
 
 /**
- * Generate turn briefing TEXT (no embeds) for mobile readability
+ * Generate rich AI-powered briefing
+ * Players should be able to play without map from this text alone
  */
-async function generateBriefingText(battleState, playerSide, commander, eliteUnit, turnNumber) {
-    const playerData = battleState[playerSide] || {};
-    const officerName = eliteUnit?.officers?.[0]?.name || 'Unit Commander';
-
-    const intelligence = generateIntelligenceReport(playerData, battleState);
-    const officerComment = generateOfficerComment(
-        intelligence,
-        commander?.culture || 'default',
-        officerName
-    );
-
-    const unitsText = formatUnitList(
-        Array.isArray(playerData.unitPositions) ? playerData.unitPositions : [],
-        battleState.map?.terrain
-    );
-
-    const lines = [];
-    lines.push(`🎖️ WAR COUNCIL — Turn ${turnNumber}`);
-    lines.push('');
-    lines.push('YOUR FORCES:');
-    lines.push(unitsText || '—');
-    lines.push('');
-    lines.push('INTELLIGENCE:');
-    lines.push(intelligence);
-    lines.push('');
-    const { getOfficerRoster } = require('./officers/namingSystem');
-    const { formatOfficersForBriefing } = require('./officers/rosterDisplay');
-
-    const officers = getOfficerRoster(battleState, playerSide);
-    const officerSection = formatOfficersForBriefing(officers);
-
-    if (officerSection) {
-        lines.push('───────────────────────────────────────');
-        lines.push('OFFICERS AVAILABLE FOR COUNSEL:');
-        lines.push(officerSection);
-        lines.push('');
-        lines.push('*Type "officers" for full roster*');
-        lines.push('');
-    }
-    lines.push(`${officerName} reports:`);
-    lines.push(officerComment);
-    lines.push('');
-    lines.push('Send your orders to continue the battle.');
-    return lines.join('\n');
-}
-
-/**
- * Legacy embed generator (kept for compatibility if needed)
- */
-async function generateBriefingEmbed(battleState, playerSide, commander, eliteUnit, turnNumber) {
+async function generateRichTextBriefing(battleState, playerSide, commander, eliteUnit, turnNumber, atmosphericOpening) {
     const playerData = battleState[playerSide];
     const officerName = eliteUnit?.officers?.[0]?.name || 'Unit Commander';
-    const intelligence = generateIntelligenceReport(playerData, battleState);
-    const officerComment = generateOfficerComment(
-        intelligence,
+    const veteranLevel = eliteUnit?.officers?.[0]?.battlesSurvived || 0;
+    
+    const lines = [];
+    
+    // Header
+    lines.push('═══════════════════════════════════════');
+    lines.push(`🎖️ WAR COUNCIL — Turn ${turnNumber}`);
+    
+    // Atmospheric opening (if provided, otherwise generate)
+    if (atmosphericOpening) {
+        lines.push(atmosphericOpening);
+    }
+    
+    lines.push('═══════════════════════════════════════');
+    
+    // YOUR FORCES section (simple, no AI needed)
+    lines.push('YOUR FORCES:');
+    lines.push('');
+    lines.push(...formatUnitsSimple(playerData.unitPositions));
+    
+    lines.push('───────────────────────────────────────');
+    
+    // AI-GENERATED TACTICAL ASSESSMENT
+    lines.push(`**${officerName} reports:**`);
+    lines.push('');
+    
+    const tacticalAssessment = await generateOfficerAssessment(
+        playerData,
         commander.culture,
-        officerName
+        officerName,
+        veteranLevel,
+        battleState.map
     );
-    const embed = new EmbedBuilder()
-        .setColor(playerSide === 'player1' ? 0x8B0000 : 0x00008B)
-        .setTitle(`🎖️ WAR COUNCIL - Turn ${turnNumber}`)
-        .setDescription(`**Your Forces:**\n${formatUnitList(playerData.unitPositions)}`)
-        .addFields(
-            { name: '👁️ INTELLIGENCE:', value: intelligence, inline: false },
-            { name: `🎖️ ${officerName} reports:`, value: officerComment, inline: false }
-        )
-        .setFooter({ text: 'Send your orders to continue the battle' });
-    return embed;
-}
-
-/**
- * Generate ASCII map separately (as code block message)
- */
-function generateMapMessage(battleState, playerSide, view = 'default') {
-    const playerData = battleState[playerSide] || {};
-
-    const friendlyUnits = Array.isArray(playerData.unitPositions) ? playerData.unitPositions : [];
-
-    const visibleEnemyCoords = Array.isArray(playerData.visibleEnemyPositions)
-        ? playerData.visibleEnemyPositions
-        : [];
-    const visibleEnemyUnits = visibleEnemyCoords.map(coord => ({ position: coord }));
-
-    const terrain = battleState.map?.terrain || require('./maps/riverCrossing').RIVER_CROSSING_MAP.terrain;
-
-    const mapData = {
-        terrain,
-        player1Units: friendlyUnits,
-        player2Units: visibleEnemyUnits
-    };
-
-    // Viewport based on preference
-    const { parseCoord, generateEmojiMapViewport } = require('./maps/mapUtils');
-    const GRID = 20, H = 15, W = 15;
-    function clamp(v, lo, hi) { return Math.max(lo, Math.min(hi, v)); }
-
-    let top = 0, left = 0;
-    if (view === 'center') {
-        top = Math.floor((GRID - H) / 2); left = Math.floor((GRID - W) / 2);
-    } else if (view === 'nw') { top = 0; left = 0; }
-    else if (view === 'ne') { top = 0; left = GRID - W; }
-    else if (view === 'sw') { top = GRID - H; left = 0; }
-    else if (view === 'se') { top = GRID - H; left = GRID - W; }
-    else { // default follow commander
-        const commanderPos = playerData?.commander?.position || friendlyUnits[0]?.position || 'K10';
-        const p = parseCoord(commanderPos) || { row: 9, col: 9 };
-        top = clamp(p.row - Math.floor(H / 2), 0, GRID - H);
-        left = clamp(p.col - Math.floor(W / 2), 0, GRID - W);
-    }
-
-    // Build overlays: X for intel older than 1 turn
-    const overlays = Array.isArray(playerData.intelMemory)
-      ? playerData.intelMemory.filter(e => (battleState.currentTurn - (e.lastSeenTurn || 0)) >= 2).map(e => e.position)
-      : [];
-    const mapView = generateEmojiMapViewport(mapData, { top, left, width: W, height: H }, overlays);
-    return `**MAP:**\n\`\`\`\n${mapView}\n\`\`\``;
-}
-
-/**
- * Generate intelligence report from visibility data
- */
-function generateIntelligenceReport(playerData, battleState) {
-    const mem = Array.isArray(playerData.intelMemory) ? playerData.intelMemory : [];
     
-    if (mem.length === 0) {
-        return '❓ No enemy contact';
-    }
-
-    const currentTurn = battleState.currentTurn || 0;
+    lines.push(tacticalAssessment);
     
-    // Load formatters
-    const { getUnitTypeEmoji, formatIntelConfidence, formatStrengthEstimate } = require('./briefingFormatters');
+    lines.push('═══════════════════════════════════════');
+    lines.push('**Type your orders to continue the battle**');
     
-    const lines = mem
-        .sort((a, b) => (b.lastSeenTurn || 0) - (a.lastSeenTurn || 0))
-        .slice(0, 8)
-        .map(entry => {
-            // Get emoji
-            const emoji = getUnitTypeEmoji(entry.unitClass);
-            
-            // Format unit type
-            const unitClass = entry.unitClass || 'Infantry';
-            const unitType = unitClass.split('_').map(w => 
-                w.charAt(0).toUpperCase() + w.slice(1)
-            ).join(' ');
-            
-            // Format strength
-            const strength = formatStrengthEstimate(
-                entry.estimatedStrength, 
-                entry.detailLevel
-            );
-            
-            // Format position confidence
-            const turnsSince = currentTurn - (entry.lastSeenTurn || currentTurn);
-            const positionPhrase = formatIntelConfidence(
-                entry.detailLevel,
-                turnsSince
-            );
-            
-            // Get terrain
-            const terrain = getTerrainAtPosition(battleState.map?.terrain, entry.position);
-            
-            return `${emoji} Enemy ${unitType} — ${strength} — ${positionPhrase} ${entry.position} (${terrain})`;
-        });
-
     return lines.join('\n');
 }
 
 /**
- * Generate culturally appropriate officer commentary
+ * Format units simply (no AI needed - just facts)
  */
-function generateOfficerComment(intelligence, culture, officerName) {
-    const hasEnemies = intelligence.includes('Enemy Spotted');
-    
-    const comments = {
-        'Roman Republic': hasEnemies ? 
-            `"Sir, enemy forces spotted ahead! The legion stands ready. Recommend we maintain formation and advance cautiously."` :
-            `"No contact yet, Commander. The men are alert and in good order."`,
-        
-        'Celtic': hasEnemies ?
-            `"Enemy ahead, Chief! The lads are eager for battle. Give the word and we'll smash their lines!"` :
-            `"Quiet out there, Chief. Too quiet. The spirits whisper of coming battle."`,
-        
-        'Han Dynasty': hasEnemies ?
-            `"Commander, enemy forces detected. Recommend coordinated advance with crossbow support."` :
-            `"All quiet, Commander. The men maintain discipline and await your orders."`,
-        
-        'Spartan City-State': hasEnemies ?
-            `"Enemy sighted. Spartans do not retreat."` :
-            `"We wait."`,
-        
-        'default': hasEnemies ?
-            `"Commander, enemy forces ahead. Awaiting your tactical orders."` :
-            `"All clear, Commander. Units ready for orders."`
-    };
-    
-    return comments[culture] || comments['default'];
-}
-
-/**
- * Format unit list for briefing - show actual unit types and details
- */
-function formatUnitList(units, terrain) {
-    if (!Array.isArray(units) || units.length === 0) {
-        return 'No units deployed';
-    }
-
+function formatUnitsSimple(units) {
     return units.map(unit => {
-        const { getFriendlyUnitEmoji } = require('./briefingFormatters');
-        const emoji = getFriendlyUnitEmoji(unit);
-        const weapon = simplifyWeaponName(unit.primaryWeapon?.name);
-        const typeBase = unit.mounted ? 'Cavalry' : 'Infantry';
-        const eliteSuffix = unit.isElite ? ` (${unit.eliteName || 'Elite'})` : '';
-        const type = unit.isElite ? `Elite ${typeBase}${eliteSuffix}` : `${typeBase}${weapon ? ` (${weapon})` : ''}`;
-        const pos = unit.position;
-        const terr = getTerrainAtPosition(terrain, pos);
-        const mission = unit.activeMission?.status === 'active' ? ` → Mission: ${unit.activeMission.target}` : '';
-        return `${emoji} ${type} at ${pos} - ${unit.currentStrength} men - (${terr})${mission}`;
+        const icon = getUnitIcon(unit.type);
+        const pos = `${unit.position.row}${unit.position.col}`;
+        
+        let status = unit.activeMission?.status === 'active' ?
+            `Advancing to ${unit.activeMission.target.row}${unit.activeMission.target.col}` :
+            `Holding position`;
+        
+        return `${icon} ${unit.name || unit.type} at ${pos} — ${unit.currentStrength}/${unit.maxStrength || 100} — ${status}`;
     }).join('\n');
 }
 
-function getTerrainAtPosition(terrain, coord) {
-    if (!terrain || !coord) return 'plains';
-    const inList = (arr, c) => Array.isArray(arr) && (arr.includes(c) || arr.some(x => typeof x === 'object' && x?.coord === c));
-    if (inList(terrain.fords, coord)) return 'ford';
-    if (inList(terrain.river, coord)) return 'river';
-    if (inList(terrain.hill, coord)) return 'hill';
-    if (inList(terrain.forest, coord)) return 'forest';
-    if (inList(terrain.marsh, coord)) return 'marsh';
-    if (inList(terrain.road, coord)) return 'road';
-    return 'plains';
+/**
+ * Generate AI-powered tactical assessment
+ * This is the heart of Gupta-style: officer describes situation narratively
+ */
+async function generateOfficerAssessment(playerData, culture, officerName, veteranLevel, map) {
+    const { callGroqAI } = require('../ai/officerQA');
+    
+    // Build tactical context
+    const friendlyUnits = playerData.unitPositions || [];
+    const visibleEnemies = playerData.visibleEnemyPositions || [];
+    
+    // Describe friendly positions and terrain
+    const friendlyContext = friendlyUnits.map(u => {
+        const terrain = map?.terrain?.[u.position.row]?.[u.position.col] || 'plains';
+        return `- ${u.name || u.type} at ${u.position.row}${u.position.col} (${terrain}, ${u.currentStrength} warriors)`;
+    }).join('\n');
+    
+    // Describe enemy contacts with relative positions
+    let enemyContext = 'No enemy forces spotted yet.';
+    if (visibleEnemies.length > 0) {
+        // Deduplicate
+        const seen = new Set();
+        // Add null check for position:
+        const unique = visibleEnemies.filter(e => {
+            if (!e || !e.position) return false;  // Skip if no position
+            const key = `${e.position.row}${e.position.col}`;
+            if (seen.has(key)) return false;
+            seen.add(key);
+            return true;
+        });
+        
+        enemyContext = unique.map(e => {
+            const nearestFriendly = friendlyUnits[0]; // Simplified - use closest
+            const dist = calculateDistance(nearestFriendly.position, e.position);
+            const direction = getRelativeDirection(nearestFriendly.position, e.position);
+            
+            return `- Enemy ${e.type || 'troops'} spotted ${direction} at ${e.position.row}${e.position.col}, ${dist} tiles away (estimated ${e.estimatedStrength || '~100'} warriors)`;
+        }).join('\n');
+    }
+    
+    const culturalVoice = getCulturalVoice(culture);
+    
+    const prompt = `You are ${officerName}, a ${veteranLevel >= 6 ? 'veteran' : 'experienced'} officer in a ${culture} army.
+
+Your commander needs a tactical situation report. Describe:
+1. What you can see of the terrain and battlefield
+2. Enemy positions and movements (if any)
+3. Your tactical assessment and recommendations
+4. Any concerns or opportunities
+
+Keep your report concise (3-4 sentences) and speak in character for ${culture}. ${culturalVoice}
+
+CURRENT SITUATION:
+Your forces:
+${friendlyContext}
+
+Enemy intelligence:
+${enemyContext}
+
+Provide your tactical report:`;
+
+    try {
+        const assessment = await callGroqAI(prompt, 'llama-3.1-8b-instant');
+        return `*"${assessment.trim()}"*`;
+    } catch (error) {
+        console.error('AI assessment failed, using fallback:', error);
+        return generateFallbackAssessment(visibleEnemies, culture);
+    }
 }
 
-function getUnitTypeDescription(unit) {
-    if (!unit) return 'Unit';
-    const type = unit.mounted ? 'Cavalry' : 'Infantry';
-    return unit.isElite ? `Elite ${type}` : type;
+/**
+ * Cultural voice guidelines for AI
+ */
+function getCulturalVoice(culture) {
+    const voices = {
+        'Roman Republic': 'Speak formally and professionally. Use military terminology. Be precise and methodical.',
+        'Celtic': 'Speak with passion and poetry. Reference spirits and honor. Be bold and direct.',
+        'Han Dynasty': 'Speak with discipline and wisdom. Reference strategy and coordination. Be measured.',
+        'Spartan City-State': 'Speak in terse, blunt statements. No flowery language. Direct and stoic.'
+    };
+    
+    return voices[culture] || voices['Roman Republic'];
 }
 
-function simplifyWeaponName(name) {
-    if (!name) return '';
-    const n = name.toLowerCase();
-    if (n.includes('spear') || n.includes('sarissa') || n.includes('dory')) return 'Spears';
-    if (n.includes('gladius') || n.includes('sword') || n.includes('xiphos') || n.includes('dao') || n.includes('jian')) return 'Swords';
-    if (n.includes('bow') || n.includes('crossbow')) return 'Bows';
-    if (n.includes('javelin') || n.includes('pilum')) return 'Javelins';
-    if (n.includes('mace')) return 'Maces';
-    if (n.includes('axe')) return 'Axes';
-    return name.split('(')[0].trim();
+/**
+ * Fallback if AI fails
+ */
+function generateFallbackAssessment(visibleEnemies, culture) {
+    if (visibleEnemies.length === 0) {
+        return `*"All quiet, Commander. No enemy contact. The men await your orders."*`;
+    }
+    
+    const enemyClose = visibleEnemies.some(e => {
+        // Simplified distance check
+        return true; // Assume close for fallback
+    });
+    
+    if (culture === 'Spartan City-State') {
+        return `*"Enemy sighted. We do not retreat."*`;
+    }
+    
+    if (culture === 'Celtic') {
+        return `*"Enemy spotted, Chief! The lads are eager for battle!"*`;
+    }
+    
+    return `*"Enemy forces detected, Commander. Recommend we advance cautiously and maintain formation."*`;
+}
+
+/**
+ * Get relative direction between two positions
+ */
+function getRelativeDirection(from, to) {
+    const rowDiff = to.row.charCodeAt(0) - from.row.charCodeAt(0);
+    const colDiff = to.col - from.col;
+    
+    let direction = '';
+    if (rowDiff > 0) direction += 'south';
+    if (rowDiff < 0) direction += 'north';
+    if (colDiff > 0) direction += 'east';
+    if (colDiff < 0) direction += 'west';
+    
+    return direction || 'nearby';
+}
+
+function getUnitIcon(type) {
+    const icons = {
+        'elite': '🔷',
+        'professional': '🟦',
+        'levy': '🔹',
+        'cavalry': '🐎',
+        'archers': '🏹',
+        'default': '⚔️'
+    };
+    return icons[type?.toLowerCase()] || icons.default;
 }
 
 module.exports = {
-    generateBriefingText,
-    generateBriefingEmbed,
-    generateMapMessage,
-    generateIntelligenceReport,
-    generateOfficerComment
+    generateRichTextBriefing
 };

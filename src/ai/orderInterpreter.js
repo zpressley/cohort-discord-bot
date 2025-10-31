@@ -73,64 +73,17 @@ function checkMissionInterruption(unit, battleState, playerSide, map) {
 
 /**
  * Interpret player orders using AI and validate against game rules
- * Checks for mission interruptions FIRST if order is "hold"
- * 
  * @param {string} orderText - Natural language order from player
  * @param {Object} battleState - Current battle state
  * @param {string} playerSide - 'player1' or 'player2'
  * @param {Object} map - Map data for validation
  * @returns {Object} Validated actions to execute
  */
-async function interpretOrders(orderText, battleState, playerSide, map, battleContext = null) {
+async function interpretOrders(orderText, battleState, playerSide, map) {
     const playerUnits = battleState[playerSide].unitPositions || [];
     const playerArmy = battleState[playerSide].army || {};
     
-    // STEP 1: If order is "hold", check for mission interruptions FIRST
-    const interruptions = [];
-    if (orderText.toLowerCase().trim() === 'hold') {
-        for (const unit of playerUnits) {
-            const check = checkMissionInterruption(unit, battleState, playerSide, map);
-            if (check.interrupted) {
-                interruptions.push({
-                    unit: unit.unitId,
-                    position: unit.position,
-                    ...check
-                });
-            }
-        }
-        
-        // If missions interrupted, return questions instead of executing
-        if (interruptions.length > 0) {
-            return {
-                validatedActions: [], // Don't execute any actions
-                errors: interruptions, // Show as questions in briefing
-                missionInterruptions: interruptions,
-                requiresPlayerDecision: true
-            };
-        }
-        // Otherwise, treat HOLD as "no new orders" so mission continuation logic can run
-        return {
-            validatedActions: [],
-            errors: [],
-            missionInterruptions: interruptions,
-            officerComment: 'No enemy detected. Maintaining discipline.'
-        };
-    }
-    
-    // STEP 2: Check for commander actions first (before AI parsing)
-    if (battleContext) {
-        const commanderContext = {
-            battleId: battleContext.battleId,
-            playerId: playerSide === 'player1' ? battleContext.player1Id : battleContext.player2Id
-        };
-        
-        const commanderAction = await parseCommanderActions(orderText, battleState, playerSide, commanderContext);
-        if (commanderAction) {
-            return commanderAction;
-        }
-    }
-    
-    // STEP 3: Normal AI order processing
+    // Build context for AI
     const context = {
         currentTurn: battleState.currentTurn,
         yourUnits: playerUnits,
@@ -139,101 +92,61 @@ async function interpretOrders(orderText, battleState, playerSide, map, battleCo
         culture: battleState[playerSide].culture
     };
     
-  const normalized = normalizeOrderText(orderText);
-  const prompt = buildOrderInterpretationPrompt(normalized, context);
-  // Always use deterministic parser (no external calls); it can handle multi-orders and targeting
-  const aiResponse = await callAIForOrderParsing(prompt, playerUnits);
+    // Generate AI prompt
+    const prompt = buildOrderInterpretationPrompt(orderText, context);
+    
+    // Call AI for interpretation
+    const aiResponse = await callAIForOrderParsing(prompt);
 
-  // Validate AI-suggested actions against rules
+    // Validate AI-suggested actions against movement system ONLY
+    // No schema validation - movement system catches invalid moves
     const validatedActions = [];
     const errors = [];
     
     for (const action of aiResponse.actions) {
-        // Handle mission continuation
-        if (action.type === 'continue_mission') {
-            const unit = playerUnits.find(u => u.unitId === action.unitId);
-            
-            if (!unit || !unit.activeMission) {
-                errors.push({ 
-                    unit: action.unitId, 
-                    error: 'No active mission to continue',
-                    reason: 'no_mission'
-                });
-                continue;
-            }
-            
-            // Execute movement toward mission target
-            const validation = validateMovement(unit, unit.activeMission.target, map);
-            
-            if (validation.valid) {
-                validatedActions.push({
-                    type: 'move',
-                    unitId: unit.unitId,
-                    currentPosition: unit.position,
-                    targetPosition: unit.activeMission.target,
-                    validation,
-                    missionAction: true, // Flag this as mission continuation
-                    finalPosition: validation.finalPosition || unit.activeMission.target,
-                    reasoning: `Continuing mission to ${unit.activeMission.target}`
-                });
-            } else {
-                errors.push({
-                    unit: unit.unitId,
-                    error: `Cannot continue mission: ${validation.error}`,
-                    reason: validation.reason
-                });
-            }
-            continue;
-        }
+        console.log('  Validating action:', action.type, action.unitId, '→', action.targetPosition);
         
         if (action.type === 'move') {
             const unit = playerUnits.find(u => u.unitId === action.unitId);
+            console.log('  Unit found:', !!unit);
             
             if (!unit) {
                 errors.push(`Unit ${action.unitId} not found`);
                 continue;
             }
             
-            const validation = validateMovement(unit, action.targetPosition, map);
-            
-            if (validation.valid) {
-                // Create mission if partial movement (destination not reached)
-                let newMission = null;
-                if (validation.partialMovement && validation.originalTarget) {
-                    newMission = {
-                        type: 'move_to_destination',
-                        target: validation.originalTarget,
-                        startTurn: battleState.currentTurn,
-                        status: 'active',
-                        contingencies: [],
-                        progress: { 
-                            startPosition: unit.position, 
-                            lastReportTurn: battleState.currentTurn 
-                        }
-                    };
-                }
+            // ONLY validation: Can the unit actually move there?
+            try {
+                const validation = require('../game/movementSystem').validateMovement(unit, action.targetPosition, map);
+                console.log('  Movement validation:', validation.valid);
                 
-                validatedActions.push({
-                    ...action,
-                    validation,
-                    unitId: unit.unitId,
-                    newMission: newMission,
-                    finalPosition: validation.finalPosition || action.targetPosition
-                });
-            } else {
+                if (validation.valid) {
+                    validatedActions.push({
+                        ...action,
+                        validation,
+                        unitId: unit.unitId
+                    });
+                    console.log('  ✅ Action validated');
+                } else {
+                    console.log('  ❌ Movement invalid:', validation.error);
+                    errors.push({
+                        unit: unit.unitId,
+                        error: validation.error,
+                        reason: validation.reason
+                    });
+                }
+            } catch (error) {
+                // Catch invalid coordinates, impossible moves, etc.
+                console.log('  ❌ Validation error:', error.message);
                 errors.push({
                     unit: unit.unitId,
-                    error: validation.error,
-                    reason: validation.reason
+                    error: error.message,
+                    reason: 'validation_exception'
                 });
             }
-        }
-        
-        if (action.type === 'formation') {
-            validatedActions.push(action);
-        }
-        
-        if (action.type === 'scout') {
+        } else {
+            // Other action types (formation, hold, attack) - just pass through
+            // They'll be validated by their respective systems
             validatedActions.push(action);
         }
     }
@@ -241,7 +154,6 @@ async function interpretOrders(orderText, battleState, playerSide, map, battleCo
     return {
         validatedActions,
         errors,
-        missionInterruptions: interruptions, // Always include (empty if none)
         officerComment: aiResponse.officerComment || generateDefaultComment(context.culture),
         rawAIResponse: aiResponse
     };
@@ -431,103 +343,164 @@ function splitMultipleOrders(orderText) {
 }
 
 /**
- * Call AI for order parsing (placeholder for real AI integration)
- * Fixed: Now selects correct units based on order keywords
+ * Call AI for order parsing using Groq
  */
 async function callAIForOrderParsing(prompt) {
+    try {
+        // Use Groq for fast order interpretation
+        if (!process.env.GROQ_API_KEY) {
+            console.log('No Groq API key - using fallback parser');
+            return fallbackOrderParsing(prompt);
+        }
+        
+        const Groq = require('groq-sdk');
+        const groq = new Groq({ apiKey: process.env.GROQ_API_KEY });
+        
+        const response = await groq.chat.completions.create({
+            model: "llama-3.1-8b-instant",
+            messages: [
+                { 
+                    role: "system", 
+                    content: "You are a tactical order interpreter for ancient warfare. Parse player orders into game actions. Return ONLY valid JSON, no other text." 
+                },
+                { role: "user", content: prompt }
+            ],
+            max_tokens: 500,
+            temperature: 0.3
+        });
+        
+        const aiText = response.choices[0].message.content.trim();
+        
+        // Extract JSON from response
+        const jsonMatch = aiText.match(/\{[\s\S]*\}/);
+        if (!jsonMatch) {
+            console.log('AI response not JSON - using fallback');
+            return fallbackOrderParsing(prompt);
+        }
+        
+        const parsed = JSON.parse(jsonMatch[0]);
+        
+        // Ensure required fields exist
+        if (!parsed.actions) parsed.actions = [];
+        if (!parsed.validation) parsed.validation = { isValid: true, errors: [], warnings: [] };
+        if (!parsed.officerComment) parsed.officerComment = 'Orders acknowledged.';
+        
+        console.log(`AI parsed ${parsed.actions.length} actions from order`);
+        return parsed;
+        
+    } catch (error) {
+        console.error('AI order parsing failed:', error.message);
+        console.log('Using fallback parser');
+        return fallbackOrderParsing(prompt);
+    }
+}
+
+/**
+ * Fallback order parsing when AI fails
+ */
+function fallbackOrderParsing(prompt) {
     const yourUnits = JSON.parse(prompt.match(/Your Units: (\[.*?\])/s)?.[1] || '[]');
     const orderText = prompt.match(/\*\*PLAYER ORDER:\*\* "(.*?)"/)?.[1] || '';
+    
+    console.log(`Fallback parsing: "${orderText}" for ${yourUnits.length} units`);
     
     if (yourUnits.length === 0) {
         return { 
             actions: [], 
-            validation: { isValid: true, errors: [], warnings: [] }, 
-            officerComment: 'No units available.' 
+            validation: { isValid: true, errors: [], warnings: ['No units available'] }, 
+            officerComment: 'No units to command.' 
         };
     }
     
     const lowerOrder = orderText.toLowerCase();
     
-    // STEP 1: Determine which units this order targets
-    let targetUnits = selectTargetUnits(orderText, yourUnits);
+    // Determine which units to command
+    let unitsToCommand = [];
     
-    // If no specific units matched, default to all units
-    if (targetUnits.length === 0) {
-        console.log('  No specific unit types matched, applying to all units');
-        targetUnits = [...yourUnits];
+    if (lowerOrder.includes('cavalry')) {
+        unitsToCommand = yourUnits.filter(u => u.type?.toLowerCase().includes('cavalry') || u.type?.toLowerCase().includes('horse'));
+        if (unitsToCommand.length === 0) {
+            return {
+                actions: [],
+                validation: { isValid: true, errors: [], warnings: ['No cavalry available'] },
+                officerComment: 'Sir, we have no cavalry units.'
+            };
+        }
+    } else if (lowerOrder.includes('archer') || lowerOrder.includes('bowmen')) {
+        unitsToCommand = yourUnits.filter(u => u.type?.toLowerCase().includes('archer') || u.type?.toLowerCase().includes('bow'));
+        if (unitsToCommand.length === 0) {
+            return {
+                actions: [],
+                validation: { isValid: true, errors: [], warnings: ['No archers available'] },
+                officerComment: 'Sir, we have no archer units.'
+            };
+        }
+    } else if (lowerOrder.includes('infantry')) {
+        unitsToCommand = yourUnits.filter(u => 
+            u.type?.toLowerCase().includes('infantry') || 
+            u.type?.toLowerCase().includes('levy') ||
+            u.type?.toLowerCase().includes('militia') ||
+            u.type?.toLowerCase().includes('soldier')
+        );
+    } else if (lowerOrder.includes('all') || lowerOrder.includes('everyone') || lowerOrder.includes('everybody')) {
+        unitsToCommand = yourUnits;
     } else {
-        console.log(`  Order targets ${targetUnits.length} unit(s):`, targetUnits.map(u => u.id));
+        // Default to all units for general commands
+        unitsToCommand = yourUnits;
     }
+    
+    console.log(`Commanding ${unitsToCommand.length} units`);
     
     const actions = [];
     
-    // STEP 2: Check for explicit coordinates in order
-    const coordMatch = orderText.match(/\b([A-O]\d{1,2})\b/i);
-    const explicitTarget = coordMatch ? coordMatch[1].toUpperCase() : null;
-    
-    if (explicitTarget) {
-        console.log(`  Explicit coordinate detected: ${explicitTarget}`);
-    }
-    
-    // STEP 3: Process each target unit
-    for (const unit of targetUnits) {
-        let destination = explicitTarget || unit.position;
+    for (const unit of unitsToCommand) {
+        let targetPosition = null;
+        let actionType = 'move';
         
-        // If no explicit coordinate, parse direction/keywords
-        if (!explicitTarget) {
-            if (lowerOrder.includes('south')) {
-                destination = moveInDirection(unit.position, 'south', 3);
-                console.log(`  ${unit.id}: Parsed 'south' → ${destination}`);
-            } else if (lowerOrder.includes('north')) {
-                destination = moveInDirection(unit.position, 'north', 3);
-                console.log(`  ${unit.id}: Parsed 'north' → ${destination}`);
-            } else if (lowerOrder.includes('east')) {
-                destination = moveInDirection(unit.position, 'east', 3);
-                console.log(`  ${unit.id}: Parsed 'east' → ${destination}`);
-            } else if (lowerOrder.includes('west')) {
-                destination = moveInDirection(unit.position, 'west', 3);
-                console.log(`  ${unit.id}: Parsed 'west' → ${destination}`);
-            } else if (lowerOrder.includes('river') || lowerOrder.includes('ford')) {
-                destination = 'F11';
-                console.log(`  ${unit.id}: Parsed 'ford/river' → ${destination}`);
-            } else if (lowerOrder.includes('hill')) {
-                destination = 'B5';
-                console.log(`  ${unit.id}: Parsed 'hill' → ${destination}`);
-            }
+        // Rest stays the same...
+        const coordMatch = orderText.match(/\b([A-T]\d{1,2})\b/i);
+        if (coordMatch) {
+            targetPosition = coordMatch[1].toUpperCase();
+        }
+        else if (lowerOrder.includes('hold') || lowerOrder.includes('defend') || lowerOrder.includes('stay')) {
+            targetPosition = unit.position;
+            actionType = 'hold';
+        }
+        else if (lowerOrder.includes('north')) targetPosition = moveInDirection(unit.position, 'north', 3);
+        else if (lowerOrder.includes('south')) targetPosition = moveInDirection(unit.position, 'south', 3);
+        else if (lowerOrder.includes('east')) targetPosition = moveInDirection(unit.position, 'east', 3);
+        else if (lowerOrder.includes('west')) targetPosition = moveInDirection(unit.position, 'west', 3);
+        else if (lowerOrder.includes('ford') || lowerOrder.includes('crossing')) targetPosition = 'F11';
+        else if (lowerOrder.includes('river')) targetPosition = 'F11';
+        else if (lowerOrder.includes('hill')) targetPosition = 'B5';
+        else if (lowerOrder.includes('attack') || lowerOrder.includes('advance') || lowerOrder.includes('charge')) {
+            targetPosition = moveInDirection(unit.position, 'north', 3);
+        }
+        else if (lowerOrder.includes('retreat') || lowerOrder.includes('withdraw') || lowerOrder.includes('fall back')) {
+            targetPosition = moveInDirection(unit.position, 'south', 3);
         }
         
-        // Only create action if unit is actually moving
-        if (destination !== unit.position) {
+        if (targetPosition) {
             actions.push({
-                type: 'move',
+                type: actionType,
                 unitId: unit.id,
                 currentPosition: unit.position,
-                targetPosition: destination,
-                reasoning: `${unit.type || 'Unit'} moving to ${destination}`
+                targetPosition: targetPosition,
+                reasoning: `Interpreting "${orderText}"`
             });
-        } else {
-            console.log(`  ${unit.id}: No movement (already at ${destination})`);
         }
     }
     
-    // If no actions generated, create hold order for first unit
-    if (actions.length === 0) {
-        actions.push({
-            type: 'hold',
-            unitId: yourUnits[0].id,
-            currentPosition: yourUnits[0].position,
-            reasoning: 'Holding position - no clear movement directive'
-        });
-    }
+    console.log(`Fallback generated ${actions.length} actions`);
     
     return {
-        actions,
-        validation: { 
-            isValid: true, 
-            errors: [], 
-            warnings: actions.length === 0 ? ['No movement detected in order'] : []
+        actions: actions,
+        validation: {
+            isValid: true,
+            errors: [],
+            warnings: actions.length === 0 ? ['Could not interpret - holding position'] : []
         },
-        officerComment: generateOfficerComment(actions, targetUnits.length)
+        officerComment: actions.length > 0 ? 'Orders understood, sir.' : 'Unclear orders - holding position.'
     };
 }
 

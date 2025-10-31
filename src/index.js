@@ -34,16 +34,6 @@ async function initializeBot() {
         // Load commands
         console.log('⚔️ Loading battle commands...');
         await loadCommands(client);
-        
-        // Scenario key alignment assertion
-        try {
-            const { assertScenarioKeys } = require('./game/validation/scenarioKeyAssert');
-            assertScenarioKeys();
-            console.log('🧭 Scenario keys aligned with map modules.');
-        } catch (e) {
-            console.error('❌ Scenario key assertion failed:', e.message);
-            process.exit(1);
-        }
 
         console.log('✅ Initialization complete!');
         

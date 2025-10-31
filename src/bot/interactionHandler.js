@@ -1,3 +1,5 @@
+const pendingOrders = new Map();
+
 // Add this after the existing InteractionCreate handler
 client.on(Events.InteractionCreate, async (interaction) => {
     if (interaction.isCommand()) {
