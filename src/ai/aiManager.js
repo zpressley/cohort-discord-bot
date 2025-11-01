@@ -306,11 +306,38 @@ async function generateOfficerResponse(prompt, provider = 'groq') {
     return 'AI not available, Commander.';
 }
 
+
+async function generateOfficerDialogue(officerName, culture, prompt) {
+    try {
+        if (!openai) {
+            throw new Error('OpenAI not initialized');
+        }
+
+        const response = await openai.chat.completions.create({
+            model: 'gpt-4o-mini',
+            messages: [
+                { role: 'system', content: `You are ${officerName}, an officer in a ${culture} army. Speak naturally, in-character, 2-3 sentences.` },
+                { role: 'user', content: prompt }
+            ],
+            temperature: 0.7,
+            max_tokens: 200
+        });
+        
+        return response.choices[0].message.content;
+        
+    } catch (error) {
+        console.error('generateOfficerDialogue error:', error.message);
+        throw error;
+    }
+}
+
 module.exports = {
     initializeAI,
     generateBattleNarrative,
     selectBestProvider,
     generateOfficerTurnSummary,
     generateOrderAcknowledgement,
+    generateOfficerDialogue,
     generateOfficerResponse
 };
+

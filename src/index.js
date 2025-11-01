@@ -43,6 +43,18 @@ async function initializeBot() {
     }
 }
 
+client.once('ready', async (readyClient) => {
+    await initializeAI();  // ADD THIS
+    console.log(`✅ Logged in as ${readyClient.user.tag}`);
+    console.log(`📊 Serving ${readyClient.guilds.cache.size} servers`);
+    
+    // Set bot presence
+    client.user.setPresence({
+        activities: [{ name: 'Ancient Warfare Strategy', type: 0 }],
+        status: 'online'
+    });
+});
+
 // Event handlers
 client.once(Events.ClientReady, async (readyClient) => {
     console.log(`🏛️ Cohort is online! Logged in as ${readyClient.user.tag}`);

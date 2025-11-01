@@ -74,6 +74,8 @@ async function initializeBattle(battle, player1Commander, player2Commander) {
         'player2'
     );
     
+    console.log('DEBUG P1 UNITS:', JSON.stringify(p1Units, null, 2));
+    console.log('DEBUG P2 UNITS:', JSON.stringify(p2Units, null, 2));
     console.log(`  Deployed: P1 ${p1Units.length} units, P2 ${p2Units.length} units`);
     
     // Initialize complete battle state

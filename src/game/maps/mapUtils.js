@@ -246,7 +246,7 @@ function getStackedEmoji(units, side) {
 }
 
 /**
- * Generate ASCII map (legacy/fallback version)
+ * Generate ASCII map (legacy/fallback version) - use 15x15 in all other situations. 
  */
 function generateASCIIMap(mapData) {
     const grid = Array(20).fill(null).map(() => Array(20).fill('.'));
@@ -608,13 +608,15 @@ function generateEmojiGrid(mapData) {
     }
 
     // Units stacked preference
+    // Units stacked preference
     const tiles = new Map();
     const addUnits = (arr, key) => {
         (arr || []).forEach(u => {
             if (!u.position) return;
-            const list = tiles.get(u.position) || { friendly: [], enemy: [] };
+            const posStr = coordToString(u.position); // Convert {row, col} to "E5"
+            const list = tiles.get(posStr) || { friendly: [], enemy: [] };
             list[key].push(u);
-            tiles.set(u.position, list);
+            tiles.set(posStr, list);
         });
     };
     addUnits(mapData.player2Units, 'enemy');
@@ -650,3 +652,4 @@ module.exports = {
     generateEmojiMapViewport,
     generateEmojiGrid
 };
+

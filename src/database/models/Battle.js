@@ -83,13 +83,13 @@ module.exports = (sequelize) => {
             defaultValue: {
                 player1: {
                     army: {},
-                    positions: {},
+                    positions: [],
                     supplies: 100,
                     morale: 100
                 },
                 player2: {
                     army: {},
-                    positions: {},
+                    positions: [],
                     supplies: 100,
                     morale: 100
                 },

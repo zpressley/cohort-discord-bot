@@ -135,12 +135,37 @@ function getAtmosphericOpening(turnNumber, weather) {
 }
 
 function generateMapForPlayer(battleState, playerSide) {
+    const { generateEmojiMapViewport } = require('./maps/mapUtils');
     const playerData = battleState[playerSide];
-    return generateASCIIMap({
+    
+    const getUnitsArray = (positions) => {
+        if (!positions) return [];
+        let units = Array.isArray(positions) ? positions : Object.values(positions);
+        return units.filter(u => u && u.position && u.position.row !== undefined && u.position.col !== undefined);
+    };
+    
+    const playerUnits = getUnitsArray(playerData.unitPositions);
+    
+    let centerRow = 10, centerCol = 10;
+    if (playerUnits.length > 0) {
+        centerRow = Math.floor(playerUnits.reduce((sum, u) => sum + u.position.row, 0) / playerUnits.length);
+        centerCol = Math.floor(playerUnits.reduce((sum, u) => sum + u.position.col, 0) / playerUnits.length);
+    }
+    
+    const view = {
+        top: Math.max(0, centerRow - 7),
+        left: Math.max(0, centerCol - 7),
+        width: 15,
+        height: 15
+    };
+    
+    const mapData = {
         terrain: battleState.map?.terrain || require('./maps/riverCrossing').RIVER_CROSSING_MAP.terrain,
-        player1Units: playerSide === 'player1' ? playerData.unitPositions : [],
-        player2Units: playerSide === 'player1' ? (playerData.visibleEnemyPositions || []) : playerData.unitPositions
-    });
+        player1Units: playerSide === 'player1' ? playerUnits : [],
+        player2Units: playerSide === 'player1' ? getUnitsArray(playerData.visibleEnemyPositions) : playerUnits
+    };
+    
+    return generateEmojiMapViewport(mapData, view);
 }
 
 module.exports = {

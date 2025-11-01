@@ -3,6 +3,7 @@
 
 const { generateASCIIMap, calculateDistance } = require('./maps/mapUtils');
 const { callGroqAI } = require('../ai/officerQA');
+const { generateOfficerDialogue } = require('../ai/aiManager');
 
 /**
  * Generate rich AI-powered briefing
@@ -29,7 +30,7 @@ async function generateRichTextBriefing(battleState, playerSide, commander, elit
     // YOUR FORCES section (simple, no AI needed)
     lines.push('YOUR FORCES:');
     lines.push('');
-    lines.push(...formatUnitsSimple(playerData.unitPositions));
+    lines.push(formatUnitsSimple(playerData.unitPositions));
     
     lines.push('───────────────────────────────────────');
     
@@ -69,74 +70,26 @@ function formatUnitsSimple(units) {
     }).join('\n');
 }
 
-/**
- * Generate AI-powered tactical assessment
- * This is the heart of Gupta-style: officer describes situation narratively
- */
 async function generateOfficerAssessment(playerData, culture, officerName, veteranLevel, map) {
-    const { callGroqAI } = require('../ai/officerQA');
-    
-    // Build tactical context
     const friendlyUnits = playerData.unitPositions || [];
     const visibleEnemies = playerData.visibleEnemyPositions || [];
     
-    // Describe friendly positions and terrain
-    const friendlyContext = friendlyUnits.map(u => {
-        const terrain = map?.terrain?.[u.position.row]?.[u.position.col] || 'plains';
-        return `- ${u.name || u.type} at ${u.position.row}${u.position.col} (${terrain}, ${u.currentStrength} warriors)`;
-    }).join('\n');
+    // Simple template-based assessment (no AI call needed)
+    let assessment = `${officerName} reports: `;
     
-    // Describe enemy contacts with relative positions
-    let enemyContext = 'No enemy forces spotted yet.';
+    if (friendlyUnits.length > 0) {
+        assessment += `Our ${friendlyUnits.length} units are in position. `;
+    }
+    
     if (visibleEnemies.length > 0) {
-        // Deduplicate
-        const seen = new Set();
-        // Add null check for position:
-        const unique = visibleEnemies.filter(e => {
-            if (!e || !e.position) return false;  // Skip if no position
-            const key = `${e.position.row}${e.position.col}`;
-            if (seen.has(key)) return false;
-            seen.add(key);
-            return true;
-        });
-        
-        enemyContext = unique.map(e => {
-            const nearestFriendly = friendlyUnits[0]; // Simplified - use closest
-            const dist = calculateDistance(nearestFriendly.position, e.position);
-            const direction = getRelativeDirection(nearestFriendly.position, e.position);
-            
-            return `- Enemy ${e.type || 'troops'} spotted ${direction} at ${e.position.row}${e.position.col}, ${dist} tiles away (estimated ${e.estimatedStrength || '~100'} warriors)`;
-        }).join('\n');
+        assessment += `Enemy forces detected at ${visibleEnemies.length} location${visibleEnemies.length > 1 ? 's' : ''}. `;
+    } else {
+        assessment += `No enemy contact yet. `;
     }
     
-    const culturalVoice = getCulturalVoice(culture);
+    assessment += `Awaiting your orders, Commander.`;
     
-    const prompt = `You are ${officerName}, a ${veteranLevel >= 6 ? 'veteran' : 'experienced'} officer in a ${culture} army.
-
-Your commander needs a tactical situation report. Describe:
-1. What you can see of the terrain and battlefield
-2. Enemy positions and movements (if any)
-3. Your tactical assessment and recommendations
-4. Any concerns or opportunities
-
-Keep your report concise (3-4 sentences) and speak in character for ${culture}. ${culturalVoice}
-
-CURRENT SITUATION:
-Your forces:
-${friendlyContext}
-
-Enemy intelligence:
-${enemyContext}
-
-Provide your tactical report:`;
-
-    try {
-        const assessment = await callGroqAI(prompt, 'llama-3.1-8b-instant');
-        return `*"${assessment.trim()}"*`;
-    } catch (error) {
-        console.error('AI assessment failed, using fallback:', error);
-        return generateFallbackAssessment(visibleEnemies, culture);
-    }
+    return assessment;
 }
 
 /**
