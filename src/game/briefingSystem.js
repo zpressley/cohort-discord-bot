@@ -141,7 +141,7 @@ function generateMapForPlayer(battleState, playerSide) {
     const getUnitsArray = (positions) => {
         if (!positions) return [];
         let units = Array.isArray(positions) ? positions : Object.values(positions);
-        return units.filter(u => u && u.position && u.position.row !== undefined && u.position.col !== undefined);
+        return units.filter(u => u && u.position); // Position can be string or object
     };
     
     const playerUnits = getUnitsArray(playerData.unitPositions);
@@ -158,11 +158,14 @@ function generateMapForPlayer(battleState, playerSide) {
         width: 15,
         height: 15
     };
-    
+    console.log('DEBUG playerSide:', playerSide);
+console.log('DEBUG playerData.unitPositions:', JSON.stringify(playerData.unitPositions, null, 2));
+console.log('DEBUG playerUnits:', JSON.stringify(playerUnits, null, 2));
+console.log('DEBUG visibleEnemyPositions:', JSON.stringify(playerData.visibleEnemyPositions, null, 2));
     const mapData = {
         terrain: battleState.map?.terrain || require('./maps/riverCrossing').RIVER_CROSSING_MAP.terrain,
-        player1Units: playerSide === 'player1' ? playerUnits : [],
-        player2Units: playerSide === 'player1' ? getUnitsArray(playerData.visibleEnemyPositions) : playerUnits
+        player1Units: playerSide === 'player1' ? playerUnits : getUnitsArray(playerData.visibleEnemyPositions),
+        player2Units: playerSide === 'player2' ? playerUnits : getUnitsArray(playerData.visibleEnemyPositions)
     };
     
     return generateEmojiMapViewport(mapData, view);

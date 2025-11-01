@@ -610,6 +610,8 @@ function generateEmojiGrid(mapData) {
     // Units stacked preference
     // Units stacked preference
     const tiles = new Map();
+console.log('DEBUG mapData.player1Units:', JSON.stringify(mapData.player1Units, null, 2));
+console.log('DEBUG mapData.player2Units:', JSON.stringify(mapData.player2Units, null, 2));
     const addUnits = (arr, key) => {
         (arr || []).forEach(u => {
             if (!u.position) return;
