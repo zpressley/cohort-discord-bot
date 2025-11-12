@@ -216,29 +216,10 @@ async function handleBattleJoin(interaction) {
     }
     await sendPrivateBriefing(player2User, battle, scenario, commander, 'player2');
 
-    // Initialize and start battle immediately
-    const { initializeBattle } = require('../game/battleInitializer');
-    const { sendInitialBriefings } = require('../game/briefingSystem');
-
-    try {
-        const initialState = await initializeBattle(battle, player1, commander);
-        
-        await battle.update({
-            battleState: initialState,
-            status: 'in_progress',
-            currentTurn: 1
-        });
-        
-        await battle.reload();
-        
-        await models.BattleTurn.create({
-            battleId: battle.id,
-            turnNumber: 1
-        });
-        
-        await sendInitialBriefings(battle, initialState, interaction.client);
-        
-        console.log('✅ Battle initialized and started');
+   // Start battle phase (will initialize and send briefings)
+   try {
+    await startBattlePhase(battle);
+    console.log('✅ Battle initialized and started');
         
     } catch (initError) {
         console.error('Battle initialization failed:', initError);

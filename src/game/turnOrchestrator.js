@@ -128,12 +128,14 @@ async function processTurn(battle, player1Order, player2Order, map) {
                 player1: {
                     ...battleState.player1,
                     unitPositions: updatedPositions.player1,
-                    visibleEnemyPositions: p1Visibility.visibleEnemyPositions
+                    visibleEnemyPositions: p1Visibility.visibleEnemyPositions,
+                    visibleEnemyDetails: p1Visibility.visibleEnemyDetails
                 },
                 player2: {
                     ...battleState.player2,
                     unitPositions: updatedPositions.player2,
-                    visibleEnemyPositions: p2Visibility.visibleEnemyPositions
+                    visibleEnemyPositions: p2Visibility.visibleEnemyPositions,
+                    visibleEnemyDetails: p2Visibility.visibleEnemyDetails 
                 }
             },
             turnResults: {

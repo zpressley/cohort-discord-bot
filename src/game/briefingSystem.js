@@ -141,7 +141,8 @@ function generateMapForPlayer(battleState, playerSide) {
     const getUnitsArray = (positions) => {
         if (!positions) return [];
         let units = Array.isArray(positions) ? positions : Object.values(positions);
-        return units.filter(u => u && u.position); // Position can be string or object
+        // Position can be string "H11" or object {row, col}
+        return units.filter(u => u && u.position);
     };
     
     const playerUnits = getUnitsArray(playerData.unitPositions);
@@ -162,11 +163,21 @@ function generateMapForPlayer(battleState, playerSide) {
 console.log('DEBUG playerData.unitPositions:', JSON.stringify(playerData.unitPositions, null, 2));
 console.log('DEBUG playerUnits:', JSON.stringify(playerUnits, null, 2));
 console.log('DEBUG visibleEnemyPositions:', JSON.stringify(playerData.visibleEnemyPositions, null, 2));
-    const mapData = {
-        terrain: battleState.map?.terrain || require('./maps/riverCrossing').RIVER_CROSSING_MAP.terrain,
-        player1Units: playerSide === 'player1' ? playerUnits : getUnitsArray(playerData.visibleEnemyPositions),
-        player2Units: playerSide === 'player2' ? playerUnits : getUnitsArray(playerData.visibleEnemyPositions)
-    };
+        // Enemies are stored as position strings, need to convert to unit objects for map
+        const enemyPositionObjects = (playerData.visibleEnemyPositions || []).map(posStr => ({
+            position: posStr,
+            side: playerSide === 'player1' ? 'player2' : 'player1'
+        }));
+        
+        const mapData = {
+            terrain: battleState.map?.terrain || require('./maps/riverCrossing').RIVER_CROSSING_MAP.terrain,
+            player1Units: playerSide === 'player1' ? playerUnits : enemyPositionObjects,
+            player2Units: playerSide === 'player2' ? playerUnits : enemyPositionObjects
+        };
+        
+        console.log('GENERATING MAP FOR:', playerSide);
+        console.log('  player1Units:', mapData.player1Units.length);
+        console.log('  player2Units:', mapData.player2Units.length);
     
     return generateEmojiMapViewport(mapData, view);
 }

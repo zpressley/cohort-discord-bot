@@ -529,8 +529,8 @@ function generateEmojiMap(mapData) {
  * Generate a 15x15 emoji viewport from a 20x20 map
  * view = { top: number, left: number, width: 15, height: 15 }
  */
-function generateEmojiMapViewport(mapData, view, overlays = []) {
-    const full = generateEmojiGrid(mapData);
+function generateEmojiMapViewport(mapData, view, overlays = [], viewingSide = 'player1') {
+    const full = generateEmojiGrid(mapData, viewingSide);
 
     // Overlay last-known positions with 'X' if not currently showing a unit icon
     try {
@@ -584,7 +584,7 @@ function generateEmojiMapViewport(mapData, view, overlays = []) {
 }
 
 // Build full 20x20 emoji grid for reuse
-function generateEmojiGrid(mapData) {
+function generateEmojiGrid(mapData, viewingSide = 'player1') {
     const grid = Array(20).fill(null).map(() => Array(20).fill('.'));
 
     // Terrain
@@ -615,7 +615,8 @@ console.log('DEBUG mapData.player2Units:', JSON.stringify(mapData.player2Units, 
     const addUnits = (arr, key) => {
         (arr || []).forEach(u => {
             if (!u.position) return;
-            const posStr = coordToString(u.position); // Convert {row, col} to "E5"
+            // Position is already a string like "H11"
+            const posStr = typeof u.position === 'string' ? u.position : coordToString(u.position);
             const list = tiles.get(posStr) || { friendly: [], enemy: [] };
             list[key].push(u);
             tiles.set(posStr, list);
