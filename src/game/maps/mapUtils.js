@@ -529,7 +529,11 @@ function generateEmojiMap(mapData) {
  * Generate a 15x15 emoji viewport from a 20x20 map
  * view = { top: number, left: number, width: 15, height: 15 }
  */
-function generateEmojiMapViewport(mapData, view, overlays = [], viewingSide = 'player1') {
+function generateEmojiMapViewport(mapData, view, overlays = [], viewingSide) {
+    if (!viewingSide) {
+        throw new Error('viewingSide required for generateEmojiMapViewport');
+    }
+    
     const full = generateEmojiGrid(mapData, viewingSide);
 
     // Overlay last-known positions with 'X' if not currently showing a unit icon
@@ -565,7 +569,7 @@ function generateEmojiMapViewport(mapData, view, overlays = [], viewingSide = 'p
     const isEmoji = (ch) => {
         if (!ch) return false;
         const cp = ch.codePointAt(0);
-        return cp >= 0x1F300 && cp <= 0x1FAFF; // general emoji ranges we use
+        return cp >= 0x1F300 && cp <= 0x1FAFF;
     };
     const cellStr = (ch) => isEmoji(ch) ? ch + '' : ch + ' ';
 
@@ -580,14 +584,14 @@ function generateEmojiMapViewport(mapData, view, overlays = [], viewingSide = 'p
     }
     out += '  └' + '─'.repeat(w * 2) + '┘\n';
     out += 'Legend: 🔵 Yours, 🟠 Enemy, X last known, ~ river, = ford, ^ hill, T forest';
+    
     return out;
 }
 
-// Build full 20x20 emoji grid for reuse
-function generateEmojiGrid(mapData, viewingSide = 'player1') {
+function generateEmojiGrid(mapData, viewingSide) {
     const grid = Array(20).fill(null).map(() => Array(20).fill('.'));
-
-    // Terrain
+    
+    // Add terrain
     if (mapData.terrain.river) {
         mapData.terrain.river.forEach(c => { const p = parseCoord(c); if (p) grid[p.row][p.col] = '~'; });
     }
@@ -606,31 +610,40 @@ function generateEmojiGrid(mapData, viewingSide = 'player1') {
     if (mapData.terrain.forest) {
         mapData.terrain.forest.forEach(c => { const p = parseCoord(c); if (p) grid[p.row][p.col] = 'T'; });
     }
-
-    // Units stacked preference
-    // Units stacked preference
+    
+    // Units - swap friendly/enemy based on viewing side
     const tiles = new Map();
-console.log('DEBUG mapData.player1Units:', JSON.stringify(mapData.player1Units, null, 2));
-console.log('DEBUG mapData.player2Units:', JSON.stringify(mapData.player2Units, null, 2));
     const addUnits = (arr, key) => {
         (arr || []).forEach(u => {
             if (!u.position) return;
-            // Position is already a string like "H11"
             const posStr = typeof u.position === 'string' ? u.position : coordToString(u.position);
             const list = tiles.get(posStr) || { friendly: [], enemy: [] };
             list[key].push(u);
             tiles.set(posStr, list);
         });
     };
-    addUnits(mapData.player2Units, 'enemy');
-    addUnits(mapData.player1Units, 'friendly');
-
+    
+    // Correct assignment based on who's viewing
+    if (viewingSide === 'player1') {
+        addUnits(mapData.player1Units, 'friendly');
+        addUnits(mapData.player2Units, 'enemy');
+    } else {
+        addUnits(mapData.player2Units, 'friendly');
+        addUnits(mapData.player1Units, 'enemy');
+    }
+    
     tiles.forEach((val, posStr) => {
-        const p = parseCoord(posStr); if (!p) return;
-        if (val.enemy.length > 0 && val.friendly.length === 0) grid[p.row][p.col] = getStackedEmoji(val.enemy, 'enemy');
-        if (val.friendly.length > 0) grid[p.row][p.col] = getStackedEmoji(val.friendly, 'friendly');
+        const p = parseCoord(posStr); 
+        if (!p) return;
+        
+        if (val.enemy.length > 0 && val.friendly.length === 0) {
+            grid[p.row][p.col] = getStackedEmoji(val.enemy, 'enemy');
+        }
+        if (val.friendly.length > 0) {
+            grid[p.row][p.col] = getStackedEmoji(val.friendly, 'friendly');
+        }
     });
-
+    
     return grid;
 }
 

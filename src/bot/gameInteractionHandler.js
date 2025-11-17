@@ -213,21 +213,12 @@ async function handleBattleJoin(interaction) {
 
     if (player1User) {
         await sendPrivateBriefing(player1User, battle, scenario, player1, 'player1');
-    }
-    await sendPrivateBriefing(player2User, battle, scenario, commander, 'player2');
-
-   // Start battle phase (will initialize and send briefings)
-   try {
-    await startBattlePhase(battle);
-    console.log('✅ Battle initialized and started');
-        
-    } catch (initError) {
-        console.error('Battle initialization failed:', initError);
-        await interaction.user.send(`❌ Error starting battle: ${initError.message}`);
-        if (player1User) {
-            await player1User.send(`❌ Error starting battle: ${initError.message}`);
         }
-    }
+        await sendPrivateBriefing(player2User, battle, scenario, commander, 'player2');
+
+    // Battle will start when both players click Ready (handled in ready button handler)
+    console.log('✅ Player 2 joined, waiting for both players to ready up');
+        
 }
 
 async function handleReadyForBattle(interaction) {

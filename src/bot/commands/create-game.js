@@ -258,7 +258,7 @@ async function createBattleWithScenario(interaction, scenarioKey, commander) {
         await battle.update({ messageId: battleMessage.id });
 
         // Send private briefing to creator
-        await sendPrivateBriefing(interaction.user, battle, scenario, commander, 'player1');
+        //await sendPrivateBriefing(interaction.user, battle, scenario, commander, 'player1');
 
     } catch (error) {
         console.error('Battle creation error:', error);

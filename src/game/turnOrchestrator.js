@@ -59,6 +59,11 @@ async function processTurn(battle, player1Order, player2Order, map) {
             map.terrain
         );
         
+        console.log('DEBUG P1 Visibility keys:', Object.keys(p1Visibility));
+        console.log('DEBUG P1 detectedEnemies:', JSON.stringify(p1Visibility.detectedEnemies, null, 2));
+        console.log('DEBUG P2 Visibility keys:', Object.keys(p2Visibility));
+        console.log('DEBUG P2 detectedEnemies:', JSON.stringify(p2Visibility.detectedEnemies, null, 2));
+
         // PHASE 4: Resolve combat
         console.log('\n⚔️ Phase 4: Resolving combat...');
         const combatResults = [];
@@ -129,13 +134,13 @@ async function processTurn(battle, player1Order, player2Order, map) {
                     ...battleState.player1,
                     unitPositions: updatedPositions.player1,
                     visibleEnemyPositions: p1Visibility.visibleEnemyPositions,
-                    visibleEnemyDetails: p1Visibility.visibleEnemyDetails
+                    visibleEnemyDetails: p1Visibility.intelligence || []
                 },
                 player2: {
                     ...battleState.player2,
                     unitPositions: updatedPositions.player2,
                     visibleEnemyPositions: p2Visibility.visibleEnemyPositions,
-                    visibleEnemyDetails: p2Visibility.visibleEnemyDetails 
+                    visibleEnemyDetails: p2Visibility.intelligence || []
                 }
             },
             turnResults: {

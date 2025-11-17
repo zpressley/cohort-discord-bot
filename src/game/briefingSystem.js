@@ -5,6 +5,7 @@ const { EmbedBuilder } = require('discord.js');
 const { generateRichTextBriefing } = require('./briefingGenerator');
 const { generateOpeningNarrative } = require('../ai/openingNarrative');
 const { generateASCIIMap } = require('./maps/mapUtils');
+const { generateEmojiMapViewport, parseCoord } = require('./maps/mapUtils');
 
 async function sendInitialBriefings(battle, battleState, client) {
     const { models } = require('../database/setup');
@@ -44,9 +45,6 @@ async function sendInitialBriefings(battle, battleState, client) {
             );
             await player1.send(briefing);
             
-            const map = generateMapForPlayer(battleState, 'player1');
-            await player1.send(`**BATTLEFIELD:**\n\`\`\`\n${map}\n\`\`\``);
-            
             console.log('  ✅ Player 1 briefing sent');
         }
         
@@ -67,9 +65,6 @@ async function sendInitialBriefings(battle, battleState, client) {
                 'Your commanders gather as dawn breaks over the battlefield...'
             );
             await player2.send(briefing);
-            
-            const map = generateMapForPlayer(battleState, 'player2');
-            await player2.send(`**BATTLEFIELD:**\n\`\`\`\n${map}\n\`\`\``);
             
             console.log('  ✅ Player 2 briefing sent');
         }
@@ -149,20 +144,24 @@ function generateMapForPlayer(battleState, playerSide) {
     
     let centerRow = 10, centerCol = 10;
     if (playerUnits.length > 0) {
-        centerRow = Math.floor(playerUnits.reduce((sum, u) => sum + u.position.row, 0) / playerUnits.length);
-        centerCol = Math.floor(playerUnits.reduce((sum, u) => sum + u.position.col, 0) / playerUnits.length);
+        const positions = playerUnits.map(u => {
+            const pos = typeof u.position === 'string' ? parseCoord(u.position) : u.position;
+            return pos;
+        }).filter(p => p);
+        
+        if (positions.length > 0) {
+            centerRow = Math.floor(positions.reduce((sum, p) => sum + p.row, 0) / positions.length);
+            centerCol = Math.floor(positions.reduce((sum, p) => sum + p.col, 0) / positions.length);
+        }
     }
-    
+        
     const view = {
         top: Math.max(0, centerRow - 7),
         left: Math.max(0, centerCol - 7),
         width: 15,
         height: 15
     };
-    console.log('DEBUG playerSide:', playerSide);
-console.log('DEBUG playerData.unitPositions:', JSON.stringify(playerData.unitPositions, null, 2));
-console.log('DEBUG playerUnits:', JSON.stringify(playerUnits, null, 2));
-console.log('DEBUG visibleEnemyPositions:', JSON.stringify(playerData.visibleEnemyPositions, null, 2));
+
         // Enemies are stored as position strings, need to convert to unit objects for map
         const enemyPositionObjects = (playerData.visibleEnemyPositions || []).map(posStr => ({
             position: posStr,
@@ -179,7 +178,7 @@ console.log('DEBUG visibleEnemyPositions:', JSON.stringify(playerData.visibleEne
         console.log('  player1Units:', mapData.player1Units.length);
         console.log('  player2Units:', mapData.player2Units.length);
     
-    return generateEmojiMapViewport(mapData, view);
+        return generateEmojiMapViewport(mapData, view, [], playerSide);
 }
 
 module.exports = {

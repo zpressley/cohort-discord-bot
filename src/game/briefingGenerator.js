@@ -27,7 +27,7 @@ async function generateRichTextBriefing(battleState, playerSide, commander, elit
     
     lines.push('═══════════════════════════════════════');
     
-    // YOUR FORCES section (simple, no AI needed)
+    // YOUR FORCES section
     lines.push('YOUR FORCES:');
     lines.push('');
     lines.push(formatUnitsSimple(playerData.unitPositions, battleState.map));
@@ -36,17 +36,27 @@ async function generateRichTextBriefing(battleState, playerSide, commander, elit
     lines.push('───────────────────────────────────────');
     lines.push('');
 
-    // INTELLIGENCE
+    // ENEMY INTELLIGENCE
     lines.push('🔍 INTELLIGENCE:');
     lines.push('');
 
-    const visibleEnemies = playerData.visibleEnemyPositions || [];
-    if (visibleEnemies.length === 0) {
+    let enemyIntel = playerData.visibleEnemyDetails || [];
+
+    // Handle if it's an object instead of array
+    if (!Array.isArray(enemyIntel)) {
+        enemyIntel = Object.values(enemyIntel);
+    }
+
+    if (enemyIntel.length === 0) {
         lines.push('  No enemy forces spotted');
     } else {
-        visibleEnemies.forEach(posStr => {
-            const terrain = getTerrainAtPosition(posStr, battleState.map);
-            lines.push(`  🔴 ${posStr} Enemy forces detected (${terrain})`);
+        enemyIntel.forEach(intel => {
+            const emoji = getEnemyIntelEmoji(intel);
+            const terrain = getTerrainAtPosition(intel.position, battleState.map);
+            const strengthEstimate = getStrengthEstimate(intel);
+            const qualityIndicator = getQualityIndicator(intel.quality);
+            
+            lines.push(`  ${emoji} ${intel.position} ${intel.unitType || 'Unknown forces'} ${strengthEstimate} (${terrain}) ${qualityIndicator}`);
         });
     }
 
@@ -54,8 +64,22 @@ async function generateRichTextBriefing(battleState, playerSide, commander, elit
     lines.push('───────────────────────────────────────');
     lines.push('');
     
-    // AI-GENERATED TACTICAL ASSESSMENT
-    lines.push(`**${officerName} reports:**`);
+    // BATTLEFIELD MAP
+    lines.push('🗺️ BATTLEFIELD:');
+    lines.push('');
+    
+    const mapDisplay = await generateBattlefieldMapForBriefing(battleState, playerSide);
+    lines.push('```');
+    lines.push(mapDisplay);
+    lines.push('```');
+    lines.push('*Use /map to adjust view*');
+    
+    lines.push('');
+    lines.push('───────────────────────────────────────');
+    lines.push('');
+    
+    // OFFICER ASSESSMENT
+    lines.push(`💬 ${officerName} reports:`);
     lines.push('');
     
     const tacticalAssessment = await generateOfficerAssessment(
@@ -66,12 +90,58 @@ async function generateRichTextBriefing(battleState, playerSide, commander, elit
         battleState.map
     );
     
-    lines.push(tacticalAssessment);
+    lines.push(`"${tacticalAssessment}"`);
     
+    lines.push('');
     lines.push('═══════════════════════════════════════');
     lines.push('**Type your orders to continue the battle**');
     
     return lines.join('\n');
+}
+
+/**
+ * Generate battlefield map for briefing (with proper centering)
+ */
+async function generateBattlefieldMapForBriefing(battleState, playerSide) {
+    const { generateEmojiMapViewport, parseCoord } = require('./maps/mapUtils');
+    const playerData = battleState[playerSide];
+    
+    const units = playerData.unitPositions || [];
+    
+    // Calculate viewport centered on player units
+    let centerRow = 10, centerCol = 10;
+    
+    if (units.length > 0) {
+        const positions = units.map(u => {
+            return typeof u.position === 'string' ? parseCoord(u.position) : u.position;
+        }).filter(p => p);
+        
+        if (positions.length > 0) {
+            centerRow = Math.floor(positions.reduce((sum, p) => sum + p.row, 0) / positions.length);
+            centerCol = Math.floor(positions.reduce((sum, p) => sum + p.col, 0) / positions.length);
+        }
+    }
+    
+    const view = {
+        top: Math.max(0, centerRow - 7),
+        left: Math.max(0, centerCol - 7),
+        width: 15,
+        height: 15
+    };
+    
+    // Build map data
+    const enemyPositionObjects = (playerData.visibleEnemyPositions || []).map(posStr => ({
+        position: posStr,
+        side: playerSide === 'player1' ? 'player2' : 'player1'
+    }));
+    
+    const mapData = {
+        terrain: battleState.map?.terrain || {},
+        player1Units: playerSide === 'player1' ? units : enemyPositionObjects,
+        player2Units: playerSide === 'player2' ? units : enemyPositionObjects
+    };
+    
+    return generateEmojiMapViewport(mapData, view, [], playerSide);
 }
 
 /**
@@ -256,6 +326,47 @@ function getRelativeDirection(from, to) {
     
     return direction || 'nearby';
 }
+
+/**
+ * Get enemy intel emoji based on unit type and elite status
+ */
+function getEnemyIntelEmoji(intel) {
+    if (intel.isElite) return '🔶';
+    if (intel.unitType === 'cavalry') return '🟠';
+    return '🟧'; // infantry/archers
+}
+
+/**
+ * Get strength estimate based on intel quality
+ */
+function getStrengthEstimate(intel) {
+    if (intel.quality === 'high') {
+        // Accurate count (within 5%)
+        return `~${intel.estimatedStrength || '100'} warriors`;
+    } else if (intel.quality === 'medium') {
+        // Range estimate (±25%)
+        const base = intel.estimatedStrength || 100;
+        const low = Math.floor(base * 0.75);
+        const high = Math.ceil(base * 1.25);
+        return `~${low}-${high} warriors`;
+    } else {
+        // Vague description
+        const strength = intel.estimatedStrength || 100;
+        if (strength > 150) return 'Large force';
+        if (strength > 75) return 'Medium force';
+        return 'Small force';
+    }
+}
+
+/**
+ * Get quality indicator for intel
+ */
+function getQualityIndicator(quality) {
+    if (quality === 'high') return '📍'; // Close range, accurate
+    if (quality === 'medium') return '👁️'; // Medium range, estimated
+    return '🌫️'; // Long range, uncertain
+}
+
 
 module.exports = {
     generateRichTextBriefing
