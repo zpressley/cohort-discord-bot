@@ -4,6 +4,7 @@
 const { EmbedBuilder } = require('discord.js');
 const { Op } = require('sequelize');
 const { processTurn } = require('../game/turnOrchestrator');
+const { parseCommanderActions } = require('../ai/orderInterpreter');
 
 const processedMessages = new Set();
 
@@ -47,12 +48,44 @@ async function handleDMCommand(message, client) {
             return;
         }
         
+        // First, check for commander-specific actions (escape / surrender / move POV)
+        const commanderHandled = await tryCommanderAction(message, activeBattle, playerSide, userId);
+        if (commanderHandled) {
+            return;
+        }
+        
         // Route orders to order processor
         await processPlayerOrder(message, activeBattle, userId, playerSide, client);
         
     } catch (error) {
         console.error('DM handler error:', error);
         await message.reply('Error processing your command. Please try again.');
+    }
+}
+
+/**
+ * Attempt to interpret a commander-focused action from this DM
+ * (escape/die/surrender when at risk, or move commander POV to a unit).
+ * Returns true if the DM was fully handled as a commander action.
+ */
+async function tryCommanderAction(message, battle, playerSide, userId) {
+    try {
+        const context = {
+            battleId: battle.id,
+            playerId: userId
+        };
+        const result = await parseCommanderActions(message.content, battle.battleState, playerSide, context);
+        if (!result || !Array.isArray(result.actions) || result.actions.length === 0) {
+            return false; // Not a commander action
+        }
+
+        // Provide a simple confirmation back to the player based on officerComment
+        const comment = result.officerComment || 'Commander action processed.';
+        await message.reply(comment);
+        return true;
+    } catch (err) {
+        console.warn('Commander action parsing failed:', err.message);
+        return false;
     }
 }
 
@@ -140,23 +173,14 @@ async function processTurnResolution(battle, battleTurn, client) {
     try {
         const { models } = require('../database/setup');
         const { processTurn } = require('../game/turnOrchestrator');
-        const { RIVER_CROSSING_MAP } = require('../game/maps/riverCrossing');
         
         console.log(`\n⚔️ RESOLVING TURN ${battle.currentTurn} - Battle ${battle.id}`);
         console.log(`   P1 Order: "${battleTurn.player1Command}"`);
         console.log(`   P2 Order: "${battleTurn.player2Command}"`);
         
-        // Get map for scenario
-        const scenarioMaps = {
-            'river_crossing': RIVER_CROSSING_MAP,
-            'bridge_control': RIVER_CROSSING_MAP,
-            'forest_ambush': RIVER_CROSSING_MAP,
-            'hill_fort_assault': RIVER_CROSSING_MAP,
-            'desert_oasis': RIVER_CROSSING_MAP
-        };
-        
-        const map = scenarioMaps[battle.scenario] || RIVER_CROSSING_MAP;
-        
+        // Use normalized battleState.map as the single map/terrain source
+        const map = battle.battleState?.map;
+
         // Process turn (orchestrator handles validation)
         const turnResult = await processTurn(
             battle,
@@ -175,6 +199,14 @@ async function processTurnResolution(battle, battleTurn, client) {
         }
         
         console.log(`✅ Turn ${battle.currentTurn} complete`);
+
+        const { selectSpeakerForSide } = require('../game/officers/speakerSelection');
+        const sideSummaries = turnResult.sideSummaries || {};
+        const p1Summary = sideSummaries.player1 || null;
+        const p2Summary = sideSummaries.player2 || null;
+
+        const p1Speaker = await selectSpeakerForSide(battle, turnResult.newBattleState, 'player1');
+        const p2Speaker = await selectSpeakerForSide(battle, turnResult.newBattleState, 'player2');
         
         // Update battle state
         const newState = JSON.parse(JSON.stringify(turnResult.newBattleState));
@@ -192,9 +224,12 @@ async function processTurnResolution(battle, battleTurn, client) {
         if (turnResult.victory?.achieved) {
             await endBattle(battle, turnResult.victory, client);
         } else {
-            // Send next turn briefings
+            // Send next turn briefings (each side gets its own FOW-safe narrative inside WAR COUNCIL)
             const { sendNextTurnBriefings } = require('../game/briefingSystem');
-            await sendNextTurnBriefings(battle, turnResult.newBattleState, client);
+            await sendNextTurnBriefings(battle, turnResult.newBattleState, client, {
+                player1: { summary: p1Summary, speaker: p1Speaker },
+                player2: { summary: p2Summary, speaker: p2Speaker }
+            });
         }
         
     } catch (error) {
@@ -204,32 +239,29 @@ async function processTurnResolution(battle, battleTurn, client) {
 }
 
 /**
- * Send turn results to players
+ * Send a compact turn results line to players as plain text.
+ * Keep this very short for phone readability; rich detail lives in WAR COUNCIL.
  */
 async function sendTurnResults(battle, battleTurn, turnResult, client) {
-    const narrative = turnResult.narrative?.mainNarrative?.fullNarrative || 
-                     `Turn ${battleTurn.turnNumber} processed.`;
-    
-    const p1Embed = new EmbedBuilder()
-        .setColor(0x8B0000)
-        .setTitle(`⚔️ Turn ${battleTurn.turnNumber} Resolution`)
-        .setDescription(narrative)
-        .setFooter({ text: `Turn ${battle.currentTurn} - Awaiting orders` });
-    
-    const p2Embed = new EmbedBuilder()
-        .setColor(0x00008B)
-        .setTitle(`⚔️ Turn ${battleTurn.turnNumber} Resolution`)
-        .setDescription(narrative)
-        .setFooter({ text: `Turn ${battle.currentTurn} - Awaiting orders` });
+    const header = `⚔️ TURN ${battleTurn.turnNumber} RESOLUTION`;
+    const combats = turnResult.turnResults?.combats ?? 0;
+    const cas = turnResult.turnResults?.casualties || { player1: 0, player2: 0 };
+
+    let body = header + '\n\n';
+    if (combats === 0) {
+        body += '0 engagements.';
+    } else {
+        body += `${combats} engagement(s). Casualties: P1 ${cas.player1}, P2 ${cas.player2}.`;
+    }
     
     if (!battle.player1Id.startsWith('TEST_')) {
         const player1 = await client.users.fetch(battle.player1Id);
-        await player1.send({ embeds: [p1Embed] });
+        await player1.send(body);
     }
     
     if (battle.player2Id && !battle.player2Id.startsWith('TEST_')) {
         const player2 = await client.users.fetch(battle.player2Id);
-        await player2.send({ embeds: [p2Embed] });
+        await player2.send(body);
     }
 }
 
@@ -260,10 +292,14 @@ async function notifyPlayersOfError(battle, errorMessage, client) {
 async function endBattle(battle, victory, client) {
     try {
         const { models } = require('../database/setup');
+        const { applyPostBattleVeteranProgress } = require('../game/officers/veteranProgression');
         
         battle.status = 'completed';
         battle.winner = victory.winner;
         await battle.save();
+
+        // Apply simple veteran progression for elite units and their officers
+        await applyPostBattleVeteranProgress(battle);
         
         const resultEmbed = new EmbedBuilder()
             .setColor(victory.winner === 'draw' ? 0x808080 : 0xFFD700)

@@ -8,6 +8,7 @@ const { calculateChaosLevel } = require('./combat/chaosCalculator');
 const { calculatePreparationLegacy } = require('./combat/preparationCalculator');
 const { getCulturalCombatModifiers } = require('./combat/culturalModifiers');
 const { applyDamageWithAccumulation, getDamageAccumulationStatus } = require('./combat/damageAccumulation');
+const { checkMorale } = require('./morale');
 
 /**
  * Calculate total attack rating for an entire force
@@ -331,13 +332,29 @@ function applyDamageWithAccumulationToForces(attackerDamage, defenderDamage, att
         attacker: { casualties: 0, total: 0, units: [], accumulationData: [] },
         defender: { casualties: 0, total: 0, units: [], accumulationData: [] }
     };
+
+    // Global scaling factors to tame casualty tempo without changing
+    // the underlying chaos / preparation relationships.
+    const ATTACKER_DAMAGE_SCALE = 0.5;
+    const DEFENDER_DAMAGE_SCALE = 0.5;
+
+    // Scale raw damage before distributing to units. We keep the sign so
+    // that being outmatched can still accumulate long-term damage, but
+    // the magnitude is reduced to avoid overly bloody exchanges.
+    const scaledAttackerDamage = attackerDamage * ATTACKER_DAMAGE_SCALE;
+    const scaledDefenderDamage = defenderDamage * DEFENDER_DAMAGE_SCALE;
     
     // Apply damage to defending force (from attacker's damage)
     if (defendingForce.units && defendingForce.units.length > 0) {
-        const damagePerUnit = attackerDamage / defendingForce.units.length;
+        const damagePerUnit = scaledAttackerDamage / defendingForce.units.length;
         
         defendingForce.units.forEach((unit, index) => {
             const result = applyDamageWithAccumulation(unit, damagePerUnit, turnNumber);
+            
+            // Morale 1.0: check if this unit breaks/routes based on casualties
+            const maxStr = unit.quality?.size || unit.maxStrength || 100;
+            checkMorale(unit, result.casualties, { /* TODO: pass local commander context */ });
+            unit.maxStrength = maxStr;
             
             casualties.defender.casualties += result.casualties;
             casualties.defender.total += result.casualties;
@@ -345,7 +362,7 @@ function applyDamageWithAccumulationToForces(attackerDamage, defenderDamage, att
             casualties.defender.units.push({
                 casualties: result.casualties,
                 type: unit.qualityType || 'professional',
-                strength: unit.quality?.size || 100,
+                strength: maxStr,
                 accumulated: result.accumulatedAfter,
                 overflow: result.overflow
             });
@@ -359,10 +376,14 @@ function applyDamageWithAccumulationToForces(attackerDamage, defenderDamage, att
     
     // Apply damage to attacking force (from defender's damage)
     if (attackingForce.units && attackingForce.units.length > 0) {
-        const damagePerUnit = defenderDamage / attackingForce.units.length;
+        const damagePerUnit = scaledDefenderDamage / attackingForce.units.length;
         
         attackingForce.units.forEach((unit, index) => {
             const result = applyDamageWithAccumulation(unit, damagePerUnit, turnNumber);
+            
+            const maxStr = unit.quality?.size || unit.maxStrength || 100;
+            checkMorale(unit, result.casualties, { /* TODO: commander context */ });
+            unit.maxStrength = maxStr;
             
             casualties.attacker.casualties += result.casualties;
             casualties.attacker.total += result.casualties;
@@ -370,7 +391,7 @@ function applyDamageWithAccumulationToForces(attackerDamage, defenderDamage, att
             casualties.attacker.units.push({
                 casualties: result.casualties,
                 type: unit.qualityType || 'professional',
-                strength: unit.quality?.size || 100,
+                strength: maxStr,
                 accumulated: result.accumulatedAfter,
                 overflow: result.overflow
             });

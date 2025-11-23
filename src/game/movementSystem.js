@@ -9,7 +9,20 @@ const { findPathAStar, calculateDistance, coordToString, parseCoord } = require(
 function validateMovement(unit, targetPosition, map) {
     const { getTerrainAt: getTerrainType } = require('./maps/riverCrossing');
     
-    // Find path using A* pathfinding
+    const weather = map.weather || 'clear';
+    const weatherFactors = {
+        clear: 1.0,
+        overcast: 1.0,
+        light_rain: 1.1,
+        heavy_rain: 1.25,
+        fog: 1.0,
+        snow: 1.25,
+        sandstorm: 1.2,
+        thunderstorm: 1.15
+    };
+    const weatherFactor = weatherFactors[weather] || 1.0;
+    
+    // Find path using A* pathfinding (terrain-based costs only)
     const pathResult = findPathAStar(
         unit.position,
         targetPosition,
@@ -26,7 +39,7 @@ function validateMovement(unit, targetPosition, map) {
     }
     
     const fullPath = pathResult.path;
-    const fullCost = pathResult.cost;
+    const fullCost = pathResult.cost * weatherFactor;
     const maxMovement = unit.movementRemaining || (unit.mounted ? 5 : 3);
     
     // If target too far, move as far as possible along path
@@ -35,7 +48,7 @@ function validateMovement(unit, targetPosition, map) {
         let costSoFar = 0;
         
         for (let i = 1; i < fullPath.length; i++) {
-            const stepCost = 1; // Simplified
+            const stepCost = 1 * weatherFactor; // Weather slows or speeds effective progress
             costSoFar += stepCost;
             
             if (costSoFar <= maxMovement) {
@@ -130,7 +143,7 @@ function executeMissionTurn(unit, map, getTerrainType) {
     let costSoFar = 0;
     
     for (let i = 1; i < fullPath.length; i++) {
-        const stepCost = 1;
+        const stepCost = 1; // Missions currently ignore weather for simplicity
         costSoFar += stepCost;
         
         if (costSoFar <= maxMovement) {

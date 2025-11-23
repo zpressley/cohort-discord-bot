@@ -28,6 +28,14 @@ async function handle(interaction, client) {
     }
 
     if (interaction.isButton && interaction.isButton()) {
+      // Commander naming flow buttons (handled entirely inside the /create-profile
+      // command via DM collectors). Ignore them here so they are not
+      // double-routed into other handlers, which was causing
+      // "Interaction has already been acknowledged" errors.
+      if (interaction.customId.startsWith('profile-')) {
+        return; // let create-profile's DM collector handle these safely
+      }
+
       if (interaction.customId.startsWith('lobby-')) {
         const { handleLobbyInteractions } = require('./lobbyInteractionHandler');
         return await handleLobbyInteractions(interaction);

@@ -1,7 +1,7 @@
 // src/game/positionBasedCombat.js
 // Combat resolution with tactical positioning modifiers
 
-const { calculateDistance, getAdjacentCoords } = require('./maps/mapUtils');
+const { calculateDistance, getAdjacentCoords, parseCoord, coordToString } = require('./maps/mapUtils');
 
 /**
  * Detect combat triggers based on unit positions
@@ -258,29 +258,41 @@ function processMovementPhase(player1Movements, player2Movements, battleState, m
     const p1Map = new Map((battleState.player1.unitPositions || []).map(u => [u.unitId, { ...u }]));
     const p2Map = new Map((battleState.player2.unitPositions || []).map(u => [u.unitId, { ...u }]));
 
-    // Build combined move list with initiative
+    // First, apply automatic routing movement before normal orders.
+    function applyRoutingForSide(side, unitMap) {
+        for (const unit of unitMap.values()) {
+            if (!unit.isRouting) continue;
+            const updated = handleRoutingMovement(unit, side, battleState, map);
+            unitMap.set(unit.unitId, updated);
+        }
+    }
+
+    applyRoutingForSide('player1', p1Map);
+    applyRoutingForSide('player2', p2Map);
+
+    // Build combined move list with initiative (routing units ignore explicit orders)
     const combined = [];
     for (const m of player1Movements) {
         const u = p1Map.get(m.unitId);
         if (!u || !m.validation?.valid) continue;
+        if (u.isRouting) continue; // routing units do not take normal orders
         combined.push({ side: 'player1', unit: u, move: m, tier: speedTierFor(u), rand: Math.random() });
     }
     for (const m of player2Movements) {
         const u = p2Map.get(m.unitId);
         if (!u || !m.validation?.valid) continue;
+        if (u.isRouting) continue; // routing units do not take normal orders
         combined.push({ side: 'player2', unit: u, move: m, tier: speedTierFor(u), rand: Math.random() });
     }
 
     // Sort by tier asc, then random for tie-break
     combined.sort((a, b) => (a.tier - b.tier) || (a.rand - b.rand));
 
-    // Track occupied tiles per side to resolve collisions (faster arrives first)
-    const occupied = {
-        player1: new Set((battleState.player1.unitPositions || []).map(u => u.position)),
-        player2: new Set((battleState.player2.unitPositions || []).map(u => u.position))
-    };
+    // NOTE: Stacking is allowed. We no longer prevent multiple friendly units
+    // from ending on the same tile here; instead, Stack-001 compression logic
+    // below applies movement penalties when units stack.
 
-    // Execute moves in order
+    // Execute moves in initiative order
     for (const item of combined) {
         const { side, unit, move } = item;
         let nextPos = move.finalPosition || move.targetPosition;
@@ -288,16 +300,6 @@ function processMovementPhase(player1Movements, player2Movements, battleState, m
         if (move.modifier?.groupMarch && Array.isArray(move.validation.path) && move.validation.path.length > 1) {
             nextPos = move.validation.path[1];
             movementRemaining = Math.max(0, (unit.movementRemaining || 3) - 1);
-        }
-
-        // Collision: if friendly already occupies target due to earlier move, hold position
-        if (occupied[side].has(nextPos)) {
-            console.log(`    ⛔ Collision on ${nextPos} for ${unit.unitId}, holding position`);
-            nextPos = unit.position;
-        } else {
-            // Update occupied sets
-            occupied[side].delete(unit.position);
-            occupied[side].add(nextPos);
         }
 
         const updated = {
@@ -318,8 +320,12 @@ function processMovementPhase(player1Movements, player2Movements, battleState, m
         else p2Map.set(unit.unitId, updated);
     }
 
-    const newPlayer1Positions = Array.from(p1Map.values());
-    const newPlayer2Positions = Array.from(p2Map.values());
+    let newPlayer1Positions = Array.from(p1Map.values());
+    let newPlayer2Positions = Array.from(p2Map.values());
+
+    // Remove units that have deserted (veteran mercenaries exiting the field)
+    newPlayer1Positions = newPlayer1Positions.filter(u => !u.hasDeserted);
+    newPlayer2Positions = newPlayer2Positions.filter(u => !u.hasDeserted);
 
     // Stack-001: compression penalties for stacked friendly units
     function applyStackCompression(units) {
@@ -347,15 +353,34 @@ function processMovementPhase(player1Movements, player2Movements, battleState, m
 
     // Detect combat triggers
     const combatTriggers = detectCombatTriggers(newPlayer1Positions, newPlayer2Positions);
-    
-    // Build combat contexts
-    const combatContexts = combatTriggers.map(combat => 
-        buildCombatContext(combat, {
+
+    // Mark missions complete when units reach their target or enter combat.
+    function completeMissionsForEngagementUnit(unit) {
+        if (unit && unit.activeMission && unit.activeMission.status === 'active') {
+            unit.activeMission.status = 'complete';
+        }
+    }
+
+    // Arrival: if unit is now at its mission target, mark complete.
+    [newPlayer1Positions, newPlayer2Positions].forEach(sideUnits => {
+        sideUnits.forEach(u => {
+            if (u.activeMission && u.activeMission.status === 'active' && u.position === u.activeMission.target) {
+                u.activeMission.status = 'complete';
+            }
+        });
+    });
+
+    // Build combat contexts and mark missions complete for engaged units.
+    const combatContexts = combatTriggers.map(combat => {
+        completeMissionsForEngagementUnit(combat.attacker);
+        completeMissionsForEngagementUnit(combat.defender);
+
+        return buildCombatContext(combat, {
             ...battleState,
             player1: { ...battleState.player1, unitPositions: newPlayer1Positions },
             player2: { ...battleState.player2, unitPositions: newPlayer2Positions }
-        }, map)
-    );
+        }, map);
+    });
     
     return {
         newPositions: {
@@ -380,6 +405,89 @@ function processMovementPhase(player1Movements, player2Movements, battleState, m
 function getTerrainType(coord, map) {
     const { getTerrainType: getTerrain } = require('./movementSystem');
     return getTerrain(coord, map);
+}
+
+/**
+ * Routing movement handler
+ * - Veteran mercenaries (qualityType === 'veteran_mercenary') attempt to
+ *   leave the field toward their friendly map edge and are removed once
+ *   they reach it.
+ * - All other routing units fall back toward their campPosition and, upon
+ *   arrival, stop routing but remain broken.
+ */
+function handleRoutingMovement(unit, side, battleState, map) {
+    const current = parseCoord(unit.position);
+    if (!current) return unit;
+
+    const size = map?.size || { rows: 20, cols: 20 };
+    const maxRowIndex = (size.rows || size.height || 20) - 1;
+
+    const updated = { ...unit };
+
+    // Veteran mercenaries desert the field
+    if ((unit.qualityType || '').toLowerCase() === 'veteran_mercenary') {
+        updated.routingTarget = 'edge';
+        let rowIndex = current.row;      // 0..19
+        const colIndex = current.col;    // 0..19
+
+        if (side === 'player1') {
+            // Retreat north (toward row 0)
+            if (rowIndex === 0) {
+                // Already at north edge: next step would leave the field
+                updated.hasDeserted = true;
+                return updated;
+            }
+            rowIndex = Math.max(0, rowIndex - 1);
+        } else {
+            // Retreat south (toward last row)
+            if (rowIndex === maxRowIndex) {
+                updated.hasDeserted = true;
+                return updated;
+            }
+            rowIndex = Math.min(maxRowIndex, rowIndex + 1);
+        }
+
+        const next = { row: rowIndex, col: colIndex };
+        updated.position = coordToString(next);
+        return updated;
+    }
+
+    // All other routing units fall back toward camp
+    const camp = battleState[side]?.campPosition || unit.campPosition;
+    if (!camp) return unit;
+
+    const campCoord = parseCoord(camp);
+    if (!campCoord) return unit;
+
+    updated.routingTarget = 'camp';
+
+    const step = { row: current.row, col: current.col };
+
+    // Step one tile toward camp in row, then column if needed
+    if (current.row !== campCoord.row) {
+        if (current.row > campCoord.row) {
+            step.row = String.fromCharCode(current.row.charCodeAt(0) - 1);
+        } else if (current.row < campCoord.row) {
+            step.row = String.fromCharCode(current.row.charCodeAt(0) + 1);
+        }
+    } else if (current.col !== campCoord.col) {
+        if (current.col > campCoord.col) {
+            step.col = current.col - 1;
+        } else if (current.col < campCoord.col) {
+            step.col = current.col + 1;
+        }
+    }
+
+    updated.position = coordToString(step);
+
+    // If we have arrived at camp, stop routing but remain broken
+    if (updated.position === camp) {
+        updated.isRouting = false;
+        updated.isBroken = true;
+        updated.regroupedAtCamp = true;
+    }
+
+    return updated;
 }
 
 module.exports = {

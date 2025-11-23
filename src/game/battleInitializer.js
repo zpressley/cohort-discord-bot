@@ -3,6 +3,7 @@
 // Version: 1.0.1 - Fixed commander creation order
 
 const { RIVER_CROSSING_MAP } = require('./maps/riverCrossing');
+const { models } = require('../database/setup');
 
 /**
  * Initialize battle when both players have joined
@@ -96,6 +97,8 @@ async function initializeBattle(battle, player1Commander, player2Commander) {
                 attachedTo: p1Units[0].unitId,
                 status: 'active'
             },
+            // Camp / rally point: first deployment tile for this side
+            campPosition: p1Units[0]?.campPosition || p1Units[0]?.position,
             morale: 100,
             supplies: 100,
             visibleEnemyPositions: [], // Will be populated after first visibility check
@@ -110,6 +113,7 @@ async function initializeBattle(battle, player1Commander, player2Commander) {
                 attachedTo: p2Units[0].unitId,
                 status: 'active'
             },
+            campPosition: p2Units[0]?.campPosition || p2Units[0]?.position,
             morale: 100,
             supplies: 100,
             visibleEnemyPositions: [],
@@ -143,6 +147,14 @@ async function initializeBattle(battle, player1Commander, player2Commander) {
     }
     
     console.log('✅ Battle state initialized');
+
+    // Apply elite veteran morale bonus based on persistent EliteUnit veteranLevel
+    try {
+        await applyEliteVeteranMoraleBonus(battleState, battle.player1Id, 'player1');
+        await applyEliteVeteranMoraleBonus(battleState, battle.player2Id, 'player2');
+    } catch (e) {
+        console.warn('Elite veteran morale bonus failed:', e.message);
+    }
     
     // Create battle commanders in database (AFTER battleState is built)
     try {
@@ -217,6 +229,9 @@ function deployUnitsToStartingPositions(armyComposition, startingZone, side) {
     
     console.log(`  Deploying ${units.length} units for ${side}:`);
     
+    // Use the first starting zone coordinate as this side's camp / rally point.
+    const campPosition = startingZone[0];
+    
     // Deploy each unit to a starting position
     units.forEach((unit, index) => {
         // Get position from starting zone (wrap around if more units than positions)
@@ -228,6 +243,8 @@ function deployUnitsToStartingPositions(armyComposition, startingZone, side) {
             unitId: `${side === 'player1' ? 'north' : 'south'}_unit_${index}`,
             position: position,
             side: side,
+            // Rally point for routing behavior
+            campPosition: campPosition,
             
             // Type - use both fields for compatibility
             type: unit.type || unit.unitType || 'infantry',
@@ -249,9 +266,11 @@ function deployUnitsToStartingPositions(armyComposition, startingZone, side) {
             mounted: unit.mounted || false,
             hasRanged: isRangedUnit(unit.primaryWeapon),
             isElite: unit.isElite || false,
+            veteranBattles: unit.veteranBattles || 0,
+            veteranLevel: unit.veteranLevel || 'fresh',
             
-            // Movement state
-            movementRemaining: unit.mounted ? 5 : 3,
+            // Movement state (scaled: infantry 2, cavalry 4 tiles per turn)
+            movementRemaining: unit.mounted ? 4 : 2,
             canMove: true,
             hasMoved: false,
             
@@ -293,6 +312,44 @@ function isRangedUnit(primaryWeapon) {
 /**
  * Parse victory conditions from battle record
  */
+function applyEliteVeteranMoraleBonus(battleState, commanderId, side) {
+    if (!commanderId) return;
+
+    models.EliteUnit.findOne({ where: { commanderId } }).then(elite => {
+        if (!elite) return;
+
+        const tier = elite.veteranLevel || 'Recruit';
+        const playerData = battleState[side];
+        if (!playerData) return;
+
+        let moraleBonus = 0;
+        switch (tier) {
+            case 'Seasoned':
+                moraleBonus = 2; break;
+            case 'Veteran':
+                moraleBonus = 5; break;
+            case 'Elite Veteran':
+                moraleBonus = 8; break;
+            case 'Legendary':
+                moraleBonus = 10; break;
+            default:
+                moraleBonus = 0; break; // Recruits: no bonus (could be penalty later)
+        }
+
+        playerData.morale = Math.min(130, (playerData.morale || 100) + moraleBonus);
+
+        // Boost elite unit on the field as well
+        const units = playerData.unitPositions || [];
+        const eliteUnit = units.find(u => u.isElite);
+        if (eliteUnit) {
+            eliteUnit.morale = Math.min(150, (eliteUnit.morale || 100) + moraleBonus);
+            eliteUnit.veteranTier = tier;
+        }
+    }).catch(err => {
+        console.warn('applyEliteVeteranMoraleBonus DB lookup failed:', err.message);
+    });
+}
+
 function parseObjectives(victoryConditions) {
     if (!victoryConditions) {
         return {

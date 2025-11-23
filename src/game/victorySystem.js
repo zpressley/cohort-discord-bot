@@ -16,6 +16,12 @@ function checkVictoryConditions(positions, turnNumber, objectives, maxTurns = 12
     const p1Units = positions.player1 || [];
     const p2Units = positions.player2 || [];
 
+    // If neither side has units yet, treat as "no deployment" and skip victory
+    if (p1Units.length === 0 && p2Units.length === 0) {
+        console.log('Victory check skipped - units not deployed yet');
+        return { achieved: false };
+    }
+
     // Objective control (VIC-002)
     try {
         if (objectives && Array.isArray(objectives.controlPoints)) {
@@ -49,8 +55,23 @@ function checkVictoryConditions(positions, turnNumber, objectives, maxTurns = 12
         console.warn('Objective control check failed:', e.message);
     }
     
+    // Calculate total strength
+    const p1Strength = p1Units.reduce((sum, u) => sum + (u.currentStrength || 0), 0);
+    const p2Strength = p2Units.reduce((sum, u) => sum + (u.currentStrength || 0), 0);
+
+    const p1Original = p1Units.reduce((sum, u) => sum + (u.maxStrength || u.currentStrength || 100), 0);
+    const p2Original = p2Units.reduce((sum, u) => sum + (u.maxStrength || u.currentStrength || 100), 0);
+
+    // Early turns: don't end the battle unless one side is completely wiped out
+    if (turnNumber < 3) {
+        // If both sides still have fighting strength, never end early
+        if (p1Strength > 0 && p2Strength > 0) {
+            return { achieved: false };
+        }
+    }
+
     // ANNIHILATION VICTORY - All units destroyed
-    if (p1Units.length === 0) {
+    if (p1Units.length === 0 || p1Strength <= 0) {
         return { 
             achieved: true, 
             winner: 'player2', 
@@ -58,7 +79,7 @@ function checkVictoryConditions(positions, turnNumber, objectives, maxTurns = 12
             description: 'All enemy forces destroyed'
         };
     }
-    if (p2Units.length === 0) {
+    if (p2Units.length === 0 || p2Strength <= 0) {
         return { 
             achieved: true, 
             winner: 'player1', 
@@ -66,13 +87,6 @@ function checkVictoryConditions(positions, turnNumber, objectives, maxTurns = 12
             description: 'All enemy forces destroyed'
         };
     }
-    
-    // Calculate total strength
-    const p1Strength = p1Units.reduce((sum, u) => sum + u.currentStrength, 0);
-    const p2Strength = p2Units.reduce((sum, u) => sum + u.currentStrength, 0);
-    
-    const p1Original = p1Units.reduce((sum, u) => sum + (u.maxStrength || 100), 0);
-    const p2Original = p2Units.reduce((sum, u) => sum + (u.maxStrength || 100), 0);
     
     // ROUTE VICTORY - >75% casualties
     if (p1Strength < p1Original * 0.25) {

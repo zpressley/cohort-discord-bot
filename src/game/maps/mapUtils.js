@@ -345,7 +345,7 @@ function findPathAStar(from, to, terrainMap, getTerrainType) {
     
     const movementCosts = terrainMap.movementCosts || {
         plains: 1.0,
-        road: 0.5,
+        road: 1.0,   // roads no longer half-cost; use standard cost
         hill: 1.5,
         forest: 2.0,
         marsh: 3.0,

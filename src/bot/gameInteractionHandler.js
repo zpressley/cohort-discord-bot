@@ -139,7 +139,7 @@ async function handleBattleJoin(interaction) {
     // Join the battle
     await battle.update({
         player2Id: interaction.user.id,
-        status: 'army_building'
+        status: 'in_progress' // Both players have armies, battle can start
     });
 
     // Generate initial weather for battle
@@ -206,18 +206,15 @@ async function handleBattleJoin(interaction) {
         }
     }
 
-    // Send private briefings to both players
-    const player1 = await models.Commander.findByPk(battle.player1Id);
-    const player1User = interaction.client.users.cache.get(battle.player1Id);
-    const player2User = interaction.user;
+    // Now that the interaction has been acknowledged and the message updated,
+    // start the battle phase (deploy units, create BattleTurn, send DMs)
+    await startBattlePhase(battle);
 
-    if (player1User) {
-        await sendPrivateBriefing(player1User, battle, scenario, player1, 'player1');
-        }
-        await sendPrivateBriefing(player2User, battle, scenario, commander, 'player2');
+    // NOTE: Detailed opening briefings and maps are now handled by
+    // sendInitialBriefings() inside startBattlePhase. We no longer send
+    // the simpler pre-game briefings here to avoid duplicate "War Council" messages.
 
-    // Battle will start when both players click Ready (handled in ready button handler)
-    console.log('✅ Player 2 joined, waiting for both players to ready up');
+    console.log('✅ Player 2 joined, battle initialized and briefings will be sent via startBattlePhase');
         
 }
 
@@ -279,6 +276,24 @@ async function startBattlePhase(battle) {
         
         // Initialize battle with proper unit deployment
         const initialState = await initializeBattle(battle, p1Commander, p2Commander);
+
+        // Ensure battleState.map exists and is hydrated from the scenario map
+        if (!initialState.map) {
+            initialState.map = {};
+        }
+        if (!initialState.map.terrain || !initialState.map.objectives) {
+            try {
+                const scenarioKey = battle.scenario || 'river_crossing';
+                if (scenarioKey === 'river_crossing') {
+                    const { RIVER_CROSSING_MAP } = require('../game/maps/riverCrossing');
+                    initialState.map.terrain = RIVER_CROSSING_MAP.terrain;
+                    initialState.map.objectives = RIVER_CROSSING_MAP.objectives;
+                }
+                // Other scenarios can be wired here when their map modules exist
+            } catch (mapError) {
+                console.warn('Could not hydrate battleState.map from scenario map:', mapError.message);
+            }
+        }
         
         // Update battle with initialized state
         await battle.update({

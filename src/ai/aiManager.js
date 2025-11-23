@@ -179,12 +179,14 @@ ${context.combatResults || 'Battle continues with both sides holding position.'}
 }
 
 async function generateOfficerTurnSummary(context, aiProvider = 'auto') {
-    // Context: { culture, movesText, combats, casualties, detectedEnemies, tone }
+    // Context may include:
+    // { culture, movesText, combats, casualties, detectedEnemies, speakerName, speakerRole,
+    //   personality, experienceLevel, concern, recommendation, question }
     try {
         if (aiProvider === 'auto') aiProvider = (process.env.GROQ_API_KEY ? 'groq' : (process.env.OPENAI_API_KEY ? 'openai' : 'template'));
         const CULTURE_VOICES = {
             'Roman': 'Roman centurion: terse, disciplined, professional, battlefield commands, no flourish.',
-            'Celtic': 'Celtic champion: bold, spirited, boastful, poetic edge, but keep one sentence.',
+            'Celtic': 'Celtic champion: bold, spirited, boastful, but keep it focused.',
             'Han': 'Han Chinese general: formal, precise, strategic, measured diction.',
             'Macedonian': 'Macedonian officer: confident, tactical, phalanx-minded.',
             'Spartan': 'Spartan lochagos: laconic, minimal words, absolute resolve.',
@@ -201,8 +203,17 @@ async function generateOfficerTurnSummary(context, aiProvider = 'auto') {
         else if (culture.includes('sarmatian')) voice = CULTURE_VOICES.Sarmatian;
         else if (culture.includes('berber')) voice = CULTURE_VOICES.Berber;
 
-        const systemStyle = `You are a ${context.culture || 'Roman'} officer. ${voice} Reply in ONE short sentence (max 18 words), present tense, no emojis.`;
-        const userMsg = `Turn summary: moves=\n${context.movesText || 'none'}\ncombats=${context.combats||0}, casualties=${context.casualties||0}, enemiesDetected=${context.detectedEnemies||0}.`;
+        const name = context.speakerName || 'your officer';
+        const role = context.speakerRole || 'staff officer';
+        const concern = context.concern || 'current tactical situation';
+        const recommendation = context.recommendation || '';
+        const question = context.question || '';
+
+        const systemStyle = `You are ${name}, ${role}, in a ${context.culture || 'Roman'} army. ${voice} ` +
+            'Reply in ONE short sentence (max 24 words), present tense, no emojis. ' +
+            'Do not restate unit positions or exact numbers; give tactical advice, warning, or a direct question to the commander.';
+
+        const userMsg = `Facts: concern=${concern}; recommendation=${recommendation}; questionToCommander=${question}; combats=${context.combats||0}, casualties=${context.casualties||0}, enemiesDetected=${context.detectedEnemies||0}.`;
 
         if (aiProvider === 'groq' && groq) {
             const resp = await groq.chat.completions.create({

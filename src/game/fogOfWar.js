@@ -5,15 +5,19 @@ const { calculateEuclideanDistance } = require('./maps/mapUtils');
 
 const DETECTION_RANGES = {
     // Base spotting (clear weather, ground level)
-    standard: 11,     // 550m - movement detectable at long range (low confidence)
-    scouts: 13,       // scouts see slightly farther
-    elevated: 2,      // modest hill bonus to align with 50m tiles
+    // Tactical scale: 50m/tile. We want:
+    // - Detailed intel ≤3 tiles (~150m)
+    // - Identification up to ~6 tiles (~300m)
+    // - Long-range "movement detected" up to ~8 tiles (~400m)
+    standard: 8,      // max spotting range for regular troops
+    scouts: 10,       // scouts see slightly farther
+    elevated: 2,      // modest hill bonus
     
     // Identification threshold (tell unit type)
-    identifyDistance: 9,   // 450m → medium confidence (5–9 tiles)
+    identifyDistance: 6,
     
     // Detail threshold (exact numbers, equipment)
-    detailDistance: 4,     // 200m → high confidence (≤4 tiles)
+    detailDistance: 3,
     
     // Weather penalties (apply to ALL ranges)
     weatherModifiers: {
@@ -57,7 +61,8 @@ function calculateVisibility(playerUnits, enemyUnits, terrain, weather = 'clear'
         detailed: []      // Full intel (short range)
     };
     
-    const weatherPenalty = DETECTION_RANGES.weatherModifiers[weather] || 0;
+    const weatherKey = normalizeWeatherKey(weather);
+    const weatherPenalty = DETECTION_RANGES.weatherModifiers[weatherKey] || 0;
     
     // Check each player unit's detection capability
     playerUnits.forEach(unit => {
@@ -86,7 +91,10 @@ function calculateVisibility(playerUnits, enemyUnits, terrain, weather = 'clear'
                 if (distance <= Math.max(1, effectiveDetailRange)) {
                     intelligence.detailed.push({
                         position: enemy.position,
+                        unitId: enemy.unitId,
                         unitType: enemy.unitType || 'infantry',
+                        isElite: !!enemy.isElite,
+                        mounted: !!enemy.mounted,
                         exactStrength: enemy.currentStrength,
                         equipment: enemy.equipment || 'standard',
                         formation: enemy.formation || 'unknown',
@@ -99,7 +107,10 @@ function calculateVisibility(playerUnits, enemyUnits, terrain, weather = 'clear'
                 else if (distance <= Math.max(1, effectiveIdentifyRange)) {
                     intelligence.identified.push({
                         position: enemy.position,
+                        unitId: enemy.unitId,
                         unitType: enemy.unitType || 'unknown',
+                        isElite: !!enemy.isElite,
+                        mounted: !!enemy.mounted,
                         estimatedStrength: Math.round(enemy.currentStrength / 25) * 25, // Round to 25
                         confidence: 'MEDIUM',
                         distance: Math.round(distance)
@@ -109,8 +120,11 @@ function calculateVisibility(playerUnits, enemyUnits, terrain, weather = 'clear'
                 else {
                     intelligence.spotted.push({
                         position: enemy.position,
+                        unitId: enemy.unitId,
                         unitType: 'unknown',
-                        estimatedStrength: 'unknown',
+                        isElite: !!enemy.isElite,
+                        mounted: !!enemy.mounted,
+                        estimatedStrength: null,
                         confidence: 'LOW',
                         distance: Math.round(distance)
                     });
@@ -124,6 +138,17 @@ function calculateVisibility(playerUnits, enemyUnits, terrain, weather = 'clear'
         intelligence,
         totalEnemiesDetected: visibleEnemyPositions.size
     };
+}
+
+/** Normalize weather keys from battleState (e.g. light_rain) to FOW table keys */
+function normalizeWeatherKey(weather) {
+    const w = (weather || '').toLowerCase();
+    if (w.includes('fog')) return 'fog';
+    if (w.includes('heavy') && w.includes('rain')) return 'heavyRain';
+    if (w.includes('light') && w.includes('rain')) return 'lightRain';
+    if (w.includes('rain')) return 'lightRain';
+    if (w.includes('dust')) return 'dust';
+    return 'clear';
 }
 
 /**
@@ -247,7 +272,8 @@ function canSeeCoordinate(unit, targetCoord, terrain, weather = 'clear') {
     
     const baseSpotRange = isScout ? DETECTION_RANGES.scouts : DETECTION_RANGES.standard;
     const elevationBonus = isElevated ? DETECTION_RANGES.elevated : 0;
-    const weatherPenalty = DETECTION_RANGES.weatherModifiers[weather] || 0;
+    const weatherKey = normalizeWeatherKey(weather);
+    const weatherPenalty = DETECTION_RANGES.weatherModifiers[weatherKey] || 0;
     const terrainPenalty = DETECTION_RANGES.terrainModifiers[unitTerrain] || 0;
     
     const effectiveRange = baseSpotRange + elevationBonus + weatherPenalty + terrainPenalty;

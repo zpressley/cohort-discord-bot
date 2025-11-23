@@ -83,7 +83,7 @@ async function interpretOrders(orderText, battleState, playerSide, map) {
     const playerUnits = battleState[playerSide].unitPositions || [];
     const playerArmy = battleState[playerSide].army || {};
     
-    // Build context for AI
+    // Build context for AI / fallbacks
     const context = {
         currentTurn: battleState.currentTurn,
         yourUnits: playerUnits,
@@ -92,19 +92,30 @@ async function interpretOrders(orderText, battleState, playerSide, map) {
         culture: battleState[playerSide].culture
     };
     
-    // Generate AI prompt
-    const prompt = buildOrderInterpretationPrompt(orderText, context);
-    
-    // Call AI for interpretation
-    const aiResponse = await callAIForOrderParsing(prompt);
+    // 1) Try deterministic handling for simple army-level orders (no AI call)
+    let aiResponse = tryGenericOrder(orderText, playerUnits, map, context);
 
-    // Validate AI-suggested actions against movement system ONLY
+    // 2) If not handled generically, fall back to AI interpretation
+    if (!aiResponse) {
+        const prompt = buildOrderInterpretationPrompt(orderText, context);
+        aiResponse = await callAIForOrderParsing(prompt);
+    }
+
+    // 3) Validate suggested actions against movement system ONLY
     // No schema validation - movement system catches invalid moves
     const validatedActions = [];
     const errors = [];
     
     for (const action of aiResponse.actions) {
         console.log('  Validating action:', action.type, action.unitId, '→', action.targetPosition);
+
+        // TEMPORARY: treat simple ATTACK orders with a targetPosition as
+        // "move toward this coordinate and engage if contact". The actual
+        // combat trigger is still purely positional.
+        if (action.type === 'attack' && action.targetPosition) {
+            console.log('  Converting ATTACK into MOVE+engagement toward', action.targetPosition);
+            action.type = 'move';
+        }
         
         if (action.type === 'move') {
             const unit = playerUnits.find(u => u.unitId === action.unitId);
@@ -117,15 +128,24 @@ async function interpretOrders(orderText, battleState, playerSide, map) {
             
             // ONLY validation: Can the unit actually move there?
             try {
-                const validation = require('../game/movementSystem').validateMovement(unit, action.targetPosition, map);
+                const { validateMovement, createMission } = require('../game/movementSystem');
+                const validation = validateMovement(unit, action.targetPosition, map);
                 console.log('  Movement validation:', validation.valid);
                 
                 if (validation.valid) {
-                    validatedActions.push({
+                    const validated = {
                         ...action,
                         validation,
                         unitId: unit.unitId
-                    });
+                    };
+
+                    // If this is a partial move (cannot reach target in one turn),
+                    // attach a mission so the unit continues toward the destination
+                    if (validation.partialMovement && validation.originalTarget && validation.finalPosition !== validation.originalTarget) {
+                        validated.newMission = createMission(unit, validation.originalTarget, battleState.currentTurn || 1);
+                    }
+
+                    validatedActions.push(validated);
                     console.log('  ✅ Action validated');
                 } else {
                     console.log('  ❌ Movement invalid:', validation.error);
@@ -246,6 +266,13 @@ function determineTargetUnits(orderText, yourUnits) {
         return yourUnits;
     }
     
+    // Check for elite keyword first (so "elite unit" doesn't fall through to infantry)
+    if (lowerOrder.includes('elite') || lowerOrder.includes('guard') || lowerOrder.includes('veteran')) {
+        const elites = yourUnits.filter(u => u.isElite === true || (u.qualityType || '').toLowerCase().includes('veteran'));
+        console.log(`Elite units (${elites.length} units)`);
+        return elites.length > 0 ? elites : [yourUnits[0]];
+    }
+    
     // Check for cavalry/mounted keyword
     if (lowerOrder.includes('cavalry') || lowerOrder.includes('horse') || lowerOrder.includes('mounted')) {
         const cavalry = yourUnits.filter(u => u.mounted === true);
@@ -313,9 +340,9 @@ function determineTargetUnits(orderText, yourUnits) {
         return [easternmost];
     }
     
-    // Default: first unit only
-    console.log('Default (first unit)');
-    return [yourUnits[0]];
+    // Default: treat as army-level order (all units)
+    console.log('Default: ALL units');
+    return yourUnits;
 }
 
 /**
@@ -369,21 +396,35 @@ async function callAIForOrderParsing(prompt) {
             temperature: 0.3
         });
         
-        const aiText = response.choices[0].message.content.trim();
+        const aiText = (response.choices?.[0]?.message?.content || '').trim();
+        if (!aiText) {
+            console.log('AI response empty - using fallback');
+            return fallbackOrderParsing(prompt);
+        }
         
-        // Extract JSON from response
+        // Extract JSON from response (robust to minor formatting noise)
         const jsonMatch = aiText.match(/\{[\s\S]*\}/);
         if (!jsonMatch) {
             console.log('AI response not JSON - using fallback');
             return fallbackOrderParsing(prompt);
         }
         
-        const parsed = JSON.parse(jsonMatch[0]);
+        let parsed;
+        try {
+            parsed = JSON.parse(jsonMatch[0]);
+        } catch (parseErr) {
+            console.log('AI JSON parse failed - using fallback:', parseErr.message);
+            return fallbackOrderParsing(prompt);
+        }
         
-        // Ensure required fields exist
-        if (!parsed.actions) parsed.actions = [];
-        if (!parsed.validation) parsed.validation = { isValid: true, errors: [], warnings: [] };
-        if (!parsed.officerComment) parsed.officerComment = 'Orders acknowledged.';
+        // Ensure required fields exist and are well-typed
+        if (!Array.isArray(parsed.actions)) parsed.actions = [];
+        if (typeof parsed.validation !== 'object' || parsed.validation === null) {
+            parsed.validation = { isValid: true, errors: [], warnings: [] };
+        }
+        if (!Array.isArray(parsed.validation.errors)) parsed.validation.errors = [];
+        if (!Array.isArray(parsed.validation.warnings)) parsed.validation.warnings = [];
+        if (typeof parsed.officerComment !== 'string') parsed.officerComment = 'Orders acknowledged.';
         
         console.log(`AI parsed ${parsed.actions.length} actions from order`);
         return parsed;
@@ -603,24 +644,48 @@ function generateOfficerComment(actions, affectedUnits) {
 function simpleKeywordActions(orderText, targetUnits, map) {
   const lower = normalizeOrderText(orderText).toLowerCase();
   const actions = [];
-  // coordinate match
+
+  // 1) Explicit coordinate target (e.g., "all units move to J11")
   const coord = orderText.match(/\b([A-T]\d{1,2})\b/i)?.[1]?.toUpperCase();
   if (coord) {
-    targetUnits.forEach(u => actions.push({ type: 'move', unitId: u.unitId, currentPosition: u.position, targetPosition: coord, reasoning: `Move to ${coord}` }));
+    targetUnits.forEach(u => actions.push({
+      type: 'move',
+      unitId: u.unitId,
+      currentPosition: u.position,
+      targetPosition: coord,
+      reasoning: `Move to ${coord}`
+    }));
     return actions;
   }
-  // landmarks
-  if (lower.includes('ford')) {
-    const dest = 'I11';
-    targetUnits.forEach(u => actions.push({ type: 'move', unitId: u.unitId, currentPosition: u.position, targetPosition: dest, reasoning: 'Move to ford' }));
+
+  // 2) Global hold / defend orders
+  if (lower.includes('hold') || lower.includes('stay') || lower.includes('defend')) {
+    targetUnits.forEach(u => actions.push({
+      type: 'move',
+      unitId: u.unitId,
+      currentPosition: u.position,
+      targetPosition: u.position,
+      reasoning: 'Hold position'
+    }));
     return actions;
   }
-  if (lower.includes('hill')) {
-    const dest = 'B5';
-    targetUnits.forEach(u => actions.push({ type: 'move', unitId: u.unitId, currentPosition: u.position, targetPosition: dest, reasoning: 'Move to hill' }));
+
+  // 3) Retreat / withdraw / fall back (3 tiles south)
+  if (lower.includes('retreat') || lower.includes('withdraw') || lower.includes('fall back')) {
+    targetUnits.forEach(u => {
+      const dest = moveInDirection(u.position, 'south', 3);
+      actions.push({
+        type: 'move',
+        unitId: u.unitId,
+        currentPosition: u.position,
+        targetPosition: dest,
+        reasoning: 'Retreat / fall back'
+      });
+    });
     return actions;
   }
-  // directions (3 tiles)
+
+  // 4) Generic directional moves (3 tiles by default)
   let dir = null;
   if (lower.includes('north')) dir = 'north';
   else if (lower.includes('south')) dir = 'south';
@@ -632,13 +697,69 @@ function simpleKeywordActions(orderText, targetUnits, map) {
       const pos = parseCoord(u.position); let row = pos.row, col = pos.col;
       if (dir==='north') row -= 3; if (dir==='south') row += 3; if (dir==='east') col += 3; if (dir==='west') col -= 3;
       row = Math.max(0, Math.min(19, row)); col = Math.max(0, Math.min(19, col));
-      actions.push({ type: 'move', unitId: u.unitId, currentPosition: u.position, targetPosition: coordToString({row, col}), reasoning: `Move ${dir}` });
+      actions.push({
+        type: 'move',
+        unitId: u.unitId,
+        currentPosition: u.position,
+        targetPosition: coordToString({row, col}),
+        reasoning: `Move ${dir}`
+      });
     });
     return actions;
   }
-  // default hold
-  targetUnits.forEach(u => actions.push({ type: 'move', unitId: u.unitId, currentPosition: u.position, targetPosition: u.position, reasoning: 'Hold position' }));
+
+  // 5) Fallback: hold in place
+  targetUnits.forEach(u => actions.push({
+    type: 'move',
+    unitId: u.unitId,
+    currentPosition: u.position,
+    targetPosition: u.position,
+    reasoning: 'Hold position'
+  }));
   return actions;
+}
+
+function tryGenericOrder(orderText, yourUnits, map, context) {
+  if (!orderText || !yourUnits || yourUnits.length === 0) return null;
+
+  const normalized = normalizeOrderText(orderText);
+  const lower = normalized.toLowerCase();
+
+  // Heuristics for generic / army-level orders
+  const hasGlobalKeyword = /\b(all units|everyone|everybody|the army|our forces|our troops|my army)\b/.test(lower);
+  const hasCoord = /\b([A-T]\d{1,2})\b/i.test(orderText);
+  const hasDirection = /\b(north|south|east|west)\b/.test(lower);
+  const hasHold = /\b(hold|stay|defend)\b/.test(lower);
+  const hasRetreat = /\b(retreat|withdraw|fall back)\b/.test(lower);
+
+  // Specific selectors suggest we might want more nuance; still allow generic if clearly global
+  const hasSpecificUnitKeyword = /\b(elite|guard|veteran|cavalry|infantry|archer|archers|horse|scout|northern unit|southern unit|eastern unit|western unit|unit at|units at)\b/.test(lower);
+
+  const looksGeneric = (
+    hasGlobalKeyword ||
+    hasCoord ||
+    hasDirection ||
+    hasHold ||
+    hasRetreat
+  ) && !lower.includes(','); // avoid multi-clause commands here
+
+  if (!looksGeneric) return null;
+
+  // Decide which units to apply to
+  let targetUnits;
+  if (hasSpecificUnitKeyword && !hasGlobalKeyword) {
+    targetUnits = determineTargetUnits(orderText, yourUnits);
+  } else {
+    targetUnits = yourUnits;
+  }
+
+  const actions = simpleKeywordActions(orderText, targetUnits, map);
+
+  return {
+    actions,
+    validation: { isValid: true, errors: [], warnings: [] },
+    officerComment: generateDefaultComment(context.culture)
+  };
 }
 
 function moveInDirection(fromCoord, direction, distance) {
@@ -1000,5 +1121,6 @@ function findUnitByDescription(description, units) {
 }
 
 module.exports = {
-    interpretOrders
+    interpretOrders,
+    parseCommanderActions
 };

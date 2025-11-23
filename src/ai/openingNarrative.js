@@ -7,11 +7,8 @@ const Groq = require('groq-sdk');
 const GROQ_ENABLED = !!process.env.GROQ_API_KEY;
 
 /**
- * Generate opening narrative when battle begins
- * @param {Object} battle - Battle record
- * @param {Object} player1Commander - Player 1 commander
- * @param {Object} player2Commander - Player 2 commander
- * @returns {Promise<string>} Opening narrative
+ * Generate a neutral opening narrative covering both sides.
+ * (Legacy function - used where a shared narrative is acceptable.)
  */
 async function generateOpeningNarrative(battle, player1Commander, player2Commander) {
     const prompt = buildOpeningPrompt(battle, player1Commander, player2Commander);
@@ -47,6 +44,47 @@ async function generateOpeningNarrative(battle, player1Commander, player2Command
     } catch (error) {
         console.warn('⚠️ Opening narrative AI failed:', error.message);
         return generateTemplateOpening(battle, player1Commander, player2Commander);
+    }
+}
+
+/**
+ * Generate a player-specific opening narrative (from one commander’s POV),
+ * without exposing enemy army composition.
+ */
+async function generateOpeningNarrativeForSide(battle, yourCommander, enemyCommander, sideKey) {
+    const prompt = buildSideOpeningPrompt(battle, yourCommander, enemyCommander, sideKey);
+
+    if (!GROQ_ENABLED) {
+        return generateSideTemplateOpening(battle, yourCommander, enemyCommander, sideKey);
+    }
+
+    try {
+        const groq = new Groq({ apiKey: process.env.GROQ_API_KEY });
+        console.log(`🤖 Generating opening narrative for ${sideKey} with Groq...`);
+
+        const response = await groq.chat.completions.create({
+            model: 'llama-3.1-8b-instant',
+            messages: [
+                {
+                    role: 'system',
+                    content: 'You are a master storyteller of ancient warfare. '
+                        + 'Write from the perspective of the commanding player. '
+                        + 'Describe ONLY what their side would reasonably know: their own army and glimpses of the enemy, '
+                        + 'but never list exact enemy numbers, formations, or detailed composition.'
+                },
+                {
+                    role: 'user',
+                    content: prompt
+                }
+            ],
+            max_tokens: 350,
+            temperature: 0.9
+        });
+
+        return response.choices[0].message.content;
+    } catch (err) {
+        console.warn('⚠️ Side opening narrative AI failed:', err.message);
+        return generateSideTemplateOpening(battle, yourCommander, enemyCommander, sideKey);
     }
 }
 
@@ -99,6 +137,59 @@ Use historically authentic details. Present tense. No dialogue yet - save that f
 }
 
 /**
+ * Build player-specific opening prompt (POV for a single commander)
+ */
+function buildSideOpeningPrompt(battle, yourCommander, enemyCommander, sideKey) {
+    const scenarioDescriptions = {
+        'river_crossing': 'a strategic river crossing with multiple stone fords',
+        'bridge_control': 'an ancient stone bridge spanning a swift river',
+        'forest_ambush': 'dense woodland where ambushers wait in the shadows',
+        'hill_fort_assault': 'a fortified hilltop position with steep approaches',
+        'desert_oasis': 'a vital desert oasis, the only water source for miles'
+    };
+
+    const weatherDescriptions = {
+        'clear': 'Dawn breaks clear and bright',
+        'light_rain': 'Light rain falls, creating muddy conditions',
+        'heavy_rain': 'Heavy rain pounds the battlefield, limiting visibility',
+        'fog': 'Dense morning fog shrouds the terrain',
+        'extreme_heat': 'The sun beats down mercilessly',
+        'wind': 'Strong winds whip across the battlefield',
+        'cold': 'Bitter cold grips the morning air',
+        'storm': 'A violent storm rages overhead'
+    };
+
+    const yourUnits = (yourCommander.armyComposition?.units || []).length;
+
+    return `You are narrating for the ${yourCommander.culture} commander.
+
+SETTING:
+- Scenario: ${scenarioDescriptions[battle.scenario] || battle.scenario}
+- Weather: ${weatherDescriptions[battle.weather] || battle.weather}
+- Time: Dawn of the first day
+
+YOUR FORCES:
+- Culture: ${yourCommander.culture}
+- Force size: about ${yourUnits} units (do NOT enumerate types)
+- Cultural identity: ${getCulturalIdentity(yourCommander.culture)}
+
+THE ENEMY:
+- Culture: ${enemyCommander.culture}
+- Strength: unknown (do NOT mention unit counts, formations, or specific weapons)
+
+TASK:
+Write 2 short paragraphs (150–220 words total) in present tense from the ${yourCommander.culture} commander’s perspective.
+
+REQUIREMENTS:
+1. Focus on what *your* side sees and feels: formations forming, banners, officers, terrain.
+2. Describe the enemy only in broad strokes (shapes on the far bank, banners, distant horns), never exact numbers.
+3. Use "you" / "your" for the commander’s side, and "the enemy" or "the ${enemyCommander.culture}" for the foe.
+4. Include vivid sensory details (sound of armor, breath of horses, river, wind, etc.).
+5. Do NOT reveal exact enemy strength or composition.
+`;
+}
+
+/**
  * Get cultural identity description for AI context
  */
 function getCulturalIdentity(culture) {
@@ -118,7 +209,7 @@ function getCulturalIdentity(culture) {
 }
 
 /**
- * Template opening for when AI unavailable
+ * Template opening for when AI unavailable (neutral)
  */
 function generateTemplateOpening(battle, player1Commander, player2Commander) {
     const weatherDesc = {
@@ -135,6 +226,24 @@ function generateTemplateOpening(battle, player1Commander, player2Commander) {
            `tactics, and the fortunes of war.`;
 }
 
+/**
+ * Side-specific fallback opening (no enemy composition details)
+ */
+function generateSideTemplateOpening(battle, yourCommander, enemyCommander, sideKey) {
+    const weatherDesc = {
+        'clear': 'a clear morning',
+        'light_rain': 'light rain falling',
+        'fog': 'thick morning fog',
+        'heavy_rain': 'torrential rain'
+    };
+
+    return `Dawn breaks over ${weatherDesc[battle.weather] || 'uncertain skies'} as your ${yourCommander.culture} forces form up. ` +
+           `Across the way, the banners of the ${enemyCommander.culture} rise through the mist, their exact strength unclear. ` +
+           `Officers call orders along your line, shields and spears shifting as the men settle into formation. ` +
+           `The ground, the river, and the sky all seem to hold their breath as you prepare for the first clash.`;
+}
+
 module.exports = {
-    generateOpeningNarrative
+    generateOpeningNarrative,
+    generateOpeningNarrativeForSide
 };

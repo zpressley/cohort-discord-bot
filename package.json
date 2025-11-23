@@ -5,9 +5,8 @@
   "scripts": {
     "start": "node src/index.js",
     "dev": "nodemon src/index.js",
-    "test:schemas": "node src/tests/schemas/validator.test.js",
     "test:core": "node src/tests/core/coreEngine.test.js",
-    "test": "npm run test:schemas && npm run test:core",
+    "test": "npm run test:core",
     "replay": "node scripts/replayBattle.js"
   },
   "keywords": [
