@@ -1,7 +1,7 @@
 // src/game/positionBasedCombat.js
 // Combat resolution with tactical positioning modifiers
 
-const { calculateDistance, getAdjacentCoords, parseCoord, coordToString } = require('./maps/mapUtils');
+const { calculateDistance, getAdjacentCoords, parseCoord, coordToString, getDirection } = require('./maps/mapUtils');
 
 /**
  * Detect combat triggers based on unit positions
@@ -10,32 +10,54 @@ const { calculateDistance, getAdjacentCoords, parseCoord, coordToString } = requ
  * @returns {Array} Array of combat engagements
  */
 function detectCombatTriggers(player1Units, player2Units) {
+    const { getUnitWeaponRange, hasRangedWeapon } = require('./rangedCombat');
     const combats = [];
     
     player1Units.forEach(p1Unit => {
         player2Units.forEach(p2Unit => {
-            const distance = calculateDistance(p1Unit.position, p2Unit.position);
+            const p1Pos = parseCoord(p1Unit.position);
+            const p2Pos = parseCoord(p2Unit.position);
+            const dx = Math.abs(p1Pos.col - p2Pos.col);
+            const dy = Math.abs(p1Pos.row - p2Pos.row);
+            const manhattan = dx + dy;                 // N/S/E/W adjacency only
+            const chebyshev = Math.max(dx, dy);        // for ranged distance
             
-            // Adjacent units trigger combat
-            if (distance <= 1) {
+            // Melee only when units share an edge (no diagonal contact)
+            if (manhattan === 1) {
                 combats.push({
                     location: p1Unit.position,
                     attacker: p1Unit,
                     defender: p2Unit,
                     type: 'melee',
-                    distance: distance
+                    distance: manhattan
                 });
             }
             
-            // Ranged combat within 3 tiles
-            if (distance > 1 && distance <= 3) {
-                if (p1Unit.hasRanged || p2Unit.hasRanged) {
+            // Ranged combat: each side may be able to shoot the other based on
+            // its own weapon's maximum range (2–14 tiles depending on weapon).
+            if (chebyshev > 1) {
+                const p1Range = hasRangedWeapon(p1Unit) ? getUnitWeaponRange(p1Unit) : null;
+                const p2Range = hasRangedWeapon(p2Unit) ? getUnitWeaponRange(p2Unit) : null;
+
+                if (p1Range && chebyshev <= p1Range.maximum) {
                     combats.push({
                         location: p1Unit.position,
-                        attacker: p1Unit,
-                        defender: p2Unit,
+                        shooter: p1Unit,
+                        target: p2Unit,
                         type: 'ranged',
-                        distance: distance
+                        distance: chebyshev,
+                        weaponRange: p1Range
+                    });
+                }
+
+                if (p2Range && chebyshev <= p2Range.maximum) {
+                    combats.push({
+                        location: p2Unit.position,
+                        shooter: p2Unit,
+                        target: p1Unit,
+                        type: 'ranged',
+                        distance: chebyshev,
+                        weaponRange: p2Range
                     });
                 }
             }
@@ -82,6 +104,34 @@ function calculatePositionalModifiers(attacker, defender, allUnits, map) {
         modifiers.attacker.attack += elevationMod.attacker;
         modifiers.description.push(`Downhill attack: +${elevationMod.attacker}`);
     }
+
+    // Facing + formation directional bonuses (front / flank / rear)
+    const attackDir = getAttackCardinalDirection(attacker.position, defender.position);
+    const facingBonus = getFormationDefenseBonus(defender, attackDir);
+    if (facingBonus !== 0) {
+        modifiers.defender.defense += facingBonus;
+        if (facingBonus > 0) {
+            modifiers.description.push(`Formation facing advantage (${attackDir} vs ${defender.facing || 'N'}): +${facingBonus} defense`);
+        } else {
+            modifiers.description.push(`Hit from flank/rear (${attackDir} vs ${defender.facing || 'N'}): ${facingBonus} defense`);
+        }
+    }
+
+    // Marching column frontal penalty: when a marching unit is hit in the head
+    if ((defender.formationStatus || 'deployed') === 'marching' && attackDir) {
+        const defFacing = (defender.facing || 'N').toUpperCase();
+        if (attackDir === defFacing) {
+            const strength = defender.currentStrength || defender.maxStrength || 400;
+            const tilesDeep = Math.max(1, Math.min(4, Math.ceil(strength / 100)));
+            const frontagePenalty = (tilesDeep - 1) * 2; // 100→0, 300→4, 400→6
+            if (frontagePenalty > 0) {
+                modifiers.defender.defense -= frontagePenalty;
+                modifiers.description.push(
+                    `March column head hit: only 1/${tilesDeep} of men can fight; defense ${-frontagePenalty}`
+                );
+            }
+        }
+    }
     
     // River crossing penalty
     if (isCrossingRiver(attacker.position, defender.position, map)) {
@@ -119,18 +169,82 @@ function calculateFlankingBonus(attacker, defender, allUnits) {
     const defenderPos = defender.position;
     const adjacent = getAdjacentCoords(defenderPos);
     
-    // Count friendly units adjacent to defender
-    const friendlyUnitsAttacking = allUnits.filter(unit => 
-        unit.side === attacker.side &&
+    // Enemy units of defender that are adjacent (other than this attacker)
+    const adjacentEnemies = allUnits.filter(unit => 
+        unit.side !== defender.side &&
         unit.unitId !== attacker.unitId &&
         adjacent.includes(unit.position)
     );
     
-    if (friendlyUnitsAttacking.length === 0) return 0;
-    if (friendlyUnitsAttacking.length === 1) return +2; // 2-sided attack
-    if (friendlyUnitsAttacking.length >= 2) return +4; // 3+ sided attack (surrounded)
+    if (adjacentEnemies.length === 0) return 0;
+    
+    // Determine distinct attack directions (N/S/E/W buckets, diagonals collapsed)
+    const directions = new Set();
+    adjacentEnemies.forEach(unit => {
+        const dir = getAttackCardinalDirection(unit.position, defenderPos);
+        if (dir) directions.add(dir);
+    });
+    
+    const attackDirections = directions.size;
+    if (attackDirections <= 1) return 0;     // front-only pressure
+    if (attackDirections === 2) return +3;   // flanked
+    if (attackDirections === 3) return +6;   // U-shaped attack
+    if (attackDirections >= 4) return +8;    // surrounded on all sides
     
     return 0;
+}
+
+/**
+ * Mark melee engagements so ranged combat can reason about "shooting into melee".
+ * Returns Map<unitId, { engaged, fightingWith: string[], adjacentFriendlies: string[] }>.
+ */
+function trackMeleeEngagements(combats, allUnits) {
+    const engagements = new Map();
+
+    // Initialize all units as not engaged
+    allUnits.forEach(unit => {
+        if (!unit || !unit.unitId) return;
+        engagements.set(unit.unitId, {
+            engaged: false,
+            fightingWith: [],
+            adjacentFriendlies: []
+        });
+    });
+
+    // Mark units in melee combat
+    combats.forEach(combat => {
+        if (combat.type !== 'melee') return;
+        const attackerId = combat.attacker.unitId;
+        const defenderId = combat.defender.unitId;
+
+        if (!engagements.has(attackerId) || !engagements.has(defenderId)) return;
+
+        const att = engagements.get(attackerId);
+        const def = engagements.get(defenderId);
+
+        att.engaged = true;
+        def.engaged = true;
+        att.fightingWith.push(defenderId);
+        def.fightingWith.push(attackerId);
+    });
+
+    // For each engaged unit, record adjacent friendly units (for FF distribution)
+    allUnits.forEach(unit => {
+        if (!unit || !unit.unitId) return;
+        const entry = engagements.get(unit.unitId);
+        if (!entry || !entry.engaged) return;
+
+        const adj = getAdjacentCoords(unit.position);
+        const friendlies = allUnits.filter(u =>
+            u.side === unit.side &&
+            u.unitId !== unit.unitId &&
+            adj.includes(u.position)
+        );
+
+        entry.adjacentFriendlies = friendlies.map(f => f.unitId);
+    });
+
+    return engagements;
 }
 
 /**
@@ -288,26 +402,110 @@ function processMovementPhase(player1Movements, player2Movements, battleState, m
     // Sort by tier asc, then random for tie-break
     combined.sort((a, b) => (a.tier - b.tier) || (a.rand - b.rand));
 
-    // NOTE: Stacking is allowed. We no longer prevent multiple friendly units
-    // from ending on the same tile here; instead, Stack-001 compression logic
-    // below applies movement penalties when units stack.
+    // NOTE: Stacking is allowed for deployed units. Marching columns must still
+    // respect collision/stacking rules along their entire footprint.
+    
+        // Execute moves in initiative order
+        for (const item of combined) {
+            const { side, unit, move } = item;
+            let nextPos = move.finalPosition || move.targetPosition;
+            let movementRemaining = move.validation.movementRemaining;
+            if (move.modifier?.groupMarch && Array.isArray(move.validation.path) && move.validation.path.length > 1) {
+                nextPos = move.validation.path[1];
+                movementRemaining = Math.max(0, (unit.movementRemaining || 3) - 1);
+            }
 
-    // Execute moves in initiative order
-    for (const item of combined) {
-        const { side, unit, move } = item;
-        let nextPos = move.finalPosition || move.targetPosition;
-        let movementRemaining = move.validation.movementRemaining;
-        if (move.modifier?.groupMarch && Array.isArray(move.validation.path) && move.validation.path.length > 1) {
-            nextPos = move.validation.path[1];
-            movementRemaining = Math.max(0, (unit.movementRemaining || 3) - 1);
+            // MOV-ENEMY-EXCLUSION: Prevent movement paths from entering tiles
+            // currently occupied by an enemy unit. If the validated path would
+            // step onto an enemy tile before reaching nextPos, clamp nextPos to
+            // the last safe tile before that contact.
+            const pathForMove = Array.isArray(move.validation?.path) ? move.validation.path : null;
+            const enemyUnitsNow = side === 'player1'
+                ? Array.from(p2Map.values())
+                : Array.from(p1Map.values());
+            const enemyPosSet = new Set(
+                enemyUnitsNow
+                    .map(u => u && u.position)
+                    .filter(Boolean)
+            );
+
+            if (pathForMove && pathForMove.length > 1 && enemyPosSet.size > 0) {
+                // Find index of this turn's destination in the path
+                let destIndex = pathForMove.lastIndexOf(nextPos);
+                if (destIndex === -1) destIndex = pathForMove.length - 1;
+
+                // Scan forward from the first step up to destIndex; if any step
+                // is an enemy tile, stop one tile short of it.
+                for (let i = 1; i <= destIndex; i++) {
+                    const stepCoord = pathForMove[i];
+                    if (enemyPosSet.has(stepCoord)) {
+                        nextPos = pathForMove[i - 1];
+                        break;
+                    }
+                }
+            }
+
+        // Marching column collision/stacking: ensure the *column* can occupy the
+        // intended footprint at nextPos. If not, fall back to the last valid
+        // front tile along the validated path.
+        let finalPos = nextPos;
+        const movingStatus = unit.formationStatus || 'deployed';
+        if (movingStatus === 'marching' && pathForMove && pathForMove.length > 1) {
+            const { calculateOccupiedTiles, checkStackingViolation } = require('./formations/formationStatus');
+            const path = pathForMove;
+            const allUnits = [
+                ...Array.from(p1Map.values()).map(u => ({ ...u, side: 'player1' })),
+                ...Array.from(p2Map.values()).map(u => ({ ...u, side: 'player2' }))
+            ];
+
+            // Walk backwards along the validated path to find the furthest
+            // front tile where the column footprint is collision-legal.
+            for (let i = path.length - 1; i >= 1; i--) {
+                const testFront = path[i];
+                const virtual = { ...unit, position: testFront };
+                const occupied = calculateOccupiedTiles(virtual);
+                let blocked = false;
+                for (const tile of occupied) {
+                    const stack = checkStackingViolation(tile, virtual, allUnits);
+                    if (!stack.allowed) {
+                        blocked = true;
+                        break;
+                    }
+                }
+                if (!blocked) {
+                    finalPos = testFront;
+                    break;
+                }
+            }
+        }
+
+        // Track from-where-this-unit-approached its final tile so we can form
+        // natural trailing columns when multiple units converge on the same
+        // destination.
+        let approachFrom = unit.position;
+        if (pathForMove && pathForMove.length >= 2) {
+            let idx = pathForMove.lastIndexOf(finalPos);
+            if (idx === -1) idx = pathForMove.length - 1;
+            if (idx > 0) {
+                approachFrom = pathForMove[idx - 1];
+            }
         }
 
         const updated = {
             ...unit,
-            position: nextPos,
+            position: finalPos,
             movementRemaining,
-            hasMoved: true
+            hasMoved: true,
+            approachFrom
         };
+
+        // Update facing based on direction of movement (only when the unit actually changes tile)
+        if (unit.position && finalPos && unit.position !== finalPos) {
+            const moveDir = getAttackCardinalDirection(unit.position, finalPos);
+            if (moveDir) {
+                updated.facing = moveDir;
+            }
+        }
 
         if (move.newMission) {
             updated.activeMission = move.newMission;
@@ -326,6 +524,134 @@ function processMovementPhase(player1Movements, player2Movements, battleState, m
     // Remove units that have deserted (veteran mercenaries exiting the field)
     newPlayer1Positions = newPlayer1Positions.filter(u => !u.hasDeserted);
     newPlayer2Positions = newPlayer2Positions.filter(u => !u.hasDeserted);
+
+    // Friendly unstacking: after all moves, try to ensure one friendly unit per
+    // tile when space exists nearby. This respects:
+    // - Passing through friends during movement (unchanged)
+    // - Not pulling units off tiles that also contain enemies (those tiles are
+    //   combat hotspots and should not be "auto-resolved" away)
+    function unstackFriendlyUnits(friendlyUnits, enemyUnits) {
+        const enemyPos = new Set(
+            (enemyUnits || [])
+                .map(u => u && u.position)
+                .filter(Boolean)
+        );
+
+        const byTile = new Map();
+        (friendlyUnits || []).forEach(u => {
+            if (!u || !u.position) return;
+            const key = u.position;
+            if (!byTile.has(key)) byTile.set(key, []);
+            byTile.get(key).push(u);
+        });
+
+        const occupied = new Set();
+        const result = [];
+
+        // Helper: relative speed tier (reuse movement initiative tiers)
+        const tierOf = (unit) => {
+            const qt = (unit.qualityType || '').toLowerCase();
+            if (qt.includes('scout')) return 1;
+            if (unit.mounted) return 2;
+            if (qt.includes('light')) return 3;
+            if (qt.includes('heavy')) return 4;
+            return 3;
+        };
+
+        // Helper: BFS fallback if behind slots are blocked
+        function findNearestFreeTile(origin, occupiedSet) {
+            const base = parseCoord(origin);
+            if (!base) return origin;
+
+            const maxRadius = 3;
+            for (let r = 1; r <= maxRadius; r++) {
+                for (let dr = -r; dr <= r; dr++) {
+                    for (let dc = -r; dc <= r; dc++) {
+                        if (Math.abs(dr) + Math.abs(dc) !== r) continue; // diamond ring
+                        const row = base.row + dr;
+                        const col = base.col + dc;
+                        if (row < 0 || row >= 40 || col < 0 || col >= 40) continue;
+                        const coord = coordToString({ row, col });
+                        if (occupiedSet.has(coord)) continue;
+                        if (enemyPos.has(coord)) continue;
+                        return coord;
+                    }
+                }
+            }
+            return origin;
+        }
+
+        // For each tile, keep fastest as anchor, trail others along their
+        // individual approach vectors when possible.
+        byTile.forEach((arr, tile) => {
+            if (!arr || arr.length === 0) return;
+
+            // If enemies occupy this tile too, leave all friendlies in place so
+            // combat resolution sees the correct contact geometry.
+            if (enemyPos.has(tile) || arr.length === 1) {
+                arr.forEach(u => {
+                    result.push(u);
+                    occupied.add(u.position);
+                });
+                return;
+            }
+
+            const sorted = [...arr].sort((a, b) => tierOf(a) - tierOf(b));
+            const anchor = sorted[0];
+            result.push(anchor);
+            occupied.add(anchor.position);
+
+            const anchorCoord = parseCoord(tile);
+            sorted.slice(1).forEach((u, idx) => {
+                const stepIndex = idx + 1; // 1 tile back for 2nd, 2 tiles for 3rd, etc.
+                let placed = false;
+
+                const fromPos = u.approachFrom || tile;
+                const fromCoord = parseCoord(fromPos);
+                if (anchorCoord && fromCoord) {
+                    let dr = anchorCoord.row - fromCoord.row;
+                    let dc = anchorCoord.col - fromCoord.col;
+                    if (dr !== 0) dr = dr > 0 ? 1 : -1;
+                    if (dc !== 0) dc = dc > 0 ? 1 : -1;
+
+                    if (dr !== 0 || dc !== 0) {
+                        for (let k = 1; k <= stepIndex; k++) {
+                            const row = anchorCoord.row + dr * k;
+                            const col = anchorCoord.col + dc * k;
+                            if (row < 0 || row >= 40 || col < 0 || col >= 40) break;
+                            const coord = coordToString({ row, col });
+                            if (occupied.has(coord)) continue;
+                            if (enemyPos.has(coord)) continue;
+                            const updated = { ...u, position: coord };
+                            result.push(updated);
+                            occupied.add(coord);
+                            placed = true;
+                            break;
+                        }
+                    }
+                }
+
+                if (!placed) {
+                    const fallback = findNearestFreeTile(tile, occupied);
+                    const updated = { ...u, position: fallback };
+                    result.push(updated);
+                    occupied.add(fallback);
+                }
+            });
+        });
+
+        // Include any units that never appeared in byTile (no position)
+        friendlyUnits.forEach(u => {
+            if (!u || !u.position) {
+                result.push(u);
+            }
+        });
+
+        return result;
+    }
+
+    newPlayer1Positions = unstackFriendlyUnits(newPlayer1Positions, newPlayer2Positions);
+    newPlayer2Positions = unstackFriendlyUnits(newPlayer2Positions, newPlayer1Positions);
 
     // Stack-001: compression penalties for stacked friendly units
     function applyStackCompression(units) {
@@ -354,6 +680,10 @@ function processMovementPhase(player1Movements, player2Movements, battleState, m
     // Detect combat triggers
     const combatTriggers = detectCombatTriggers(newPlayer1Positions, newPlayer2Positions);
 
+    // Split into melee and ranged engagements
+    const meleeTriggers = combatTriggers.filter(c => c.type === 'melee');
+    const rangedTriggers = combatTriggers.filter(c => c.type === 'ranged');
+
     // Mark missions complete when units reach their target or enter combat.
     function completeMissionsForEngagementUnit(unit) {
         if (unit && unit.activeMission && unit.activeMission.status === 'active') {
@@ -370,8 +700,8 @@ function processMovementPhase(player1Movements, player2Movements, battleState, m
         });
     });
 
-    // Build combat contexts and mark missions complete for engaged units.
-    const combatContexts = combatTriggers.map(combat => {
+    // Build combat contexts and mark missions complete for engaged units (melee only).
+    const combatContexts = meleeTriggers.map(combat => {
         completeMissionsForEngagementUnit(combat.attacker);
         completeMissionsForEngagementUnit(combat.defender);
 
@@ -395,7 +725,12 @@ function processMovementPhase(player1Movements, player2Movements, battleState, m
         compression: {
             player1: p1Compressed,
             player2: p2Compressed
-        }
+        },
+        rangedEngagements: rangedTriggers,
+        meleeEngagements: trackMeleeEngagements(meleeTriggers, [
+            ...newPlayer1Positions.map(u => ({ ...u, side: 'player1' })),
+            ...newPlayer2Positions.map(u => ({ ...u, side: 'player2' }))
+        ])
     };
 }
 
@@ -405,6 +740,78 @@ function processMovementPhase(player1Movements, player2Movements, battleState, m
 function getTerrainType(coord, map) {
     const { getTerrainType: getTerrain } = require('./movementSystem');
     return getTerrain(coord, map);
+}
+
+/**
+ * Derive a coarse cardinal attack direction (N/S/E/W) from attacker to defender.
+ * Diagonals are collapsed to their dominant axis.
+ */
+function getAttackCardinalDirection(attackerPos, defenderPos) {
+    const dirStr = getDirection(attackerPos, defenderPos); // e.g. 'northwest'
+    if (!dirStr || typeof dirStr !== 'string') return null;
+    const d = dirStr.toLowerCase();
+    if (d.includes('north') && !d.includes('east') && !d.includes('west')) return 'N';
+    if (d.includes('south') && !d.includes('east') && !d.includes('west')) return 'S';
+    if (d.includes('east')  && !d.includes('north') && !d.includes('south')) return 'E';
+    if (d.includes('west')  && !d.includes('north') && !d.includes('south')) return 'W';
+    // Diagonals: choose dominant axis by row/col delta
+    const from = parseCoord(attackerPos);
+    const to = parseCoord(defenderPos);
+    if (!from || !to) return null;
+    const dRow = to.row - from.row; // + = south, - = north
+    const dCol = to.col - from.col; // + = east,  - = west
+    if (Math.abs(dRow) >= Math.abs(dCol)) {
+        return dRow >= 0 ? 'S' : 'N';
+    } else {
+        return dCol >= 0 ? 'E' : 'W';
+    }
+}
+
+/**
+ * Facing-aware formation defense bonuses.
+ * Currently focuses on phalanx-style formations but can be extended.
+ */
+function getFormationDefenseBonus(defender, attackDirection) {
+    const facing = (defender.facing || 'N').toUpperCase();
+    const formation = (defender.formation || '').toLowerCase();
+
+    if (!attackDirection) return 0;
+
+    // Helper: is this a flank relative to facing?
+    const isFlank = (face, atk) => {
+        if (face === 'N' || face === 'S') {
+            return atk === 'E' || atk === 'W';
+        } else {
+            return atk === 'N' || atk === 'S';
+        }
+    };
+
+    const isRear = (face, atk) => {
+        if (face === 'N' && atk === 'S') return true;
+        if (face === 'S' && atk === 'N') return true;
+        if (face === 'E' && atk === 'W') return true;
+        if (face === 'W' && atk === 'E') return true;
+        return false;
+    };
+
+    // Example directional formations: phalanx-style and similar
+    if (formation === 'phalanx' || formation === 'shield_wall' || formation === 'roman_manipular') {
+        if (attackDirection === facing) {
+            // Strong to the front
+            return +4;
+        }
+        if (isFlank(facing, attackDirection)) {
+            // Vulnerable on flanks
+            return -4;
+        }
+        if (isRear(facing, attackDirection)) {
+            // Very vulnerable from rear
+            return -6;
+        }
+    }
+
+    // Default: no directional modifier
+    return 0;
 }
 
 /**
@@ -463,12 +870,13 @@ function handleRoutingMovement(unit, side, battleState, map) {
 
     const step = { row: current.row, col: current.col };
 
-    // Step one tile toward camp in row, then column if needed
+    // Step one tile toward camp in row, then column if needed.
+    // current.row / campCoord.row are 0-based numeric indices; move +/-1.
     if (current.row !== campCoord.row) {
         if (current.row > campCoord.row) {
-            step.row = String.fromCharCode(current.row.charCodeAt(0) - 1);
+            step.row = current.row - 1;
         } else if (current.row < campCoord.row) {
-            step.row = String.fromCharCode(current.row.charCodeAt(0) + 1);
+            step.row = current.row + 1;
         }
     } else if (current.col !== campCoord.col) {
         if (current.col > campCoord.col) {

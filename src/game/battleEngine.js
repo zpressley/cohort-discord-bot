@@ -9,6 +9,8 @@ const { calculatePreparationLegacy } = require('./combat/preparationCalculator')
 const { getCulturalCombatModifiers } = require('./combat/culturalModifiers');
 const { applyDamageWithAccumulation, getDamageAccumulationStatus } = require('./combat/damageAccumulation');
 const { checkMorale } = require('./morale');
+const { getUnitWeaponRange, calculateRangeModifier, calculateFriendlyFireRisk } = require('./rangedCombat');
+const { calculateDistance } = require('./maps/mapUtils');
 
 /**
  * Calculate total attack rating for an entire force
@@ -513,10 +515,124 @@ function calculateNextTurnEffects(combatResult, conditions) {
     return effects;
 }
 
+/**
+ * Resolve a single ranged attack order.
+ * Uses the same attack/defense + accumulation system but applies one-way damage
+ * from shooter to target, scaled by range.
+ */
+async function resolveRangedAttack(order, battleState, playerSide) {
+    if (!order || !order.unitId) {
+        return null;
+    }
+
+    const shooterSide = playerSide === 'player2' ? 'player2' : 'player1';
+    const enemySide = shooterSide === 'player1' ? 'player2' : 'player1';
+
+    const shooter = (battleState[shooterSide]?.unitPositions || []).find(u => u.unitId === order.unitId);
+    if (!shooter) return null;
+
+    const enemyUnits = battleState[enemySide]?.unitPositions || [];
+    const targetId = order.validation?.target?.unitId || order.targetUnitId;
+    const target = enemyUnits.find(u => u.unitId === targetId);
+    if (!target) {
+        return null;
+    }
+
+    const weaponRange = order.validation?.weaponRange || getUnitWeaponRange(shooter);
+    if (!weaponRange) return null;
+
+    const distance = calculateDistance(shooter.position, target.position);
+    if (!Number.isFinite(distance) || distance <= 1 || distance > weaponRange.maximum) {
+        return null;
+    }
+
+    const rangeModifier = order.validation?.rangeModifier ?? calculateRangeModifier(distance, weaponRange);
+    if (rangeModifier <= 0) return null;
+
+    const ffRisk = calculateFriendlyFireRisk(shooter, target, battleState, weaponRange);
+
+    // Build minimal forces: single shooter vs single target
+    const attackerForce = {
+        units: [shooter],
+        formation: shooter.formation || 'line',
+        experience: shooter.experience || 'regular'
+    };
+
+    const defenderForce = {
+        units: [target],
+        formation: target.formation || 'line',
+        experience: target.experience || 'regular'
+    };
+
+    const conditions = {
+        weather: battleState.weather,
+        terrain: order.terrain || 'plains',
+        combat_situation: order.combat_situation || null
+    };
+
+    const baseAttack = calculateTotalAttackRating(attackerForce, defenderForce, conditions, false);
+    const baseDefense = calculateTotalDefenseRating(defenderForce);
+    const rawDamage = Math.max(0, baseAttack - baseDefense);
+    const rangedDamage = rawDamage * rangeModifier;
+
+    const casualties = applyDamageWithAccumulationToForces(
+        rangedDamage,
+        0,
+        attackerForce,
+        defenderForce,
+        battleState.currentTurn || 1
+    );
+
+    const totalCasualties = casualties.defender.total || 0;
+
+    // Interpret ffRisk.risk as the share of hits likely to fall on friendly troops
+    // when shooting into melee.
+    let enemyCasualties = totalCasualties;
+    let friendlyTotal = 0;
+
+    if (ffRisk && typeof ffRisk.risk === 'number' && ffRisk.risk > 0) {
+        const share = Math.max(0, Math.min(0.9, ffRisk.risk));
+        enemyCasualties = Math.round(totalCasualties * (1 - share));
+        friendlyTotal = Math.max(0, totalCasualties - enemyCasualties);
+    }
+
+    const friendlyCasualties = [];
+
+    if (friendlyTotal > 0 && ffRisk && Array.isArray(ffRisk.friendlyUnitsAtRisk) && ffRisk.friendlyUnitsAtRisk.length > 0) {
+        const ids = ffRisk.friendlyUnitsAtRisk;
+        const base = Math.floor(friendlyTotal / ids.length);
+        let remainder = friendlyTotal % ids.length;
+
+        ids.forEach(id => {
+            const cas = base + (remainder > 0 ? 1 : 0);
+            if (remainder > 0) remainder -= 1;
+            if (cas > 0) {
+                friendlyCasualties.push({ unitId: id, casualties: cas });
+            }
+        });
+    }
+
+    return {
+        type: 'ranged_attack',
+        shooterUnitId: shooter.unitId,
+        target: {
+            unitId: target.unitId,
+            position: target.position
+        },
+        distance,
+        weaponRange,
+        rangeModifier,
+        casualties: enemyCasualties,
+        friendlyCasualties,
+        friendlyFireRisk: ffRisk
+    };
+}
+
 // Combat System v2.0 Exports
 module.exports = {
     // Main function
     resolveCombat,
+    resolveRangedAttack,
     
     // Supporting functions
     rollChaos,

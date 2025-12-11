@@ -21,6 +21,15 @@ function validateMovement(unit, targetPosition, map) {
         thunderstorm: 1.15
     };
     const weatherFactor = weatherFactors[weather] || 1.0;
+
+    const { calculateOccupiedTiles } = require('./formations/formationStatus');
+    
+    // Base movement rates per turn in tiles (25m/tile). These replace the
+    // previous implicit 3/5 tile assumptions from the 50m grid.
+    const BASE_MOVEMENT_RATES = {
+        infantry: 6,  // 150m/turn
+        cavalry: 10   // 250m/turn (scouts can be treated as fast cavalry)
+    };
     
     // Find path using A* pathfinding (terrain-based costs only)
     const pathResult = findPathAStar(
@@ -40,7 +49,13 @@ function validateMovement(unit, targetPosition, map) {
     
     const fullPath = pathResult.path;
     const fullCost = pathResult.cost * weatherFactor;
-    const maxMovement = unit.movementRemaining || (unit.mounted ? 5 : 3);
+    const baseRate = unit.mounted ? BASE_MOVEMENT_RATES.cavalry : BASE_MOVEMENT_RATES.infantry;
+
+    // Marching units move 50% faster (handled as a simple multiplier here)
+    const isMarching = (unit.formationStatus || 'deployed') === 'marching';
+    const movementBonus = isMarching ? 1.5 : 1.0;
+
+    const maxMovement = (unit.movementRemaining || baseRate) * movementBonus;
     
     // If target too far, move as far as possible along path
     if (fullCost > maxMovement) {
@@ -60,17 +75,42 @@ function validateMovement(unit, targetPosition, map) {
         
         const partialPath = fullPath.slice(0, reachableIndex + 1);
         const reachablePosition = fullPath[reachableIndex];
+
+        // For marching units, ensure the column (depth based on strength) can
+        // occupy the reachable tile; otherwise, fall back to the last tile that
+        // kept the entire column on-map.
+        let finalReachable = reachablePosition;
+        if (isMarching) {
+            for (let i = reachableIndex; i >= 1; i--) {
+                const testFront = fullPath[i];
+                const virtual = { ...unit, position: testFront };
+                const occupied = calculateOccupiedTiles(virtual);
+                // Basic map bounds check for all column tiles
+                const allOnMap = occupied.every(c => {
+                    try {
+                        const p = parseCoord(c);
+                        return p.row >= 0 && p.row < 40 && p.col >= 0 && p.col < 40;
+                    } catch {
+                        return false;
+                    }
+                });
+                if (allOnMap) {
+                    finalReachable = testFront;
+                    break;
+                }
+            }
+        }
         
         return {
             valid: true,
             path: partialPath,
             cost: maxMovement,
             movementRemaining: 0,
-            targetTerrain: getTerrainType(reachablePosition),
+            targetTerrain: getTerrainType(finalReachable),
             partialMovement: true,
-            finalPosition: reachablePosition,
+            finalPosition: finalReachable,
             originalTarget: targetPosition,
-            message: `Moving toward ${targetPosition}, reached ${reachablePosition}`
+            message: `Moving toward ${targetPosition}, reached ${finalReachable}`
         };
     }
     
@@ -137,7 +177,8 @@ function executeMissionTurn(unit, map, getTerrainType) {
     }
     
     const fullPath = pathResult.path;
-    const maxMovement = unit.movementRemaining || (unit.mounted ? 5 : 3);
+    const baseRate = unit.mounted ? BASE_MOVEMENT_RATES.cavalry : BASE_MOVEMENT_RATES.infantry;
+    const maxMovement = unit.movementRemaining || baseRate;
     
     let reachableIndex = 1;
     let costSoFar = 0;

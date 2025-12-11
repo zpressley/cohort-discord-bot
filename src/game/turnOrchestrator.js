@@ -4,7 +4,7 @@
 const { interpretOrders } = require('../ai/orderInterpreter');
 const { processMovementPhase } = require('./positionBasedCombat');
 const { calculateVisibility } = require('./fogOfWar');
-const { resolveCombat } = require('./battleEngine');
+const { resolveCombat, resolveRangedAttack } = require('./battleEngine');
 const { validateMovement } = require('./movementSystem');
 const { checkVictoryConditions } = require('./victorySystem');
 const { checkCommanderCaptureRisk, updateCommanderPosition } = require('./commandSystem/commanderManager');
@@ -107,7 +107,40 @@ async function processTurn(battle, player1Order, player2Order, map) {
             battle.currentTurn
         );
 
-        // PHASE 4: Resolve combat
+        // Persist melee engagements for ranged FF logic
+        if (movementResults.meleeEngagements) {
+            battleState.meleeEngagements = movementResults.meleeEngagements;
+        }
+
+        // PHASE 3.5: Resolve ranged attacks
+        console.log('\n🏹 Phase 3.5: Resolving ranged attacks...');
+        const p1RangedOrders = p1Interpretation.validatedActions.filter(a => a.type === 'ranged_attack');
+        const p2RangedOrders = p2Interpretation.validatedActions.filter(a => a.type === 'ranged_attack');
+        const rangedResults = [];
+
+        const rangedState = {
+            ...battleState,
+            player1: { ...battleState.player1, unitPositions: movementResults.newPositions.player1 },
+            player2: { ...battleState.player2, unitPositions: movementResults.newPositions.player2 },
+            meleeEngagements: movementResults.meleeEngagements || battleState.meleeEngagements
+        };
+
+        for (const order of p1RangedOrders) {
+            const result = await resolveRangedAttack(order, rangedState, 'player1');
+            if (result) rangedResults.push({ ...result, shooterSide: 'player1' });
+        }
+
+        for (const order of p2RangedOrders) {
+            const result = await resolveRangedAttack(order, rangedState, 'player2');
+            if (result) rangedResults.push({ ...result, shooterSide: 'player2' });
+        }
+
+        const positionsAfterRanged = applyRangedCasualties(
+            movementResults.newPositions,
+            rangedResults
+        );
+
+        // PHASE 4: Resolve combat (melee)
         console.log('\n⚔️ Phase 4: Resolving combat...');
         const combatResults = [];
         
@@ -141,11 +174,11 @@ async function processTurn(battle, player1Order, player2Order, map) {
         // PHASE 5: Apply casualties
         console.log('\n💀 Phase 5: Applying casualties...');
 
-        // Snapshot strengths before casualties for capture-risk checks
-        const preStrengths = buildStrengthIndex(movementResults.newPositions);
+        // Snapshot strengths before melee casualties for capture-risk checks
+        const preStrengths = buildStrengthIndex(positionsAfterRanged);
 
         const updatedPositions = applyCasualties(
-            movementResults.newPositions,
+            positionsAfterRanged,
             combatResults
         );
 
@@ -173,7 +206,8 @@ async function processTurn(battle, player1Order, player2Order, map) {
                 movements: movementResults,
                 intelligence: { player1: p1Visibility, player2: p2Visibility },
                 combats: combatResults,
-                casualties: extractCasualtySummary(combatResults)
+                rangedAttacks: rangedResults,
+                casualties: extractCasualtySummary(combatResults, rangedResults)
             },
             battleState,
             battle.currentTurn
@@ -216,7 +250,7 @@ async function processTurn(battle, player1Order, player2Order, map) {
                     player2Detected: p2Visibility.totalEnemiesDetected
                 },
                 combats: combatResults.length,
-                casualties: extractCasualtySummary(combatResults)
+                casualties: extractCasualtySummary(combatResults, rangedResults)
             },
             narrative,
             sideSummaries,
@@ -331,16 +365,75 @@ function applyCasualties(positions, combatResults) {
     return updated;
 }
 
-function extractCasualtySummary(combatResults) {
+function extractCasualtySummary(combatResults, rangedResults = []) {
     let p1Total = 0;
     let p2Total = 0;
     
+    // Melee casualties
     combatResults.forEach(combat => {
         p1Total += combat.result?.casualties?.attacker?.total || 0;
         p2Total += combat.result?.casualties?.defender?.total || 0;
     });
+
+    // Ranged casualties (enemy plus future friendly-fire buckets)
+    rangedResults.forEach(r => {
+        const enemyLosses = r.casualties || r.enemyCasualties || 0;
+        if (r.shooterSide === 'player1') {
+            p2Total += enemyLosses;
+            if (Array.isArray(r.friendlyCasualties)) {
+                p1Total += r.friendlyCasualties.reduce((sum, fc) => sum + (fc.casualties || 0), 0);
+            }
+        } else if (r.shooterSide === 'player2') {
+            p1Total += enemyLosses;
+            if (Array.isArray(r.friendlyCasualties)) {
+                p2Total += r.friendlyCasualties.reduce((sum, fc) => sum + (fc.casualties || 0), 0);
+            }
+        }
+    });
     
     return { player1: p1Total, player2: p2Total };
+}
+
+function applyRangedCasualties(positions, rangedResults) {
+    if (!rangedResults || rangedResults.length === 0) return positions;
+
+    const updated = {
+        player1: positions.player1.map(u => ({ ...u })),
+        player2: positions.player2.map(u => ({ ...u }))
+    };
+
+    rangedResults.forEach(result => {
+        const enemySide = result.shooterSide === 'player1' ? 'player2' : 'player1';
+
+        const enemyLosses = result.casualties ?? result.enemyCasualties ?? 0;
+        if (enemyLosses > 0 && result.target?.unitId) {
+            const idx = updated[enemySide].findIndex(u => u.unitId === result.target.unitId);
+            if (idx >= 0) {
+                const before = updated[enemySide][idx].currentStrength || 0;
+                updated[enemySide][idx].currentStrength = Math.max(0, before - enemyLosses);
+            }
+        }
+
+        if (Array.isArray(result.friendlyCasualties) && result.friendlyCasualties.length > 0) {
+            const friendlySide = result.shooterSide;
+            result.friendlyCasualties.forEach(fc => {
+                const idx = updated[friendlySide].findIndex(u => u.unitId === fc.unitId);
+                if (idx >= 0) {
+                    const unit = updated[friendlySide][idx];
+                    const before = unit.currentStrength || 0;
+                    unit.currentStrength = Math.max(0, before - (fc.casualties || 0));
+                    if (typeof unit.morale === 'number') {
+                        unit.morale = Math.max(0, unit.morale - 1);
+                    }
+                }
+            });
+        }
+    });
+
+    updated.player1 = updated.player1.filter(u => (u.currentStrength || 0) > 0);
+    updated.player2 = updated.player2.filter(u => (u.currentStrength || 0) > 0);
+
+    return updated;
 }
 
 function flattenVisibilityForBriefing(visibility, currentTurn) {
@@ -674,6 +767,13 @@ async function generateTurnNarrative(turnEvents, battleState, turnNumber) {
 
     lines.push(`Turn ${turnNumber} - ${turnEvents.combats.length} engagement(s).`);
     lines.push(`Casualties: P1 ${turnEvents.casualties.player1}, P2 ${turnEvents.casualties.player2}.`);
+
+    const ranged = Array.isArray(turnEvents.rangedAttacks) ? turnEvents.rangedAttacks : [];
+    if (ranged.length > 0) {
+        const totalRanged = ranged.reduce((sum, r) => sum + (r.casualties || 0), 0);
+        const locations = Array.from(new Set(ranged.map(r => r.target?.position).filter(Boolean))).join(', ');
+        lines.push(`Ranged fire reported at ${locations || 'multiple sectors'}, inflicting ~${totalRanged} enemy casualties.`);
+    }
 
     // Simple routing/desertion hooks based on current state
     const p1Units = battleState.player1?.unitPositions || [];

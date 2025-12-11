@@ -2,52 +2,55 @@ const { SlashCommandBuilder, EmbedBuilder, ActionRowBuilder, StringSelectMenuBui
 const { TROOP_QUALITY, ARMOR_CATEGORIES, SHIELD_OPTIONS, SUPPORT_SPECIALISTS, CULTURAL_SP_BUDGETS } = require('../../game/armyData');
 
 // Cultural elite units data - Starting 8 Cultures (ONLY ONE DECLARATION)
+// Display sizes are aligned with the Phase 1 scaling: regular units ~400,
+// elites ~300, with culture-specific exceptions (e.g. Spartans smaller,
+// Han Feathered Forest Guard larger).
 const CULTURES = {
     'Roman Republic': { 
         elite: 'Praetorian Guard', 
-        size: 80, 
+        size: 300, 
         description: 'Professional legionnaires with tactical adaptability',
         perks: ['Engineering mastery', 'Professional discipline']
     },
     'Macedonian Kingdoms': { 
         elite: 'Silver Shields', 
-        size: 80, 
+        size: 300, 
         description: 'Battle-hardened professionals with combined arms',
         perks: ['Veterans of war', 'Equipment flexibility']
     },
     'Spartan City-State': { 
         elite: 'Lacedaimonian Guards', 
-        size: 40, 
+        size: 150, 
         description: 'Elite warriors with death-before-dishonor',
         perks: ['Fight to the last man', 'Superior perioeci militia']
     },
     'Carthaginian Empire': { 
         elite: 'The Sacred Band', 
-        size: 100, 
+        size: 300, 
         description: 'Cosmopolitan, professionally diverse',
         perks: ['War elephant terror', 'Merchant wealth (+2 SP)']
     },
     'Kingdom of Kush': { 
         elite: 'Children of the Golden Bow', 
-        size: 80, 
+        size: 300, 
         description: 'Master archers and desert warriors',
         perks: ['Desert mastery', 'Archer-cavalry coordination']
     },
     'Berber Confederations': { 
         elite: 'The Blue Men', 
-        size: 80, 
+        size: 300, 
         description: 'Desert cavalry with survival warfare',
         perks: ['Desert navigation mastery', 'Tribal confederation tactics']
     },
     'Sarmatian Confederations': { 
         elite: 'Iron Scale Riders', 
-        size: 80, 
+        size: 300, 
         description: 'Heavy cavalry-archers with dual-mode combat',
         perks: ['Dual-mode combat mastery', 'Master of feigned retreat']
     },
     'Han Dynasty': { 
         elite: 'Feathered Forest Guard', 
-        size: 100, 
+        size: 400, 
         description: 'Elite mixed troops with advanced technology',
         perks: ['Advanced technology', 'Han farming techniques (+20% unit size)']
     }

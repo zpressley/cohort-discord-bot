@@ -29,12 +29,19 @@ async function initializeBattle(battle, player1Commander, player2Commander) {
         throw new Error('Player 2 has not built an army');
     }
     
-    // Ensure a cultural elite unit is present for each side (≈80 warriors)
+    // Ensure a cultural elite unit is present for each side
+    // Default elite size ≈300 warriors; Spartans smaller, Han larger.
     try {
         const { getEliteUnitForCulture } = require('./eliteTemplates');
         const { getAllWeapons, TROOP_QUALITY } = require('./armyData');
         const allWeapons = getAllWeapons();
-        const eliteSize = 80;
+
+        const getEliteSizeForCulture = (culture) => {
+            if (!culture) return 300;
+            if (culture === 'Spartan City-State') return 150;
+            if (culture === 'Han Dynasty') return 400;
+            return 300;
+        };
         
         const normalize = (ac) => (typeof ac === 'string' ? JSON.parse(ac) : ac) || { units: [] };
         player1Commander.armyComposition = normalize(player1Commander.armyComposition);
@@ -49,13 +56,15 @@ async function initializeBattle(battle, player1Commander, player2Commander) {
         
         const hasElite1 = player1Commander.armyComposition.units.some(u => u && u.isElite);
         if (!hasElite1) {
-            const elite = getEliteUnitForCulture(player1Commander.culture, eliteSize, allWeapons, TROOP_QUALITY);
+            const eliteSize1 = getEliteSizeForCulture(player1Commander.culture);
+            const elite = getEliteUnitForCulture(player1Commander.culture, eliteSize1, allWeapons, TROOP_QUALITY);
             if (elite) player1Commander.armyComposition.units.unshift(elite);
         }
         
         const hasElite2 = player2Commander.armyComposition.units.some(u => u && u.isElite);
         if (!hasElite2) {
-            const elite = getEliteUnitForCulture(player2Commander.culture, eliteSize, allWeapons, TROOP_QUALITY);
+            const eliteSize2 = getEliteSizeForCulture(player2Commander.culture);
+            const elite = getEliteUnitForCulture(player2Commander.culture, eliteSize2, allWeapons, TROOP_QUALITY);
             if (elite) player2Commander.armyComposition.units.unshift(elite);
         }
     } catch (e) {
@@ -63,15 +72,36 @@ async function initializeBattle(battle, player1Commander, player2Commander) {
     }
     
     // Deploy units to starting positions
+    // Support both legacy maps with deployment.north/south.coords and
+    // newer maps using startingPositions.player1/player2.
+    let p1Starting = null;
+    let p2Starting = null;
+
+    if (map && map.deployment && map.deployment.north && Array.isArray(map.deployment.north.coords)) {
+        p1Starting = map.deployment.north.coords;
+    } else if (map && map.startingPositions && Array.isArray(map.startingPositions.player1)) {
+        p1Starting = map.startingPositions.player1;
+    }
+
+    if (map && map.deployment && map.deployment.south && Array.isArray(map.deployment.south.coords)) {
+        p2Starting = map.deployment.south.coords;
+    } else if (map && map.startingPositions && Array.isArray(map.startingPositions.player2)) {
+        p2Starting = map.startingPositions.player2;
+    }
+
+    if (!p1Starting || !p2Starting) {
+        throw new Error('Scenario map is missing starting positions for one or both sides');
+    }
+
     const p1Units = deployUnitsToStartingPositions(
         player1Commander.armyComposition,
-        map.deployment.north.coords,
+        p1Starting,
         'player1'
     );
     
     const p2Units = deployUnitsToStartingPositions(
         player2Commander.armyComposition,
-        map.deployment.south.coords,
+        p2Starting,
         'player2'
     );
     
@@ -231,6 +261,9 @@ function deployUnitsToStartingPositions(armyComposition, startingZone, side) {
     
     // Use the first starting zone coordinate as this side's camp / rally point.
     const campPosition = startingZone[0];
+
+    // Initial facing: player1 starts facing south, player2 starts facing north
+    const initialFacing = side === 'player1' ? 'S' : 'N';
     
     // Deploy each unit to a starting position
     units.forEach((unit, index) => {
@@ -277,8 +310,11 @@ function deployUnitsToStartingPositions(armyComposition, startingZone, side) {
             // Mission state
             activeMission: null,
             
-            // Combat state
+            // Combat / formation state
             formation: 'standard',
+            formationStatus: 'deployed',   // start deployed on the line
+            facing: initialFacing,         // cardinal facing for flanking logic (N/S/E/W)
+            tilesOccupied: [position],     // single-tile footprint by default
             morale: 100,
             
             // Damage accumulation (CMB-005)

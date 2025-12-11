@@ -7,6 +7,7 @@ const { processTurn } = require('../game/turnOrchestrator');
 const { parseCommanderActions } = require('../ai/orderInterpreter');
 
 const processedMessages = new Set();
+const pendingFriendlyFireOrders = new Map(); // userId -> { battleId, playerSide, orderText, createdAt }
 
 /**
  * Handle DM commands - Routes to appropriate handler
@@ -122,6 +123,58 @@ async function processPlayerOrder(message, battle, playerId, playerSide, client)
     try {
         const { models } = require('../database/setup');
         const orderText = message.content.trim();
+        
+        console.log(`📝 Incoming order for ${playerSide}: "${orderText}"`);
+
+        // Quick ranged-friendly-fire check (Phase D UX only)
+        try {
+            const { interpretOrders } = require('../ai/orderInterpreter');
+            const map = battle.battleState?.map || {};
+            const interpretation = await interpretOrders(orderText, battle.battleState, playerSide, map);
+            const rangedHighRisk = (interpretation.validatedActions || []).filter(a =>
+                a.type === 'ranged_attack' &&
+                a.validation?.friendlyFireRisk?.risk >= 0.2
+            );
+
+            if (rangedHighRisk.length > 0) {
+                const risky = rangedHighRisk[0];
+                const shooterUnits = battle.battleState[playerSide]?.unitPositions || [];
+                const shooter = shooterUnits.find(u => u.unitId === risky.unitId);
+                const { generateFriendlyFireWarning } = require('../game/orderFeedback');
+                const warning = generateFriendlyFireWarning(
+                    risky.validation,
+                    shooter,
+                    battle.battleState[playerSide]?.culture || 'Roman Republic'
+                );
+
+                if (warning && warning.requiresConfirmation) {
+                    pendingFriendlyFireOrders.set(playerId, {
+                        battleId: battle.id,
+                        playerSide,
+                        orderText,
+                        createdAt: Date.now()
+                    });
+
+                    await message.reply({
+                        content: warning.warning,
+                        components: [{
+                            type: 1,
+                            components: warning.options.map(opt => ({
+                                type: 2,
+                                style: opt.id === 'confirm' ? 4 : 2, // confirm in red, others grey
+                                custom_id: `ff_${opt.id}`,
+                                label: opt.label
+                            }))
+                        }]
+                    });
+
+                    console.log('⚠️ Ranged friendly-fire warning sent; awaiting confirmation.');
+                    return; // Wait for button response instead of storing order now
+                }
+            }
+        } catch (ffErr) {
+            console.warn('Friendly-fire pre-check failed (non-fatal):', ffErr.message);
+        }
         
         console.log(`📝 Storing order for ${playerSide}: "${orderText}"`);
         
@@ -253,6 +306,12 @@ async function sendTurnResults(battle, battleTurn, turnResult, client) {
     } else {
         body += `${combats} engagement(s). Casualties: P1 ${cas.player1}, P2 ${cas.player2}.`;
     }
+
+    // Light-touch ranged note if any ranged phase occurred
+    if (Array.isArray(turnResult.rangedAttacks) && turnResult.rangedAttacks.length > 0) {
+        const totalRanged = turnResult.rangedAttacks.reduce((sum, r) => sum + (r.casualties || 0), 0);
+        body += ` Ranged fire inflicted ~${totalRanged} enemy casualties.`;
+    }
     
     if (!battle.player1Id.startsWith('TEST_')) {
         const player1 = await client.users.fetch(battle.player1Id);
@@ -364,7 +423,58 @@ function isQuestion(text) {
     return false;
 }
 
+async function handleFriendlyFireConfirmation(interaction) {
+    const userId = interaction.user.id;
+    const pending = pendingFriendlyFireOrders.get(userId);
+
+    if (!pending) {
+        return interaction.reply({ content: 'This friendly-fire decision has expired. Please resend your orders.', ephemeral: true });
+    }
+
+    const choice = interaction.customId.split('_')[1]; // 'confirm' | 'cancel' | 'reposition'
+
+    const { models } = require('../database/setup');
+    const battle = await models.Battle.findByPk(pending.battleId);
+    if (!battle) {
+        pendingFriendlyFireOrders.delete(userId);
+        return interaction.reply({ content: 'Battle no longer active.', ephemeral: true });
+    }
+
+    const playerSide = pending.playerSide;
+    const playerId = userId;
+
+    if (choice === 'confirm') {
+        // Store the previously-confirmed order and run normal resolution path
+        const fakeMessage = {
+            content: pending.orderText,
+            author: { id: playerId },
+            reply: (payload) => interaction.followUp(payload)
+        };
+
+        await interaction.update({
+            content: '✓ Order confirmed – archers will fire as ordered.',
+            components: []
+        });
+
+        // Reuse processPlayerOrder logic to persist and possibly trigger turn resolution
+        await processPlayerOrder(fakeMessage, battle, playerId, playerSide, interaction.client);
+    } else if (choice === 'cancel') {
+        await interaction.update({
+            content: '✗ Archers holding fire. You may send new orders.',
+            components: []
+        });
+    } else if (choice === 'reposition') {
+        await interaction.update({
+            content: '📍 Suggestion: consider moving your ranged troops to a flank or waiting for melee to resolve before firing.',
+            components: []
+        });
+    }
+
+    pendingFriendlyFireOrders.delete(userId);
+}
+
 module.exports = {
     handleDMCommand,
-    processTurnResolution
+    processTurnResolution,
+    handleFriendlyFireConfirmation
 };

@@ -36,6 +36,11 @@ async function handle(interaction, client) {
         return; // let create-profile's DM collector handle these safely
       }
 
+      if (interaction.customId.startsWith('ff_')) {
+        const { handleFriendlyFireConfirmation } = require('./dmHandler');
+        return await handleFriendlyFireConfirmation(interaction);
+      }
+
       if (interaction.customId.startsWith('lobby-')) {
         const { handleLobbyInteractions } = require('./lobbyInteractionHandler');
         return await handleLobbyInteractions(interaction);

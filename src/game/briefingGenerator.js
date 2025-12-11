@@ -284,9 +284,16 @@ function formatUnitsSimple(units, map, eliteVeteranLevel) {
         
         // Get terrain at position
         const terrain = getTerrainAtPosition(pos, map);
+
+        // Human-readable formation status
+        const formationStatus = (unit.formationStatus || 'deployed').toLowerCase();
+        let formationLabel;
+        if (formationStatus === 'marching') formationLabel = 'Marching';
+        else if (formationStatus === 'encamped') formationLabel = 'Encamped';
+        else formationLabel = 'Deployed';
         
-    // Build line: [emoji][coords] Name - Size (Weapon, Terrain/Mission)
-    let line = `${icon} [${pos}] ${unitName} — ${unit.currentStrength}`;
+        // Build line: [emoji][coords] Name — Size (Weapon, Terrain, Formation)
+        let line = `${icon} [${pos}] ${unitName} — ${unit.currentStrength}`;
 
         // Morale / routing state indicators
         if (unit.isRouting) {
@@ -310,7 +317,7 @@ function formatUnitsSimple(units, map, eliteVeteranLevel) {
             line += ` — To ${unit.activeMission.target}`;
         }
         
-        line += ` (${terrain}, ${weapon})`;
+        line += ` (${terrain}, ${weapon}, ${formationLabel})`;
         
         return line;
     }).join('\n');
@@ -506,10 +513,13 @@ function getTerrainAtPosition(position, map) {
 }
 
 async function generateOfficerAssessment(playerData, culture, officerName, veteranLevel, map, sideSummary = null, speaker = null) {
-    const { generateOfficerTurnSummary } = require('../ai/aiManager');
+    const { generateOfficerTurnSummary, generateOfficerDialogue } = require('../ai/aiManager');
 
+    // Helper: classify simple intel state for this side
+    const intelSnapshot = getOfficerIntelSnapshot(playerData, sideSummary);
+
+    // Fallback to simple summary if we don't have rich context yet
     if (!sideSummary || !speaker) {
-        // Fallback to simple summary if we don't have rich context yet
         const friendlyUnits = playerData.unitPositions || [];
         const visibleEnemies = playerData.visibleEnemyPositions || [];
         const moveSummary = friendlyUnits
@@ -517,23 +527,41 @@ async function generateOfficerAssessment(playerData, culture, officerName, veter
             .slice(0, 5)
             .join('; ');
 
+        const combats = 0;
+        const casualties = 0;
+
+        // If we have no live contacts and no combats, avoid AI and use
+        // deterministic, culture-aware templates that cannot invent scouts.
+        if (intelSnapshot.contactState !== 'live_contact' && combats === 0) {
+            return buildNoContactOfficerLine(culture, intelSnapshot, moveSummary);
+        }
+
         const context = {
             culture,
             movesText: moveSummary,
-            combats: 0,
-            casualties: 0,
+            combats,
+            casualties,
             detectedEnemies: visibleEnemies.length
         };
         const shortLine = await generateOfficerTurnSummary(context, 'auto');
-        return `${officerName} reports: ${shortLine}`;
+        return shortLine;
     }
 
     const insight = buildOfficerInsight(sideSummary, speaker);
+    const combats = sideSummary.combat?.engagements?.length || 0;
+    const casualties = sideSummary.combat?.ourTotalLosses || 0;
+
+    // Deterministic path for no-contact turns: no AI call, just templates.
+    if (intelSnapshot.contactState !== 'live_contact' && combats === 0) {
+        const moveSummary = ''; // movements already summarized in sideSummary text
+        return buildNoContactOfficerLine(culture, intelSnapshot, moveSummary);
+    }
+
     const context = {
         culture,
         movesText: '',
-        combats: sideSummary.combat?.engagements?.length || 0,
-        casualties: sideSummary.combat?.ourTotalLosses || 0,
+        combats,
+        casualties,
         detectedEnemies: (sideSummary.enemyContacts || []).length,
         speakerName: speaker.name,
         speakerRole: speaker.role,
@@ -545,7 +573,112 @@ async function generateOfficerAssessment(playerData, culture, officerName, veter
     };
 
     const shortLine = await generateOfficerTurnSummary(context, 'auto');
-    return `${speaker.name} (${speaker.role}): ${shortLine}`;
+
+    // Phase 3: occasional richer dialogue on heavy-loss turns
+    const heavyLosses = casualties >= 50; // threshold can be tuned later
+    if (heavyLosses) {
+        const eventPrompt = [
+            `Turn with heavy losses (${casualties} warriors) and active contact state=${intelSnapshot.contactState}.`,
+            intelSnapshot.contactState === 'live_contact'
+                ? 'Enemy formations are visible this turn.'
+                : 'No clear enemy formations visible; losses mostly from terrain, positioning, or ranged fire.',
+            'Give 2-3 sentences of in-character assessment and concern, FOW-safe, no invented unit types or positions.'
+        ].join(' ');
+
+        try {
+            const dialogue = await generateOfficerDialogue(speaker.name, culture, eventPrompt);
+            // Combine the compact line with a short, richer follow-up.
+            return `${shortLine} ${dialogue}`;
+        } catch (e) {
+            // If dialogue generation fails, fall back to single-line summary.
+            console.warn('Officer extended dialogue failed:', e.message);
+        }
+    }
+
+    return shortLine;
+}
+
+function getOfficerIntelSnapshot(playerData, sideSummary) {
+    // Simple classification using per-side summary when present; otherwise
+    // fall back to raw FOW-filtered enemy positions and ghost overlays.
+    let freshContacts = 0;
+    let ghostContacts = 0;
+
+    if (sideSummary && Array.isArray(sideSummary.enemyContacts)) {
+        freshContacts = sideSummary.enemyContacts.length;
+    } else {
+        const visible = Array.isArray(playerData.visibleEnemyPositions)
+            ? playerData.visibleEnemyPositions.length
+            : 0;
+        freshContacts = visible;
+    }
+
+    if (Array.isArray(playerData.ghostPositions)) {
+        ghostContacts = playerData.ghostPositions.length;
+    }
+
+    let contactState = 'none';
+    if (freshContacts > 0) contactState = 'live_contact';
+    else if (ghostContacts > 0) contactState = 'ghost_only';
+
+    return {
+        contactState,
+        freshContacts,
+        ghostContacts
+    };
+}
+
+function buildNoContactOfficerLine(culture, intelSnapshot, moveSummary) {
+    const c = (culture || '').toLowerCase();
+    const moved = (moveSummary || '').length > 0;
+
+    if (intelSnapshot.contactState === 'none') {
+        if (c.includes('spartan')) {
+            return moved
+                ? 'Units maneuvered; no enemy in sight.'
+                : 'All quiet. No enemy in sight.';
+        }
+        if (c.includes('roman')) {
+            return moved
+                ? 'Formation adjusted; scouts report no enemy contact this turn.'
+                : 'All quiet, sir; scouts report no enemy contact.';
+        }
+        if (c.includes('celt')) {
+            return moved
+                ? 'The lads shift their line; still no sign of the foe ahead.'
+                : 'Camp is quiet; no enemy shapes on the horizon.';
+        }
+        if (c.includes('han')) {
+            return moved
+                ? 'Columns reposition quietly; no enemy banners observed this turn.'
+                : 'No enemy movement reported; lines hold in readiness.';
+        }
+        return moved
+            ? 'Troops repositioned; no enemy contact reported.'
+            : 'All quiet; no enemy contact reported.';
+    }
+
+    // Ghost-only intel: rumors and old sightings, not live contact.
+    if (intelSnapshot.contactState === 'ghost_only') {
+        if (c.includes('spartan')) {
+            return 'Only old reports beyond the line; no enemy seen this turn.';
+        }
+        if (c.includes('roman')) {
+            return 'Previous reports hint at forces ahead, but scouts see nothing concrete this turn.';
+        }
+        if (c.includes('celt')) {
+            return 'Stories speak of warriors ahead, but today the mist shows nothing.';
+        }
+        if (c.includes('han')) {
+            return 'Earlier sightings place the enemy farther ahead; current scouts report nothing visible.';
+        }
+        return 'Old reports suggest enemy ahead, but nothing can be seen this turn.';
+    }
+
+    // Fallback, should be rare.
+    return moved
+        ? 'Units maneuvered; contact remains uncertain.'
+        : 'Contact state unclear; no confirmed sightings this turn.';
 }
 
 function generateSideBattleBrief(summary) {

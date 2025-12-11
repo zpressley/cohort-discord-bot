@@ -5,19 +5,20 @@ const { calculateEuclideanDistance } = require('./maps/mapUtils');
 
 const DETECTION_RANGES = {
     // Base spotting (clear weather, ground level)
-    // Tactical scale: 50m/tile. We want:
-    // - Detailed intel ≤3 tiles (~150m)
-    // - Identification up to ~6 tiles (~300m)
-    // - Long-range "movement detected" up to ~8 tiles (~400m)
-    standard: 8,      // max spotting range for regular troops
-    scouts: 10,       // scouts see slightly farther
-    elevated: 2,      // modest hill bonus
+    // NEW Tactical scale: 25m/tile.
+    // We want to keep roughly the same real-world distances:
+    // - Detailed intel ≤6 tiles (~150m)
+    // - Identification up to ~12 tiles (~300m)
+    // - Long-range "movement detected" up to ~16 tiles (~400m)
+    standard: 16,      // max spotting range for regular troops (~400m)
+    scouts: 20,        // scouts see slightly farther (~500m)
+    elevated: 4,       // hill bonus (~100m)
     
     // Identification threshold (tell unit type)
-    identifyDistance: 6,
+    identifyDistance: 12,
     
     // Detail threshold (exact numbers, equipment)
-    detailDistance: 3,
+    detailDistance: 6,
     
     // Weather penalties (apply to ALL ranges)
     weatherModifiers: {
@@ -223,7 +224,7 @@ function generateIntelligenceReport(visibility, culture) {
                 `📍 **CONFIRMED: ${(contact.unitType || 'UNIT').toUpperCase()} at ${contact.position}**\n` +
                 `   Exact strength: ${contact.exactStrength} warriors\n` +
                 `   Formation: ${contact.formation}\n` +
-                `   Distance: ${contact.distance} tiles (${contact.distance * 50}m)\n` +
+                `   Distance: ${contact.distance} tiles (${contact.distance * 25}m)\n` +
                 `   Confidence: ${contact.confidence}`
             );
         });
@@ -235,7 +236,7 @@ function generateIntelligenceReport(visibility, culture) {
             reports.push(
                 `👁️ **${(contact.unitType || 'FORCES').toUpperCase()} SPOTTED at ${contact.position}**\n` +
                 `   Estimated: ~${contact.estimatedStrength} troops\n` +
-                `   Distance: ${contact.distance} tiles (${contact.distance * 50}m)\n` +
+                `   Distance: ${contact.distance} tiles (${contact.distance * 25}m)\n` +
                 `   Confidence: ${contact.confidence}`
             );
         });

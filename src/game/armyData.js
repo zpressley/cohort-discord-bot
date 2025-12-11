@@ -6,7 +6,7 @@ const TROOP_QUALITY = {
     'levy': {
         name: 'Levy',
         cost: 3,
-        size: 100,
+        size: 400, // WAS: 100
         description: 'Poorly equipped farmers, minimal training',
         combat: { attack: 1, defense: 1, morale: 0 },
         restrictions: ['heavy_weapons', 'heavy_armor', 'heavy_shield']
@@ -14,7 +14,7 @@ const TROOP_QUALITY = {
     'tribal_warriors': {
         name: 'Tribal Warriors',
         cost: 4,
-        size: 100,
+        size: 400, // WAS: 100
         description: 'Fierce but undisciplined fighters',
         combat: { attack: 3, defense: 2, morale: 2 },
         restrictions: ['heavy_armor']
@@ -22,21 +22,21 @@ const TROOP_QUALITY = {
     'militia': {
         name: 'Militia',
         cost: 5,
-        size: 100,
+        size: 400, // WAS: 100
         description: 'Trained citizen soldiers, part-time',
         combat: { attack: 2, defense: 2, morale: 1 }
     },
     'professional': {
         name: 'Professional',
         cost: 7,
-        size: 100,
+        size: 400, // WAS: 100
         description: 'Career military, full-time warriors',
         combat: { attack: 4, defense: 4, morale: 3 }
     },
     'veteran_mercenary': {
         name: 'Veteran Mercenary',
         cost: 9,
-        size: 100,
+        size: 400, // WAS: 100 (regular baseline now 400)
         description: 'Elite experienced warriors',
         combat: { attack: 6, defense: 5, morale: 4 }
     }

@@ -25,20 +25,20 @@ function makeUnit(unitId, position, opts = {}) {
 }
 
 (async function run() {
-  // Movement legality: entering river tile should be invalid
+  // Movement legality: entering a known river tile should be invalid (T20 is river on Snake River Crossing)
   {
-    const unit = makeUnit('u1', 'J9'); // Adjacent to J10 (river)
-    const res = validateMovement(unit, 'J10', RIVER_CROSSING_MAP);
+    const unit = makeUnit('u1', 'J9'); // Starting from a safe land tile
+    const res = validateMovement(unit, 'T20', RIVER_CROSSING_MAP);
     ok('movement into river is invalid', res.valid === false);
   }
 
-  // Partial movement: far target results in partialMovement true
+  // Partial movement: far land target results in partialMovement true
   {
     const unit = makeUnit('u2', 'A1');
-    const res = validateMovement(unit, 'T20', RIVER_CROSSING_MAP);
+    const res = validateMovement(unit, 'N30', RIVER_CROSSING_MAP);
     ok('partial movement valid', res.valid === true && res.partialMovement === true);
     ok('partial movement reduces remaining to 0', res.movementRemaining === 0);
-    ok('finalPosition not equal target', res.finalPosition !== 'T20');
+    ok('finalPosition not equal target', res.finalPosition !== 'N30');
   }
 
   // Combat invariants: non-negative casualties and reasonable structure

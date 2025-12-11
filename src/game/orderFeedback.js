@@ -1,6 +1,6 @@
 // src/game/orderFeedback.js
-// Provide clear feedback on player orders
-// Version: 1.0.0
+// Provide clear feedback on player orders and (optionally) friendly-fire warnings
+// Version: 1.1.0
 
 /**
  * Generate feedback for player showing what was understood
@@ -117,9 +117,107 @@ function generateAmbiguousFeedback(order, possibleInterpretations) {
     return feedback;
 }
 
+/**
+ * Generate a friendly-fire warning for a high-risk ranged attack.
+ * This is UX-only: it does not change mechanics, only messaging & confirmation.
+ *
+ * @param {Object} rangedValidation - validateRangedAttack() result
+ * @param {Object} shooter - shooting unit (from battleState)
+ * @param {string} culture - player's culture name
+ * @returns {Object|null} { requiresConfirmation, warning, risk, options[] } or null
+ */
+function generateFriendlyFireWarning(rangedValidation, shooter, culture) {
+    if (!rangedValidation || !rangedValidation.friendlyFireRisk) return null;
+
+    const ffRisk = rangedValidation.friendlyFireRisk;
+    if (!ffRisk || typeof ffRisk.risk !== 'number') return null;
+
+    // Only warn when risk is meaningful (> 20%)
+    if (ffRisk.risk < 0.2) {
+        return null;
+    }
+
+    const riskPercent = Math.round(ffRisk.risk * 100);
+    const enemyShare = Math.round((1 - ffRisk.risk) * 100);
+    const friendlyShare = riskPercent;
+
+    const officerName = getOfficerName(shooter, culture);
+    const warningText = buildCulturalWarning(
+        officerName,
+        culture,
+        riskPercent,
+        enemyShare,
+        friendlyShare,
+        ffRisk.friendlyUnitsAtRisk || []
+    );
+
+    return {
+        requiresConfirmation: true,
+        warning: warningText,
+        risk: ffRisk,
+        options: [
+            { id: 'confirm', label: '✓ Fire Anyway', value: 'proceed' },
+            { id: 'cancel', label: '✗ Hold Fire', value: 'cancel' },
+            { id: 'reposition', label: '📍 Reposition First', value: 'suggest_movement' }
+        ]
+    };
+}
+
+function buildCulturalWarning(officer, culture, risk, enemyDmg, friendlyDmg, friendlyUnits) {
+    const base = {
+        'Roman Republic':
+            `⚠️ **${officer} reports:**\n\n` +
+            `"Commander, the enemy is locked in melee with our troops. Firing now will strike both sides:\n` +
+            `• ~${enemyDmg}% of this volley will hit the enemy.\n` +
+            `• ~${friendlyDmg}% may fall among our own men.\n\n` +
+            `Do you wish to proceed?"`,
+
+        'Celtic':
+            `⚠️ **${officer} shouts:**\n\n` +
+            `"Chieftain! Our brothers are mixed with the foe! Your arrows will drink friendly blood as well as theirs:\n` +
+            `• Enemy struck: ~${enemyDmg}%.\n` +
+            `• Our warriors at risk: ~${friendlyDmg}%.\n\n` +
+            `What is your command?"`,
+
+        'Han Dynasty':
+            `⚠️ **${officer} bows:**\n\n` +
+            `"Honorable Commander, our soldiers are engaged in close combat. The manuals warn against such shots:\n` +
+            `• Expected harm to the enemy: ~${enemyDmg}%.\n` +
+            `• Expected harm to our own: ~${friendlyDmg}%.\n\n` +
+            `Your decision will be remembered."`,
+
+        default:
+            `⚠️ **${officer}:**\n\n` +
+            `"Commander, we would be shooting into our own melee. This volley is likely to hit BOTH sides:\n` +
+            `• Enemy: ~${enemyDmg}% of hits.\n` +
+            `• Friendly: ~${friendlyDmg}% of hits.\n\n` +
+            `Proceed?"`
+    };
+
+    return base[culture] || base.default;
+}
+
+function getOfficerName(unit, culture) {
+    if (unit && unit.officerName) return unit.officerName;
+
+    const defaults = {
+        'Roman Republic': 'Centurion Marcus',
+        'Celtic': 'Brennus',
+        'Han Dynasty': 'General Wei',
+        'Spartan City-State': 'Lochagos',
+        'Macedonian Kingdoms': 'Phalangarch',
+        'Sarmatian Confederations': 'Khan',
+        'Berber Confederations': 'Amghar',
+        'Kingdom of Kush': 'Master Archer'
+    };
+
+    return defaults[culture] || 'Officer';
+}
+
 module.exports = {
     generateOrderFeedback,
     generateNoActionsFoundFeedback,
     generateAmbiguousFeedback,
-    formatUnitName
+    formatUnitName,
+    generateFriendlyFireWarning
 };

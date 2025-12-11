@@ -183,6 +183,31 @@ async function generateOfficerTurnSummary(context, aiProvider = 'auto') {
     // { culture, movesText, combats, casualties, detectedEnemies, speakerName, speakerRole,
     //   personality, experienceLevel, concern, recommendation, question }
     try {
+        const enemiesDetected = context.detectedEnemies || 0;
+        const combats = context.combats || 0;
+        const movesText = context.movesText || '';
+
+        // Hard FOW guard: if nothing has been detected and there are no combats,
+        // return deterministic, culture-aware templates instead of calling an LLM.
+        if (enemiesDetected === 0 && combats === 0) {
+            const culture = (context.culture || '').toLowerCase();
+            if (movesText.length > 0) {
+                // Movement but no sightings this turn.
+                if (culture.includes('spartan')) {
+                    return 'Units maneuvered; no enemy in sight.';
+                }
+                return 'Units maneuvered to new positions; no enemy contact reported.';
+            }
+            // Completely quiet turn.
+            if (culture.includes('spartan')) {
+                return 'All quiet. No enemy in sight.';
+            }
+            if (culture.includes('roman')) {
+                return 'All quiet, sir; scouts report no enemy contact.';
+            }
+            return 'All quiet; no enemy contact reported.';
+        }
+
         if (aiProvider === 'auto') aiProvider = (process.env.GROQ_API_KEY ? 'groq' : (process.env.OPENAI_API_KEY ? 'openai' : 'template'));
         const CULTURE_VOICES = {
             'Roman': 'Roman centurion: terse, disciplined, professional, battlefield commands, no flourish.',

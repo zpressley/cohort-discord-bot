@@ -18,7 +18,9 @@ function getEliteUnitForCulture(culture, eliteSize, allWeapons, TROOP_QUALITY) {
     }
   }
 
-  const effectiveSize = sizeFromDocs || eliteSize || 80;
+  // Phase 1 scaling: elite units standardized at ~300 warriors when not
+  // explicitly sized in docs.
+  const effectiveSize = sizeFromDocs || eliteSize || 300;
 
   const map = {
     'Roman Republic': { weaponKey: 'roman_gladius', mounted: false },

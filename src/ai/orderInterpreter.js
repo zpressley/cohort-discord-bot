@@ -92,10 +92,15 @@ async function interpretOrders(orderText, battleState, playerSide, map) {
         culture: battleState[playerSide].culture
     };
     
-    // 1) Try deterministic handling for simple army-level orders (no AI call)
-    let aiResponse = tryGenericOrder(orderText, playerUnits, map, context);
+    // 1) Try deterministic handling for simple ranged orders (no AI call)
+    let aiResponse = tryRangedOrder(orderText, battleState, playerSide, map, playerUnits, context);
 
-    // 2) If not handled generically, fall back to AI interpretation
+    // 2) Try deterministic handling for simple army-level orders (no AI call)
+    if (!aiResponse) {
+        aiResponse = tryGenericOrder(orderText, playerUnits, map, context);
+    }
+
+    // 3) If not handled generically, fall back to AI interpretation
     if (!aiResponse) {
         const prompt = buildOrderInterpretationPrompt(orderText, context);
         aiResponse = await callAIForOrderParsing(prompt);
@@ -117,7 +122,35 @@ async function interpretOrders(orderText, battleState, playerSide, map) {
             action.type = 'move';
         }
         
-        if (action.type === 'move') {
+        if (action.type === 'ranged_attack') {
+            const unit = playerUnits.find(u => u.unitId === action.unitId);
+            if (!unit) {
+                errors.push(`Unit ${action.unitId} not found`);
+                continue;
+            }
+            try {
+                const { validateRangedAttack } = require('../game/rangedCombat');
+                const validation = validateRangedAttack(unit, action.targetKeyword, battleState, playerSide);
+                if (validation.valid) {
+                    validatedActions.push({
+                        ...action,
+                        validation,
+                        unitId: unit.unitId
+                    });
+                } else {
+                    errors.push({
+                        unit: unit.unitId,
+                        error: validation.error
+                    });
+                }
+            } catch (error) {
+                errors.push({
+                    unit: action.unitId,
+                    error: error.message,
+                    reason: 'ranged_validation_exception'
+                });
+            }
+        } else if (action.type === 'move') {
             const unit = playerUnits.find(u => u.unitId === action.unitId);
             console.log('  Unit found:', !!unit);
             
@@ -268,16 +301,21 @@ function determineTargetUnits(orderText, yourUnits) {
     
     // Check for elite keyword first (so "elite unit" doesn't fall through to infantry)
     if (lowerOrder.includes('elite') || lowerOrder.includes('guard') || lowerOrder.includes('veteran')) {
-        const elites = yourUnits.filter(u => u.isElite === true || (u.qualityType || '').toLowerCase().includes('veteran'));
+        const elites = yourUnits.filter(u => u.isElite === true || (u.veteranTier || '').toLowerCase().includes('veteran'));
         console.log(`Elite units (${elites.length} units)`);
         return elites.length > 0 ? elites : [yourUnits[0]];
     }
     
-    // Check for cavalry/mounted keyword
-    if (lowerOrder.includes('cavalry') || lowerOrder.includes('horse') || lowerOrder.includes('mounted')) {
+    // Check for cavalry / mounted keyword
+    if (lowerOrder.includes('cavalry') || lowerOrder.includes('horse') || lowerOrder.includes('mounted') || lowerOrder.includes('horsemen')) {
         const cavalry = yourUnits.filter(u => u.mounted === true);
         console.log(`Cavalry (${cavalry.length} units)`);
-        return cavalry.length > 0 ? cavalry : [yourUnits[0]];
+        // If we explicitly asked for cavalry and have none, DO NOT fall back to elites/infantry
+        if (cavalry.length === 0) {
+            console.log('No mounted units available for cavalry order');
+            return [];
+        }
+        return cavalry;
     }
     
     // Check for infantry keyword
@@ -367,6 +405,39 @@ function splitMultipleOrders(orderText) {
     
     // Split on commas
     return orderText.split(',').map(s => s.trim());
+}
+
+/**
+ * Try deterministic parsing for simple ranged orders
+ */
+function tryRangedOrder(orderText, battleState, playerSide, map, playerUnits, context) {
+    if (!orderText || !playerUnits || playerUnits.length === 0) return null;
+
+    const lower = orderText.toLowerCase();
+    if (!/(shoot|fire|volley|rain arrows|loose)/.test(lower)) {
+        return null;
+    }
+
+    const { hasRangedWeapon } = require('../game/rangedCombat');
+    const shooters = playerUnits.filter(u => hasRangedWeapon(u));
+    if (shooters.length === 0) return null;
+
+    // Extract simple target keyword after verbs: "shoot enemy cavalry", "fire at infantry"
+    const match = lower.match(/(?:shoot|fire|target|attack|volley)\s+(?:at\s+)?(?:the\s+)?(\w+)/i);
+    const targetKeyword = match ? match[1] : 'enemy';
+
+    const actions = shooters.map(u => ({
+        type: 'ranged_attack',
+        unitId: u.unitId,
+        targetKeyword,
+        reasoning: `Ranged attack order against ${targetKeyword}`
+    }));
+
+    return {
+        actions,
+        validation: { isValid: true, errors: [], warnings: [] },
+        officerComment: generateDefaultComment(context.culture)
+    };
 }
 
 /**
@@ -559,10 +630,12 @@ function selectTargetUnits(orderText, units) {
     
     const matched = [];
     
-    // Check for cavalry
-    if (/\b(cavalry|horse|rider|mount|chariot)\b/.test(lower)) {
+    // Check for cavalry / mounted only
+    if (/\b(cavalry|horsemen|horse|rider|mounted|mount|chariot)\b/.test(lower)) {
         console.log('  Keyword matched: cavalry');
         const cavMatches = units.filter(u => {
+            // Hard rule: cavalry = mounted units
+            if (u.mounted) return true;
             const unitType = (u.type || '').toLowerCase();
             return unitType.includes('cavalry') || unitType.includes('horse');
         });
@@ -1068,7 +1141,7 @@ function findUnitByDescription(description, units) {
     
     // Direct unit type matches
     const typeMatches = {
-        'cavalry': ['cavalry', 'horse', 'mounted'],
+        'cavalry': ['cavalry', 'horse', 'horsemen', 'mounted', 'riders'],
         'infantry': ['infantry', 'foot', 'soldiers'],
         'spear': ['spear', 'spearmen', 'spears', 'phalanx'],
         'sword': ['sword', 'swordsmen', 'swords', 'legion'],

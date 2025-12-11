@@ -16,35 +16,55 @@ const UNIT_EMOJIS = {
 };
 
 /**
- * Parse grid coordinate string to {row, col} object
+ * Parse grid coordinate string to {row, col} object for a 40x40 battlefield.
+ * Supports A1-AN40, where columns are A..Z, AA..AN and rows 1..40.
  */
 function parseCoord(coord) {
     if (!coord || typeof coord !== 'string') {
         throw new Error(`Invalid coordinate: ${coord}`);
     }
     
-    const match = coord.match(/^([A-T])(\d+)$/);
+    // Match pattern: letters followed by numbers (A1, AB23, AN40)
+    const match = coord.match(/^([A-Z]+)(\d+)$/);
     if (!match) {
-        throw new Error(`Invalid coordinate format: ${coord}. Expected A1-T20.`);
+        throw new Error(`Invalid coordinate format: ${coord}. Expected A1-AN40.`);
     }
     
-    const col = match[1].charCodeAt(0) - 65; // A=0, B=1, ..., T=19
-    const row = parseInt(match[2]) - 1; // 1-indexed to 0-indexed
+    const colStr = match[1];
+    const row = parseInt(match[2], 10) - 1; // 1-indexed to 0-indexed
     
-    if (row < 0 || row > 19 || col < 0 || col > 19) {
-        throw new Error(`Coordinate out of bounds: ${coord}`);
+    // Convert column letters to number using Excel-style base-26:
+    // A=0, B=1, ..., Z=25, AA=26, AB=27, ..., AN=39
+    let col = 0;
+    for (let i = 0; i < colStr.length; i++) {
+        const value = colStr.charCodeAt(i) - 64; // A=1 .. Z=26
+        col = col * 26 + value;
+    }
+    col -= 1; // shift to 0-based
+    
+    // Validate bounds (40×40 grid)
+    if (row < 0 || row >= 40 || col < 0 || col >= 40) {
+        throw new Error(`Coordinate out of bounds: ${coord}. Valid range: A1-AN40`);
     }
     
     return { row, col };
 }
 
 /**
- * Convert {row, col} object to grid coordinate string
+ * Convert {row, col} object to grid coordinate string (A..Z, AA..AN).
  */
 function coordToString(pos) {
-    const col = String.fromCharCode(65 + pos.col); // 0=A, 1=B, ..., 19=T
+    let col = pos.col + 1; // work in 1-based for letters
+    let colStr = '';
+    
+    while (col > 0) {
+        const rem = (col - 1) % 26;
+        colStr = String.fromCharCode(65 + rem) + colStr;
+        col = Math.floor((col - 1) / 26);
+    }
+    
     const row = pos.row + 1; // 0-indexed to 1-indexed
-    return `${col}${row}`;
+    return `${colStr}${row}`;
 }
 
 /**
@@ -87,7 +107,7 @@ function getAdjacentCoords(coord) {
             const newRow = pos.row + dr;
             const newCol = pos.col + dc;
             
-            if (newRow >= 0 && newRow <= 19 && newCol >= 0 && newCol <= 19) {
+            if (newRow >= 0 && newRow < 40 && newCol >= 0 && newCol < 40) {
                 adjacent.push(coordToString({ row: newRow, col: newCol }));
             }
         }
@@ -103,8 +123,8 @@ function getCoordsInRange(center, range) {
     const centerPos = parseCoord(center);
     const coords = [];
     
-    for (let row = 0; row <= 19; row++) {
-        for (let col = 0; col <= 19; col++) {
+    for (let row = 0; row < 40; row++) {
+        for (let col = 0; col < 40; col++) {
             const testCoord = coordToString({ row, col });
             const dist = calculateDistance(center, testCoord);
             
@@ -162,10 +182,34 @@ function calculatePathCost(path, terrainCosts, getTerrainType) {
 function isValidCoord(coord) {
     try {
         const pos = parseCoord(coord);
-        return pos.row >= 0 && pos.row <= 19 && pos.col >= 0 && pos.col <= 19;
+        return pos.row >= 0 && pos.row < 40 && pos.col >= 0 && pos.col < 40;
     } catch {
         return false;
     }
+}
+
+/**
+ * Calculate a 15×15 viewport window on a 40×40 grid.
+ * Returns { startRow, startCol, endRow, endCol, center }.
+ */
+function calculateViewport(centerCoord, gridSize = 40, viewportSize = 15) {
+    const center = parseCoord(centerCoord);
+    const halfView = Math.floor(viewportSize / 2);
+    
+    let startRow = center.row - halfView;
+    let startCol = center.col - halfView;
+    
+    // Clamp to grid bounds
+    startRow = Math.max(0, Math.min(startRow, gridSize - viewportSize));
+    startCol = Math.max(0, Math.min(startCol, gridSize - viewportSize));
+    
+    return {
+        startRow,
+        startCol,
+        endRow: startRow + viewportSize - 1,
+        endCol: startCol + viewportSize - 1,
+        center: centerCoord
+    };
 }
 
 /**
@@ -249,7 +293,7 @@ function getStackedEmoji(units, side) {
  * Generate ASCII map (legacy/fallback version) - use 15x15 in all other situations. 
  */
 function generateASCIIMap(mapData) {
-    const grid = Array(20).fill(null).map(() => Array(20).fill('.'));
+    const grid = Array(40).fill(null).map(() => Array(40).fill('.'));
     
     // Mark terrain
     if (mapData.terrain.river) {
@@ -289,6 +333,14 @@ function generateASCIIMap(mapData) {
             }
         });
     }
+    // Draw bridge tiles as a distinct symbol (≡) on top of underlying terrain
+    // so the crossing is clearly visible in the ASCII 40×40 tactical map.
+    if (mapData.terrain.bridge) {
+        mapData.terrain.bridge.forEach(coord => {
+            const pos = parseCoord(coord);
+            grid[pos.row][pos.col] = '≡';
+        });
+    }
     
     if (mapData.terrain.forest) {
         mapData.terrain.forest.forEach(coord => {
@@ -313,20 +365,364 @@ function generateASCIIMap(mapData) {
     }
     
     // Build map
-    let ascii = '    A B C D E F G H I J K L M N O P Q R S T\n';
-    ascii += '   ──────────────────────────────────────────\n';
+    let ascii = '    ';
+    // Column headers A..AN (0..39)
+    for (let col = 0; col < 40; col++) {
+        const label = coordToString({ row: 0, col }).match(/[A-Z]+/)[0];
+        ascii += label.padEnd(3, ' ');
+    }
+    ascii += '\n';
+    ascii += '   ' + '─'.repeat(3 * 40) + '\n';
     
-    for (let row = 0; row < 20; row++) {
+    for (let row = 0; row < 40; row++) {
         const rowNum = (row + 1).toString().padStart(2, ' ');
         ascii += `${rowNum} │`;
         ascii += grid[row].join(' ');
-        ascii += `│ ${rowNum}\n`;
+        ascii += `│\n`;
     }
     
-    ascii += '   ──────────────────────────────────────────\n';
-    ascii += '    A B C D E F G H I J K L M N O P Q R S T\n\n';
-    ascii += 'Legend: . plains, ~ river, = ford, ^ hill, % marsh, # road, T forest, 1 P1, 2 P2';
+    ascii += '   ' + '─'.repeat(3 * 40) + '\n';
+    ascii += '\n';
+    ascii += 'Legend: . plains, ~ river, = ford, ≡ bridge, ^ hill, % marsh, # road, T forest, 1 P1, 2 P2';
     
+    return ascii;
+}
+
+/**
+ * Generate a 15×15 tactical ASCII map centered on a coordinate.
+ * Uses full terrain + unit positions with basic FOW for enemy units.
+ */
+function generateTacticalMap(battleState, centerCoord, playerSide) {
+    const viewport = calculateViewport(centerCoord, 40, 15);
+    const grid = Array(15).fill(null).map(() => Array(15).fill('.'));
+
+    const map = battleState.map || { terrain: {} };
+    const terrain = map.terrain || {};
+
+    // Mark terrain within viewport
+    const terrainSymbols = {
+        river: '~',
+        ford: '=',
+        hill: '^',
+        forest: 'T',
+        marsh: '%',
+        road: '#'
+    };
+
+    Object.entries(terrain).forEach(([terrainType, coords]) => {
+        const symbol = terrainSymbols[terrainType];
+        if (!symbol) return;
+        (coords || []).forEach(coord => {
+            const pos = parseCoord(coord);
+            if (pos.row >= viewport.startRow && pos.row <= viewport.endRow &&
+                pos.col >= viewport.startCol && pos.col <= viewport.endCol) {
+                const viewRow = pos.row - viewport.startRow;
+                const viewCol = pos.col - viewport.startCol;
+                grid[viewRow][viewCol] = symbol;
+            }
+        });
+    });
+
+    // Mark friendly units (full info)
+    const { calculateOccupiedTiles } = require('../formations/formationStatus');
+    const sideData = battleState[playerSide] || {};
+    const friendlyUnits = sideData.unitPositions || [];
+
+    friendlyUnits.forEach(unit => {
+        const occupied = calculateOccupiedTiles(unit);
+        occupied.forEach(tileCoord => {
+            const pos = parseCoord(tileCoord);
+            if (pos.row >= viewport.startRow && pos.row <= viewport.endRow &&
+                pos.col >= viewport.startCol && pos.col <= viewport.endCol) {
+                const viewRow = pos.row - viewport.startRow;
+                const viewCol = pos.col - viewport.startCol;
+                grid[viewRow][viewCol] = '1'; // Friendly marker
+            }
+        });
+    });
+
+    // Mark enemy units using fog of war (only visible ones)
+    try {
+        const opponentSide = playerSide === 'player1' ? 'player2' : 'player1';
+        const opponentData = battleState[opponentSide] || {};
+        const enemyUnits = opponentData.unitPositions || [];
+        const { calculateVisibility } = require('../fogOfWar');
+
+        const visibility = calculateVisibility(
+            friendlyUnits,
+            enemyUnits,
+            battleState.terrain || {},
+            battleState.weather || 'clear'
+        );
+
+        const visiblePositions = new Set(visibility.visibleEnemyPositions || []);
+
+        enemyUnits.forEach(unit => {
+            if (!visiblePositions.has(unit.position)) return; // not visible this turn
+            const pos = parseCoord(unit.position);
+            if (pos.row >= viewport.startRow && pos.row <= viewport.endRow &&
+                pos.col >= viewport.startCol && pos.col <= viewport.endCol) {
+                const viewRow = pos.row - viewport.startRow;
+                const viewCol = pos.col - viewport.startCol;
+                grid[viewRow][viewCol] = '2'; // Enemy marker
+            }
+        });
+    } catch (_) {
+        // If fogOfWar is unavailable for some reason, skip enemy markers.
+    }
+
+    return formatGridWithLabels(grid, viewport);
+}
+
+/**
+ * Build a map of operational tiles -> units inside their 2×2 tactical block.
+ * Keyed as "row,col" in 20×20 space, values are { friendly: [], enemy: [] }.
+ */
+function buildOperationalUnitTiles(battleState, playerSide) {
+    const tiles = new Map();
+
+    if (!battleState || !playerSide) return tiles;
+
+    const sideData = battleState[playerSide] || {};
+    const oppSide = playerSide === 'player1' ? 'player2' : 'player1';
+    const oppData = battleState[oppSide] || {};
+
+    const friendlyUnits = Array.isArray(sideData.unitPositions)
+        ? sideData.unitPositions
+        : (sideData.unitPositions ? Object.values(sideData.unitPositions) : []);
+    const enemyAllUnits = Array.isArray(oppData.unitPositions)
+        ? oppData.unitPositions
+        : (oppData.unitPositions ? Object.values(oppData.unitPositions) : []);
+
+    const visibleEnemyPositions = new Set(sideData.visibleEnemyPositions || []);
+    const visibleEnemies = enemyAllUnits.filter(u => u && visibleEnemyPositions.has(u.position));
+
+    const addToTile = (unit, key) => {
+        if (!unit || !unit.position) return;
+        const p = parseCoord(unit.position); // 40×40 tactical
+        const opRow = Math.floor(p.row / 2);
+        const opCol = Math.floor(p.col / 2);
+        const k = `${opRow},${opCol}`;
+        const cell = tiles.get(k) || { friendly: [], enemy: [] };
+        cell[key].push(unit);
+        tiles.set(k, cell);
+    };
+
+    friendlyUnits.forEach(u => addToTile(u, 'friendly'));
+    visibleEnemies.forEach(u => addToTile(u, 'enemy'));
+
+    return tiles;
+}
+
+/**
+ * Generate a 15×15 operational map by compressing 2×2 tactical tiles
+ * into 1 operational tile. Shows broader terrain patterns.
+ */
+function generateOperationalMap(battleState, centerCoord, playerSide) {
+    // Use the premade 20×20 operational map as an information-first zoomed-out
+    // representation of the 40×40 tactical map.
+    const { createMap } = require('./baseMapRS');
+    const opMap = createMap(); // 20×20 operational map
+    const gridSize = opMap.gridSize || 20;
+    const viewSize = 15;
+
+    // Map 40×40 center coordinate down to 20×20 by simple 2:1 scaling so the
+    // operational view roughly follows the same area as the tactical center.
+    let opCenterCoord = 'K10';
+    try {
+        const tac = parseCoord(centerCoord || 'T20');
+        const opRow = Math.floor(tac.row / 2);
+        const opCol = Math.floor(tac.col / 2);
+        opCenterCoord = coordToString({ row: opRow, col: opCol });
+    } catch (_) {
+        // Fallback keeps center in middle of 20×20 grid
+        opCenterCoord = 'K10';
+    }
+
+    const viewport = calculateViewport(opCenterCoord, gridSize, viewSize);
+    const grid = Array(viewSize).fill(null).map(() => Array(viewSize).fill('.'));
+
+    const terrainSymbols = {
+        river: '~',
+        ford: '=',
+        hill: '^',
+        forest: 'T',
+        marsh: '%',
+        road: '#',
+        bridge: '≡'
+    };
+
+    Object.entries(opMap.terrain || {}).forEach(([terrainType, coords]) => {
+        const symbol = terrainSymbols[terrainType];
+        if (!symbol) return;
+        (coords || []).forEach(coord => {
+            try {
+                const pos = parseCoord(coord);
+                if (pos.row >= viewport.startRow && pos.row <= viewport.endRow &&
+                    pos.col >= viewport.startCol && pos.col <= viewport.endCol) {
+                    const r = pos.row - viewport.startRow;
+                    const c = pos.col - viewport.startCol;
+                    grid[r][c] = symbol;
+                }
+            } catch (_) {
+                // ignore bad coords
+            }
+        });
+    });
+
+    // Overlay units based on 40×40 positions, projected into 20×20 cells
+    // (2×2 tactical tiles per operational tile). Use stacked emojis so each
+    // cell shows a single friendly/enemy icon summarizing that block.
+    try {
+        const tiles = buildOperationalUnitTiles(battleState, playerSide);
+
+        tiles.forEach((cell, key) => {
+            const [opRow, opCol] = key.split(',').map(Number);
+            if (opRow < viewport.startRow || opRow > viewport.endRow ||
+                opCol < viewport.startCol || opCol > viewport.endCol) return;
+            const r = opRow - viewport.startRow;
+            const c = opCol - viewport.startCol;
+
+            if (cell.enemy.length > 0 && cell.friendly.length === 0) {
+                grid[r][c] = getStackedEmoji(cell.enemy, 'enemy');
+            }
+            if (cell.friendly.length > 0) {
+                grid[r][c] = getStackedEmoji(cell.friendly, 'friendly');
+            }
+        });
+    } catch (_) {
+        // If anything goes wrong, we still return the terrain-only map.
+    }
+
+    return formatGridWithLabels(grid, viewport);
+}
+
+/**
+ * Helper: pick a dominant terrain symbol for a 2×2 block.
+ */
+function getDominantTerrainSymbol(terrain, baseRow, baseCol) {
+    const symbols = {
+        river: '~',
+        ford: '=',
+        hill: '^',
+        forest: 'T',
+        marsh: '%',
+        road: '#'
+    };
+
+    const counts = {};
+
+    Object.entries(terrain).forEach(([terrainType, coords]) => {
+        const symbol = symbols[terrainType];
+        if (!symbol) return;
+        (coords || []).forEach(coord => {
+            const pos = parseCoord(coord);
+            if (pos.row >= baseRow && pos.row < baseRow + 2 &&
+                pos.col >= baseCol && pos.col < baseCol + 2) {
+                counts[symbol] = (counts[symbol] || 0) + 1;
+            }
+        });
+    });
+
+    // Default plains if nothing else appears
+    if (Object.keys(counts).length === 0) return '.';
+
+    // Return symbol with max count
+    return Object.entries(counts).sort((a, b) => b[1] - a[1])[0][0];
+}
+
+/**
+ * For a given operational coordinate (20×20), return a human label for terrain.
+ */
+function getOperationalTerrainLabel(opMap, opCoordStr) {
+    if (!opMap || !opMap.terrain) return 'Plains';
+    const t = opMap.terrain;
+    const inList = (key) => Array.isArray(t[key]) && t[key].includes(opCoordStr);
+
+    if (inList('bridge')) return 'Bridge';
+    if (inList('ford')) return 'Ford';
+    if (inList('river')) return 'River';
+    if (inList('marsh')) return 'Marsh';
+    if (inList('forest')) return 'Forest';
+    if (inList('hill')) return 'Hill';
+    if (inList('road')) return 'Road';
+    return 'Plains';
+}
+
+/**
+ * Format a 15×15 grid with AA–AN style column labels and row numbers.
+ * Layout is matched to the 20×20 operational map style so columns line up
+ * cleanly in Discord code blocks.
+ */
+function formatGridWithLabels(grid, viewport) {
+    const colStart = viewport.startCol;
+    const rowStart = viewport.startRow;
+    const h = grid.length;
+    const w = grid[0]?.length || 0;
+
+    // Column headers (top only), aligned so first letter sits above the first
+    // cell after the left row-number + space + bar prefix.
+    let header = '    ';
+    for (let col = colStart; col < colStart + w; col++) {
+        const colLabel = coordToString({ row: 0, col }).match(/[A-Z]+/)[0];
+        header += colLabel + ' ';
+    }
+
+    // Helper: detect emoji so we can compensate for wide rendering.
+    const isEmoji = (ch) => {
+        if (!ch) return false;
+        const cp = ch.codePointAt(0);
+        return cp >= 0x1F300 && cp <= 0x1FAFF;
+    };
+
+    let ascii = header.trimEnd() + '\n';
+    ascii += '   ┌' + '─'.repeat(w * 2 - 1) + '┐\n';
+
+    for (let row = 0; row < h; row++) {
+        const actualRow = rowStart + row + 1; // 1-indexed
+        const rowLabel = actualRow.toString().padStart(2, ' ');
+        ascii += `${rowLabel} │`;
+
+        // Find longest contiguous run of emoji in this row so we can apply a
+        // small fudge factor to keep the right border visually aligned.
+        let maxRun = 0;
+        let curRun = 0;
+        let emojiCount = 0;
+        for (let col = 0; col < w; col++) {
+            const ch = grid[row][col] ?? '.';
+            if (isEmoji(ch)) {
+                emojiCount++;
+                curRun++;
+                if (curRun > maxRun) maxRun = curRun;
+            } else {
+                curRun = 0;
+            }
+        }
+        const singleEmojiRow = emojiCount === 1;
+        const extraSpaces = singleEmojiRow ? 0 : Math.floor(maxRun / 2); // about 1 space per 2 emoji
+
+        let rowStr = '';
+        for (let col = 0; col < w; col++) {
+            const ch = grid[row][col] ?? '.';
+            if (col > 0) rowStr += ' ';
+            // For a single-emoji row, behave like "emoji + space" everywhere,
+            // then trim one space from the far right to keep border aligned.
+            if (singleEmojiRow && isEmoji(ch)) {
+                rowStr += ch + ' ';
+            } else {
+                rowStr += ch;
+            }
+        }
+        if (singleEmojiRow && rowStr.endsWith(' ')) {
+            rowStr = rowStr.slice(0, -1);
+        }
+        rowStr += ' '.repeat(extraSpaces);
+
+        ascii += rowStr;
+        ascii += `│\n`;
+    }
+
+    ascii += '   └' + '─'.repeat(w * 2 - 1) + '┘\n';
     return ascii;
 }
 
@@ -424,7 +820,7 @@ function reconstructPath(cameFrom, current) {
  * Generate emoji-based map
  */
 function generateEmojiMap(mapData) {
-    const grid = Array(20).fill(null).map(() => Array(20).fill('.'));
+    const grid = Array(40).fill(null).map(() => Array(40).fill('.'));
     
     // Mark terrain
     if (mapData.terrain.river) {
@@ -461,6 +857,16 @@ function generateEmojiMap(mapData) {
         mapData.terrain.road.forEach(coord => {
             const pos = parseCoord(coord);
             if (grid[pos.row][pos.col] === '.') {
+                grid[pos.row][pos.col] = '#';
+            }
+        });
+    }
+    // For emoji tactical view, treat bridge tiles as road visually so the
+    // crossing blends with the road network but still replaces river glyph.
+    if (mapData.terrain.bridge) {
+        mapData.terrain.bridge.forEach(coord => {
+            const pos = parseCoord(coord);
+            if (grid[pos.row][pos.col] === '.' || grid[pos.row][pos.col] === '~') {
                 grid[pos.row][pos.col] = '#';
             }
         });
@@ -510,18 +916,56 @@ function generateEmojiMap(mapData) {
     // Build map
     let ascii = '    A B C D E F G H I J K L M N O P Q R S T\n';
     ascii += '   ──────────────────────────────────────────\n';
-    
+
+    const isEmoji = (ch) => {
+        if (!ch) return false;
+        const cp = ch.codePointAt(0);
+        return cp >= 0x1F300 && cp <= 0x1FAFF;
+    };
+
     for (let row = 0; row < 20; row++) {
         const rowNum = (row + 1).toString().padStart(2, ' ');
         ascii += `${rowNum} │`;
-        ascii += grid[row].join(' ');
-        ascii += `│ ${rowNum}\n`;
+
+        // Longest contiguous run of emoji in this row
+        let maxRun = 0;
+        let curRun = 0;
+        let emojiCount = 0;
+        for (let col = 0; col < 20; col++) {
+            const ch = grid[row][col] ?? '.';
+            if (isEmoji(ch)) {
+                emojiCount++;
+                curRun++;
+                if (curRun > maxRun) maxRun = curRun;
+            } else {
+                curRun = 0;
+            }
+        }
+        const singleEmojiRow = emojiCount === 1;
+        const extraSpaces = singleEmojiRow ? 0 : Math.floor(maxRun / 2);
+
+        let rowStr = '';
+        for (let col = 0; col < 20; col++) {
+            const ch = grid[row][col] ?? '.';
+            if (col > 0) rowStr += ' ';
+            if (singleEmojiRow && isEmoji(ch)) {
+                rowStr += ch + ' ';
+            } else {
+                rowStr += ch;
+            }
+        }
+        if (singleEmojiRow && rowStr.endsWith(' ')) {
+            rowStr = rowStr.slice(0, -1);
+        }
+        rowStr += ' '.repeat(extraSpaces);
+
+        ascii += rowStr;
+        ascii += `│\n`;
     }
-    
+
     ascii += '   ──────────────────────────────────────────\n';
-    ascii += '    A B C D E F G H I J K L M N O P Q R S T\n\n';
-    ascii += 'Terrain: . plains, ~ river, = ford, ^ hill, % marsh, # road, T forest';
-    
+    ascii += 'Terrain: . plains, ~ river, = ford, ≡ bridge, ^ hill, % marsh, # road, T forest';
+
     return ascii;
 }
 
@@ -556,14 +1000,20 @@ function generateEmojiMapViewport(mapData, view, overlays = [], viewingSide) {
         }
     } catch (_) {}
 
-    const top = Math.max(0, Math.min(20 - (view.height || 15), view.top || 0));
-    const left = Math.max(0, Math.min(20 - (view.width || 15), view.left || 0));
+    const top = Math.max(0, Math.min(40 - (view.height || 15), view.top || 0));
+    const left = Math.max(0, Math.min(40 - (view.width || 15), view.left || 0));
     const h = view.height || 15;
     const w = view.width || 15;
 
-    // Column headers (top only), spaced to 2 columns per cell
-    const letters = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ'.slice(0, 20).split('');
-    const headerLetters = letters.slice(left, left + w).map(l => l + ' ').join('');
+    // Column headers (top only), spaced to 2 columns per cell. Use
+    // coordToString so AA, AB, ... appear correctly when viewport is far
+    // to the east.
+    const headerLabels = [];
+    for (let col = left; col < left + w; col++) {
+        const label = coordToString({ row: 0, col }).match(/[A-Z]+/)[0];
+        headerLabels.push(label + ' ');
+    }
+    const headerLetters = headerLabels.join('');
 
     // Cell renderer: keep each cell width constant (2 cols). Emoji are double-width.
     const isEmoji = (ch) => {
@@ -571,14 +1021,44 @@ function generateEmojiMapViewport(mapData, view, overlays = [], viewingSide) {
         const cp = ch.codePointAt(0);
         return cp >= 0x1F300 && cp <= 0x1FAFF;
     };
-    const cellStr = (ch) => isEmoji(ch) ? ch + '' : ch + ' ';
+    const cellStr = (ch) => isEmoji(ch) ? ch : ch + ' ';
 
     let out = `   ${headerLetters}\n`;
     out += '  ┌' + '─'.repeat(w * 2) + '┐\n';
     for (let r = 0; r < h; r++) {
         const rowNum = (top + r + 1).toString().padStart(2, ' ');
         out += `${rowNum}│`;
-        const rowCells = full[top + r].slice(left, left + w).map(cellStr).join('');
+        const slice = full[top + r].slice(left, left + w);
+
+        // Longest contiguous emoji run + total count in this viewport row
+        let maxRun = 0;
+        let curRun = 0;
+        let emojiCount = 0;
+        for (let i = 0; i < slice.length; i++) {
+            const ch = slice[i];
+            if (isEmoji(ch)) {
+                emojiCount++;
+                curRun++;
+                if (curRun > maxRun) maxRun = curRun;
+            } else {
+                curRun = 0;
+            }
+        }
+        const singleEmojiRow = emojiCount === 1;
+        const extraSpaces = singleEmojiRow ? 0 : Math.floor(maxRun / 2);
+
+        let rowCells;
+        if (singleEmojiRow) {
+            // For a single-emoji row, treat emoji like "emoji + space" but
+            // then remove one trailing space overall to keep the border aligned.
+            const cellStrSingle = (ch) => (isEmoji(ch) ? ch + ' ' : ch + ' ');
+            rowCells = slice.map(cellStrSingle).join('');
+            if (rowCells.endsWith(' ')) {
+                rowCells = rowCells.slice(0, -1);
+            }
+        } else {
+            rowCells = slice.map(cellStr).join('') + ' '.repeat(extraSpaces);
+        }
         out += rowCells;
         out += '│\n';
     }
@@ -589,7 +1069,7 @@ function generateEmojiMapViewport(mapData, view, overlays = [], viewingSide) {
 }
 
 function generateEmojiGrid(mapData, viewingSide) {
-    const grid = Array(20).fill(null).map(() => Array(20).fill('.'));
+    const grid = Array(40).fill(null).map(() => Array(40).fill('.'));
     
     // Add terrain
     if (mapData.terrain.river) {
@@ -615,7 +1095,7 @@ function generateEmojiGrid(mapData, viewingSide) {
     const tiles = new Map();
     const addUnits = (arr, key) => {
         (arr || []).forEach(u => {
-            if (!u.position) return;
+            if (!u || !u.position) return;
             const posStr = typeof u.position === 'string' ? u.position : coordToString(u.position);
             const list = tiles.get(posStr) || { friendly: [], enemy: [] };
             list[key].push(u);
@@ -643,6 +1123,64 @@ function generateEmojiGrid(mapData, viewingSide) {
             grid[p.row][p.col] = getStackedEmoji(val.friendly, 'friendly');
         }
     });
+
+    // Marching column visualization: vanguard emoji + trailing symbols per tile
+    try {
+        const { calculateOccupiedTiles } = require('../formations/formationStatus');
+
+        // Helper: choose trail symbol based on side + unit type/elite
+        function getTrailSymbol(unit, isFriendly) {
+            const elite = !!unit.isElite;
+            const type = (unit.unitType || unit.type || '').toLowerCase();
+            const cav = unit.mounted || type.includes('cavalry') || type.includes('horse');
+
+            if (elite) {
+                return isFriendly ? '◆' : '◇';
+            }
+            if (cav) {
+                return isFriendly ? '●' : '○';
+            }
+            // default infantry
+            return isFriendly ? '■' : '□';
+        }
+
+        // Draw marching columns for both sides relative to viewingSide
+        const drawColumns = (units, isFriendly) => {
+            (units || []).forEach(unit => {
+                if (!unit || unit.formationStatus !== 'marching' || !unit.position) return;
+                const occupied = calculateOccupiedTiles(unit);
+                if (!occupied || occupied.length <= 1) return; // only multi-tile columns get trails
+
+                const trailSymbol = getTrailSymbol(unit, isFriendly);
+
+                // occupied[0] is the vanguard/front; leave its emoji as-is.
+                for (let i = 1; i < occupied.length; i++) {
+                    const coordStr = occupied[i];
+                    try {
+                        const p = parseCoord(coordStr);
+                        if (!p) continue;
+                        const current = grid[p.row][p.col];
+                        // Do not overwrite other unit emojis; only paint over plain/terrain cells.
+                        if (!current || ['.', '~', '=', '^', '%', '#', 'T'].includes(current)) {
+                            grid[p.row][p.col] = trailSymbol;
+                        }
+                    } catch {
+                        // ignore bad coords
+                    }
+                }
+            });
+        };
+
+        if (viewingSide === 'player1') {
+            drawColumns(mapData.player1Units, true);
+            drawColumns(mapData.player2Units, false);
+        } else {
+            drawColumns(mapData.player2Units, true);
+            drawColumns(mapData.player1Units, false);
+        }
+    } catch (_) {
+        // If formations/formationStatus is unavailable for some reason, skip column trails.
+    }
     
     return grid;
 }
@@ -659,13 +1197,20 @@ module.exports = {
     reconstructPath,
     calculatePathCost,
     isValidCoord,
+    calculateViewport,
     generateASCIIMap,
+    generateTacticalMap,
+    generateOperationalMap,
+    formatGridWithLabels,
     generateEmojiMap,
     getUnitEmoji,
     getStackedEmoji,
     getDirection,
     UNIT_EMOJIS,
     generateEmojiMapViewport,
-    generateEmojiGrid
+    generateEmojiGrid,
+    buildOperationalUnitTiles,
+    getDominantTerrainSymbol,
+    getOperationalTerrainLabel
 };
 
