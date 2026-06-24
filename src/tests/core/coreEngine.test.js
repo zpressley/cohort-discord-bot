@@ -1,8 +1,8 @@
 // src/tests/core/coreEngine.test.js
 // Core invariants tests (no framework)
 
-const { validateMovement } = require('../../../src/game/movementSystem');
-const { RIVER_CROSSING_MAP } = require('../../../src/game/maps/riverCrossing');
+const { validateMovement } = require('../../../src/game/movement');
+const { RIVER_CROSSING_MAP } = require('../../../src/game/maps/mapUtils');
 const { resolveCombat } = require('../../../src/game/battleEngine');
 
 function ok(name, cond) { cond ? pass(name) : fail(name); }

@@ -1,7 +1,7 @@
 // src/tests/commander/naturalLanguageTest.js
 // Test natural language commander actions
 
-const { interpretOrders } = require('../../ai/orderInterpreter');
+const { interpretOrders } = require('../../game/orders');
 const { models, setupDatabase } = require('../../database/setup');
 const { createBattleCommander } = require('../../game/commandSystem/commanderManager');
 

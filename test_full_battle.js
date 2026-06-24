@@ -5,7 +5,7 @@
 const { models } = require('./src/database/setup');
 const { processTurn } = require('./src/game/turnOrchestrator');
 const { initializeBattle } = require('./src/game/battleInitializer');
-const { RIVER_CROSSING_MAP } = require('./src/game/maps/riverCrossing');
+const { RIVER_CROSSING_MAP } = require('./src/game/maps/mapUtils');
 
 /**
  * Create test commanders with armies

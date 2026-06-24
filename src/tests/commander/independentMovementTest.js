@@ -1,7 +1,7 @@
 // src/tests/commander/independentMovementTest.js
 // Test independent commander movement capabilities
 
-const { interpretOrders } = require('../../ai/orderInterpreter');
+const { interpretOrders } = require('../../game/orders');
 const { models, setupDatabase } = require('../../database/setup');
 const { createBattleCommander, getCommanderStatus } = require('../../game/commandSystem/commanderManager');
 

@@ -2,9 +2,8 @@
 // Simple harness to sanity-check marching column depth, movement bonus,
 // collision behavior, and map visualization.
 
-const { RIVER_CROSSING_MAP } = require('../../game/maps/riverCrossing');
-const { validateMovement } = require('../../game/movementSystem');
-const { calculateOccupiedTiles } = require('../../game/formations/formationStatus');
+const { RIVER_CROSSING_MAP, calculateOccupiedTiles } = require('../../game/maps/mapUtils');
+const { validateMovement } = require('../../game/movement');
 const { generateEmojiGrid } = require('../../game/maps/mapUtils');
 
 function makeUnit({
@@ -82,7 +81,7 @@ async function run() {
     player1: { unitPositions: [marchToward, blocker] },
     player2: { unitPositions: [] }
   };
-  const { processMovementPhase } = require('../../game/positionBasedCombat');
+  const { processMovementPhase } = require('../../game/movement');
 
   const movementResults = processMovementPhase([
     { unitId: 'col', targetPosition: moveRes.finalPosition, validation: moveRes }

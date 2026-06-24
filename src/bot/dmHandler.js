@@ -4,7 +4,7 @@
 const { EmbedBuilder } = require('discord.js');
 const { Op } = require('sequelize');
 const { processTurn } = require('../game/turnOrchestrator');
-const { parseCommanderActions } = require('../ai/orderInterpreter');
+const { parseCommanderActions } = require('../game/orders');
 
 const processedMessages = new Set();
 const pendingFriendlyFireOrders = new Map(); // userId -> { battleId, playerSide, orderText, createdAt }
@@ -95,7 +95,7 @@ async function tryCommanderAction(message, battle, playerSide, userId) {
  */
 async function handleQuestion(message, battle, playerSide, userId) {
     const { models } = require('../database/setup');
-    const { answerTacticalQuestion } = require('../ai/officerQA');
+    const { answerTacticalQuestion } = require('../ai/aiManager');
     
     const eliteUnit = await models.EliteUnit.findOne({
         where: { commanderId: userId },
@@ -128,7 +128,7 @@ async function processPlayerOrder(message, battle, playerId, playerSide, client)
 
         // Quick ranged-friendly-fire check (Phase D UX only)
         try {
-            const { interpretOrders } = require('../ai/orderInterpreter');
+            const { interpretOrders } = require('../game/orders');
             const map = battle.battleState?.map || {};
             const interpretation = await interpretOrders(orderText, battle.battleState, playerSide, map);
             const rangedHighRisk = (interpretation.validatedActions || []).filter(a =>
@@ -278,7 +278,7 @@ async function processTurnResolution(battle, battleTurn, client) {
             await endBattle(battle, turnResult.victory, client);
         } else {
             // Send next turn briefings (each side gets its own FOW-safe narrative inside WAR COUNCIL)
-            const { sendNextTurnBriefings } = require('../game/briefingSystem');
+            const { sendNextTurnBriefings } = require('./briefing');
             await sendNextTurnBriefings(battle, turnResult.newBattleState, client, {
                 player1: { summary: p1Summary, speaker: p1Speaker },
                 player2: { summary: p2Summary, speaker: p2Speaker }
@@ -351,7 +351,7 @@ async function notifyPlayersOfError(battle, errorMessage, client) {
 async function endBattle(battle, victory, client) {
     try {
         const { models } = require('../database/setup');
-        const { applyPostBattleVeteranProgress } = require('../game/officers/veteranProgression');
+        const { applyPostBattleVeteranProgress } = require('../game/officers/progression');
         
         battle.status = 'completed';
         battle.winner = victory.winner;

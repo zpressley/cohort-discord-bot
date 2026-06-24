@@ -7,7 +7,7 @@ const { calculateDefenseRating } = require('../../game/combat/defenseRatings');
 const { calculateChaosLevel } = require('../../game/combat/chaosCalculator');
 const { calculatePreparation } = require('../../game/combat/preparationCalculator');
 const { applyBreakthroughMechanics } = require('../../game/combat/breakthroughMechanics');
-const { RIVER_CROSSING_MAP, initializeDeployment } = require('../../game/maps/riverCrossing');
+const { RIVER_CROSSING_MAP, initializeDeployment } = require('../../game/maps/mapUtils');
 const { TROOP_QUALITY, LIGHT_WEAPONS, MEDIUM_WEAPONS, HEAVY_WEAPONS, LIGHT_RANGED, MEDIUM_RANGED, ARMOR_CATEGORIES, SHIELD_OPTIONS } = require('../../game/armyData');
 
 // Balance testing configuration

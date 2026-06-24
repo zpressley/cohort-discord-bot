@@ -1,7 +1,7 @@
 // src/tests/commander/povCommanderTest.js
 // Test corrected commander behavior as POV with adjacency constraint
 
-const { interpretOrders } = require('../../ai/orderInterpreter');
+const { interpretOrders } = require('../../game/orders');
 const { models, setupDatabase } = require('../../database/setup');
 const { createBattleCommander, getCommanderStatus } = require('../../game/commandSystem/commanderManager');
 

@@ -1,7 +1,7 @@
 // test_veteran_ai_warnings.js
 // Test veteran warning triggers (without AI generation)
 
-const { shouldVeteransWarn } = require('../../game/officers/veteranWarnings');
+const { shouldVeteransWarn } = require('../../game/officers/progression');
 
 console.log('=== TESTING VETERAN WARNING TRIGGERS ===\n');
 

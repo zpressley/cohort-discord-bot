@@ -2,7 +2,7 @@
 // Ensure elite units have veteran officer records for narrative and tactical use
 
 const { models } = require('../../database/setup');
-const { generateOfficerName } = require('./culturalNames');
+const { generateOfficerName } = require('./officers');
 
 /**
  * Ensure the given elite unit has a roster of VeteranOfficer entries.

@@ -261,7 +261,7 @@ async function handleReadyForBattle(interaction) {
 async function startBattlePhase(battle) {
     const { models } = require('../database/setup');
     const { initializeBattle } = require('../game/battleInitializer');
-    const { sendInitialBriefings } = require('../game/briefingSystem');
+    const { sendInitialBriefings } = require('./briefing');
     
     console.log(`🎬 Starting battle phase for ${battle.id}`);
     
@@ -285,7 +285,7 @@ async function startBattlePhase(battle) {
             try {
                 const scenarioKey = battle.scenario || 'river_crossing';
                 if (scenarioKey === 'river_crossing') {
-                    const { RIVER_CROSSING_MAP } = require('../game/maps/riverCrossing');
+                    const { RIVER_CROSSING_MAP } = require('../game/maps/mapUtils');
                     initialState.map.terrain = RIVER_CROSSING_MAP.terrain;
                     initialState.map.objectives = RIVER_CROSSING_MAP.objectives;
                 }

@@ -2,7 +2,7 @@
 // Initialize battles with proper unit deployment and state setup
 // Version: 1.0.1 - Fixed commander creation order
 
-const { RIVER_CROSSING_MAP } = require('./maps/riverCrossing');
+const { RIVER_CROSSING_MAP } = require('./maps/mapUtils');
 const { models } = require('../database/setup');
 
 /**

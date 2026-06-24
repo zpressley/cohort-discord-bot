@@ -1,9 +1,9 @@
 // src/tests/movement/movementSandbox.js
 // Simple sandbox to test interpretOrders + movement pipeline for different commands
 
-const { interpretOrders } = require('../../ai/orderInterpreter');
-const { processMovementPhase } = require('../../game/positionBasedCombat');
-const { RIVER_CROSSING_MAP } = require('../../game/maps/riverCrossing');
+const { interpretOrders } = require('../../game/orders');
+const { processMovementPhase } = require('../../game/movement');
+const { RIVER_CROSSING_MAP } = require('../../game/maps/mapUtils');
 
 async function run(commandP1, commandP2) {
   const map = RIVER_CROSSING_MAP;

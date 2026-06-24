@@ -2,7 +2,7 @@
 // Quick multi-turn smoke test without Discord. Runs a few turns and prints officer summaries.
 
 const { processTurn } = require('../src/game/turnOrchestrator');
-const { RIVER_CROSSING_MAP } = require('../src/game/maps/riverCrossing');
+const { RIVER_CROSSING_MAP } = require('../src/game/maps/mapUtils');
 const { generateOfficerTurnSummary } = require('../src/ai/aiManager');
 
 (async function main() {

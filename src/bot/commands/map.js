@@ -67,7 +67,7 @@ module.exports = {
       const opponentSide = playerSide === 'player1' ? 'player2' : 'player1';
 
       const battleState = battle.battleState || {};
-      const { RIVER_CROSSING_MAP } = require('../../game/maps/riverCrossing');
+      const { RIVER_CROSSING_MAP } = require('../../game/maps/mapUtils');
       const { getUnitEmoji, getStackedEmoji, buildOperationalUnitTiles, getOperationalTerrainLabel } = require('../../game/maps/mapUtils');
       // Prefer the battle's stored map (with terrain), fall back to static map
       const map = battleState.map || RIVER_CROSSING_MAP;
@@ -127,8 +127,8 @@ module.exports = {
 
       if (mode === 'op') {
         // Operational 15x15 ASCII map (zoomed-out view, 50m tiles)
-        const { createMap } = require('../../game/maps/baseMapRS');
-        opMap = createMap();
+        const { createOperationalMap } = require('../../game/maps/mapUtils');
+        opMap = createOperationalMap();
         const gridSize20 = opMap.gridSize || 20;
         const viewSize20 = 15;
 

@@ -1,11 +1,10 @@
 // src/game/turnOrchestrator.js
 // Master turn resolution orchestrator
 
-const { interpretOrders } = require('../ai/orderInterpreter');
-const { processMovementPhase } = require('./positionBasedCombat');
+const { interpretOrders } = require('./orders');
+const { processMovementPhase, validateMovement } = require('./movement');
 const { calculateVisibility } = require('./fogOfWar');
 const { resolveCombat, resolveRangedAttack } = require('./battleEngine');
-const { validateMovement } = require('./movementSystem');
 const { checkVictoryConditions } = require('./victorySystem');
 const { checkCommanderCaptureRisk, updateCommanderPosition } = require('./commandSystem/commanderManager');
 

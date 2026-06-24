@@ -13,7 +13,7 @@ module.exports = {
     async execute(interaction) {
         try {
 const { models } = require('../../database/setup');
-            const { generateBriefingText, generateMapMessage } = require('../../game/briefingGenerator');
+            const { generateRichTextBriefing, generateBattlefieldMapForBriefing } = require('../briefing');
             
             // Find active battle
             const battle = await models.Battle.findOne({
@@ -45,16 +45,18 @@ const { models } = require('../../database/setup');
             });
             
 // Generate current briefing
-            const text = await generateBriefingText(
+            const rawBriefing = await generateRichTextBriefing(
                 battle.battleState,
                 playerSide,
                 commander,
                 eliteUnit,
-                battle.currentTurn
+                battle.currentTurn,
+                null
             );
+            const text = rawBriefing.replace('<<MAP_PLACEHOLDER>>', '').trim();
             const meta = `\n⏱️ Battle Info\nScenario: ${battle.scenario.replace('_', ' ')}\nTurn: ${battle.currentTurn} / ${battle.maxTurns}\nWeather: ${battle.weather.replace('_', ' ')}`;
-            const viewPref = (commander?.preferences && commander.preferences.mapView) || 'default';
-            const map = generateMapMessage(battle.battleState, playerSide, viewPref);
+            const mapDisplay = await generateBattlefieldMapForBriefing(battle.battleState, playerSide);
+            const map = '🗺️ BATTLEFIELD\n```\n' + mapDisplay + '\n```\n*Use /map for different view*';
             
             await interaction.reply({ content: text + '\n' + meta, flags: MessageFlags.Ephemeral });
             await interaction.followUp({ content: map, flags: MessageFlags.Ephemeral });

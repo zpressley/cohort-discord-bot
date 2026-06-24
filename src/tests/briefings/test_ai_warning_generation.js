@@ -5,7 +5,7 @@
 require('dotenv').config();
 
 async function testAIWarnings() {
-    const { generateVeteranWarning } = require('../../ai/officerQA');
+    const { generateVeteranWarning } = require('../../ai/aiManager');
     
     console.log('=== TESTING AI WARNING GENERATION ===\n');
     

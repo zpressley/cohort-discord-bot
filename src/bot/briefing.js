@@ -1,9 +1,13 @@
-// src/game/briefingGenerator.js
-// AI-powered narrative briefings (Gupta-style)
+// src/bot/briefing.js
+// AI-powered narrative briefings — generation + delivery
+// Merged from: briefingGenerator.js + briefingSystem.js
 
-const { generateASCIIMap, calculateDistance, parseCoord } = require('./maps/mapUtils');
-const { callGroqAI } = require('../ai/officerQA');
-const { generateOfficerDialogue } = require('../ai/aiManager');
+const { EmbedBuilder } = require('discord.js');
+const { generateASCIIMap, generateEmojiMapViewport, calculateDistance, parseCoord } = require('../game/maps/mapUtils');
+const { callGroqAI, generateOfficerDialogue, generateOfficerTurnSummary, generateOfficerResponse, getCulturalPersonality } = require('../ai/aiManager');
+const { generateOpeningNarrative } = require('../ai/openingNarrative');
+
+// ── BRIEFING GENERATION ────────────────────────────────────────────────────────
 
 /**
  * Generate rich AI-powered briefing
@@ -20,19 +24,15 @@ async function generateRichTextBriefing(
     speaker = null
 ) {
     const playerData = battleState[playerSide];
-    const { getCulturalPersonality } = require('../ai/officerQA');
     const cultureProfile = getCulturalPersonality(commander.culture || 'Roman Republic');
     const primaryOfficer = eliteUnit?.officers?.[0] || null;
     const officerName = primaryOfficer?.name || cultureProfile.officerName || 'Unit Commander';
     const veteranLevel = primaryOfficer?.battlesExperience || 0;
-    
+
     const lines = [];
-    
+
     // Header (compact for mobile)
     lines.push(`════ WAR COUNCIL — TURN ${turnNumber} ════`);
-    
-    // Atmospheric opening disabled for now to avoid repetitive filler
-    // (could be reintroduced later as a one-line tactical weather/terrain note)
 
     // Turn-level battle report: use structured summary when available
     if (sideSummary) {
@@ -59,9 +59,9 @@ async function generateRichTextBriefing(
             console.warn('Commander turn narrative failed:', err.message);
         }
     }
-    
+
     lines.push('────────────────────');
-    
+
     // YOUR FORCES section
     lines.push('YOUR FORCES');
     lines.push(formatUnitsSimple(playerData.unitPositions, battleState.map, playerData.eliteVeteranLevel));
@@ -70,9 +70,6 @@ async function generateRichTextBriefing(
     // ENEMY INTELLIGENCE
     lines.push('🔍 INTELLIGENCE');
 
-    // Prefer persistent intel memory so we can surface ghost contacts and
-    // "last seen" information. This is safe now that intel memory is keyed
-    // per unit (not per tile) and summarized per position.
     let enemyIntel = playerData.intelMemory || playerData.visibleEnemyDetails || [];
 
     // Handle if it's an object instead of array
@@ -93,19 +90,16 @@ async function generateRichTextBriefing(
             const terrain = getTerrainAtPosition(pos, battleState.map);
             const strength = getStrengthEstimate(intel);
 
-            // Determine prefix based on whether this is a current sighting or a ghost.
-            // A contact is a ghost if we did not see it this turn (seenThisTurn=false)
-            // or if its intel is marked stale/very_stale.
             const isGhost = (!intel.seenThisTurn) || (intel.staleLevel && intel.staleLevel !== 'fresh');
             const isFresh = !!intel.seenThisTurn && (!intel.staleLevel || intel.staleLevel === 'fresh');
 
             let prefix = '';
             if (isGhost) {
-                prefix = 'X';        // Ghost contact
+                prefix = 'X';
             } else if (isFresh) {
-                prefix = getEnemyIntelEmoji(intel); // Live contact
+                prefix = getEnemyIntelEmoji(intel);
             } else {
-                prefix = '';         // Stale but not currently seen
+                prefix = '';
             }
 
             let lineHead = prefix
@@ -114,7 +108,6 @@ async function generateRichTextBriefing(
 
             let line = `  ${lineHead} ${intel.unitType || 'infantry'} ${strength}`;
 
-            // Only include terrain when we have a reasonably current sense of where they are
             if (intel.seenThisTurn || !intel.staleLevel || intel.staleLevel === 'fresh' || intel.staleLevel === 'stale') {
                 line += ` (${terrain})`;
             }
@@ -130,23 +123,20 @@ async function generateRichTextBriefing(
             } else if (intel.isRouting) {
                 line += ' — ROUTING!';
             }
-            
+
             lines.push(line);
         });
     }
 
     lines.push('────────────────────');
-    
-    // BATTLEFIELD MAP placeholder; actual ASCII map is sent as its own
-    // code-block message between the surrounding sections so layout is
-    // stable and mobile-safe.
+
     lines.push('<<MAP_PLACEHOLDER>>');
-    
+
     lines.push('────────────────────');
-    
+
     // OFFICER ASSESSMENT
     lines.push(`💬 ${officerName} reports`);
-    
+
     const tacticalAssessment = await generateOfficerAssessment(
         playerData,
         commander.culture,
@@ -156,12 +146,12 @@ async function generateRichTextBriefing(
         sideSummary,
         speaker
     );
-    
+
     lines.push(`"${tacticalAssessment}"`);
-    
+
     lines.push('════');
     lines.push('Type your orders to continue the battle');
-    
+
     return lines.join('\n');
 }
 
@@ -169,40 +159,38 @@ async function generateRichTextBriefing(
  * Generate battlefield map for briefing (with proper centering)
  */
 async function generateBattlefieldMapForBriefing(battleState, playerSide) {
-    const { generateEmojiMapViewport, parseCoord } = require('./maps/mapUtils');
+    const { generateEmojiMapViewport: gEMV, parseCoord: pc } = require('../game/maps/mapUtils');
     const playerData = battleState[playerSide];
     const opponentSide = playerSide === 'player1' ? 'player2' : 'player1';
     const opponentData = battleState[opponentSide] || {};
-    
+
     const units = playerData.unitPositions || [];
-    
-    // Calculate viewport centered on player units
+
     let centerRow = 10, centerCol = 10;
-    
+
     if (units.length > 0) {
         const positions = units.map(u => {
-            return typeof u.position === 'string' ? parseCoord(u.position) : u.position;
+            return typeof u.position === 'string' ? pc(u.position) : u.position;
         }).filter(p => p);
-        
+
         if (positions.length > 0) {
             centerRow = Math.floor(positions.reduce((sum, p) => sum + p.row, 0) / positions.length);
             centerCol = Math.floor(positions.reduce((sum, p) => sum + p.col, 0) / positions.length);
         }
     }
-    
+
     const view = {
         top: Math.max(0, centerRow - 7),
         left: Math.max(0, centerCol - 7),
         width: 15,
         height: 15
     };
-    
-    // Build map data
+
     const enemyPositionObjects = (playerData.visibleEnemyPositions || []).map(posStr => ({
         position: posStr,
         side: playerSide === 'player1' ? 'player2' : 'player1'
     }));
-    
+
     const enemyUnits = Array.isArray(opponentData.unitPositions)
         ? opponentData.unitPositions
         : (opponentData.unitPositions ? Object.values(opponentData.unitPositions) : []);
@@ -224,8 +212,8 @@ async function generateBattlefieldMapForBriefing(battleState, playerSide) {
         player1Units: playerSide === 'player1' ? units : enrichedEnemies,
         player2Units: playerSide === 'player2' ? units : enrichedEnemies
     };
-    
-    return generateEmojiMapViewport(mapData, view, [], playerSide);
+
+    return gEMV(mapData, view, [], playerSide);
 }
 
 /**
@@ -233,34 +221,28 @@ async function generateBattlefieldMapForBriefing(battleState, playerSide) {
  */
 function getUnitIcon(unit, isFriendly = true) {
     const color = isFriendly ? '🔵' : '🟠';
-    
-    // Elite units get diamond
+
     if (unit.isElite) {
         return isFriendly ? '🔷' : '🔶';
     }
-    
-    // Mounted units get circle
+
     if (unit.mounted || unit.type === 'cavalry') {
         return color;
     }
-    
-    // Infantry (archer or melee) get square
+
     return isFriendly ? '🟦' : '🟧';
 }
 
 /**
  * Format units with detailed info
- * Format: [emoji][coords] Name (Weapon) - Size - Mission (Terrain)
  */
 function formatUnitsSimple(units, map, eliteVeteranLevel) {
     return units.map(unit => {
         const icon = getUnitIcon(unit);
-        const pos = unit.position; // String like "N4"
-        
-        // Get unit name (veteran name or descriptor)
+        const pos = unit.position;
+
         let unitName = unit.name || getUnitDescriptor(unit);
 
-        // Surface elite veteran tier for the elite unit
         if (unit.isElite && eliteVeteranLevel) {
             const tierLabelMap = {
                 Recruit: 'Green Guard',
@@ -272,30 +254,25 @@ function formatUnitsSimple(units, map, eliteVeteranLevel) {
             const label = tierLabelMap[eliteVeteranLevel] || 'Elite Guard';
             unitName = label;
         }
-        
-        // Get main weapon and flip parenthetical format
+
         let weapon = unit.primaryWeapon?.name || 'Standard Arms';
         if (weapon.includes('(') && weapon.includes(')')) {
             const match = weapon.match(/(.+?)\s*\((.+?)\)/);
             if (match) {
-                weapon = `${match[2]} ${match[1]}`; // "Self-Bow (Professional)" → "Professional Self-Bow"
+                weapon = `${match[2]} ${match[1]}`;
             }
         }
-        
-        // Get terrain at position
+
         const terrain = getTerrainAtPosition(pos, map);
 
-        // Human-readable formation status
         const formationStatus = (unit.formationStatus || 'deployed').toLowerCase();
         let formationLabel;
         if (formationStatus === 'marching') formationLabel = 'Marching';
         else if (formationStatus === 'encamped') formationLabel = 'Encamped';
         else formationLabel = 'Deployed';
-        
-        // Build line: [emoji][coords] Name — Size (Weapon, Terrain, Formation)
+
         let line = `${icon} [${pos}] ${unitName} — ${unit.currentStrength}`;
 
-        // Morale / routing state indicators
         if (unit.isRouting) {
             if ((unit.qualityType || '').toLowerCase() === 'veteran_mercenary' && unit.routingTarget === 'edge') {
                 line += ' — ROUTING! (Deserting toward rear)';
@@ -311,14 +288,13 @@ function formatUnitsSimple(units, map, eliteVeteranLevel) {
                 line += ' — Shaken';
             }
         }
-        
-        // Only add mission if actively moving
+
         if (unit.activeMission?.status === 'active') {
             line += ` — To ${unit.activeMission.target}`;
         }
-        
+
         line += ` (${terrain}, ${weapon}, ${formationLabel})`;
-        
+
         return line;
     }).join('\n');
 }
@@ -331,18 +307,16 @@ function getUnitDescriptor(unit) {
         if (unit.hasRanged) return 'Horse Archers';
         return 'Cavalry';
     }
-    
+
     if (unit.hasRanged) {
         return 'Archers';
     }
-    
-    // Base descriptor from armor & type
+
     const armorType = unit.armor?.name || '';
     let base = 'Infantry';
     if (armorType.includes('Heavy')) base = 'Heavy Infantry';
     else if (armorType.includes('Medium')) base = 'Medium Infantry';
 
-    // Overlay simple veteran tier for non-elite units using veteranBattles
     const vb = unit.veteranBattles || 0;
     if (vb >= 10) return `Legendary ${base}`;
     if (vb >= 5) return `Veteran ${base}`;
@@ -371,7 +345,6 @@ async function generateCommanderTurnNarrativeForSide(battleState, playerSide, co
     const shakenUnits = friendlyUnits.filter(u => u.isBroken && !u.isRouting).length;
     const regroupedAtCamp = friendlyUnits.filter(u => u.regroupedAtCamp).length;
 
-    // Enemy contacts visible from this side's FOW-filtered intel
     let enemyContacts = [];
     if (Array.isArray(playerData.visibleEnemyDetails) && playerData.visibleEnemyDetails.length > 0) {
         enemyContacts = playerData.visibleEnemyDetails.filter(e => {
@@ -392,21 +365,17 @@ async function generateCommanderTurnNarrativeForSide(battleState, playerSide, co
     const contactCount = enemyContacts.length;
     const ghostCount = Array.isArray(playerData.ghostPositions) ? playerData.ghostPositions.length : 0;
 
-    // Derive simple geometry: average our position + nearest visible enemy
     const ourCenter = (() => {
         if (friendlyUnits.length === 0) return null;
-        // use first unit as anchor for now
         return friendlyUnits[0].position;
     })();
 
     const nearestEnemy = (() => {
         if (!enemyContacts.length) return null;
-        // prefer a fresh, seenThisTurn contact if possible
         const fresh = enemyContacts.filter(e => e.seenThisTurn);
         return (fresh[0] || enemyContacts[0]);
     })();
 
-    // Build SAFE FACTS: explicit, minimal, FOW-safe details the model is allowed to use.
     const unitFacts = [];
     friendlyUnits.slice(0, 5).forEach(u => {
         const desc = getUnitDescriptor(u);
@@ -478,7 +447,6 @@ async function generateCommanderTurnNarrativeForSide(battleState, playerSide, co
         '- Present tense, historically grounded tone, no modern slang, no emojis.',
     ].join('\n');
 
-    const { generateOfficerResponse } = require('../ai/aiManager');
     const text = await generateOfficerResponse(prompt, 'groq');
     return text;
 }
@@ -489,10 +457,9 @@ async function generateCommanderTurnNarrativeForSide(battleState, playerSide, co
 function getTerrainAtPosition(position, map) {
     const pos = typeof position === 'string' ? parseCoord(position) : position;
     if (!pos || !map?.terrain) return 'plains';
-    
+
     const terrain = map.terrain;
-    
-    // Check each terrain type
+
     if (terrain.forest?.some(c => parseCoord(c)?.row === pos.row && parseCoord(c)?.col === pos.col)) {
         return 'forest';
     }
@@ -508,17 +475,13 @@ function getTerrainAtPosition(position, map) {
     if (terrain.road?.some(c => parseCoord(c)?.row === pos.row && parseCoord(c)?.col === pos.col)) {
         return 'road';
     }
-    
+
     return 'plains';
 }
 
 async function generateOfficerAssessment(playerData, culture, officerName, veteranLevel, map, sideSummary = null, speaker = null) {
-    const { generateOfficerTurnSummary, generateOfficerDialogue } = require('../ai/aiManager');
-
-    // Helper: classify simple intel state for this side
     const intelSnapshot = getOfficerIntelSnapshot(playerData, sideSummary);
 
-    // Fallback to simple summary if we don't have rich context yet
     if (!sideSummary || !speaker) {
         const friendlyUnits = playerData.unitPositions || [];
         const visibleEnemies = playerData.visibleEnemyPositions || [];
@@ -530,8 +493,6 @@ async function generateOfficerAssessment(playerData, culture, officerName, veter
         const combats = 0;
         const casualties = 0;
 
-        // If we have no live contacts and no combats, avoid AI and use
-        // deterministic, culture-aware templates that cannot invent scouts.
         if (intelSnapshot.contactState !== 'live_contact' && combats === 0) {
             return buildNoContactOfficerLine(culture, intelSnapshot, moveSummary);
         }
@@ -551,9 +512,8 @@ async function generateOfficerAssessment(playerData, culture, officerName, veter
     const combats = sideSummary.combat?.engagements?.length || 0;
     const casualties = sideSummary.combat?.ourTotalLosses || 0;
 
-    // Deterministic path for no-contact turns: no AI call, just templates.
     if (intelSnapshot.contactState !== 'live_contact' && combats === 0) {
-        const moveSummary = ''; // movements already summarized in sideSummary text
+        const moveSummary = '';
         return buildNoContactOfficerLine(culture, intelSnapshot, moveSummary);
     }
 
@@ -574,8 +534,7 @@ async function generateOfficerAssessment(playerData, culture, officerName, veter
 
     const shortLine = await generateOfficerTurnSummary(context, 'auto');
 
-    // Phase 3: occasional richer dialogue on heavy-loss turns
-    const heavyLosses = casualties >= 50; // threshold can be tuned later
+    const heavyLosses = casualties >= 50;
     if (heavyLosses) {
         const eventPrompt = [
             `Turn with heavy losses (${casualties} warriors) and active contact state=${intelSnapshot.contactState}.`,
@@ -587,10 +546,8 @@ async function generateOfficerAssessment(playerData, culture, officerName, veter
 
         try {
             const dialogue = await generateOfficerDialogue(speaker.name, culture, eventPrompt);
-            // Combine the compact line with a short, richer follow-up.
             return `${shortLine} ${dialogue}`;
         } catch (e) {
-            // If dialogue generation fails, fall back to single-line summary.
             console.warn('Officer extended dialogue failed:', e.message);
         }
     }
@@ -599,8 +556,6 @@ async function generateOfficerAssessment(playerData, culture, officerName, veter
 }
 
 function getOfficerIntelSnapshot(playerData, sideSummary) {
-    // Simple classification using per-side summary when present; otherwise
-    // fall back to raw FOW-filtered enemy positions and ghost overlays.
     let freshContacts = 0;
     let ghostContacts = 0;
 
@@ -658,7 +613,6 @@ function buildNoContactOfficerLine(culture, intelSnapshot, moveSummary) {
             : 'All quiet; no enemy contact reported.';
     }
 
-    // Ghost-only intel: rumors and old sightings, not live contact.
     if (intelSnapshot.contactState === 'ghost_only') {
         if (c.includes('spartan')) {
             return 'Only old reports beyond the line; no enemy seen this turn.';
@@ -675,7 +629,6 @@ function buildNoContactOfficerLine(culture, intelSnapshot, moveSummary) {
         return 'Old reports suggest enemy ahead, but nothing can be seen this turn.';
     }
 
-    // Fallback, should be rare.
     return moved
         ? 'Units maneuvered; contact remains uncertain.'
         : 'Contact state unclear; no confirmed sightings this turn.';
@@ -684,7 +637,6 @@ function buildNoContactOfficerLine(culture, intelSnapshot, moveSummary) {
 function generateSideBattleBrief(summary) {
     const parts = [];
 
-    // Single, compact text block focused on what changed and what matters now.
     if (summary.movements && summary.movements.length > 0) {
         const mv = summary.movements[0];
         parts.push(`Your ${mv.descriptor} moved from ${mv.from} to ${mv.to} (${mv.terrainFrom} → ${mv.terrainTo}).`);
@@ -719,7 +671,6 @@ function buildOfficerInsight(sideSummary, speaker) {
 
     const riverEngagement = (sideSummary.combat?.engagements || []).find(e => e.terrain === 'river');
     if (riverEngagement) {
-        // Base concern is the same; personality changes recommendation and framing.
         const concern = 'continuing to attack across the river ford into enemy cavalry';
 
         if (archetype.includes('cautious') || archetype.includes('formation') || archetype.includes('defensive')) {
@@ -746,7 +697,6 @@ function buildOfficerInsight(sideSummary, speaker) {
             };
         }
 
-        // Default ford advice
         return {
             concern,
             recommendation: 'stop sending cavalry alone through the ford; either commit infantry in force or reposition',
@@ -754,7 +704,6 @@ function buildOfficerInsight(sideSummary, speaker) {
         };
     }
 
-    // Non-river generic insight, modulated by archetype
     if (archetype.includes('aggressive') || archetype.includes('strike')) {
         return {
             concern: 'enemy line holding ahead',
@@ -779,8 +728,6 @@ function buildOfficerInsight(sideSummary, speaker) {
         };
     }
 
-    // Experience can harden tone later; for now we keep the same structure and
-    // let the AI prompt use experienceLevel for voice.
     return {
         concern: 'enemy disposition ahead',
         recommendation: 'advance with caution and maintain cohesion while scouts probe',
@@ -798,7 +745,7 @@ function getCulturalVoice(culture) {
         'Han Dynasty': 'Speak with discipline and wisdom. Reference strategy and coordination. Be measured.',
         'Spartan City-State': 'Speak in terse, blunt statements. No flowery language. Direct and stoic.'
     };
-    
+
     return voices[culture] || voices['Roman Republic'];
 }
 
@@ -809,20 +756,19 @@ function generateFallbackAssessment(visibleEnemies, culture) {
     if (visibleEnemies.length === 0) {
         return `*"All quiet, Commander. No enemy contact. The men await your orders."*`;
     }
-    
+
     const enemyClose = visibleEnemies.some(e => {
-        // Simplified distance check
-        return true; // Assume close for fallback
+        return true;
     });
-    
+
     if (culture === 'Spartan City-State') {
         return `*"Enemy sighted. We do not retreat."*`;
     }
-    
+
     if (culture === 'Celtic') {
         return `*"Enemy spotted, Chief! The lads are eager for battle!"*`;
     }
-    
+
     return `*"Enemy forces detected, Commander. Recommend we advance cautiously and maintain formation."*`;
 }
 
@@ -832,13 +778,13 @@ function generateFallbackAssessment(visibleEnemies, culture) {
 function getRelativeDirection(from, to) {
     const rowDiff = to.row.charCodeAt(0) - from.row.charCodeAt(0);
     const colDiff = to.col - from.col;
-    
+
     let direction = '';
     if (rowDiff > 0) direction += 'south';
     if (rowDiff < 0) direction += 'north';
     if (colDiff > 0) direction += 'east';
     if (colDiff < 0) direction += 'west';
-    
+
     return direction || 'nearby';
 }
 
@@ -897,7 +843,6 @@ function summarizeIntelByPosition(enemyIntel) {
         if (c.hasDeserted) existing.hasDeserted = true;
         if (c.seenThisTurn) existing.seenThisTurn = true;
 
-        // Use freshest/strongest intel for staleness and quality
         const staleRank = { fresh: 2, stale: 1, very_stale: 0 };
         const qRank = { high: 2, medium: 1, low: 0 };
         const cStale = c.staleLevel || 'fresh';
@@ -917,7 +862,6 @@ function summarizeIntelByPosition(enemyIntel) {
         const { totalStrength, infantryStrength, cavalryStrength, hasElite } = entry;
         const intel = { ...entry };
 
-        // Decide display type
         let displayType;
         if (hasElite && cavalryStrength > 0) displayType = 'elite cavalry';
         else if (hasElite) displayType = 'elite infantry';
@@ -941,7 +885,7 @@ function getEnemyIntelEmoji(intel) {
     if (type.includes('elite') && type.includes('cavalry')) return '🔶';
     if (type.includes('elite')) return '🔶';
     if (type.includes('cavalry')) return '🟠';
-    return '🟧'; // infantry/archers
+    return '🟧';
 }
 
 /**
@@ -949,20 +893,16 @@ function getEnemyIntelEmoji(intel) {
  */
 function getStrengthEstimate(intel) {
     if (intel.quality === 'high') {
-        // At very close range we should have effectively exact counts
         if (typeof intel.exactStrength === 'number') {
             return `${intel.exactStrength} warriors`;
         }
-        // Otherwise treat as very tight estimate
         const approx = intel.estimatedStrength || 100;
         return `~${approx} warriors`;
     } else if (intel.quality === 'medium') {
-        // Single rounded estimate instead of a range to keep lines tight
         const base = intel.estimatedStrength || 100;
-        const rounded = Math.round(base / 10) * 10; // e.g. 83 → 80
+        const rounded = Math.round(base / 10) * 10;
         return `~${rounded} warriors`;
     } else {
-        // Vague description only
         const strength = intel.estimatedStrength || 100;
         if (strength > 150) return 'Large force';
         if (strength > 75) return 'Medium force';
@@ -974,13 +914,251 @@ function getStrengthEstimate(intel) {
  * Get quality indicator for intel
  */
 function getQualityIndicator(quality) {
-    if (quality === 'high') return '📍'; // Close range, accurate
-    if (quality === 'medium') return '👁️'; // Medium range, estimated
-    return '🌫️'; // Long range, uncertain
+    if (quality === 'high') return '📍';
+    if (quality === 'medium') return '👁️';
+    return '🌫️';
 }
 
+// ── BRIEFING DELIVERY ──────────────────────────────────────────────────────────
+
+// Helper: send long text to a user, chunked to Discord's 2000-char limit
+async function sendLongDM(user, content) {
+    const MAX = 1900;
+    if (!content || content.length <= MAX) {
+        await user.send(content);
+        return;
+    }
+
+    let remaining = content;
+    while (remaining.length > 0) {
+        let slice = remaining.slice(0, MAX);
+        const lastNewline = slice.lastIndexOf('\n');
+        if (lastNewline > 0) {
+            slice = slice.slice(0, lastNewline);
+        }
+        await user.send(slice);
+        remaining = remaining.slice(slice.length);
+    }
+}
+
+async function sendInitialBriefings(battle, battleState, client) {
+    const { models } = require('../database/setup');
+
+    console.log('📬 Sending initial battle briefings...');
+
+    try {
+        const p1Commander = await models.Commander.findByPk(battle.player1Id);
+        const p2Commander = await models.Commander.findByPk(battle.player2Id);
+        const { ensureEliteOfficersForCommander } = require('../game/officers/eliteOfficerBootstrap');
+
+        const p1Elite = await ensureEliteOfficersForCommander(battle.player1Id, p1Commander.culture);
+        const p2Elite = await ensureEliteOfficersForCommander(battle.player2Id, p2Commander.culture);
+
+        if (p1Elite) {
+            battleState.player1.eliteVeteranLevel = p1Elite.veteranLevel || 'Recruit';
+        }
+        if (p2Elite) {
+            battleState.player2.eliteVeteranLevel = p2Elite.veteranLevel || 'Recruit';
+        }
+
+        // Player 1
+        if (!battle.player1Id.startsWith('TEST_')) {
+            const player1 = await client.users.fetch(battle.player1Id);
+
+            const rawBriefing = await generateRichTextBriefing(
+                battleState, 'player1', p1Commander, p1Elite, 1,
+                'Steel glints in morning light as your forces take their positions...'
+            );
+
+            const [p1Pre, p1Post] = rawBriefing.split('<<MAP_PLACEHOLDER>>');
+            if (p1Pre && p1Pre.trim()) {
+                await sendLongDM(player1, p1Pre.trimEnd());
+            }
+
+            const p1MapDisplay = await generateBattlefieldMapForBriefing(battleState, 'player1');
+            const p1MapMessage = '🗺️ BATTLEFIELD\n```\n' + p1MapDisplay + '\n```\n*Use /map for different view*';
+            await player1.send(p1MapMessage);
+
+            if (p1Post && p1Post.trim()) {
+                await sendLongDM(player1, p1Post.trimStart());
+            }
+
+            console.log('  ✅ Player 1 briefing sent');
+        }
+
+        // Player 2
+        if (battle.player2Id && !battle.player2Id.startsWith('TEST_')) {
+            const player2 = await client.users.fetch(battle.player2Id);
+
+            const rawBriefing = await generateRichTextBriefing(
+                battleState, 'player2', p2Commander, p2Elite, 1,
+                'Your commanders gather as dawn breaks over the battlefield...'
+            );
+
+            const [p2Pre, p2Post] = rawBriefing.split('<<MAP_PLACEHOLDER>>');
+            if (p2Pre && p2Pre.trim()) {
+                await sendLongDM(player2, p2Pre.trimEnd());
+            }
+
+            const p2MapDisplay = await generateBattlefieldMapForBriefing(battleState, 'player2');
+            const p2MapMessage = '🗺️ BATTLEFIELD\n```\n' + p2MapDisplay + '\n```\n*Use /map for different view*';
+            await player2.send(p2MapMessage);
+
+            if (p2Post && p2Post.trim()) {
+                await sendLongDM(player2, p2Post.trimStart());
+            }
+
+            console.log('  ✅ Player 2 briefing sent');
+        }
+
+        console.log('✅ Initial briefings complete');
+
+    } catch (error) {
+        console.error('Error sending initial briefings:', error);
+        throw error;
+    }
+}
+
+async function sendNextTurnBriefings(battle, battleState, client, sideContext = {}) {
+    const { models } = require('../database/setup');
+
+    try {
+        const p1Commander = await models.Commander.findByPk(battle.player1Id);
+        const p2Commander = await models.Commander.findByPk(battle.player2Id);
+        const { ensureEliteOfficersForCommander } = require('../game/officers/eliteOfficerBootstrap');
+
+        const p1Elite = await ensureEliteOfficersForCommander(battle.player1Id, p1Commander.culture);
+        const p2Elite = await ensureEliteOfficersForCommander(battle.player2Id, p2Commander.culture);
+
+        if (p1Elite) battleState.player1.eliteVeteranLevel = p1Elite.veteranLevel || 'Recruit';
+        if (p2Elite) battleState.player2.eliteVeteranLevel = p2Elite.veteranLevel || 'Recruit';
+
+        if (battle.player1Id && !battle.player1Id.startsWith('TEST_')) {
+            const player1 = await client.users.fetch(battle.player1Id);
+            const rawBriefing = await generateRichTextBriefing(
+                battleState, 'player1', p1Commander, p1Elite, battle.currentTurn,
+                null,
+                (sideContext.player1 || {}).summary,
+                (sideContext.player1 || {}).speaker
+            );
+            const [p1Pre, p1Post] = rawBriefing.split('<<MAP_PLACEHOLDER>>');
+            if (p1Pre && p1Pre.trim()) {
+                await sendLongDM(player1, p1Pre.trimEnd());
+            }
+
+            const p1MapDisplay = await generateBattlefieldMapForBriefing(battleState, 'player1');
+            const p1MapMessage = '🗺️ BATTLEFIELD\n```\n' + p1MapDisplay + '\n```\n*Use /map for different view*';
+            await player1.send(p1MapMessage);
+
+            if (p1Post && p1Post.trim()) {
+                await sendLongDM(player1, p1Post.trimStart());
+            }
+        }
+
+        if (battle.player2Id && !battle.player2Id.startsWith('TEST_')) {
+            const player2 = await client.users.fetch(battle.player2Id);
+            const rawBriefing = await generateRichTextBriefing(
+                battleState, 'player2', p2Commander, p2Elite, battle.currentTurn,
+                null,
+                (sideContext.player2 || {}).summary,
+                (sideContext.player2 || {}).speaker
+            );
+            const [p2Pre, p2Post] = rawBriefing.split('<<MAP_PLACEHOLDER>>');
+            if (p2Pre && p2Pre.trim()) {
+                await sendLongDM(player2, p2Pre.trimEnd());
+            }
+
+            const p2MapDisplay = await generateBattlefieldMapForBriefing(battleState, 'player2');
+            const p2MapMessage = '🗺️ BATTLEFIELD\n```\n' + p2MapDisplay + '\n```\n*Use /map for different view*';
+            await player2.send(p2MapMessage);
+
+            if (p2Post && p2Post.trim()) {
+                await sendLongDM(player2, p2Post.trimStart());
+            }
+        }
+
+        console.log(`✅ Turn ${battle.currentTurn} briefings sent`);
+
+    } catch (error) {
+        console.error('Error sending turn briefings:', error);
+    }
+}
+
+function getAtmosphericOpening(turnNumber, weather) {
+    const timeOfDay = turnNumber <= 3 ? 'dawn' : turnNumber <= 6 ? 'morning' : 'midday';
+    const weatherDesc = weather?.type === 'rain' ? 'as rain begins to fall' : 'under clear skies';
+    return `The ${timeOfDay} advances ${weatherDesc} as battle continues...`;
+}
+
+function generateMapForPlayer(battleState, playerSide) {
+    const { generateEmojiMapViewport: gEMV } = require('../game/maps/mapUtils');
+    const playerData = battleState[playerSide];
+    const opponentSide = playerSide === 'player1' ? 'player2' : 'player1';
+    const opponentData = battleState[opponentSide] || {};
+
+    const getUnitsArray = (positions) => {
+        if (!positions) return [];
+        let units = Array.isArray(positions) ? positions : Object.values(positions);
+        return units.filter(u => u && u.position);
+    };
+
+    const playerUnits = getUnitsArray(playerData.unitPositions);
+
+    let centerRow = 10, centerCol = 10;
+    if (playerUnits.length > 0) {
+        const positions = playerUnits.map(u => {
+            const pos = typeof u.position === 'string' ? parseCoord(u.position) : u.position;
+            return pos;
+        }).filter(p => p);
+
+        if (positions.length > 0) {
+            centerRow = Math.floor(positions.reduce((sum, p) => sum + p.row, 0) / positions.length);
+            centerCol = Math.floor(positions.reduce((sum, p) => sum + p.col, 0) / positions.length);
+        }
+    }
+
+    const view = {
+        top: Math.max(0, centerRow - 7),
+        left: Math.max(0, centerCol - 7),
+        width: 15,
+        height: 15
+    };
+
+    const enemyUnits = Array.isArray(opponentData.unitPositions)
+        ? opponentData.unitPositions
+        : (opponentData.unitPositions ? Object.values(opponentData.unitPositions) : []);
+
+    const enemyPositionObjects = (playerData.visibleEnemyPositions || []).map(posStr => {
+        const match = enemyUnits.find(u => u && u.position === posStr);
+        return {
+            position: posStr,
+            side: opponentSide,
+            unitType: match?.unitType,
+            mounted: match?.mounted,
+            isElite: match?.isElite,
+            isCommander: match?.isCommander
+        };
+    });
+
+    const mapData = {
+        terrain: battleState.map?.terrain || require('../game/maps/mapUtils').RIVER_CROSSING_MAP.terrain,
+        player1Units: playerSide === 'player1' ? playerUnits : enemyPositionObjects,
+        player2Units: playerSide === 'player2' ? playerUnits : enemyPositionObjects
+    };
+
+    const overlays = playerData.ghostPositions || [];
+
+    console.log('GENERATING MAP FOR:', playerSide);
+    console.log('  player1Units:', mapData.player1Units.length);
+    console.log('  player2Units:', mapData.player2Units.length);
+    console.log('  ghost overlays:', overlays.length);
+
+    return gEMV(mapData, view, overlays, playerSide);
+}
 
 module.exports = {
     generateRichTextBriefing,
-    generateBattlefieldMapForBriefing
+    generateBattlefieldMapForBriefing,
+    sendInitialBriefings,
+    sendNextTurnBriefings
 };

@@ -2,7 +2,7 @@
 // Test veteran warning system
 
 const { checkCulturalViolations } = require('./src/game/officers/culturalTraditions');
-const { detectTacticalRisks } = require('./src/game/officers/veteranWarnings');
+const { shouldVeteransWarn } = require('./src/game/officers/progression');
 
 console.log('=== TESTING VETERAN WARNING SYSTEM ===\n');
 

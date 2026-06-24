@@ -1,7 +1,272 @@
-// src/game/positionBasedCombat.js
-// Combat resolution with tactical positioning modifiers
+// src/game/movement.js
+// Movement validation, execution, mission tracking, and movement-phase orchestration.
+// Merged from: movementSystem.js + processMovementPhase/detectCombatTriggers (positionBasedCombat.js)
 
-const { calculateDistance, getAdjacentCoords, parseCoord, coordToString, getDirection } = require('./maps/mapUtils');
+const { findPathAStar, calculateDistance, coordToString, parseCoord, getAdjacentCoords, getDirection } = require('./maps/mapUtils');
+
+// ── MOVEMENT VALIDATION ────────────────────────────────────────────────────────
+
+/**
+ * Validate movement with partial movement support
+ */
+function validateMovement(unit, targetPosition, map) {
+    const { getTerrainAt: getTerrainType } = require('./maps/mapUtils');
+
+    const weather = map.weather || 'clear';
+    const weatherFactors = {
+        clear: 1.0,
+        overcast: 1.0,
+        light_rain: 1.1,
+        heavy_rain: 1.25,
+        fog: 1.0,
+        snow: 1.25,
+        sandstorm: 1.2,
+        thunderstorm: 1.15
+    };
+    const weatherFactor = weatherFactors[weather] || 1.0;
+
+    const { calculateOccupiedTiles } = require('./maps/mapUtils');
+
+    // Base movement rates per turn in tiles (25m/tile). These replace the
+    // previous implicit 3/5 tile assumptions from the 50m grid.
+    const BASE_MOVEMENT_RATES = {
+        infantry: 6,  // 150m/turn
+        cavalry: 10   // 250m/turn (scouts can be treated as fast cavalry)
+    };
+
+    // Find path using A* pathfinding (terrain-based costs only)
+    const pathResult = findPathAStar(
+        unit.position,
+        targetPosition,
+        map,
+        getTerrainType
+    );
+
+    if (!pathResult.valid) {
+        return {
+            valid: false,
+            error: 'No valid path to target',
+            reason: pathResult.reason || 'River or impassable terrain blocks the way'
+        };
+    }
+
+    const fullPath = pathResult.path;
+    const fullCost = pathResult.cost * weatherFactor;
+    const baseRate = unit.mounted ? BASE_MOVEMENT_RATES.cavalry : BASE_MOVEMENT_RATES.infantry;
+
+    // Marching units move 50% faster (handled as a simple multiplier here)
+    const isMarching = (unit.formationStatus || 'deployed') === 'marching';
+    const movementBonus = isMarching ? 1.5 : 1.0;
+
+    const maxMovement = (unit.movementRemaining || baseRate) * movementBonus;
+
+    // If target too far, move as far as possible along path
+    if (fullCost > maxMovement) {
+        let reachableIndex = 1;
+        let costSoFar = 0;
+
+        for (let i = 1; i < fullPath.length; i++) {
+            const stepCost = 1 * weatherFactor; // Weather slows or speeds effective progress
+            costSoFar += stepCost;
+
+            if (costSoFar <= maxMovement) {
+                reachableIndex = i;
+            } else {
+                break;
+            }
+        }
+
+        const partialPath = fullPath.slice(0, reachableIndex + 1);
+        const reachablePosition = fullPath[reachableIndex];
+
+        // For marching units, ensure the column (depth based on strength) can
+        // occupy the reachable tile; otherwise, fall back to the last tile that
+        // kept the entire column on-map.
+        let finalReachable = reachablePosition;
+        if (isMarching) {
+            for (let i = reachableIndex; i >= 1; i--) {
+                const testFront = fullPath[i];
+                const virtual = { ...unit, position: testFront };
+                const occupied = calculateOccupiedTiles(virtual);
+                // Basic map bounds check for all column tiles
+                const allOnMap = occupied.every(c => {
+                    try {
+                        const p = parseCoord(c);
+                        return p.row >= 0 && p.row < 40 && p.col >= 0 && p.col < 40;
+                    } catch {
+                        return false;
+                    }
+                });
+                if (allOnMap) {
+                    finalReachable = testFront;
+                    break;
+                }
+            }
+        }
+
+        return {
+            valid: true,
+            path: partialPath,
+            cost: maxMovement,
+            movementRemaining: 0,
+            targetTerrain: getTerrainType(finalReachable),
+            partialMovement: true,
+            finalPosition: finalReachable,
+            originalTarget: targetPosition,
+            message: `Moving toward ${targetPosition}, reached ${finalReachable}`
+        };
+    }
+
+    // Target reachable in one turn
+    return {
+        valid: true,
+        path: fullPath,
+        cost: fullCost,
+        movementRemaining: maxMovement - fullCost,
+        targetTerrain: getTerrainType(targetPosition),
+        finalPosition: targetPosition,
+        partialMovement: false
+    };
+}
+
+// ── MISSION TRACKING ───────────────────────────────────────────────────────────
+
+/**
+ * Create mission from movement order
+ */
+function createMission(unit, targetPosition, currentTurn, contingencies = []) {
+    return {
+        type: 'move_to_destination',
+        target: targetPosition,
+        startTurn: currentTurn,
+        status: 'active',
+        contingencies: contingencies,
+        progress: {
+            startPosition: unit.position,
+            lastReportTurn: currentTurn
+        }
+    };
+}
+
+/**
+ * Check if unit should continue mission
+ */
+function shouldContinueMission(unit, battleState) {
+    if (!unit.activeMission) return false;
+    if (unit.activeMission.status !== 'active') return false;
+    if (unit.position === unit.activeMission.target) return false;
+    return true;
+}
+
+/**
+ * Execute mission turn - move toward destination
+ */
+function executeMissionTurn(unit, map, getTerrainType) {
+    const mission = unit.activeMission;
+
+    const pathResult = findPathAStar(
+        unit.position,
+        mission.target,
+        map,
+        getTerrainType
+    );
+
+    if (!pathResult.valid) {
+        return {
+            type: 'mission_blocked',
+            missionTarget: mission.target,
+            reason: pathResult.reason,
+            action: 'request_new_orders',
+            officerReport: `Commander, cannot reach ${mission.target}. ${pathResult.reason}`
+        };
+    }
+
+    const fullPath = pathResult.path;
+    const BASE_MOVEMENT_RATES = { infantry: 6, cavalry: 10 };
+    const baseRate = unit.mounted ? BASE_MOVEMENT_RATES.cavalry : BASE_MOVEMENT_RATES.infantry;
+    const maxMovement = unit.movementRemaining || baseRate;
+
+    let reachableIndex = 1;
+    let costSoFar = 0;
+
+    for (let i = 1; i < fullPath.length; i++) {
+        const stepCost = 1; // Missions currently ignore weather for simplicity
+        costSoFar += stepCost;
+
+        if (costSoFar <= maxMovement) {
+            reachableIndex = i;
+        } else {
+            break;
+        }
+    }
+
+    const reachedPosition = fullPath[reachableIndex];
+    const remainingDistance = fullPath.length - reachableIndex - 1;
+    const missionComplete = reachedPosition === mission.target;
+
+    return {
+        type: 'move',
+        unitId: unit.unitId,
+        targetPosition: reachedPosition,
+        missionContinues: !missionComplete,
+        missionProgress: {
+            target: mission.target,
+            current: reachedPosition,
+            remaining: remainingDistance,
+            complete: missionComplete
+        },
+        officerReport: missionComplete
+            ? `${mission.target} reached, sir. Holding position.`
+            : `Advancing to ${mission.target}, ${remainingDistance} tiles remaining.`
+    };
+}
+
+/**
+ * Complete mission
+ */
+function completeMission(unit, reason = 'destination_reached') {
+    return {
+        ...unit,
+        activeMission: {
+            ...unit.activeMission,
+            status: 'complete',
+            completionReason: reason
+        }
+    };
+}
+
+/**
+ * Cancel mission
+ */
+function cancelMission(unit, newOrder) {
+    const mission = unit.activeMission;
+
+    return {
+        canceled: true,
+        previousTarget: mission.target,
+        officerConfirmation: `Canceling advance to ${mission.target}. New orders: "${newOrder}"`,
+        updatedUnit: {
+            ...unit,
+            activeMission: null
+        }
+    };
+}
+
+function getTerrainType(coord, map) {
+    if (map.terrain.river && map.terrain.river.includes(coord)) {
+        if (map.terrain.fords && map.terrain.fords.some(f => f.coord === coord)) {
+            return 'ford';
+        }
+        return 'river';
+    }
+    if (map.terrain.hill && map.terrain.hill.includes(coord)) return 'hill';
+    if (map.terrain.marsh && map.terrain.marsh.includes(coord)) return 'marsh';
+    if (map.terrain.road && map.terrain.road.includes(coord)) return 'road';
+    if (map.terrain.forest && map.terrain.forest.includes(coord)) return 'forest';
+    return 'plains';
+}
+
+// ── COMBAT DETECTION ───────────────────────────────────────────────────────────
 
 /**
  * Detect combat triggers based on unit positions
@@ -10,9 +275,9 @@ const { calculateDistance, getAdjacentCoords, parseCoord, coordToString, getDire
  * @returns {Array} Array of combat engagements
  */
 function detectCombatTriggers(player1Units, player2Units) {
-    const { getUnitWeaponRange, hasRangedWeapon } = require('./rangedCombat');
+    const { getUnitWeaponRange, hasRangedWeapon } = require('./battleEngine');
     const combats = [];
-    
+
     player1Units.forEach(p1Unit => {
         player2Units.forEach(p2Unit => {
             const p1Pos = parseCoord(p1Unit.position);
@@ -21,7 +286,7 @@ function detectCombatTriggers(player1Units, player2Units) {
             const dy = Math.abs(p1Pos.row - p2Pos.row);
             const manhattan = dx + dy;                 // N/S/E/W adjacency only
             const chebyshev = Math.max(dx, dy);        // for ranged distance
-            
+
             // Melee only when units share an edge (no diagonal contact)
             if (manhattan === 1) {
                 combats.push({
@@ -32,7 +297,7 @@ function detectCombatTriggers(player1Units, player2Units) {
                     distance: manhattan
                 });
             }
-            
+
             // Ranged combat: each side may be able to shoot the other based on
             // its own weapon's maximum range (2–14 tiles depending on weapon).
             if (chebyshev > 1) {
@@ -63,136 +328,11 @@ function detectCombatTriggers(player1Units, player2Units) {
             }
         });
     });
-    
+
     return combats;
 }
 
-/**
- * Calculate tactical position modifiers for combat
- * @param {Object} attacker - Attacking unit with position
- * @param {Object} defender - Defending unit with position
- * @param {Object} allUnits - All units on battlefield
- * @param {Object} map - Map terrain data
- * @returns {Object} Combat modifiers from positioning
- */
-function calculatePositionalModifiers(attacker, defender, allUnits, map) {
-    // Apply formation change vulnerability to defense directly on defender
-    if (defender.formationChanging && defender.formationChanging.remaining > 0) {
-        defender.positionModifiers = defender.positionModifiers || {};
-        defender.positionModifiers.defense = (defender.positionModifiers.defense || 0) - 3;
-    }
-    const modifiers = {
-        attacker: { attack: 0, defense: 0 },
-        defender: { attack: 0, defense: 0 },
-        description: []
-    };
-    
-    // Flanking bonus - check if friendly units attack from multiple sides
-    const flankingBonus = calculateFlankingBonus(attacker, defender, allUnits);
-    if (flankingBonus > 0) {
-        modifiers.attacker.attack += flankingBonus;
-        modifiers.description.push(`Flanking attack: +${flankingBonus} attack`);
-    }
-    
-    // High ground advantage
-    const elevationMod = calculateElevationAdvantage(attacker.position, defender.position, map);
-    if (elevationMod.defender > 0) {
-        modifiers.defender.defense += elevationMod.defender;
-        modifiers.description.push(`High ground defense: +${elevationMod.defender}`);
-    }
-    if (elevationMod.attacker > 0) {
-        modifiers.attacker.attack += elevationMod.attacker;
-        modifiers.description.push(`Downhill attack: +${elevationMod.attacker}`);
-    }
-
-    // Facing + formation directional bonuses (front / flank / rear)
-    const attackDir = getAttackCardinalDirection(attacker.position, defender.position);
-    const facingBonus = getFormationDefenseBonus(defender, attackDir);
-    if (facingBonus !== 0) {
-        modifiers.defender.defense += facingBonus;
-        if (facingBonus > 0) {
-            modifiers.description.push(`Formation facing advantage (${attackDir} vs ${defender.facing || 'N'}): +${facingBonus} defense`);
-        } else {
-            modifiers.description.push(`Hit from flank/rear (${attackDir} vs ${defender.facing || 'N'}): ${facingBonus} defense`);
-        }
-    }
-
-    // Marching column frontal penalty: when a marching unit is hit in the head
-    if ((defender.formationStatus || 'deployed') === 'marching' && attackDir) {
-        const defFacing = (defender.facing || 'N').toUpperCase();
-        if (attackDir === defFacing) {
-            const strength = defender.currentStrength || defender.maxStrength || 400;
-            const tilesDeep = Math.max(1, Math.min(4, Math.ceil(strength / 100)));
-            const frontagePenalty = (tilesDeep - 1) * 2; // 100→0, 300→4, 400→6
-            if (frontagePenalty > 0) {
-                modifiers.defender.defense -= frontagePenalty;
-                modifiers.description.push(
-                    `March column head hit: only 1/${tilesDeep} of men can fight; defense ${-frontagePenalty}`
-                );
-            }
-        }
-    }
-    
-    // River crossing penalty
-    if (isCrossingRiver(attacker.position, defender.position, map)) {
-        modifiers.attacker.attack -= 4;
-        modifiers.defender.defense += 3;
-        modifiers.description.push('Attacking across ford: -4 attack, defender +3 defense');
-    }
-    
-    // Forest combat modifiers
-    const defenderTerrain = getTerrainType(defender.position, map);
-    if (defenderTerrain === 'forest') {
-        modifiers.defender.defense += 2;
-        modifiers.description.push('Forest cover: +2 defense');
-        
-        if (attacker.mounted) {
-            modifiers.attacker.attack -= 4;
-            modifiers.description.push('Cavalry in forest: -4 attack');
-        }
-    }
-    
-    // Marsh penalties
-    if (defenderTerrain === 'marsh') {
-        modifiers.defender.defense -= 2;
-        modifiers.attacker.attack -= 2;
-        modifiers.description.push('Fighting in marsh: both sides -2');
-    }
-    
-    return modifiers;
-}
-
-/**
- * Calculate flanking bonus from friendly units
- */
-function calculateFlankingBonus(attacker, defender, allUnits) {
-    const defenderPos = defender.position;
-    const adjacent = getAdjacentCoords(defenderPos);
-    
-    // Enemy units of defender that are adjacent (other than this attacker)
-    const adjacentEnemies = allUnits.filter(unit => 
-        unit.side !== defender.side &&
-        unit.unitId !== attacker.unitId &&
-        adjacent.includes(unit.position)
-    );
-    
-    if (adjacentEnemies.length === 0) return 0;
-    
-    // Determine distinct attack directions (N/S/E/W buckets, diagonals collapsed)
-    const directions = new Set();
-    adjacentEnemies.forEach(unit => {
-        const dir = getAttackCardinalDirection(unit.position, defenderPos);
-        if (dir) directions.add(dir);
-    });
-    
-    const attackDirections = directions.size;
-    if (attackDirections <= 1) return 0;     // front-only pressure
-    if (attackDirections === 2) return +3;   // flanked
-    if (attackDirections === 3) return +6;   // U-shaped attack
-    if (attackDirections >= 4) return +8;    // surrounded on all sides
-    
-    return 0;
-}
+// ── MOVEMENT PHASE HELPERS ─────────────────────────────────────────────────────
 
 /**
  * Mark melee engagements so ranged combat can reason about "shooting into melee".
@@ -248,82 +388,162 @@ function trackMeleeEngagements(combats, allUnits) {
 }
 
 /**
- * Calculate elevation advantage
+ * Derive a coarse cardinal attack direction (N/S/E/W) from attacker to defender.
+ * Diagonals are collapsed to their dominant axis.
  */
-function calculateElevationAdvantage(attackerPos, defenderPos, map) {
-    const { getTerrainType } = require('./movementSystem');
-    
-    const attackerTerrain = getTerrainType(attackerPos, map);
-    const defenderTerrain = getTerrainType(defenderPos, map);
-    
-    const attackerElevation = attackerTerrain === 'hill' ? 1 : 0;
-    const defenderElevation = defenderTerrain === 'hill' ? 1 : 0;
-    
-    if (defenderElevation > attackerElevation) {
-        return { defender: +2, attacker: 0 }; // Defender on high ground
+function getAttackCardinalDirection(attackerPos, defenderPos) {
+    const dirStr = getDirection(attackerPos, defenderPos); // e.g. 'northwest'
+    if (!dirStr || typeof dirStr !== 'string') return null;
+    const d = dirStr.toLowerCase();
+    if (d.includes('north') && !d.includes('east') && !d.includes('west')) return 'N';
+    if (d.includes('south') && !d.includes('east') && !d.includes('west')) return 'S';
+    if (d.includes('east')  && !d.includes('north') && !d.includes('south')) return 'E';
+    if (d.includes('west')  && !d.includes('north') && !d.includes('south')) return 'W';
+    // Diagonals: choose dominant axis by row/col delta
+    const from = parseCoord(attackerPos);
+    const to = parseCoord(defenderPos);
+    if (!from || !to) return null;
+    const dRow = to.row - from.row; // + = south, - = north
+    const dCol = to.col - from.col; // + = east,  - = west
+    if (Math.abs(dRow) >= Math.abs(dCol)) {
+        return dRow >= 0 ? 'S' : 'N';
+    } else {
+        return dCol >= 0 ? 'E' : 'W';
     }
-    if (attackerElevation > defenderElevation) {
-        return { attacker: +2, defender: 0 }; // Attacker on high ground (rare)
-    }
-    
-    return { attacker: 0, defender: 0 };
 }
 
 /**
- * Check if attacker is crossing river to attack
+ * Facing-aware formation defense bonuses.
+ * Currently focuses on phalanx-style formations but can be extended.
  */
-function isCrossingRiver(attackerPos, defenderPos, map) {
-    const { getTerrainType } = require('./movementSystem');
-    const { isFord } = require('./maps/riverCrossing');
-    
-    // Check if defender is at a ford
-    if (!isFord(defenderPos)) return false;
-    
-    // Check if attacker is on opposite side of river
-    const distance = calculateDistance(attackerPos, defenderPos);
-    if (distance !== 1) return false; // Must be adjacent
-    
-    // If attacker is not at ford but defender is, attacker is crossing
-    return !isFord(attackerPos);
-}
+function getFormationDefenseBonus(defender, attackDirection) {
+    const facing = (defender.facing || 'N').toUpperCase();
+    const formation = (defender.formation || '').toLowerCase();
 
-/**
- * Build combat context with positional data
- * @param {Object} combat - Combat engagement from detectCombatTriggers
- * @param {Object} battleState - Full battle state
- * @param {Object} map - Map data
- * @returns {Object} Enhanced combat context for battle engine
- */
-function buildCombatContext(combat, battleState, map) {
-    const allUnits = [
-        ...(battleState.player1.unitPositions || []).map(u => ({...u, side: 'player1'})),
-        ...(battleState.player2.unitPositions || []).map(u => ({...u, side: 'player2'}))
-    ];
-    
-    const positionMods = calculatePositionalModifiers(
-        combat.attacker,
-        combat.defender,
-        allUnits,
-        map
-    );
-    
-    return {
-        attacker: {
-            unit: combat.attacker,
-            positionModifiers: positionMods.attacker,
-            position: combat.attacker.position
-        },
-        defender: {
-            unit: combat.defender,
-            positionModifiers: positionMods.defender,
-            position: combat.defender.position
-        },
-        location: combat.location,
-        terrain: getTerrainType(combat.location, map),
-        combatType: combat.type,
-        tacticalSituation: positionMods.description
+    if (!attackDirection) return 0;
+
+    // Helper: is this a flank relative to facing?
+    const isFlank = (face, atk) => {
+        if (face === 'N' || face === 'S') {
+            return atk === 'E' || atk === 'W';
+        } else {
+            return atk === 'N' || atk === 'S';
+        }
     };
+
+    const isRear = (face, atk) => {
+        if (face === 'N' && atk === 'S') return true;
+        if (face === 'S' && atk === 'N') return true;
+        if (face === 'E' && atk === 'W') return true;
+        if (face === 'W' && atk === 'E') return true;
+        return false;
+    };
+
+    // Example directional formations: phalanx-style and similar
+    if (formation === 'phalanx' || formation === 'shield_wall' || formation === 'roman_manipular') {
+        if (attackDirection === facing) {
+            // Strong to the front
+            return +4;
+        }
+        if (isFlank(facing, attackDirection)) {
+            // Vulnerable on flanks
+            return -4;
+        }
+        if (isRear(facing, attackDirection)) {
+            // Very vulnerable from rear
+            return -6;
+        }
+    }
+
+    // Default: no directional modifier
+    return 0;
 }
+
+/**
+ * Routing movement handler
+ * - Veteran mercenaries (qualityType === 'veteran_mercenary') attempt to
+ *   leave the field toward their friendly map edge and are removed once
+ *   they reach it.
+ * - All other routing units fall back toward their campPosition and, upon
+ *   arrival, stop routing but remain broken.
+ */
+function handleRoutingMovement(unit, side, battleState, map) {
+    const current = parseCoord(unit.position);
+    if (!current) return unit;
+
+    const size = map?.size || { rows: 20, cols: 20 };
+    const maxRowIndex = (size.rows || size.height || 20) - 1;
+
+    const updated = { ...unit };
+
+    // Veteran mercenaries desert the field
+    if ((unit.qualityType || '').toLowerCase() === 'veteran_mercenary') {
+        updated.routingTarget = 'edge';
+        let rowIndex = current.row;      // 0..19
+        const colIndex = current.col;    // 0..19
+
+        if (side === 'player1') {
+            // Retreat north (toward row 0)
+            if (rowIndex === 0) {
+                // Already at north edge: next step would leave the field
+                updated.hasDeserted = true;
+                return updated;
+            }
+            rowIndex = Math.max(0, rowIndex - 1);
+        } else {
+            // Retreat south (toward last row)
+            if (rowIndex === maxRowIndex) {
+                updated.hasDeserted = true;
+                return updated;
+            }
+            rowIndex = Math.min(maxRowIndex, rowIndex + 1);
+        }
+
+        const next = { row: rowIndex, col: colIndex };
+        updated.position = coordToString(next);
+        return updated;
+    }
+
+    // All other routing units fall back toward camp
+    const camp = battleState[side]?.campPosition || unit.campPosition;
+    if (!camp) return unit;
+
+    const campCoord = parseCoord(camp);
+    if (!campCoord) return unit;
+
+    updated.routingTarget = 'camp';
+
+    const step = { row: current.row, col: current.col };
+
+    // Step one tile toward camp in row, then column if needed.
+    // current.row / campCoord.row are 0-based numeric indices; move +/-1.
+    if (current.row !== campCoord.row) {
+        if (current.row > campCoord.row) {
+            step.row = current.row - 1;
+        } else if (current.row < campCoord.row) {
+            step.row = current.row + 1;
+        }
+    } else if (current.col !== campCoord.col) {
+        if (current.col > campCoord.col) {
+            step.col = current.col - 1;
+        } else if (current.col < campCoord.col) {
+            step.col = current.col + 1;
+        }
+    }
+
+    updated.position = coordToString(step);
+
+    // If we have arrived at camp, stop routing but remain broken
+    if (updated.position === camp) {
+        updated.isRouting = false;
+        updated.isBroken = true;
+        updated.regroupedAtCamp = true;
+    }
+
+    return updated;
+}
+
+// ── MOVEMENT PHASE ORCHESTRATION ───────────────────────────────────────────────
 
 /**
  * Process movement phase and detect all combat triggers
@@ -333,10 +553,6 @@ function buildCombatContext(combat, battleState, map) {
  * @param {Object} map - Map data
  * @returns {Object} New positions and combat triggers
  */
-
-// Replace ENTIRE processMovementPhase function in positionBasedCombat.js
-// This is the clean version with proper debug
-
 function processMovementPhase(player1Movements, player2Movements, battleState, map) {
     // Debug: Show what we received
     if (player1Movements.length > 0) {
@@ -347,7 +563,7 @@ function processMovementPhase(player1Movements, player2Movements, battleState, m
     }
     if (player2Movements.length > 0) {
         console.log('  P2 movement[0]:');
-        console.log('    unitId:', player2Movements[0].unitId);  
+        console.log('    unitId:', player2Movements[0].unitId);
         console.log('    target:', player2Movements[0].targetPosition);
         console.log('    validation.valid:', player2Movements[0].validation?.valid);
     }
@@ -404,46 +620,46 @@ function processMovementPhase(player1Movements, player2Movements, battleState, m
 
     // NOTE: Stacking is allowed for deployed units. Marching columns must still
     // respect collision/stacking rules along their entire footprint.
-    
-        // Execute moves in initiative order
-        for (const item of combined) {
-            const { side, unit, move } = item;
-            let nextPos = move.finalPosition || move.targetPosition;
-            let movementRemaining = move.validation.movementRemaining;
-            if (move.modifier?.groupMarch && Array.isArray(move.validation.path) && move.validation.path.length > 1) {
-                nextPos = move.validation.path[1];
-                movementRemaining = Math.max(0, (unit.movementRemaining || 3) - 1);
-            }
 
-            // MOV-ENEMY-EXCLUSION: Prevent movement paths from entering tiles
-            // currently occupied by an enemy unit. If the validated path would
-            // step onto an enemy tile before reaching nextPos, clamp nextPos to
-            // the last safe tile before that contact.
-            const pathForMove = Array.isArray(move.validation?.path) ? move.validation.path : null;
-            const enemyUnitsNow = side === 'player1'
-                ? Array.from(p2Map.values())
-                : Array.from(p1Map.values());
-            const enemyPosSet = new Set(
-                enemyUnitsNow
-                    .map(u => u && u.position)
-                    .filter(Boolean)
-            );
+    // Execute moves in initiative order
+    for (const item of combined) {
+        const { side, unit, move } = item;
+        let nextPos = move.finalPosition || move.targetPosition;
+        let movementRemaining = move.validation.movementRemaining;
+        if (move.modifier?.groupMarch && Array.isArray(move.validation.path) && move.validation.path.length > 1) {
+            nextPos = move.validation.path[1];
+            movementRemaining = Math.max(0, (unit.movementRemaining || 3) - 1);
+        }
 
-            if (pathForMove && pathForMove.length > 1 && enemyPosSet.size > 0) {
-                // Find index of this turn's destination in the path
-                let destIndex = pathForMove.lastIndexOf(nextPos);
-                if (destIndex === -1) destIndex = pathForMove.length - 1;
+        // MOV-ENEMY-EXCLUSION: Prevent movement paths from entering tiles
+        // currently occupied by an enemy unit. If the validated path would
+        // step onto an enemy tile before reaching nextPos, clamp nextPos to
+        // the last safe tile before that contact.
+        const pathForMove = Array.isArray(move.validation?.path) ? move.validation.path : null;
+        const enemyUnitsNow = side === 'player1'
+            ? Array.from(p2Map.values())
+            : Array.from(p1Map.values());
+        const enemyPosSet = new Set(
+            enemyUnitsNow
+                .map(u => u && u.position)
+                .filter(Boolean)
+        );
 
-                // Scan forward from the first step up to destIndex; if any step
-                // is an enemy tile, stop one tile short of it.
-                for (let i = 1; i <= destIndex; i++) {
-                    const stepCoord = pathForMove[i];
-                    if (enemyPosSet.has(stepCoord)) {
-                        nextPos = pathForMove[i - 1];
-                        break;
-                    }
+        if (pathForMove && pathForMove.length > 1 && enemyPosSet.size > 0) {
+            // Find index of this turn's destination in the path
+            let destIndex = pathForMove.lastIndexOf(nextPos);
+            if (destIndex === -1) destIndex = pathForMove.length - 1;
+
+            // Scan forward from the first step up to destIndex; if any step
+            // is an enemy tile, stop one tile short of it.
+            for (let i = 1; i <= destIndex; i++) {
+                const stepCoord = pathForMove[i];
+                if (enemyPosSet.has(stepCoord)) {
+                    nextPos = pathForMove[i - 1];
+                    break;
                 }
             }
+        }
 
         // Marching column collision/stacking: ensure the *column* can occupy the
         // intended footprint at nextPos. If not, fall back to the last valid
@@ -451,7 +667,7 @@ function processMovementPhase(player1Movements, player2Movements, battleState, m
         let finalPos = nextPos;
         const movingStatus = unit.formationStatus || 'deployed';
         if (movingStatus === 'marching' && pathForMove && pathForMove.length > 1) {
-            const { calculateOccupiedTiles, checkStackingViolation } = require('./formations/formationStatus');
+            const { calculateOccupiedTiles, checkStackingViolation } = require('./maps/mapUtils');
             const path = pathForMove;
             const allUnits = [
                 ...Array.from(p1Map.values()).map(u => ({ ...u, side: 'player1' })),
@@ -701,6 +917,7 @@ function processMovementPhase(player1Movements, player2Movements, battleState, m
     });
 
     // Build combat contexts and mark missions complete for engaged units (melee only).
+    const { buildCombatContext } = require('./battleEngine');
     const combatContexts = meleeTriggers.map(combat => {
         completeMissionsForEngagementUnit(combat.attacker);
         completeMissionsForEngagementUnit(combat.defender);
@@ -711,7 +928,7 @@ function processMovementPhase(player1Movements, player2Movements, battleState, m
             player2: { ...battleState.player2, unitPositions: newPlayer2Positions }
         }, map);
     });
-    
+
     return {
         newPositions: {
             player1: newPlayer1Positions,
@@ -734,176 +951,18 @@ function processMovementPhase(player1Movements, player2Movements, battleState, m
     };
 }
 
-/**
- * Helper to get terrain type (imported from movementSystem)
- */
-function getTerrainType(coord, map) {
-    const { getTerrainType: getTerrain } = require('./movementSystem');
-    return getTerrain(coord, map);
-}
-
-/**
- * Derive a coarse cardinal attack direction (N/S/E/W) from attacker to defender.
- * Diagonals are collapsed to their dominant axis.
- */
-function getAttackCardinalDirection(attackerPos, defenderPos) {
-    const dirStr = getDirection(attackerPos, defenderPos); // e.g. 'northwest'
-    if (!dirStr || typeof dirStr !== 'string') return null;
-    const d = dirStr.toLowerCase();
-    if (d.includes('north') && !d.includes('east') && !d.includes('west')) return 'N';
-    if (d.includes('south') && !d.includes('east') && !d.includes('west')) return 'S';
-    if (d.includes('east')  && !d.includes('north') && !d.includes('south')) return 'E';
-    if (d.includes('west')  && !d.includes('north') && !d.includes('south')) return 'W';
-    // Diagonals: choose dominant axis by row/col delta
-    const from = parseCoord(attackerPos);
-    const to = parseCoord(defenderPos);
-    if (!from || !to) return null;
-    const dRow = to.row - from.row; // + = south, - = north
-    const dCol = to.col - from.col; // + = east,  - = west
-    if (Math.abs(dRow) >= Math.abs(dCol)) {
-        return dRow >= 0 ? 'S' : 'N';
-    } else {
-        return dCol >= 0 ? 'E' : 'W';
-    }
-}
-
-/**
- * Facing-aware formation defense bonuses.
- * Currently focuses on phalanx-style formations but can be extended.
- */
-function getFormationDefenseBonus(defender, attackDirection) {
-    const facing = (defender.facing || 'N').toUpperCase();
-    const formation = (defender.formation || '').toLowerCase();
-
-    if (!attackDirection) return 0;
-
-    // Helper: is this a flank relative to facing?
-    const isFlank = (face, atk) => {
-        if (face === 'N' || face === 'S') {
-            return atk === 'E' || atk === 'W';
-        } else {
-            return atk === 'N' || atk === 'S';
-        }
-    };
-
-    const isRear = (face, atk) => {
-        if (face === 'N' && atk === 'S') return true;
-        if (face === 'S' && atk === 'N') return true;
-        if (face === 'E' && atk === 'W') return true;
-        if (face === 'W' && atk === 'E') return true;
-        return false;
-    };
-
-    // Example directional formations: phalanx-style and similar
-    if (formation === 'phalanx' || formation === 'shield_wall' || formation === 'roman_manipular') {
-        if (attackDirection === facing) {
-            // Strong to the front
-            return +4;
-        }
-        if (isFlank(facing, attackDirection)) {
-            // Vulnerable on flanks
-            return -4;
-        }
-        if (isRear(facing, attackDirection)) {
-            // Very vulnerable from rear
-            return -6;
-        }
-    }
-
-    // Default: no directional modifier
-    return 0;
-}
-
-/**
- * Routing movement handler
- * - Veteran mercenaries (qualityType === 'veteran_mercenary') attempt to
- *   leave the field toward their friendly map edge and are removed once
- *   they reach it.
- * - All other routing units fall back toward their campPosition and, upon
- *   arrival, stop routing but remain broken.
- */
-function handleRoutingMovement(unit, side, battleState, map) {
-    const current = parseCoord(unit.position);
-    if (!current) return unit;
-
-    const size = map?.size || { rows: 20, cols: 20 };
-    const maxRowIndex = (size.rows || size.height || 20) - 1;
-
-    const updated = { ...unit };
-
-    // Veteran mercenaries desert the field
-    if ((unit.qualityType || '').toLowerCase() === 'veteran_mercenary') {
-        updated.routingTarget = 'edge';
-        let rowIndex = current.row;      // 0..19
-        const colIndex = current.col;    // 0..19
-
-        if (side === 'player1') {
-            // Retreat north (toward row 0)
-            if (rowIndex === 0) {
-                // Already at north edge: next step would leave the field
-                updated.hasDeserted = true;
-                return updated;
-            }
-            rowIndex = Math.max(0, rowIndex - 1);
-        } else {
-            // Retreat south (toward last row)
-            if (rowIndex === maxRowIndex) {
-                updated.hasDeserted = true;
-                return updated;
-            }
-            rowIndex = Math.min(maxRowIndex, rowIndex + 1);
-        }
-
-        const next = { row: rowIndex, col: colIndex };
-        updated.position = coordToString(next);
-        return updated;
-    }
-
-    // All other routing units fall back toward camp
-    const camp = battleState[side]?.campPosition || unit.campPosition;
-    if (!camp) return unit;
-
-    const campCoord = parseCoord(camp);
-    if (!campCoord) return unit;
-
-    updated.routingTarget = 'camp';
-
-    const step = { row: current.row, col: current.col };
-
-    // Step one tile toward camp in row, then column if needed.
-    // current.row / campCoord.row are 0-based numeric indices; move +/-1.
-    if (current.row !== campCoord.row) {
-        if (current.row > campCoord.row) {
-            step.row = current.row - 1;
-        } else if (current.row < campCoord.row) {
-            step.row = current.row + 1;
-        }
-    } else if (current.col !== campCoord.col) {
-        if (current.col > campCoord.col) {
-            step.col = current.col - 1;
-        } else if (current.col < campCoord.col) {
-            step.col = current.col + 1;
-        }
-    }
-
-    updated.position = coordToString(step);
-
-    // If we have arrived at camp, stop routing but remain broken
-    if (updated.position === camp) {
-        updated.isRouting = false;
-        updated.isBroken = true;
-        updated.regroupedAtCamp = true;
-    }
-
-    return updated;
-}
-
 module.exports = {
+    validateMovement,
+    getTerrainType,
+    createMission,
+    shouldContinueMission,
+    executeMissionTurn,
+    completeMission,
+    cancelMission,
     detectCombatTriggers,
-    calculatePositionalModifiers,
-    buildCombatContext,
     processMovementPhase,
-    calculateFlankingBonus,
-    calculateElevationAdvantage,
-    isCrossingRiver
+    trackMeleeEngagements,
+    getAttackCardinalDirection,
+    getFormationDefenseBonus,
+    handleRoutingMovement
 };

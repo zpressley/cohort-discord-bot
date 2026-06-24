@@ -85,6 +85,17 @@ client.on(Events.MessageCreate, async (message) => {
     }
 });
 
+// Phase 1 movement test — listens in battle-test channel
+client.on(Events.MessageCreate, async (message) => {
+    try {
+        if (!message.guild || message.author.bot) return;
+        const { handleMessage } = require('./phase1-movement/handler');
+        await handleMessage(message);
+    } catch (e) {
+        console.error('Phase1 handler error:', e);
+    }
+});
+
 // Error handling
 client.on(Events.Error, error => {
     console.error('Discord client error:', error);
