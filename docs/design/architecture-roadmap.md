@@ -78,7 +78,7 @@ Renumbered from the current restart. Each phase = branch/tag `phase-N-complete` 
 ### Phase 1 — Single-unit movement ✅
 A* pathfinding, landmark resolution, intent parsing, narration, 40×40 map. Done.
 
-### Phase 2 — Combat engine + balance harness (CURRENT)
+### Phase 2 — Combat engine + balance harness (COMPLETE)
 **Recovery first:** the harness, build plan, seeded RNG, scenarios, phase-1 characterization tests, mapUtils fix, and legacy doc banners already exist on `origin/claude/phase-4-completion-ad7yq3` (2 commits ahead of main). Step one is merge that branch and tag it — do not rebuild what it contains. It also fixes a live phase 1 bug (parseCoord broke all two-letter columns; the eastern third of the map is unaddressable on main).
 
 Then build `src/phase2-combat/combat/` per the recovered `PHASE2_COMBAT_PLAN.md` §8 build order (ratings → damage → resolve → tune → scenarios), implementing the design in `docs/design/combat-design.md`:
@@ -87,8 +87,45 @@ Then build `src/phase2-combat/combat/` per the recovered `PHASE2_COMBAT_PLAN.md`
 - Salvage numbers (not code) from the inline legacy battleEngine per the plan's §5 salvage map: weapon/armor/shield/training ratings, situational modifiers, chaos tables. Skip the six preparation tables (never validated — start simpler) and the damage-accumulation bucket (superseded, see §9.6).
 - Harness already enforces: purity, injected RNG only, no I/O, diffable reports, `--sweep N`. Extend its assertions to the 10 in the combat design doc.
 - **Exit criteria:** all assertions green across the matrix; the three recovered scenarios (hill-assault, ford-crossing, bridge-standoff) hit their tuning targets — elevation matters, mid-crossing is punishing, the bridge standoff is bloody and slow.
+**Done (2026-08-30, tag `phase-2-complete`).** Engine in `src/phase2-combat/combat/`,
+balance harness in `src/phase2-combat/balance/` (`npm run balance`), 152 tests.
+All nine design assertions green; every pairing across 9 archetypes and 5 tiers
+resolves in 2–8 rounds with no stalemates; mirrors 45–55%; the ladder reads levy
+2.0 / militia 3.0 / tribal 5.0 / professional 5.0 / elite 7.0 rounds.
 
-### Phase 3 — Multi-unit movement
+Four engine bugs the matrix found that reading the code did not: chaos rolled
+once and shared (so mirrors could never diverge, and locked decision 6 depends on
+divergence); the mutual-rout rule read as a standing exemption, which deadlocked
+permanently because morale only falls; fatigue cancelling out of the damage
+ratio, leaving "heavies must win before they gas out" with no mechanism behind
+it; and per-round casualty rounding quantising away the entire chaos signal at
+100-man units.
+
+**Open, carried into later phases:**
+- **`prepared` is the most decisive factor in the engine** — a braced defender
+  beats an unbraced attacker in ~100% of otherwise-identical matchups, ahead of
+  terrain, numbers and kit. It is why no scenario can isolate a terrain modifier
+  (the hill defender wins on flat ground too). Worth a ruling before phase 4
+  gives terrain real teeth.
+- **Forest is a trap.** `TERRAIN_MODIFIERS.forest_cover` favours a defender, but
+  forest also carries 2 terrain chaos, which applies to attack, defense and
+  morale every round and swamps it: a defender in woods wins 0% of mirror
+  matches, and 47% with forest chaos set to 0. May be correct — woods do break
+  up formations — but it should be a decision, not a salvaged accident.
+- **Graded win rates are unreachable while morale is monotonic.** Chaos is
+  zero-mean noise, so any constant edge accumulates in one direction and decides
+  the fight; softening modifiers changes the margin, not the win rate. "Counters
+  are real but not absolute" therefore holds through *conditions* — quality,
+  timing, who charged — rather than through close win rates. Recovery is a
+  phase 8 feature (locked decision 5); revisit then.
+- **`persian_kontos` is an outlier** (damage 15, effectiveness 95/90/80/85).
+  Lancers beat everything in the matrix. Weapons are not priced in phase 2, so
+  this is a phase 7 army-builder cost problem, not an engine one.
+- **Rout is not yet a map event.** The scenario runner ends a battle on a rout,
+  but broken units do not flee and there are no pursuit casualties. Phase 4.
+
+
+### Phase 3 — Multi-unit movement (CURRENT)
 Multiple units per side, simultaneous resolution. Old docs' MOVE-002 lands here.
 - Occupancy layer (`getUnitAt`, per-tile unit lists), initiative by speed tier (scouts → siege), collision resolution, path-crossing.
 - Stacking density penalties (numbers re-derived for 25m tiles, see §6).
