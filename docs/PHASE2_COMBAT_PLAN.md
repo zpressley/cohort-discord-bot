@@ -364,6 +364,14 @@ simpler.
 
 ## 7. Decisions to make before writing damage code
 
+> **All six are now ruled.** See `docs/design/architecture-roadmap.md` §8,
+> "Ruled — session 2026-08-30". Summary: `effectiveness` is a damage multiplier
+> (÷100); the unit that entered contact is the attacker, persistent contact is
+> symmetric; a turn is N ten-minute rounds (elastic time); casualties are a
+> fraction of current strength; morale **is** in phase 2; standard units are
+> ~100 strong, elites 80. The list below is kept for the reasoning behind each
+> question.
+
 1. **What is `effectiveness`?** Multiplier, hit chance, or armour penetration.
    Everything else follows.
 2. **Who attacks?** The harness reports an unordered pair. Charge bonuses,
