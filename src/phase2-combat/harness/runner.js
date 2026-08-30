@@ -58,10 +58,10 @@ function detectEngagements(world, engagementRange = DEFAULT_ENGAGEMENT_RANGE) {
 
 // Phase 1's engine pathfinds for a single unit and knows nothing about anyone
 // else on the map, so without this two units walk onto the same tile and the
-// engagement detector reports a 0-tile "contact". A 25m tile does not hold two
-// bodies of 400 men. Rule: a unit stops on the last tile of its path before the
-// first occupied one. Occupancy is evaluated in unit-id order, so it is
-// deterministic. Phase 2 may want to own this (zones of control, friendly
+// engagement detector reports a 0-tile "contact". A 25m tile holds about a
+// hundred men — one unit, not two. Rule: a unit stops on the last tile of its
+// path before the first occupied one. Occupancy is evaluated in unit-id order,
+// so it is deterministic. Phase 2 may want to own this (zones of control, friendly
 // stacking penalties) — see PHASE2_COMBAT_PLAN.md.
 function truncateForOccupancy(world, unit, move) {
   const occupied = new Map()

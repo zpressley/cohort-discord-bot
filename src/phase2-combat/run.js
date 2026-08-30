@@ -13,15 +13,20 @@
 
 const { runScenario, sweep, formatReport, formatSummary } = require('./harness')
 const { placeholderResolver } = require('./harness/placeholderResolver')
+const { createCombatResolver } = require('./combat')
 const { SCENARIOS, getScenario } = require('./scenarios')
 
+// Factories, not resolvers. The real engine carries stamina, morale and
+// rounds-in-contact across rounds in a closure, so every run needs its own.
 const RESOLVERS = {
-  placeholder: placeholderResolver
-  // combat: require('./combat').resolveCombat   <- phase 2 lands here
+  combat: () => createCombatResolver(),
+  placeholder: () => placeholderResolver
 }
 
+const DEFAULT_RESOLVER = 'combat'
+
 function parseArgs(argv) {
-  const args = { scenario: null, combat: false, seed: null, sweep: 0, resolver: 'placeholder' }
+  const args = { scenario: null, combat: false, seed: null, sweep: 0, resolver: DEFAULT_RESOLVER }
 
   for (let i = 0; i < argv.length; i++) {
     const arg = argv[i]
@@ -48,23 +53,26 @@ function main() {
   }
 
   const scenario = getScenario(args.scenario)
-  const combatResolver = args.combat ? RESOLVERS[args.resolver] : null
+  const factory = args.combat ? RESOLVERS[args.resolver] : null
 
-  if (args.combat && !combatResolver) {
+  if (args.combat && !factory) {
     console.error(`Unknown resolver "${args.resolver}". Available: ${Object.keys(RESOLVERS).join(', ')}`)
     process.exitCode = 1
     return
   }
 
   if (args.sweep > 0) {
-    const { runs, tally } = sweep(scenario, { combatResolver, seeds: args.sweep })
+    const { runs, tally } = sweep(scenario, { combatResolverFactory: factory, seeds: args.sweep })
     console.log(`SWEEP: ${scenario.name} x${args.sweep} seeds\n`)
     for (const run of runs) console.log(formatSummary(run))
     console.log('\nwin tally:', JSON.stringify(tally))
     return
   }
 
-  console.log(formatReport(runScenario(scenario, { combatResolver, seed: args.seed ?? undefined })))
+  console.log(formatReport(runScenario(scenario, {
+    combatResolver: factory ? factory() : null,
+    seed: args.seed ?? undefined
+  })))
 }
 
 main()
