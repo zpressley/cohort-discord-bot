@@ -235,6 +235,22 @@ const ANTI_CAVALRY_THRESHOLD = 85
 // phase 1 has road/ford/bridge and has no desert/urban/mountain. The plan warns
 // about exactly this, so the mapping is written out rather than merged.
 
+// KNOWN ISSUE, not yet ruled on. These values were authored for a
+// single-resolution engine where chaos applied once. Here they apply EVERY
+// round, to attack, defense and morale at once, which makes a terrain chaos
+// value a large persistent penalty rather than a flavour modifier — and it
+// swamps the corresponding entry in TERRAIN_MODIFIERS.
+//
+// The clearest case is forest. Cover is supposed to favour a defender, and
+// TERRAIN_MODIFIERS.forest_cover says so (+defense, -attack). But forest also
+// carries 2 chaos, and measured against a mirror the defender wins 0% standing
+// in woods; set forest chaos to 0 and the same matchup is 47/53. The cover
+// bonus is doing nothing and the disorder penalty is doing everything, so
+// standing in a forest is currently a straightforward mistake.
+//
+// Whether that is right is a design question — woods genuinely do break up
+// formations — but it should be a decision, not an accident of a salvaged
+// table. Flagged for a ruling before phase 4 wires terrain into real battles.
 const TERRAIN_CHAOS = {
   plains: 0,   // [salvage] plains 0
   road:   0,   // [derived] phase 1 only — a road is as orderly as plains
@@ -259,7 +275,20 @@ const SITUATION_CHAOS = {
 const CHAOS = {
   MAX: 10,              // [salvage] the legacy scale was 0-10
   ROLL_MAX: 4,          // [derived] how much of the scalar is luck per round
-  PREPARED_REDUCTION: 3, // [notebook] "prepared reduces chaos"
+  // [notebook] "prepared reduces chaos". Reduced from 3, because being prepared
+  // turned out to be the single strongest state in the engine: chaos degrades
+  // attack, defense AND presses on morale, so a chaos discount is a persistent
+  // advantage on three channels at once. Braced-vs-unbraced was 100/0.
+  //
+  // Worth recording what tuning could NOT fix here. Morale is monotonic down
+  // with no recovery (locked decision 5), and chaos is zero-mean noise, so any
+  // constant edge — however small — accumulates in one direction over 4-8
+  // rounds and decides the fight. Zeroing this reduction entirely still left
+  // the braced side winning 97%. Graded win rates need a mechanism for the
+  // trailing side to recover, and recovery is explicitly a phase 8 feature.
+  // Until then, "counters are not absolute" holds through CONDITIONS — quality,
+  // timing, who charged — rather than through close win rates.
+  PREPARED_REDUCTION: 2,
   SURPRISE_PENALTY: 4,   // [notebook] "surprise increases chaos"
   // Each point of chaos degrades the disordered side's ratings by this much.
   EFFECT_PER_POINT: 0.03,   // chaos 10 -> x0.70 on attack/defense/push
@@ -365,16 +394,25 @@ const CHARGE = {
 // SITUATIONAL_DEFENSE_MODIFIERS, trimmed to what phase 2 can detect today.
 // Flanking and rear attacks need the occupancy model from phase 3.
 
+// The legacy values are halved. They were authored for a single-resolution
+// engine where a modifier applied once; here it applies every round, and
+// because morale only ever falls (locked decision 5) a small persistent edge
+// compounds into a near-certain result. At the salvaged values a mirror match
+// went from 45/55 on flat ground to 2/98 with one side on a hill — position
+// stopped being an advantage and became a verdict.
+//
+// Halving makes the advantage proportionate. It does NOT make the win rate
+// graded, and no value here would: see the note on CHAOS.PREPARED_REDUCTION.
 const TERRAIN_MODIFIERS = {
   // Holding the high ground. The hill-assault scenario exists to prove this
   // number is not zero.
-  high_ground:        { attack: +1, defense: +2 },
-  // [salvage] 'crossing_obstacle' -2. The ford-crossing scenario should be
-  // punishing, and this is the reason it is.
-  crossing_obstacle:  { attack: -2, defense: -2 },
-  forest_cover:       { attack: -1, defense: +1 },
-  marsh:              { attack: -2, defense: +2 },
-  prepared_defense:   { attack: 0,  defense: +2 }
+  high_ground:        { attack: +0.5, defense: +1 },
+  // [salvage] 'crossing_obstacle' -2, halved. The ford-crossing scenario should
+  // be punishing, and this is the reason it is.
+  crossing_obstacle:  { attack: -1,   defense: -1 },
+  forest_cover:       { attack: -0.5, defense: +0.5 },
+  marsh:              { attack: -1,   defense: +1 },
+  prepared_defense:   { attack: 0,    defense: +1 }
 }
 
 // Which phase 1 terrain counts as elevated, and which counts as an obstacle to
