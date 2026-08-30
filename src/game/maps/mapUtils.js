@@ -1181,52 +1181,6 @@ function generateEmojiGrid(mapData, viewingSide) {
     return grid;
 }
 
-module.exports = {
-    parseCoord,
-    coordToString,
-    calculateDistance,
-    calculateEuclideanDistance,
-    getAdjacentCoords,
-    getCoordsInRange,
-    calculatePath,
-    findPathAStar,
-    reconstructPath,
-    calculatePathCost,
-    isValidCoord,
-    calculateViewport,
-    generateASCIIMap,
-    generateTacticalMap,
-    generateOperationalMap,
-    formatGridWithLabels,
-    generateEmojiMap,
-    getUnitEmoji,
-    getStackedEmoji,
-    getDirection,
-    UNIT_EMOJIS,
-    generateEmojiMapViewport,
-    generateEmojiGrid,
-    buildOperationalUnitTiles,
-    getDominantTerrainSymbol,
-    getOperationalTerrainLabel,
-    // MAP DATA
-    createTacticalMap,
-    createOperationalMap,
-    // RIVER CROSSING & TERRAIN
-    RIVER_CROSSING_MAP,
-    getTerrainAt,
-    isFord,
-    crossesRiverIllegally,
-    initializeDeployment,
-    getUnitMovementRange,
-    getUnitDetectRange,
-    generateBattleMap,
-    // FORMATION FOOTPRINTS
-    FORMATION_STATUS,
-    calculateOccupiedTiles,
-    checkStackingViolation,
-    executeDeployment,
-    getDirectionalOffset
-};
 
 // ── MAP DATA ───────────────────────────────────────────────────────────────────
 
@@ -1831,3 +1785,53 @@ async function executeDeployment(unit, direction) {
   };
 }
 
+// Exports live at the end of the file: the riverCrossing.js content appended
+// during consolidation declares RIVER_CROSSING_MAP with `const` further down,
+// and a module.exports above that declaration hit the temporal dead zone —
+// the whole module threw on require, taking the live bot down with it.
+module.exports = {
+    parseCoord,
+    coordToString,
+    calculateDistance,
+    calculateEuclideanDistance,
+    getAdjacentCoords,
+    getCoordsInRange,
+    calculatePath,
+    findPathAStar,
+    reconstructPath,
+    calculatePathCost,
+    isValidCoord,
+    calculateViewport,
+    generateASCIIMap,
+    generateTacticalMap,
+    generateOperationalMap,
+    formatGridWithLabels,
+    generateEmojiMap,
+    getUnitEmoji,
+    getStackedEmoji,
+    getDirection,
+    UNIT_EMOJIS,
+    generateEmojiMapViewport,
+    generateEmojiGrid,
+    buildOperationalUnitTiles,
+    getDominantTerrainSymbol,
+    getOperationalTerrainLabel,
+    // MAP DATA
+    createTacticalMap,
+    createOperationalMap,
+    // RIVER CROSSING & TERRAIN
+    RIVER_CROSSING_MAP,
+    getTerrainAt,
+    isFord,
+    crossesRiverIllegally,
+    initializeDeployment,
+    getUnitMovementRange,
+    getUnitDetectRange,
+    generateBattleMap,
+    // FORMATION FOOTPRINTS
+    FORMATION_STATUS,
+    calculateOccupiedTiles,
+    checkStackingViolation,
+    executeDeployment,
+    getDirectionalOffset
+};
