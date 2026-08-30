@@ -62,11 +62,15 @@ function fight(world, engagements, resolver, random, turns) {
 
 // ── The contract ───────────────────────────────────────
 
-test('the resolver returns casualty intent and events, and nothing else', () => {
+test('the resolver returns casualty intent, routs and events, and nothing else', () => {
+  // `routed` is an addition to the plan's contract. The runner needs it: morale
+  // lives in the resolver, the world model has no rout flag, and without it a
+  // battle that ended in a rout — which is how most of them end — reported as
+  // `undecided`.
   const { world, engagements } = pair()
   const result = createCombatResolver()({ engagements, world, random: createRng(1), turn: 1 })
 
-  assert.deepEqual(Object.keys(result).sort(), ['casualties', 'events'])
+  assert.deepEqual(Object.keys(result).sort(), ['casualties', 'events', 'routed'])
   assert.ok(Array.isArray(result.casualties))
   assert.ok(Array.isArray(result.events))
   for (const casualty of result.casualties) {

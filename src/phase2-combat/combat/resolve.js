@@ -88,6 +88,11 @@ function createCombatResolver(options = {}) {
   function resolveCombat({ engagements, world, random, turn }) {
     const casualties = new Map()
     const events = []
+    // Units that broke this turn. Reported alongside casualties so the scenario
+    // runner can end an engagement on a rout: a broken unit is out of the fight,
+    // and without this the runner only knows about destruction and reports a
+    // decided battle as 'undecided'.
+    const routed = []
 
     // Who moved this turn. The contract gives the resolver no movement report,
     // but it does give the world every turn, so comparing positions recovers
@@ -226,17 +231,17 @@ function createCombatResolver(options = {}) {
           // that is the case the rule was written for.
           const loser = breakingLoser(aState, bState, a, b)
 
-          if (loser === 'a') rout(aState, a, b, turn, events)
-          else if (loser === 'b') rout(bState, b, a, turn, events)
+          if (loser === 'a') rout(aState, a, b, turn, events, routed)
+          else if (loser === 'b') rout(bState, b, a, turn, events, routed)
           else {
             events.push(
               `${a.id} and ${b.id} are both at breaking point — neither breaks, ` +
               'there is nobody to run from')
           }
         } else if (floorPassed && aBroken) {
-          rout(aState, a, b, turn, events)
+          rout(aState, a, b, turn, events, routed)
         } else if (floorPassed && bBroken) {
-          rout(bState, b, a, turn, events)
+          rout(bState, b, a, turn, events, routed)
         }
       }
     }
@@ -249,6 +254,7 @@ function createCombatResolver(options = {}) {
       casualties: [...casualties.entries()]
         .map(([unitId, killed]) => ({ unitId, killed }))
         .sort((x, y) => x.unitId.localeCompare(y.unitId)),
+      routed: routed.sort((x, y) => x.unitId.localeCompare(y.unitId)),
       events
     }
   }
@@ -329,10 +335,11 @@ function breakingLoser(aState, bState, a, b) {
   return null
 }
 
-function rout(state, unit, victor, turn, events) {
+function rout(state, unit, victor, turn, events, routed) {
   state.routed = true
   state.routedOnTurn = turn
   events.push(`${unit.id} breaks and routs from ${victor.id}`)
+  if (routed) routed.push({ unitId: unit.id, by: victor.id, turn })
 }
 
 // Turn an unrounded casualty figure into whole men, carrying the fraction

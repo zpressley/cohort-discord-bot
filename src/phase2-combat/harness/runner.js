@@ -165,13 +165,31 @@ function applyCasualties(world, casualties = []) {
   return applied
 }
 
-// A side is beaten when it has no living units left.
-function checkOutcome(world) {
-  const remaining = sides(world).filter(side => unitsOnSide(world, side).length > 0)
+// A side is beaten when it has no units left that can still fight — destroyed
+// or broken. Routed units are passed in rather than read off the world, because
+// morale lives in the combat resolver and the world model carries no rout flag.
+//
+// `routedIds` defaults to empty, so a movement-only run behaves exactly as
+// before. Without it a battle that ended in a rout — which is how most of them
+// end — reported as `undecided`.
+function checkOutcome(world, routedIds = new Set()) {
+  const effective = (side) => unitsOnSide(world, side).filter(u => !routedIds.has(u.id))
+  const remaining = sides(world).filter(side => effective(side).length > 0)
 
-  if (remaining.length === 1) return { decided: true, winner: remaining[0], reason: 'enemy destroyed' }
-  if (remaining.length === 0) return { decided: true, winner: 'draw', reason: 'mutual destruction' }
+  const reasonFor = (side) => unitsOnSide(world, side).length > 0 ? 'enemy routed' : 'enemy destroyed'
+
+  if (remaining.length === 1) {
+    return { decided: true, winner: remaining[0], reason: reasonFor(otherSide(world, remaining[0])) }
+  }
+  if (remaining.length === 0) {
+    const anyAlive = sides(world).some(side => unitsOnSide(world, side).length > 0)
+    return { decided: true, winner: 'draw', reason: anyAlive ? 'mutual collapse' : 'mutual destruction' }
+  }
   return { decided: false, winner: null, reason: null }
+}
+
+function otherSide(world, side) {
+  return sides(world).find(s => s !== side) ?? side
 }
 
 /**
@@ -202,6 +220,9 @@ function runScenario(scenario, options = {}) {
   }
 
   const orderScript = scenario.turns ?? []
+  // Units that have broken. Accumulated across turns — a rout is permanent
+  // inside an engagement (morale is monotonic down).
+  const routedIds = new Set()
 
   for (let turnIndex = 0; turnIndex < orderScript.length; turnIndex++) {
     world.turn = turnIndex + 1
@@ -216,6 +237,7 @@ function runScenario(scenario, options = {}) {
     if (combatResolver && engagements.length > 0) {
       combat = combatResolver({ engagements, world, random, turn: world.turn })
       casualties = applyCasualties(world, combat?.casualties ?? [])
+      for (const rout of combat?.routed ?? []) routedIds.add(rout.unitId)
     }
 
     record.turns.push({
@@ -223,11 +245,12 @@ function runScenario(scenario, options = {}) {
       movement,
       engagements,
       events: combat?.events ?? [],
+      routed: combat?.routed ?? [],
       casualties,
       snapshot: cloneWorld(world)
     })
 
-    const outcome = checkOutcome(world)
+    const outcome = checkOutcome(world, routedIds)
     if (outcome.decided) {
       record.outcome = outcome
       break
