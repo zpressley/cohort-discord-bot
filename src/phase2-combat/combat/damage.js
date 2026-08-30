@@ -59,9 +59,18 @@ function casualtiesFrom(attacker, defender, attackerCtx = {}, defenderCtx = {}) 
   // fewer men per round in absolute terms but the same share of what is left,
   // while its own output falls with strengthScale. The asymmetry compounds.
   const fraction = T.DAMAGE.BASE_RATE * ratio
-  const killed = Math.min(defender.strength, Math.round(defender.strength * fraction))
 
-  return { killed, effectiveAttack, defense, ratio, fraction }
+  // `raw` is the unrounded figure. Callers that resolve round after round must
+  // use it and carry the remainder themselves, because rounding every round
+  // independently quantises the result badly at this unit scale: a 100-man unit
+  // taking 4-5 casualties a round has a granularity of 20-25%, which is wider
+  // than the entire chaos band. Rounding per round made every seed of a
+  // scenario produce byte-identical casualties even though the chaos rolls
+  // clearly differed — the randomness was real and then thrown away.
+  const raw = defender.strength * fraction
+  const killed = Math.min(defender.strength, Math.round(raw))
+
+  return { killed, raw, effectiveAttack, defense, ratio, fraction }
 }
 
 // ── Push ───────────────────────────────────────────────
@@ -114,12 +123,14 @@ function pushStaminaDamage(differential) {
 /**
  * @param {Object} unit
  * @param {Object} sources
- * @param {number} [sources.killed]              casualties taken this round
+ * @param {number} [sources.killed]              casualties taken this round.
+ *   Pass the UNROUNDED figure where one is available: morale should respond to
+ *   the real damage, not to whether it happened to round up this round.
  * @param {number} [sources.pushDifferential]    differential LOST by this unit
  * @param {number} [sources.chaos]               0..10, already rolled
  * @returns {{total:number, fromCasualties:number, fromPush:number, fromChaos:number}}
  */
-function moraleDamage(unit, { killed = 0, pushDifferential = 0, chaos = 0 } = {}) {
+function moraleDamage(unit, { killed = 0, pushDifferential = 0, chaos = 0, stamina = null } = {}) {
   const max = unit.maxStrength || unit.strength || 1
 
   // Scaled by the share of the ORIGINAL unit lost, not the current strength.
@@ -130,10 +141,19 @@ function moraleDamage(unit, { killed = 0, pushDifferential = 0, chaos = 0 } = {}
   const fromPush = pushMoraleDamage(pushDifferential)
   const fromChaos = Math.max(0, chaos) * T.CHAOS.MORALE_PER_POINT
 
-  const resistance = R.moraleResistance(unit)
-  const total = (fromCasualties + fromPush + fromChaos) / resistance
+  // Exhaustion, read off the same universal fatigue curve everything else uses.
+  // A fresh unit pays nothing; a spent one pays. This is the only place stamina
+  // reaches an outcome in a symmetric fight, because the curve cancels out of
+  // the damage ratio when both sides are equally tired.
+  const fatigue = stamina === null
+    ? 1
+    : R.fatigueMultiplier(stamina / R.staminaPool(unit))
+  const fromExhaustion = (1 - fatigue) * T.MORALE.EXHAUSTION_COEF
 
-  return { total, fromCasualties, fromPush, fromChaos }
+  const resistance = R.moraleResistance(unit)
+  const total = (fromCasualties + fromPush + fromChaos + fromExhaustion) / resistance
+
+  return { total, fromCasualties, fromPush, fromChaos, fromExhaustion }
 }
 
 // ── Stamina ────────────────────────────────────────────
@@ -182,18 +202,22 @@ function resolveExchange(a, b, aCtx = {}, bCtx = {}) {
   const aPushLost = push.winner === 'b' ? push.differential : 0
   const bPushLost = push.winner === 'a' ? push.differential : 0
 
-  const chaos = aCtx.chaos ?? bCtx.chaos ?? 0
+  // Each side feels its own chaos. The two are rolled separately upstream —
+  // that asymmetry is what locked decision 6 relies on to break a mutual-rout
+  // deadlock, so collapsing them back to one shared value here would undo it.
+  const aChaos = aCtx.chaos ?? 0
+  const bChaos = bCtx.chaos ?? 0
 
   return {
     a: {
       killed: aLosses.killed,
-      moraleDamage: moraleDamage(a, { killed: aLosses.killed, pushDifferential: aPushLost, chaos }),
+      moraleDamage: moraleDamage(a, { killed: aLosses.raw, pushDifferential: aPushLost, chaos: aChaos, stamina: aCtx.stamina ?? null }),
       staminaDrain: staminaDrain(a, { pushDifferential: aPushLost }),
       detail: aLosses
     },
     b: {
       killed: bLosses.killed,
-      moraleDamage: moraleDamage(b, { killed: bLosses.killed, pushDifferential: bPushLost, chaos }),
+      moraleDamage: moraleDamage(b, { killed: bLosses.raw, pushDifferential: bPushLost, chaos: bChaos, stamina: bCtx.stamina ?? null }),
       staminaDrain: staminaDrain(b, { pushDifferential: bPushLost }),
       detail: bLosses
     },

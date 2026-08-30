@@ -43,6 +43,12 @@ module.exports = {
     { orders: [{ unitId: 'red_infantry', target: 'X6' }, { unitId: 'blue_spearmen', target: 'hold' }] },
     { orders: [{ unitId: 'red_infantry', target: 'hold' }, { unitId: 'blue_spearmen', target: 'hold' }] },
     { orders: [{ unitId: 'red_infantry', target: 'hold' }, { unitId: 'blue_spearmen', target: 'hold' }] },
+    { orders: [{ unitId: 'red_infantry', target: 'hold' }, { unitId: 'blue_spearmen', target: 'hold' }] },
+    { orders: [{ unitId: 'red_infantry', target: 'hold' }, { unitId: 'blue_spearmen', target: 'hold' }] },
+    { orders: [{ unitId: 'red_infantry', target: 'hold' }, { unitId: 'blue_spearmen', target: 'hold' }] },
+    { orders: [{ unitId: 'red_infantry', target: 'hold' }, { unitId: 'blue_spearmen', target: 'hold' }] },
+    { orders: [{ unitId: 'red_infantry', target: 'hold' }, { unitId: 'blue_spearmen', target: 'hold' }] },
+    { orders: [{ unitId: 'red_infantry', target: 'hold' }, { unitId: 'blue_spearmen', target: 'hold' }] },
     { orders: [{ unitId: 'red_infantry', target: 'hold' }, { unitId: 'blue_spearmen', target: 'hold' }] }
   ]
 }

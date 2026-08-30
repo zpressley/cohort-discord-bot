@@ -142,7 +142,13 @@ const SHIELD = {
 
 const MOUNT = {
   defense: 1,
-  push: 3,
+  // [derived] Deliberately modest. A horse's real shove is momentum, and
+  // momentum lives in CHARGE, not here. An earlier value of 3 gave cavalry a
+  // standing push advantage that never decayed, so a horse stuck in a melee
+  // still out-shoved the infantry holding it - the exact opposite of the
+  // notebook's "bad in long melee engagements", and invisible until the matrix
+  // could tell a charge apart from a unit caught standing.
+  push: 2,
   staminaDrain: 2,
   chargeBonus: 2
 }
@@ -303,12 +309,26 @@ const PUSH = {
 const MORALE = {
   START: 100,
   ROUT_THRESHOLD: 25,        // [derived] crossing this triggers a rout check
-  RESISTANCE_PER_POINT: 0.20, // resistance = 1 + tierMorale * this
+  RESISTANCE_PER_POINT: 0.38, // resistance = 1 + tierMorale * this
   // [derived] morale lost per 1% of the unit's original strength killed
-  CASUALTY_COEF: 1.6,
+  CASUALTY_COEF: 5.5,
   // [notebook] "the system must guarantee the 1-2 round minimum before any
   // rout check can succeed." No unit may rout before this round.
-  ROUT_FLOOR_ROUND: 2
+  ROUT_FLOOR_ROUND: 2,
+  // [derived] Exhausted men lose heart. Morale damage scaled by how far the
+  // fatigue multiplier has fallen below full, so a fresh unit pays nothing and
+  // a spent one pays this much per round.
+  //
+  // This exists because of a gap the balance matrix exposed. The fatigue
+  // multiplier scales attack and defense alike, so in a mirror match it cancels
+  // out of the damage ratio entirely: two heavy units could gas out completely
+  // and kill each other no faster than when fresh. Heavy-infantry mirrors ran
+  // 11-15 rounds against an 8-round cap for exactly that reason, and the
+  // notebook's "heavies must win before they gas out" had no mechanism behind
+  // it. Routing them through morale gives exhaustion a cost that does not
+  // cancel, and keeps locked decision 2 intact — still one universal curve,
+  // read by one more consumer.
+  EXHAUSTION_COEF: 66
 }
 
 // ── Damage ─────────────────────────────────────────────
@@ -335,7 +355,7 @@ const DAMAGE = {
 
 const CHARGE = {
   DECAY: [1.80, 1.30, 1.00],   // multiplier on attack and push at impact, +1, +2
-  SUSTAINED: 0.85,             // [notebook] cavalry is bad in long melee
+  SUSTAINED: 0.75,             // [notebook] cavalry is bad in long melee
   // A braced spear wall does not just blunt the charge, it inverts it.
   BRACED_MULTIPLIER: 0.15      // fraction of the spike that survives spears
 }

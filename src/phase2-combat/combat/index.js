@@ -8,12 +8,13 @@
 const tables = require('./tables')
 const ratings = require('./ratings')
 const damage = require('./damage')
-const { createCombatResolver, chaosFor, chargeRoundFor } = require('./resolve')
+const { createCombatResolver, chaosFor, chargeRoundFor, breakingLoser } = require('./resolve')
 
 module.exports = {
   createCombatResolver,
   chaosFor,
   chargeRoundFor,
+  breakingLoser,
   tables,
   ratings,
   damage

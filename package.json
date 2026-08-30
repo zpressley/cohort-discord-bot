@@ -10,7 +10,8 @@
     "replay": "node scripts/replayBattle.js",
     "test:phase2": "node --test \"src/phase2-combat/tests/**/*.test.js\"",
     "sim": "node src/phase2-combat/run.js",
-    "test:legacy": "node src/tests/core/coreEngine.test.js"
+    "test:legacy": "node src/tests/core/coreEngine.test.js",
+    "balance": "node src/phase2-combat/balance/run-balance.js"
   },
   "keywords": [
     "discord",

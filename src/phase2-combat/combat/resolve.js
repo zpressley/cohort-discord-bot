@@ -35,12 +35,25 @@ const { getUnit } = require('../harness/world')
  *   meet. Default 1 — one call, one round — which is what the three tactical
  *   scenarios were scripted against.
  * @param {string} [options.situation]  key into SITUATION_CHAOS
+ * @param {Object} [options.prepared]  unitId -> boolean, overriding the
+ *   movement inference below.
+ * @param {Object} [options.charging]  unitId -> boolean, likewise.
+ *
+ *   Both exist for the balance harness, which places two units already in
+ *   contact and never moves them. With no movement there is nothing to infer
+ *   from, and these are not the same question: a unit can close into contact
+ *   without being prepared, and hold ground without being braced. Separating
+ *   them is what lets the matrix ask "does cavalry lose a melee it did not
+ *   choose?" — which is a design assertion, and unanswerable if arriving in
+ *   contact and standing to receive cannot be told apart.
  * @returns {Function} a resolver matching the harness contract, with
  *   `.getState(unitId)` and `.snapshot()` attached for the balance harness.
  */
 function createCombatResolver(options = {}) {
   const roundsPerTurn = options.roundsPerTurn ?? 1
   const situation = options.situation ?? 'meeting_engagement'
+  const preparedOverride = options.prepared ?? null
+  const chargingOverride = options.charging ?? null
 
   // unitId -> { stamina, morale, routed, routedOnTurn }
   const unitState = new Map()
@@ -55,6 +68,15 @@ function createCombatResolver(options = {}) {
       state = {
         stamina: R.staminaPool(unit),
         morale: T.MORALE.START,
+        // Morale floors at zero, which loses information exactly when it is
+        // needed most: two units both at zero look identical to the rout
+        // tiebreak. This keeps the undamped running total so "who is worse
+        // off" always has an answer. It is never read as morale.
+        moraleDamageTaken: 0,
+        // Fractional casualties owed but not yet inflicted. Carried between
+        // rounds so that repeated rounding does not quantise away differences
+        // smaller than one man — see the note in damage.casualtiesFrom.
+        casualtyRemainder: 0,
         routed: false,
         routedOnTurn: null
       }
@@ -101,11 +123,22 @@ function createCombatResolver(options = {}) {
         const key = `${engagement.aId}|${engagement.bId}`
         const roundsInContact = contactRounds.get(key) ?? 0
 
-        // One chaos roll per engagement per round, drawn BEFORE any decision
-        // to skip. [locked decision 4] chaos is the single RNG channel, so
-        // keeping the draw unconditional keeps the stream comparable when a
-        // rule above it changes — which is the point of seeding at all.
-        const roll = random() * T.CHAOS.ROLL_MAX
+        // One chaos roll PER SIDE, per engagement, per round — always in a/b
+        // order, and always drawn before any decision to skip, so the stream
+        // stays comparable when a rule above it changes. That is the point of
+        // seeding at all.
+        //
+        // Per side, not shared. [locked decision 6] leans on chaos to break the
+        // mutual-rout deadlock: "the fight continues until asymmetry emerges
+        // (chaos guarantees it eventually does)". A single shared roll applied
+        // to two identical units on identical terrain is perfectly symmetric
+        // and guarantees the opposite — every mirror match ran to the hard cap
+        // as a stalemate until this was split in two. Chaos is still one
+        // channel; it just lands on each side separately, which is what makes
+        // "no two matchups play out the same" true within a matchup as well as
+        // between them.
+        const aRoll = random() * T.CHAOS.ROLL_MAX
+        const bRoll = random() * T.CHAOS.ROLL_MAX
 
         const aState = stateFor(a)
         const bState = stateFor(b)
@@ -118,15 +151,15 @@ function createCombatResolver(options = {}) {
         // Prepared: held ground this turn. [notebook] "a formation set and
         // braced for an incoming attack" — the phase 2 abstraction that named
         // formations refine in phase 8.
-        const aPrepared = held.get(a.id)
-        const bPrepared = held.get(b.id)
+        const aPrepared = preparedOverride?.[a.id] ?? held.get(a.id)
+        const bPrepared = preparedOverride?.[b.id] ?? held.get(b.id)
 
-        const aChaos = chaosFor(roll, engagement.aTerrain, situation, aPrepared)
-        const bChaos = chaosFor(roll, engagement.bTerrain, situation, bPrepared)
+        const aChaos = chaosFor(aRoll, engagement.aTerrain, situation, aPrepared)
+        const bChaos = chaosFor(bRoll, engagement.bTerrain, situation, bPrepared)
 
         const aCtx = {
           stamina: aState.stamina,
-          roundsInContact: chargeRoundFor(a, charging.get(a.id), roundsInContact),
+          roundsInContact: chargeRoundFor(a, chargingOverride?.[a.id] ?? charging.get(a.id), roundsInContact),
           terrain: engagement.aTerrain,
           enemyTerrain: engagement.bTerrain,
           chaos: aChaos,
@@ -134,7 +167,7 @@ function createCombatResolver(options = {}) {
         }
         const bCtx = {
           stamina: bState.stamina,
-          roundsInContact: chargeRoundFor(b, charging.get(b.id), roundsInContact),
+          roundsInContact: chargeRoundFor(b, chargingOverride?.[b.id] ?? charging.get(b.id), roundsInContact),
           terrain: engagement.bTerrain,
           enemyTerrain: engagement.aTerrain,
           chaos: bChaos,
@@ -143,19 +176,24 @@ function createCombatResolver(options = {}) {
 
         const exchange = D.resolveExchange(a, b, aCtx, bCtx)
 
-        addCasualty(casualties, a.id, exchange.a.killed)
-        addCasualty(casualties, b.id, exchange.b.killed)
+        const aKilled = takeCasualties(aState, exchange.a.detail.raw, a.strength)
+        const bKilled = takeCasualties(bState, exchange.b.detail.raw, b.strength)
+
+        addCasualty(casualties, a.id, aKilled)
+        addCasualty(casualties, b.id, bKilled)
 
         // [locked decision 5] Morale is monotonic down and floors at zero.
         aState.morale = Math.max(0, aState.morale - exchange.a.moraleDamage.total)
         bState.morale = Math.max(0, bState.morale - exchange.b.moraleDamage.total)
+        aState.moraleDamageTaken += exchange.a.moraleDamage.total
+        bState.moraleDamageTaken += exchange.b.moraleDamage.total
 
         aState.stamina = Math.max(0, aState.stamina - exchange.a.staminaDrain)
         bState.stamina = Math.max(0, bState.stamina - exchange.b.staminaDrain)
 
         contactRounds.set(key, roundsInContact + 1)
 
-        events.push(describeExchange(a, b, exchange, aCtx, bCtx, roundsInContact))
+        events.push(describeExchange(a, b, exchange, aCtx, bCtx, roundsInContact, aKilled, bKilled))
 
         // ── Rout ───────────────────────────────────────
         //
@@ -171,9 +209,30 @@ function createCombatResolver(options = {}) {
         const floorPassed = turn >= T.MORALE.ROUT_FLOOR_ROUND
 
         if (floorPassed && aBroken && bBroken) {
-          events.push(
-            `${a.id} and ${b.id} are both at breaking point — neither breaks, ` +
-            'there is nobody to run from')
+          // Both are past breaking. The rule is that rout requires a loser, not
+          // that a mutual break is permanent amnesty — "the fight continues
+          // until asymmetry emerges". So look for the asymmetry.
+          //
+          // Reading it as a standing exemption is what an earlier version did,
+          // and it deadlocked: morale is monotonic down and floors at zero, so
+          // once both sides were under the line neither could ever climb back
+          // above it and no rout was possible again. Every hard-fought match
+          // ran to the cap, and raising the damage coefficients made stalemates
+          // MORE common rather than fewer.
+          //
+          // The tiebreak is the notebook's own sentence: "fewer men with worse
+          // morale is what produces the rout." Worse morale first, then fewer
+          // men. Only exact symmetry on both counts is a true standoff, and
+          // that is the case the rule was written for.
+          const loser = breakingLoser(aState, bState, a, b)
+
+          if (loser === 'a') rout(aState, a, b, turn, events)
+          else if (loser === 'b') rout(bState, b, a, turn, events)
+          else {
+            events.push(
+              `${a.id} and ${b.id} are both at breaking point — neither breaks, ` +
+              'there is nobody to run from')
+          }
         } else if (floorPassed && aBroken) {
           rout(aState, a, b, turn, events)
         } else if (floorPassed && bBroken) {
@@ -245,10 +304,50 @@ function chargeRoundFor(unit, didMove, roundsInContact) {
   return roundsInContact
 }
 
+// Which of two already-broken units is the one that runs.
+//
+// [locked decision 6] "Rout requires a loser." The loser is the side that is
+// measurably worse off: worse morale first, and if morale has bottomed out for
+// both, fewer men. Returns null only when the two are identical on both counts,
+// which is the genuine "who would they be running from?" case.
+function breakingLoser(aState, bState, a, b) {
+  if (aState.morale !== bState.morale) {
+    return aState.morale < bState.morale ? 'a' : 'b'
+  }
+  if (a.strength !== b.strength) {
+    return a.strength < b.strength ? 'a' : 'b'
+  }
+  // Both bottomed out at zero morale with the same number of men standing.
+  // Morale has clipped, so it can no longer separate them, and casualties are
+  // rounded to whole men so small differences vanish there too — this was the
+  // last source of permanent standoffs. The undamped damage total still
+  // separates them, and because chaos is rolled per side it effectively always
+  // differs.
+  if (aState.moraleDamageTaken !== bState.moraleDamageTaken) {
+    return aState.moraleDamageTaken > bState.moraleDamageTaken ? 'a' : 'b'
+  }
+  return null
+}
+
 function rout(state, unit, victor, turn, events) {
   state.routed = true
   state.routedOnTurn = turn
   events.push(`${unit.id} breaks and routs from ${victor.id}`)
+}
+
+// Turn an unrounded casualty figure into whole men, carrying the fraction
+// forward. Over an engagement the men inflicted match the damage dealt; within
+// a round the remainder waits rather than being rounded away.
+//
+// Without this, differences smaller than one man vanish every round, and at
+// 100-man units almost every difference is smaller than one man — two runs with
+// visibly different chaos rolls produced identical casualties, round after
+// round, which made the seeded RNG decorative.
+function takeCasualties(state, raw, available) {
+  const owed = state.casualtyRemainder + Math.max(0, raw)
+  const killed = Math.min(available, Math.floor(owed))
+  state.casualtyRemainder = owed - killed
+  return killed
 }
 
 function addCasualty(map, unitId, killed) {
@@ -258,7 +357,7 @@ function addCasualty(map, unitId, killed) {
 
 // Stable, diffable, no wall clock. Numbers are fixed-width so a report diff
 // shows what actually moved rather than reflowing.
-function describeExchange(a, b, exchange, aCtx, bCtx, roundsInContact) {
+function describeExchange(a, b, exchange, aCtx, bCtx, roundsInContact, aKilled, bKilled) {
   const push = exchange.push.winner
     ? `${exchange.push.winner === 'a' ? a.id : b.id} shoves (+${exchange.push.differential.toFixed(1)})`
     : 'the shove is even'
@@ -268,7 +367,7 @@ function describeExchange(a, b, exchange, aCtx, bCtx, roundsInContact) {
     : ''
 
   return (
-    `r${roundsInContact + 1} ${a.id} -${exchange.a.killed} / ${b.id} -${exchange.b.killed}; ` +
+    `r${roundsInContact + 1} ${a.id} -${aKilled} / ${b.id} -${bKilled}; ` +
     `${push}; chaos ${aCtx.chaos.toFixed(1)}/${bCtx.chaos.toFixed(1)}${charge}`
   )
 }
@@ -276,5 +375,6 @@ function describeExchange(a, b, exchange, aCtx, bCtx, roundsInContact) {
 module.exports = {
   createCombatResolver,
   chaosFor,
-  chargeRoundFor
+  chargeRoundFor,
+  breakingLoser
 }

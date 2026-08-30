@@ -8,7 +8,7 @@
 const { test } = require('node:test')
 const assert = require('node:assert/strict')
 
-const { createCombatResolver, chaosFor, chargeRoundFor } = require('../combat')
+const { createCombatResolver, chaosFor, chargeRoundFor, breakingLoser } = require('../combat')
 const T = require('../combat/tables')
 const { createRng } = require('../harness/rng')
 const { createWorld } = require('../harness/world')
@@ -140,8 +140,8 @@ test('each resolver carries its own state — one run never leaks into the next'
 
   const third = pair()
   carried({ engagements: third.engagements, world: third.world, random: createRng(1), turn: 1 })
-  assert.ok(carried.getState('a').stamina < drained,
-    'the reused one keeps draining — which is exactly what must not happen across a sweep')
+  assert.ok(carried.getState('a').stamina <= drained,
+    'the reused one never refills for a new battle — exactly what must not happen across a sweep')
 })
 
 // ── Stamina and morale across rounds ───────────────────
@@ -223,9 +223,10 @@ test('a hopeless matchup does eventually rout once the floor has passed', () => 
 
 // ── The mutual-rout rule ───────────────────────────────
 
-test('a perfect mirror never routs — rout requires a loser', () => {
-  // locked decision 6: "If both units would cross the rout threshold in the
-  // same round, neither routs — who would they be running from?"
+test('both sides are never routed at once — rout requires a loser', () => {
+  // locked decision 6, in its exact scope: no round may end with two broken
+  // units. It does NOT mean a mutual break is permanent amnesty; the fight
+  // "continues until asymmetry emerges", and per-side chaos makes it emerge.
   const { world, engagements } = pair({ quality: 'levy' }, { quality: 'levy' })
   const resolver = createCombatResolver()
   const random = createRng(4)
@@ -236,36 +237,58 @@ test('a perfect mirror never routs — rout requires a loser', () => {
       const unit = world.units.find(u => u.id === casualty.unitId)
       unit.strength = Math.max(0, unit.strength - casualty.killed)
     }
+    assert.ok(!(resolver.getState('a').routed && resolver.getState('b').routed),
+      `both sides routed on turn ${turn} — there was nobody to run from`)
     if (world.units.some(u => u.strength === 0)) break
   }
-
-  const a = resolver.getState('a')
-  const b = resolver.getState('b')
-
-  // Identical units on identical terrain take identical damage, so their morale
-  // crosses the threshold on the same round. Neither may run.
-  assert.equal(a.morale, b.morale, 'the fixture must actually be a perfect mirror')
-  assert.equal(a.routed, false)
-  assert.equal(b.routed, false)
 })
 
-test('the mutual standoff is announced, not silently skipped', () => {
+test('a mirror match still terminates — the standoff is not a deadlock', () => {
+  // The failure this guards against: an earlier reading treated "both below the
+  // threshold" as a standing exemption. Morale is monotonic down and floors at
+  // zero, so once both were under the line neither could ever rise back above
+  // it, no rout was possible again, and every mirror ran forever.
   const { world, engagements } = pair({ quality: 'levy' }, { quality: 'levy' })
   const resolver = createCombatResolver()
   const random = createRng(4)
 
-  let sawStandoff = false
-  for (let turn = 1; turn <= 25; turn++) {
+  let ended = false
+  for (let turn = 1; turn <= 30 && !ended; turn++) {
     const result = resolver({ engagements, world, random, turn })
-    if (result.events.some(e => e.includes('nobody to run from'))) sawStandoff = true
     for (const casualty of result.casualties) {
       const unit = world.units.find(u => u.id === casualty.unitId)
       unit.strength = Math.max(0, unit.strength - casualty.killed)
     }
-    if (world.units.some(u => u.strength === 0)) break
+    ended = resolver.getState('a').routed || resolver.getState('b').routed ||
+      world.units.some(u => u.strength === 0)
   }
 
-  assert.ok(sawStandoff, 'a mutual break is a design event and should be visible in the log')
+  assert.ok(ended, 'a mirror match must reach a conclusion')
+})
+
+test('when both break together, the one worse off is the one that runs', () => {
+  // The tiebreak, in the notebook's own order: worse morale, then fewer men,
+  // then — because morale clips at zero and casualties round to whole men —
+  // the undamped damage total.
+  const unitA = { strength: 50 }
+  const unitB = { strength: 50 }
+
+  assert.equal(
+    breakingLoser({ morale: 4, moraleDamageTaken: 96 }, { morale: 9, moraleDamageTaken: 91 }, unitA, unitB),
+    'a', 'worse morale runs first')
+
+  assert.equal(
+    breakingLoser({ morale: 0, moraleDamageTaken: 100 }, { morale: 0, moraleDamageTaken: 100 },
+      { strength: 20 }, { strength: 40 }),
+    'a', 'equal morale falls through to fewer men')
+
+  assert.equal(
+    breakingLoser({ morale: 0, moraleDamageTaken: 130 }, { morale: 0, moraleDamageTaken: 120 }, unitA, unitB),
+    'a', 'equal on both, so the undamped damage total decides')
+
+  assert.equal(
+    breakingLoser({ morale: 0, moraleDamageTaken: 100 }, { morale: 0, moraleDamageTaken: 100 }, unitA, unitB),
+    null, 'and only exact symmetry on every count is a true standoff')
 })
 
 test('a routed unit stops fighting', () => {
