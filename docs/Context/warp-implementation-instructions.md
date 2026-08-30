@@ -1,5 +1,10 @@
 # WARP AI Instructions - Cohort Bot Fix Implementation
 
+
+> ⚠️ **Past build notes, this project has moved in new direction, use for reference only not concrete action plan**
+>
+> Current direction: [`docs/PHASE2_COMBAT_PLAN.md`](../PHASE2_COMBAT_PLAN.md)
+
 ## 🎯 WARP DIRECTIVE
 
 You are implementing critical fixes for the Cohort Discord bot. The game is currently broken and needs these fixes applied in order. Follow each instruction exactly as written.

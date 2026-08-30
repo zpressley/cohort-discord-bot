@@ -1,5 +1,10 @@
 # Name Component Pool Expansion Guide
 
+
+> ⚠️ **Past build notes, this project has moved in new direction, use for reference only not concrete action plan**
+>
+> Current direction: [`docs/PHASE2_COMBAT_PLAN.md`](../../PHASE2_COMBAT_PLAN.md)
+
 ## Current Problem
 
 **Existing pools are too small:**

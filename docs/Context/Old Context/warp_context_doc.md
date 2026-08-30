@@ -1,5 +1,10 @@
 # Cohort - Warp AI Context Document
 
+
+> ⚠️ **Past build notes, this project has moved in new direction, use for reference only not concrete action plan**
+>
+> Current direction: [`docs/PHASE2_COMBAT_PLAN.md`](../../PHASE2_COMBAT_PLAN.md)
+
 **Project:** Cohort - Ancient Warfare Strategy Game  
 **Platform:** Discord Bot (no external downloads)  
 **Period:** 3000 BCE - 500 CE (pre-gunpowder ancient warfare)  

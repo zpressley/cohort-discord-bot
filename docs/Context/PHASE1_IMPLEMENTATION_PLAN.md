@@ -1,5 +1,10 @@
 # Phase 1 Implementation Plan: Grid Rescale & Formation System
 
+
+> ⚠️ **Past build notes, this project has moved in new direction, use for reference only not concrete action plan**
+>
+> Current direction: [`docs/PHASE2_COMBAT_PLAN.md`](../PHASE2_COMBAT_PLAN.md)
+
 **Target:** 40×40 battlefield at 25m tiles with formation status and viewport system  
 **Estimated Total:** 18-24 hours  
 **Deliverable:** Playable game with operational movement and tactical combat

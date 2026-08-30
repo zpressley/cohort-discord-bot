@@ -1,5 +1,10 @@
 # CMB-007: Chaos Display in Combat Results (BACKLOG)
 
+
+> ⚠️ **Past build notes, this project has moved in new direction, use for reference only not concrete action plan**
+>
+> Current direction: [`docs/PHASE2_COMBAT_PLAN.md`](../PHASE2_COMBAT_PLAN.md)
+
 **Status**: Moved to Backlog  
 **Priority**: Low  
 **Complexity**: Medium

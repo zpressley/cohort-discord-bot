@@ -1,5 +1,10 @@
 # Cohort System Architecture Documentation
 
+
+> ⚠️ **Past build notes, this project has moved in new direction, use for reference only not concrete action plan**
+>
+> Current direction: [`docs/PHASE2_COMBAT_PLAN.md`](../PHASE2_COMBAT_PLAN.md)
+
 ## Overview
 Complete system architecture, data flow patterns, testing framework, configuration management, and deployment considerations for the Cohort ancient warfare Discord bot.
 

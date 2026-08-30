@@ -1,5 +1,10 @@
 # Ranged Combat System Implementation
 
+
+> ⚠️ **Past build notes, this project has moved in new direction, use for reference only not concrete action plan**
+>
+> Current direction: [`docs/PHASE2_COMBAT_PLAN.md`](../PHASE2_COMBAT_PLAN.md)
+
 **Project:** Cohort Discord Bot  
 **Component:** Ranged Combat with Friendly Fire Mechanics  
 **Created:** December 2, 2025  

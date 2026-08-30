@@ -17,11 +17,16 @@ function parseCoord(coord) {
   const colStr = match[1]
   const row = parseInt(match[2]) - 1  // 1-indexed → 0-indexed
 
+  // Excel-style bijective base-26: A=0 .. Z=25, AA=26, AB=27 .. AN=39.
+  // Restored from mapUtils.js parseCoord — the original copy here used
+  // (charCode - 65) with an i>0 increment, which collapsed every two-letter
+  // column onto a single-letter one (AA1 -> col 1 instead of 26), making the
+  // eastern third of the 40x40 map unaddressable.
   let col = 0
   for (let i = 0; i < colStr.length; i++) {
-    col = col * 26 + (colStr.charCodeAt(i) - 65)
-    if (i > 0) col++
+    col = col * 26 + (colStr.charCodeAt(i) - 64)  // A=1 .. Z=26
   }
+  col -= 1
 
   if (row < 0 || row >= 40 || col < 0 || col >= 40) {
     throw new Error(`Coordinate out of bounds: ${coord}. Valid range: A1-AN40`)

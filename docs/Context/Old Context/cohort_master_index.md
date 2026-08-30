@@ -1,5 +1,10 @@
 # Cohort Master Documentation Index
 
+
+> ⚠️ **Past build notes, this project has moved in new direction, use for reference only not concrete action plan**
+>
+> Current direction: [`docs/PHASE2_COMBAT_PLAN.md`](../../PHASE2_COMBAT_PLAN.md)
+
 ## Project Overview
 **Cohort** is a Discord-based ancient warfare strategy game (3000 BC - 500 AD) featuring:
 - 20 playable ancient civilizations with cultural authenticity

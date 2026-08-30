@@ -1,5 +1,10 @@
 # Cohort: Updated Task List from Resolved Issues
 
+
+> ⚠️ **Past build notes, this project has moved in new direction, use for reference only not concrete action plan**
+>
+> Current direction: [`docs/PHASE2_COMBAT_PLAN.md`](../../PHASE2_COMBAT_PLAN.md)
+
 **Last Updated:** 10/23/25
 **Source:** Resolved Issues → Implementation Tasks  
 **Total Tasks:** 26 (15 new, 8 expand existing, 3 complete)

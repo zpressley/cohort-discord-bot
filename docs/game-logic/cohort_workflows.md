@@ -1,5 +1,10 @@
 # Cohort Complete Workflows & Developer Reference
 
+
+> ⚠️ **Past build notes, this project has moved in new direction, use for reference only not concrete action plan**
+>
+> Current direction: [`docs/PHASE2_COMBAT_PLAN.md`](../PHASE2_COMBAT_PLAN.md)
+
 ## Overview
 End-to-end workflows for all major operations, debugging guides, common patterns, and quick reference for developers working on the Cohort ancient warfare bot.
 

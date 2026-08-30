@@ -1,5 +1,10 @@
 # WARP.md
 
+
+> ⚠️ **Past build notes, this project has moved in new direction, use for reference only not concrete action plan**
+>
+> Current direction: [`docs/PHASE2_COMBAT_PLAN.md`](docs/PHASE2_COMBAT_PLAN.md)
+
 This file provides guidance to WARP (warp.dev) when working with code in this repository.
 
 Project overview

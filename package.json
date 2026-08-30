@@ -6,8 +6,11 @@
     "start": "node src/index.js",
     "dev": "nodemon src/index.js",
     "test:core": "node src/tests/core/coreEngine.test.js",
-    "test": "npm run test:core",
-    "replay": "node scripts/replayBattle.js"
+    "test": "npm run test:phase2",
+    "replay": "node scripts/replayBattle.js",
+    "test:phase2": "node --test \"src/phase2-combat/tests/**/*.test.js\"",
+    "sim": "node src/phase2-combat/run.js",
+    "test:legacy": "node src/tests/core/coreEngine.test.js"
   },
   "keywords": [
     "discord",

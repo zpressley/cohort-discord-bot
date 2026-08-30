@@ -1,5 +1,10 @@
 # Cohort Complete Variable & Object Reference
 
+
+> ⚠️ **Past build notes, this project has moved in new direction, use for reference only not concrete action plan**
+>
+> Current direction: [`docs/PHASE2_COMBAT_PLAN.md`](../PHASE2_COMBAT_PLAN.md)
+
 ## Overview
 Comprehensive index of all variables, objects, constants, and data structures used throughout the Cohort codebase, organized by system and purpose.
 

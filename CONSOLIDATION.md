@@ -1,4 +1,9 @@
 # Cohort Bot — Consolidation Plan
+
+> ⚠️ **Past build notes, this project has moved in new direction, use for reference only not concrete action plan**
+>
+> Current direction: [`docs/PHASE2_COMBAT_PLAN.md`](docs/PHASE2_COMBAT_PLAN.md)
+
 > Written from a live audit of the actual codebase. Every file, import, and line count here was verified.
 
 ---

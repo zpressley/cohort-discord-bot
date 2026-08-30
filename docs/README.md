@@ -1,5 +1,10 @@
 # Cohort Documentation
 
+
+> ⚠️ **Past build notes, this project has moved in new direction, use for reference only not concrete action plan**
+>
+> Current direction: [`docs/PHASE2_COMBAT_PLAN.md`](PHASE2_COMBAT_PLAN.md)
+
 Complete technical documentation for the Cohort ancient warfare Discord bot.
 
 ## 📚 Documentation Sections

@@ -1,5 +1,10 @@
 # Cohort Discord Bot - Implementation Guide & Fix Roadmap
 
+
+> ⚠️ **Past build notes, this project has moved in new direction, use for reference only not concrete action plan**
+>
+> Current direction: [`docs/PHASE2_COMBAT_PLAN.md`](../PHASE2_COMBAT_PLAN.md)
+
 **Generated:** December 2024  
 **Current Version:** 0.2.0  
 **Status:** Critical fixes needed, then feature implementation

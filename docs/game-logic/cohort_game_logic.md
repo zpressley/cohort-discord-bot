@@ -1,5 +1,10 @@
 # Cohort Game Logic Layer Documentation
 
+
+> ⚠️ **Past build notes, this project has moved in new direction, use for reference only not concrete action plan**
+>
+> Current direction: [`docs/PHASE2_COMBAT_PLAN.md`](../PHASE2_COMBAT_PLAN.md)
+
 ## Overview
 The game logic layer implements historically-accurate ancient warfare mechanics including combat resolution, movement validation, pathfinding, and zone-based tactical positioning. All systems are grounded in historical research with documented sources.
 
