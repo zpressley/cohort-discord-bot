@@ -125,29 +125,61 @@ it; and per-round casualty rounding quantising away the entire chaos signal at
   but broken units do not flee and there are no pursuit casualties. Phase 4.
 
 
-### Phase 3 — Multi-unit movement (CURRENT)
+### Phase 3 — Multi-unit movement (COMPLETE)
 Multiple units per side, simultaneous resolution. Old docs' MOVE-002 lands here.
 - Occupancy layer (`getUnitAt`, per-tile unit lists), initiative by speed tier (scouts → siege), collision resolution, path-crossing.
 - Stacking density penalties (numbers re-derived for 25m tiles, see §6).
 - Intent parser extended: multi-unit addressing ("the archers", "everyone", unit aliases already exist in unitState).
 - **Exit:** headless script moves 6 units/side through 5 turns with zero collision anomalies; parser routes orders to correct units.
+**Done (2026-08-30).** `src/phase3-movement/`: initiative tiers (scouts→siege,
+derived from role/mount/kit), one-unit-per-tile occupancy (a consequence of Q6
+— a 100-man unit IS a 25m tile's capacity), tick-interleaved simultaneous
+resolution (racing units resolve by initiative, columns flow through their own
+vanguard's vacated ground, head-on units deadlock into a standoff), and
+deterministic multi-unit addressing ("everyone", ids, aliases, role words).
+Exit criterion runs as a test. **Open:** path replanning around blockers
+(autonomy-AI territory, phase 8); AI-prompt emission of unit references
+(phase 7, not headless-testable).
 
-### Phase 4 — Integration: combat on the map
+
+### Phase 4 — Integration: combat on the map (COMPLETE)
 The two engines meet.
 - Adjacency/contact detection triggers engagements; terrain flags feed combat modifiers (elevation, ford/bridge tags — already in mapData tags).
 - Push gains its positional teeth: pushed-back units lose tiles, terrain advantage flips (the crest rule), stacking pressure.
 - Rout behavior on the map: broken units flee toward their edge, -50% defense while broken (old doc value, re-validate in harness), pursuit casualties.
 - Multi-unit engagements: adjacent friends support / flanking direction matters (flank/rear multipliers re-derived).
 - **Exit:** full headless battle — two 4-unit armies, movement + combat + routs — terminates correctly under 20 turns, replayable from seed.
+**Done (2026-08-30).** `src/phase4-integration/`: the battle runner
+(createBattleState/stepTurn/runBattle), push with positional teeth (loser
+shoved back, winner follows up — the crest rule cuts both ways from position
+alone), rout on the map (flight toward the home edge with lane routing,
+pursuit at 10%/30%-trapped with a minimum kill for convergence, fled units
+preserved for the veterans phase), flanking (+1 attack per extra engagement,
+capped 2), standing orders, and the typed event log the narrator will consume.
+Exit criteria run as tests: two 4-unit armies decide inside 20 turns across
+10 seeds, byte-identical replay from seed. **Open:** crush (blocked shove)
+morale cost; facing for flank-vs-rear (phase 8 formations).
 
-### Phase 5 — Turn orchestration & two-player game loop
+
+### Phase 5 — Turn orchestration & two-player game loop (COMPLETE)
 - Simultaneous order submission (both players DM orders; process when both in or timeout).
 - Fog of war: vision ranges (converted per §6), intelligence tiers, ghost/stale intel (old FOG features), scout role.
 - Victory conditions (old VIC-002): objective control (fords/bridge/hills, 3+ consecutive turns), army destruction (<20% or commander loss placeholder), morale collapse, explicit surrender.
 - Elastic time model: 10-min combat rounds; out-of-contact movement fast-forwards until an interrupt event (contact, sighting, objective) — per locked decision 1.
 - **Exit:** scripted two-player battle from creation to declared victory, all via the orchestrator, no Discord.
+**Done (2026-08-30).** `src/phase5-orchestration/`: simultaneous order
+submission (turn fires on the last commander's orders; forceProcess is the
+timeout path), fog of war (vision 6/10/+4 per §6; visible/ghost/unknown intel
+tiers; sideView as the single window a side gets), the four victory conditions
+in priority order (surrender, army broken, <20% collapse, all objectives held
+3 consecutive player turns), and elastic time (up to six 10-minute ticks per
+turn, interrupting on contact/sighting/objective-change/verdict/stall). Exit
+criterion runs as a test. **Open:** terrain-blocking LOS (phase 8 ranged);
+commander-loss victory (needs the phase 8 commander entity); real timeouts
+(Discord adapter).
 
-### Phase 6 — Persistence & the veteran arc
+
+### Phase 6 — Persistence & the veteran arc (COMPLETE, file-backed)
 The emotional core. Old veteran docs are authoritative for *intent* here.
 - DB layer (SQLite dev / Postgres on Railway): Commander, Battle, BattleTurn, EliteUnit, VeteranOfficer — schema informed by old models, rebuilt clean.
 - Two distinct progression axes (this resolves an old-doc ambiguity):
@@ -156,13 +188,41 @@ The emotional core. Old veteran docs are authoritative for *intent* here.
 - Elite officer lifecycle: 8–12 named positions per culture, death probability by experience (15% recruit → 6% legendary), knowledge that dies with the officer, automatic promotion, memorial references.
 - Naming milestones: unit named at battle 3, lead officer personality at battle 5, legendary status at 10.
 - **Exit:** three consecutive battles by the same commander persist correctly; an officer dies, a promotion fires, XP math matches the framework doc's worked example.
+**Done (2026-08-30).** `src/phase6-veterans/`: the hybrid XP system salvaged
+as intent (survivors bank 1/battle, the fallen take their average with them,
+recruits dilute — the old docs' worked example pinned as a test), the five
+veteran levels, the regulars' battles-fought ladder, naming milestones at
+3/5/10, veterancy feeding rout resistance through a `veteranResistance` field
+on phase 2's moraleResistance (0.20/level; absent field = unchanged
+arithmetic, so the balance matrix never sees it), the 15→6% officer death
+ladder with seeded rolls, automatic promotion, knowledge dying into memorials,
+and a file-backed repository with byte-stable serialization. Exit criteria run
+as tests: three battles by one commander survive save/load round trips; an
+officer death survives the disk with the promotion intact. **Open,
+deliberate:** the Sequelize/SQLite swap happens behind this repository
+interface when the Discord stack is rebuilt — the exit test would pass
+unmodified against the real DB. Q3's survival-curve simulation is now
+runnable (seeded officer fates) but not yet run at scale.
 
-### Phase 7 — Discord shell & AI hardening
+
+### Phase 7 — Discord shell & AI hardening (CURRENT — builder engine done)
 Rebuild the product surface on the proven engine.
 - Lobby, create/join, block-based army builder (visual progress bars, per-culture restrictions), DM order flow, multi-battle context selector, stats.
 - AI production-grade: provider fallback cascade, retries/timeouts, cost tracking, cultural narrator voices, officer Q&A ("ask your centurion").
 - Deploy to Railway; soft launch with friends.
 - **Exit:** two real humans complete a full battle end-to-end on Discord.
+**Partially done (2026-08-30) — the headless half.** `src/phase7-army/`: the
+army-builder economy under Q6–Q8 — salvaged prices and permissions (39
+weapons, armour/shield/mount SP, cultural budgets and locks, min-quality
+gates, shield/cavalry restrictions), Tribal Warriors faction-gated, no
+training purchase, and `toBattleUnits` emitting phase 4/5 specs with the free
+80-man elite (a persistent phase 6 elite carries its resistance and strength
+through). A builder-to-battle test fights two built armies to a verdict
+through the orchestrator. **Flagged, needs live services and a human:** the
+Discord adapter itself, provider cascade/AI hardening, Railway deploy, the
+legacy/ migration (scheduled for when the Discord rebuild begins), soft
+launch. SP re-derivation vs the balance harness (persian_kontos) stays open.
+
 
 ### Phase 8 — Tactical depth
 Features from old docs that layer onto a working game:
