@@ -218,7 +218,7 @@ gates, shield/cavalry restrictions), Tribal Warriors faction-gated, no
 training purchase, and `toBattleUnits` emitting phase 4/5 specs with the free
 80-man elite (a persistent phase 6 elite carries its resistance and strength
 through). A builder-to-battle test fights two built armies to a verdict
-through the orchestrator. **Flagged, needs live services and a human:** the
+through the orchestrator. The hotseat CLI (`npm run play`, `src/phase7-hotseat/`) replaces the old two-Discord-accounts testing ritual: two commanders at one keyboard (or solo with `--auto blue`), a deterministic order grammar shaped like the AI interpreter contract, fog-honest map/roster/intel rendering, and a worded event-log narrative that the AI narrator will replace sentence-for-sentence. **Flagged, needs live services and a human:** the
 Discord adapter itself, provider cascade/AI hardening, Railway deploy, the
 legacy/ migration (scheduled for when the Discord rebuild begins), soft
 launch. SP re-derivation vs the balance harness (persian_kontos) stays open.
