@@ -6,13 +6,14 @@
     "start": "node src/index.js",
     "dev": "nodemon src/index.js",
     "test:core": "node src/tests/core/coreEngine.test.js",
-    "test": "node --test \"src/phase2-combat/tests/**/*.test.js\" \"src/phase3-movement/tests/**/*.test.js\"",
+    "test": "node --test \"src/phase2-combat/tests/**/*.test.js\" \"src/phase3-movement/tests/**/*.test.js\" \"src/phase4-integration/tests/**/*.test.js\"",
     "replay": "node scripts/replayBattle.js",
     "test:phase2": "node --test \"src/phase2-combat/tests/**/*.test.js\"",
     "sim": "node src/phase2-combat/run.js",
     "test:legacy": "node src/tests/core/coreEngine.test.js",
     "balance": "node src/phase2-combat/balance/run-balance.js",
-    "test:phase3": "node --test \"src/phase3-movement/tests/**/*.test.js\""
+    "test:phase3": "node --test \"src/phase3-movement/tests/**/*.test.js\"",
+    "test:phase4": "node --test \"src/phase4-integration/tests/**/*.test.js\""
   },
   "keywords": [
     "discord",

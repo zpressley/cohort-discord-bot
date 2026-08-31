@@ -93,6 +93,24 @@ function createCombatResolver(options = {}) {
     // and without this the runner only knows about destruction and reports a
     // decided battle as 'undecided'.
     const routed = []
+    // Shoves strong enough to move a unit. The resolver stays pure - it
+    // reports the shove, and the phase 4 battle runner applies the tile loss
+    // (and with it the crest rule, since terrain is read from position).
+    const pushes = []
+
+    // Flanking: a unit caught in several engagements at once is attacked from
+    // more directions than it can face. Each of its opponents gains a small
+    // flat attack bonus per extra engagement, capped - see tables.FLANKING.
+    // Impossible in a duel, so the balance matrix never sees this branch.
+    const engagementCounts = new Map()
+    for (const e of engagements) {
+      engagementCounts.set(e.aId, (engagementCounts.get(e.aId) ?? 0) + 1)
+      engagementCounts.set(e.bId, (engagementCounts.get(e.bId) ?? 0) + 1)
+    }
+    const flankBonusAgainst = (defenderId) => {
+      const extra = (engagementCounts.get(defenderId) ?? 1) - 1
+      return T.FLANKING.ATTACK_PER_EXTRA_ENGAGEMENT * Math.min(T.FLANKING.CAP, Math.max(0, extra))
+    }
 
     // Who moved this turn. The contract gives the resolver no movement report,
     // but it does give the world every turn, so comparing positions recovers
@@ -168,7 +186,8 @@ function createCombatResolver(options = {}) {
           terrain: engagement.aTerrain,
           enemyTerrain: engagement.bTerrain,
           chaos: aChaos,
-          prepared: aPrepared
+          prepared: aPrepared,
+          bonusAttack: flankBonusAgainst(b.id)
         }
         const bCtx = {
           stamina: bState.stamina,
@@ -176,7 +195,8 @@ function createCombatResolver(options = {}) {
           terrain: engagement.bTerrain,
           enemyTerrain: engagement.aTerrain,
           chaos: bChaos,
-          prepared: bPrepared
+          prepared: bPrepared,
+          bonusAttack: flankBonusAgainst(a.id)
         }
 
         const exchange = D.resolveExchange(a, b, aCtx, bCtx)
@@ -197,6 +217,14 @@ function createCombatResolver(options = {}) {
         bState.stamina = Math.max(0, bState.stamina - exchange.b.staminaDrain)
 
         contactRounds.set(key, roundsInContact + 1)
+
+        if (exchange.push.winner && exchange.push.differential >= T.PUSH.SHOVE_THRESHOLD) {
+          pushes.push({
+            winnerId: exchange.push.winner === 'a' ? a.id : b.id,
+            loserId: exchange.push.winner === 'a' ? b.id : a.id,
+            differential: exchange.push.differential
+          })
+        }
 
         events.push(describeExchange(a, b, exchange, aCtx, bCtx, roundsInContact, aKilled, bKilled))
 
@@ -254,6 +282,7 @@ function createCombatResolver(options = {}) {
       casualties: [...casualties.entries()]
         .map(([unitId, killed]) => ({ unitId, killed }))
         .sort((x, y) => x.unitId.localeCompare(y.unitId)),
+      pushes: pushes.sort((x, y) => x.loserId.localeCompare(y.loserId)),
       routed: routed.sort((x, y) => x.unitId.localeCompare(y.unitId)),
       events
     }

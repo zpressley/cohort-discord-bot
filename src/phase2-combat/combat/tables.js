@@ -322,7 +322,53 @@ const STAMINA = {
 
 const PUSH = {
   MORALE_COEF: 2.0,     // [derived] morale lost per point of push differential
-  STAMINA_COEF: 1.5     // [derived] stamina lost per point of push differential
+  STAMINA_COEF: 1.5,    // [derived] stamina lost per point of push differential
+  // [locked decision 3] Winning the shove has positional consequences once
+  // combat meets the map. A differential at or above this line is a real
+  // shove: the resolver reports it, and the phase 4 battle runner moves the
+  // loser one tile straight back — which is the crest rule for free, because
+  // terrain is read from position. Below the line the shove is just the
+  // morale/stamina pressure above.
+  SHOVE_THRESHOLD: 2.0
+}
+
+// ── Flanking ───────────────────────────────────────────
+//
+// [derived from salvage] SITUATIONAL_ATTACK_MODIFIERS had flanking +2 and
+// rear +4 — but those were single-resolution numbers, and phase 2's tuning
+// showed that a persistent per-round edge compounds into a verdict (see the
+// note on CHAOS.PREPARED_REDUCTION). So: +1 attack per extra engagement the
+// defender is caught in, capped. Direction (flank vs rear) needs facing,
+// which no unit has yet — that refinement is phase 8's formations work.
+//
+// Only active when one unit appears in several engagements at once, which
+// can never happen in a duel — the balance matrix and its assertions are
+// untouched by this table.
+
+const FLANKING = {
+  ATTACK_PER_EXTRA_ENGAGEMENT: 1,
+  CAP: 2
+}
+
+// ── Pursuit ────────────────────────────────────────────
+//
+// [derived] A broken unit caught at the start of its flight bleeds. The old
+// docs gave broken units -50% defense and pursuers +3 attack; run through the
+// phase 2 ratio math that lands near an extra tenth of the unit per pursuer,
+// so it is stated directly as a fraction — deterministic, no RNG channel
+// beyond the rout that caused it. Re-validate in the harness when cavalry
+// pursuit becomes a real mechanic (roadmap phase 4 exit notes).
+
+const PURSUIT = {
+  CASUALTY_FRACTION: 0.10,  // of current strength, per adjacent enemy
+  // A broken unit that could not move this turn - fled into its own line, or
+  // cornered - is being overrun, not chased. The first battle runs found the
+  // failure this guards against: a trapped remnant bled 10% a round, rounding
+  // toward zero, and an immortal nine-man wreck gridlocked both armies behind
+  // it past the turn cap.
+  TRAPPED_FRACTION: 0.30,
+  MIN_KILLED: 1,            // a caught fleeing man dies; no asymptotic remnants
+  MAX_PURSUERS: 2           // more than two cannot reach a fleeing column
 }
 
 // ── Morale ─────────────────────────────────────────────
@@ -434,6 +480,8 @@ module.exports = {
   CHAOS,
   STAMINA,
   PUSH,
+  FLANKING,
+  PURSUIT,
   MORALE,
   DAMAGE,
   CHARGE,

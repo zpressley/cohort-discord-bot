@@ -70,7 +70,7 @@ test('the resolver returns casualty intent, routs and events, and nothing else',
   const { world, engagements } = pair()
   const result = createCombatResolver()({ engagements, world, random: createRng(1), turn: 1 })
 
-  assert.deepEqual(Object.keys(result).sort(), ['casualties', 'events', 'routed'])
+  assert.deepEqual(Object.keys(result).sort(), ['casualties', 'events', 'pushes', 'routed'])
   assert.ok(Array.isArray(result.casualties))
   assert.ok(Array.isArray(result.events))
   for (const casualty of result.casualties) {

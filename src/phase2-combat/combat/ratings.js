@@ -230,11 +230,14 @@ function attackRating(unit, ctx = {}) {
     enemyTerrain = 'plains',
     chaos = 0,
     enemyBraced = false,
-    prepared = false
+    prepared = false,
+    // Flat situational bonus, e.g. flanking a defender caught in several
+    // engagements at once. Zero in every duel — only the map produces it.
+    bonusAttack = 0
   } = ctx
 
   const terrainMod = terrainModifier(terrain, enemyTerrain, prepared).attack
-  const base = Math.max(0, baseAttackRating(unit) + terrainMod)
+  const base = Math.max(0, baseAttackRating(unit) + terrainMod + bonusAttack)
 
   return base
     * fatigueMultiplier(stamina / staminaPool(unit))
