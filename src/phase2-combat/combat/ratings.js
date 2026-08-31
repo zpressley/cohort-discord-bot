@@ -76,8 +76,15 @@ function fatigueMultiplier(staminaPct) {
 // The tier's morale stat is not a pool size — it is a divisor on incoming
 // morale damage. This is the literal implementation of the notebook's claim
 // that a veteran unit's main edge is that it stays.
+//
+// `veteranResistance` is the EARNED axis (phase 6): battles survived, applied
+// on top of the purchased tier. A unit that has never fought carries nothing
+// here — the field is simply absent, and the arithmetic is unchanged for
+// every unit phase 2's matrix ever builds, so the balance assertions never
+// see it.
 function moraleResistance(unit) {
-  return 1 + resolveQuality(unit).morale * T.MORALE.RESISTANCE_PER_POINT
+  return 1 + resolveQuality(unit).morale * T.MORALE.RESISTANCE_PER_POINT +
+    (unit.veteranResistance ?? 0)
 }
 
 // ── Rock-paper-scissors ────────────────────────────────
