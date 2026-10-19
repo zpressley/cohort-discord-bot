@@ -323,6 +323,16 @@ log, per §5: design decisions live in the repo.
 - Casualties are computed as a **fraction of current strength** (plan §7.4) — that fraction is what produces the strength-scaled snowball the design relies on to break stalemates.
 
 
+### Stage 0 (2026-10-19): open conflicts found during Stage 0
+Logged under the Stage 0 spec's rule 5: the agent stopped on each of these and
+did not pick a side. The Section 6 rulings of 2026-10-14 are recorded in
+`docs/DECISIONS.md`.
+
+| # | Conflict | Where | Options |
+|---|---|---|---|
+| **S0-1** | Spec Task 3 says move `battleEngine.js` into `archive/`, and also says to stop if live code imports an archived file. Live code does import it. | `src/game/turnOrchestrator.js:7`, `src/game/movement.js:278, 920`, `src/game/orders.js:78, 564`; CI's `test:core` (`src/tests/core/coreEngine.test.js:6`) | (a) Leave it in `src/game/` until the Discord bot runs on the new engine, then archive it with the rest of `src/game/`. (b) Archive it now and repoint the live imports at `archive/` (live code importing the archive). (c) Archive it now and accept that the live bot breaks. **Not moved.** |
+| **S0-2** | Ruling Q2 of 2026-08-30 (§8 above, and §7 items 1 and 4) says `legacy/` for code and `docs/historical/` for docs, deferred to Phase 7. Ruling Q2 of 2026-10-14 says `archive/` on `main` now. | §7, §8 Q2 | The newer ruling was followed (`archive/` created, 21 bannered docs moved). The 2026-08-30 text above is left as written. Confirm, or say which wins. |
+
 ## 9. Flagged as Just Wrong (fix in consolidation, no ruling needed)
 1. `cohort-bot-docs.md` opens by calling this a "tactical **naval** warfare" game. It is ancient land warfare. Correct the line when archiving.
 2. Old task list header says "Last Updated: December 2024" while depending on the October 2025 mechanics doc — internal dating is unreliable; treat all old-doc dates as approximate.
