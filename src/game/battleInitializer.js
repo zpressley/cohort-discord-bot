@@ -291,7 +291,6 @@ function deployUnitsToStartingPositions(armyComposition, startingZone, side) {
             primaryWeapon: unit.primaryWeapon,
             armor: unit.armor,
             shields: unit.shields,
-            training: unit.training,
             
             // Unit properties
             quality: unit.quality,
