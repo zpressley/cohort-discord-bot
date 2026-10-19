@@ -262,6 +262,8 @@ PREPARATION_COMMAND = {
 
 ## 💧 Damage Accumulation (Bucket System)
 
+> **Superseded (2026-10-19).** Not used by the engine. This bucket turns |attack − defense| into casualties whatever the sign, so a hopeless unit out-kills a dominant one (roadmap §9.6). The engine computes casualties as a fraction of the target's current strength: see `src/phase2-combat/combat/damage.js` `casualtiesFrom` and the tests in `src/phase2-combat/tests/damage.test.js`. Kept as a historical record.
+
 **Problem:** What happens when attack < defense? (Example: 4 attack vs 6 defense = -2 damage)
 
 **Solution:** The "Bucket/Cup" system - damage accumulates until it overflows.

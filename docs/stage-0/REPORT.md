@@ -264,6 +264,18 @@ All are in `docs/design/architecture-roadmap.md` §8, under "Stage 0
   combat engine, but `run.js` and `harness.test.js` still use it. Keep it
   for now.
 
+## Follow-up: resolutions
+
+After review, Zach confirmed the spec was a design direction rather than a
+full picture of the repo, and resolved the log entries (roadmap §8, "Stage 0
+resolutions"). In the follow-up commit:
+
+- S0-6: Tribal Warriors' heavy-armour restriction is dropped, and the Q7
+  test now pins the same kit as Militia.
+- S0-7: the bucket section of `combat_design_parameters.md` is marked
+  superseded in place.
+- Every other entry is resolved with no code change.
+
 ## Proposed tag
 
 After this PR is merged: `stage-0-complete` on the merge commit.

@@ -65,7 +65,7 @@ const QUALITY_TIERS = {
     push: 2,
     staminaPool: 75,
     factionGated: true,      // [Q7] availability, not price, is the cost
-    restrictions: ['heavy_armor']
+    restrictions: []         // [Q7] same kit as Militia; the legacy heavy-armour ban dropped
   },
   professional: {
     name: 'Professional',

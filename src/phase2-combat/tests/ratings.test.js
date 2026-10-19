@@ -60,6 +60,7 @@ test('Q7: Tribal Warriors match Militia on cost and stats, and differ only on mo
   assert.equal(tribal.push, militia.push)
   assert.equal(tribal.staminaPool, militia.staminaPool)
   assert.equal(tribal.size, militia.size)
+  assert.deepEqual(tribal.restrictions, militia.restrictions, 'same kit as Militia')
 
   assert.equal(tribal.morale, professional.morale, 'morale equal to Professional is the whole bonus')
   assert.ok(tribal.factionGated, 'availability is the cost, so it must be gated')
