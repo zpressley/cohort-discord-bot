@@ -107,15 +107,15 @@ function createCombatResolver(options = {}) {
       engagementCounts.set(e.aId, (engagementCounts.get(e.aId) ?? 0) + 1)
       engagementCounts.set(e.bId, (engagementCounts.get(e.bId) ?? 0) + 1)
     }
-    const flankBonusAgainst = (defenderId) => {
-      const extra = (engagementCounts.get(defenderId) ?? 1) - 1
+    const flankBonusAgainst = (targetId) => {
+      const extra = (engagementCounts.get(targetId) ?? 1) - 1
       return T.FLANKING.ATTACK_PER_EXTRA_ENGAGEMENT * Math.min(T.FLANKING.CAP, Math.max(0, extra))
     }
 
     // Who moved this turn. The contract gives the resolver no movement report,
     // but it does give the world every turn, so comparing positions recovers
-    // it. This is what answers [Q5]: the unit that entered contact is the
-    // attacker, and the one that held is prepared.
+    // it. This is what answers [Q5]: the unit that moved into contact
+    // carries the charge momentum, and a unit that held is prepared.
     //
     // The turn contact is first made is the awkward one: the resolver is only
     // called when an engagement exists, so on that turn there is no previous
@@ -329,7 +329,7 @@ function chaosFor(roll, terrain, situation, prepared) {
 // it lands on CHARGE.SUSTAINED — cavalry in a melee it did not choose, which is
 // exactly the notebook's "bad in long melee engagements".
 //
-// [Q5] This is the practical shape of the attacker ruling. It matters only for
+// [Q5] This is the practical shape of the charge-momentum ruling. It matters only for
 // cavalry, because chargeMultiplier returns 1 for everything on foot. When
 // movement and combat integrate in phase 4, the real contact direction is
 // available and this can be sharpened.

@@ -110,10 +110,10 @@ test('Q8: no quality tier carries a separate training purchase', () => {
 // ── Rock-paper-scissors ────────────────────────────────
 
 test('Q4: effectiveness is a multiplier in 0..1, never a raw percentage', () => {
-  const attacker = unit({ primaryWeapon: 'heavy_mace' })
+  const striker = unit({ primaryWeapon: 'heavy_mace' })
 
   for (const armor of ['no_armor', 'light_armor', 'medium_armor', 'heavy_armor']) {
-    const value = R.effectivenessAgainst(attacker, unit({ armor }))
+    const value = R.effectivenessAgainst(striker, unit({ armor }))
     assert.ok(value > 0 && value <= 1,
       `${armor}: got ${value} — treating the table as a raw percentage inflates damage 100x`)
   }

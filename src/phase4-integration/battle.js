@@ -99,7 +99,7 @@ function stepTurn(state, sideOrders = {}) {
     // simplest deterministic aggression there is, and the reason a battle
     // between two willing armies cannot stall into two lines standing out
     // of range staring at each other. (A side without standing orders
-    // holds, which is also a choice: a defender is allowed to stand.)
+    // holds, which is also a choice: a unit is allowed to stand.)
     if (spec.standingOrders?.[side] === 'advance') {
       const ordered = new Set(expanded.map(o => o.unitId))
       for (const unit of effective) {
@@ -259,7 +259,7 @@ function runBattle(spec, options = {}) {
 // ends the engagement), so winning the push rewarded the loser with a clean
 // disengage — the first fixture battles showed a beaten levy simply shoved
 // out of contact and left in peace. Because terrain comes from position, a
-// defender shoved off a hill has lost the high ground the moment they land,
+// unit shoved off a hill has lost the high ground the moment they land,
 // and the winner has taken it. A shove into an occupied, impassable or
 // off-map tile does not move anyone; it is logged as `crush`. Whether crush
 // should cost extra morale is an open tuning question (locked decision 3

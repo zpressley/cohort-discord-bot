@@ -17,13 +17,14 @@ const R = require('./ratings')
 
 // ── Casualties ─────────────────────────────────────────
 //
-// One direction of one exchange: what `attacker` does to `defender`.
+// One direction of one exchange: what `striker` does to `target`. Both units
+// strike every round; this is one of the two halves.
 //
 // A note on armour, because it is the easiest thing here to double-count.
 // Armour expresses itself exactly TWICE:
 //
 //   1. as a defense rating (ARMOR.defense), raising the denominator, and
-//   2. as the column of the attacker's `effectiveness` table it is looked up
+//   2. as the column of the striker's `effectiveness` table it is looked up
 //      in (ARMOR.damageClass), which is where rock-paper-scissors lives.
 //
 // The legacy armyData table also carries a `damage_reduction` percentage
@@ -39,22 +40,22 @@ const R = require('./ratings')
 // worst troops survive 1-2 rounds" reachable.
 
 /**
- * @param {Object} attacker  harness unit
- * @param {Object} defender  harness unit
- * @param {Object} attackerCtx  see ratings.attackRating
- * @param {Object} defenderCtx  see ratings.defenseRating
+ * @param {Object} striker  harness unit dealing the blow
+ * @param {Object} target  harness unit taking it
+ * @param {Object} strikerCtx  see ratings.attackRating
+ * @param {Object} targetCtx  see ratings.defenseRating
  * @returns {{killed:number, effectiveAttack:number, defense:number, ratio:number, fraction:number}}
  */
-function casualtiesFrom(attacker, defender, attackerCtx = {}, defenderCtx = {}) {
-  const rawAttack = R.attackRating(attacker, attackerCtx)
-  const effectiveness = R.effectivenessAgainst(attacker, defender)
+function casualtiesFrom(striker, target, strikerCtx = {}, targetCtx = {}) {
+  const rawAttack = R.attackRating(striker, strikerCtx)
+  const effectiveness = R.effectivenessAgainst(striker, target)
   const effectiveAttack = rawAttack * effectiveness
-  const defense = R.defenseRating(defender, defenderCtx)
+  const defense = R.defenseRating(target, targetCtx)
 
   const denominator = effectiveAttack + defense
   const ratio = denominator > 0 ? effectiveAttack / denominator : 0
 
-  // Casualties are a fraction of the defender's CURRENT strength, not a flat
+  // Casualties are a fraction of the target's CURRENT strength, not a flat
   // number (the ruling). That is half of the snowball: a thinner line loses
   // fewer men per round in absolute terms but the same share of what is left,
   // while its own output falls with strengthScale. The asymmetry compounds.
@@ -67,8 +68,8 @@ function casualtiesFrom(attacker, defender, attackerCtx = {}, defenderCtx = {}) 
   // than the entire chaos band. Rounding per round made every seed of a
   // scenario produce byte-identical casualties even though the chaos rolls
   // clearly differed — the randomness was real and then thrown away.
-  const raw = defender.strength * fraction
-  const killed = Math.min(defender.strength, Math.round(raw))
+  const raw = target.strength * fraction
+  const killed = Math.min(target.strength, Math.round(raw))
 
   return { killed, raw, effectiveAttack, defense, ratio, fraction }
 }
@@ -168,10 +169,11 @@ function staminaDrain(unit, { pushDifferential = 0 } = {}) {
 // ── One full round, both directions ────────────────────
 //
 // Combat is simultaneous: both units strike in the same round, and neither
-// gets to act on the other's losses until the next one. [Q5] Attacker and
-// defender differ only in what modifiers they carry — the charge bonus for the
-// side that entered contact, prepared state and terrain for the side that
-// held. Persistent contact resolves symmetrically.
+// gets to act on the other's losses until the next one. [Q5] Neither unit
+// has a role. The two differ only in what modifiers their position and
+// circumstances give them: charge momentum for the unit that moved into
+// contact, prepared state for a unit that held, and terrain for wherever each
+// one stands. Persistent contact resolves symmetrically.
 //
 // The caller supplies both contexts and owns the running stamina, morale and
 // roundsInContact state; this function is pure and reads them.

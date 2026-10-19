@@ -241,9 +241,9 @@ const ANTI_CAVALRY_THRESHOLD = 85
 // value a large persistent penalty rather than a flavour modifier — and it
 // swamps the corresponding entry in TERRAIN_MODIFIERS.
 //
-// The clearest case is forest. Cover is supposed to favour a defender, and
+// The clearest case is forest. Cover is supposed to favour the unit in it, and
 // TERRAIN_MODIFIERS.forest_cover says so (+defense, -attack). But forest also
-// carries 2 chaos, and measured against a mirror the defender wins 0% standing
+// carries 2 chaos, and measured against a mirror the unit in cover wins 0% standing
 // in woods; set forest chaos to 0 and the same matchup is 47/53. The cover
 // bonus is doing nothing and the disorder penalty is doing everything, so
 // standing in a forest is currently a straightforward mistake.
@@ -338,7 +338,7 @@ const PUSH = {
 // rear +4 — but those were single-resolution numbers, and phase 2's tuning
 // showed that a persistent per-round edge compounds into a verdict (see the
 // note on CHAOS.PREPARED_REDUCTION). So: +1 attack per extra engagement the
-// defender is caught in, capped. Direction (flank vs rear) needs facing,
+// enemy is caught in, capped. Direction (flank vs rear) needs facing,
 // which no unit has yet — that refinement is phase 8's formations work.
 //
 // Only active when one unit appears in several engagements at once, which
@@ -410,7 +410,7 @@ const MORALE = {
 
 const DAMAGE = {
   // [derived] The master casualty knob. Casualties are a fraction of the
-  // defender's CURRENT strength (ruling: fraction, not flat), so an even
+  // target's CURRENT strength (ruling: fraction, not flat), so an even
   // matchup at ratio 0.5 loses about 12% of its remaining men per round.
   // Tune this first — it sets rounds-to-resolution more than anything else.
   BASE_RATE: 0.24,

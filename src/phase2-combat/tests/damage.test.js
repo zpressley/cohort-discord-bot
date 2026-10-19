@@ -28,12 +28,12 @@ function unit(overrides = {}) {
 // ── Casualties ─────────────────────────────────────────
 
 test('casualties are a fraction of current strength, never a flat number', () => {
-  const attacker = unit()
+  const striker = unit()
   const full = unit({ id: 'full', strength: 100, maxStrength: 100 })
   const half = unit({ id: 'half', strength: 50, maxStrength: 100 })
 
-  const vsFull = D.casualtiesFrom(attacker, full)
-  const vsHalf = D.casualtiesFrom(attacker, half)
+  const vsFull = D.casualtiesFrom(striker, full)
+  const vsHalf = D.casualtiesFrom(striker, half)
 
   assert.ok(vsHalf.killed < vsFull.killed, 'a thinner line loses fewer men in absolute terms')
   assert.ok(Math.abs(vsHalf.fraction - vsFull.fraction) < 1e-9, '...but the same share of what is left')
@@ -69,7 +69,7 @@ test('the damage ratio is never negative, even hopelessly outmatched', () => {
 })
 
 test('the legacy damage-accumulation inversion does not reappear', () => {
-  // Section 9.6 of the roadmap: in the old bucket model a hopeless attacker
+  // Section 9.6 of the roadmap: in the old bucket model a hopeless unit
   // out-killed a dominant one, because the sign of (attack - defense) was
   // discarded. This is the regression test for that specific bug.
   const target = unit({ id: 'target', armor: 'medium_armor', shield: 'medium_shield' })
@@ -81,17 +81,17 @@ test('the legacy damage-accumulation inversion does not reappear', () => {
   const byHopeless = D.casualtiesFrom(hopeless, target).killed
 
   assert.ok(byDominant > byHopeless,
-    'a dominant attacker must out-kill a hopeless one — the bucket got this backwards')
+    'a dominant unit must out-kill a hopeless one — the bucket got this backwards')
 })
 
 test('buying defense makes you harder to kill, not easier', () => {
   // The other half of the same legacy bug: better armour used to increase
   // |attack - defense| and therefore increase your own casualties.
-  const attacker = unit({ primaryWeapon: 'sword_standard' })
+  const striker = unit({ primaryWeapon: 'sword_standard' })
   let previous = Infinity
 
   for (const armor of ['no_armor', 'light_armor', 'medium_armor', 'heavy_armor']) {
-    const killed = D.casualtiesFrom(attacker, unit({ armor })).killed
+    const killed = D.casualtiesFrom(striker, unit({ armor })).killed
     assert.ok(killed <= previous, `${armor} must not be worse than the lighter option`)
     previous = killed
   }
@@ -119,8 +119,8 @@ test('spears kill horses that swords do not', () => {
 test('push never causes casualties — locked decision 3', () => {
   // The only way to check a negative: the casualty path must not read push at
   // all. Two units identical except for push-bearing kit must still take the
-  // same losses from the same attacker.
-  const attacker = unit({ id: 'a' })
+  // same losses from the same striker.
+  const striker = unit({ id: 'a' })
 
   const shover = unit({ id: 'shover', mounted: true, armor: 'medium_armor', shield: 'medium_shield' })
   const shoved = unit({ id: 'shoved', mounted: false, armor: 'medium_armor', shield: 'medium_shield' })
@@ -131,8 +131,8 @@ test('push never causes casualties — locked decision 3', () => {
   // Casualties depend on armour class, so compare like with like: the mounted
   // unit is in the cavalry column. Instead, assert directly that the casualty
   // result carries no push term at all.
-  const result = D.casualtiesFrom(attacker, shoved)
-  const withoutPushKit = D.casualtiesFrom(attacker, unit({ id: 'shoved', shield: 'medium_shield' }))
+  const result = D.casualtiesFrom(striker, shoved)
+  const withoutPushKit = D.casualtiesFrom(striker, unit({ id: 'shoved', shield: 'medium_shield' }))
   assert.equal(result.killed, withoutPushKit.killed)
 })
 
@@ -284,8 +284,8 @@ test('an exchange mutates neither unit', () => {
 })
 
 test('the charging side hits harder on impact than it does two rounds later', () => {
-  // [Q5] The unit that entered contact is the attacker, and this is the whole
-  // consequence of that ruling.
+  // [Q5] Charge momentum belongs to the unit that moved into contact, and
+  // this is the whole consequence of that ruling.
   const horse = unit({ id: 'horse', mounted: true, primaryWeapon: 'sword_standard' })
   const foot = unit({ id: 'foot', primaryWeapon: 'sword_standard' })
 

@@ -13,10 +13,11 @@
 // A scenario has one side advancing and the other holding, and in this engine
 // that asymmetry — `prepared` — is the single most decisive factor there is,
 // ahead of terrain, numbers and kit within a tier. Measured directly: a braced
-// defender beats an unbraced attacker in ~100% of otherwise-identical matchups.
+// unit that held beats an unbraced unit that moved into contact in ~100% of
+// otherwise-identical matchups.
 //
-// So "the defender won the hill scenario" does NOT show that elevation matters;
-// the same defender wins on flat ground. Terrain has to be measured with
+// So "the side on the hill won the hill scenario" does NOT show that elevation
+// matters; the same side wins on flat ground. Terrain has to be measured with
 // everything else held equal, which is what the controlled tests below do. The
 // scenario tests then pin the scenarios as characterization — they catch a
 // change that alters how a real battle plays out, without pretending to isolate
@@ -85,8 +86,8 @@ function controlledTerrain({ aTerrain = 'plains', bTerrain = 'plains' }, seeds =
 // ── Terrain, measured with everything else held equal ──
 
 test('elevation is worth something — the controlled measurement', () => {
-  // The hill-assault scenario asks "if the attacker wins easily, elevation is
-  // worth nothing". This is that question asked properly: two identical units,
+  // The hill-assault scenario asks "if the side climbing wins easily, elevation
+  // is worth nothing". This is that question asked properly: two identical units,
   // both braced, neither charging, and only the ground different.
   const flat = controlledTerrain({})
   const uphill = controlledTerrain({ bTerrain: 'hill' })
@@ -120,7 +121,7 @@ test('holding ground beats advancing into contact — the effect that dominates 
     if (result.winner === 'b') bracedWins++
   }
   assert.ok(bracedWins / 200 > 0.8,
-    `braced defenders should dominate, got ${(100 * bracedWins / 200).toFixed(0)}%`)
+    `braced units that held should dominate, got ${(100 * bracedWins / 200).toFixed(0)}%`)
 })
 
 // ── The three scenarios ────────────────────────────────
@@ -137,20 +138,20 @@ test('every scenario reaches a decision — no undecided battles', () => {
   }
 })
 
-test('hill-assault: the defenders hold the crest', () => {
+test('hill-assault: the side on the crest holds it', () => {
   // 80 Spartans on The Crownhill against 100 Romans coming up it.
   const runs = sweepScenario('hill-assault')
   assert.ok(winRate(runs, 'blue') > 0.8,
     `the hill should hold, blue won ${(100 * winRate(runs, 'blue')).toFixed(0)}%`)
 })
 
-test('ford-crossing: the attacker is caught in the water and loses', () => {
+test('ford-crossing: the side crossing is caught in the water and loses', () => {
   const runs = sweepScenario('ford-crossing')
   assert.ok(winRate(runs, 'blue') > 0.8,
-    `crossing into a braced defender should fail, blue won ${(100 * winRate(runs, 'blue')).toFixed(0)}%`)
+    `crossing into a braced line on the far bank should fail, blue won ${(100 * winRate(runs, 'blue')).toFixed(0)}%`)
 
   // And the asymmetry must be real: one side in the ford, one on dry ground.
-  // The scenario originally ordered the defender INTO the water, so both sides
+  // The scenario originally ordered Blue INTO the water, so both sides
   // took the crossing penalty and it measured nothing.
   const contact = runs[0].turns.find(t => t.engagements.length > 0)
   assert.equal(contact.engagements[0].aTerrain, 'ford')

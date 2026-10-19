@@ -89,7 +89,7 @@ function moraleResistance(unit) {
 
 // ── Rock-paper-scissors ────────────────────────────────
 
-// Which column of an attacker's `effectiveness` table this unit is looked up
+// Which column of a striker's `effectiveness` table this unit is looked up
 // in. A mounted unit is 'cavalry' whatever it is wearing — that is precisely
 // what makes spears beat horses rather than beating horse armour.
 function armorClass(unit) {
@@ -99,9 +99,9 @@ function armorClass(unit) {
 
 // [Q4] `effectiveness` is a damage multiplier, divided by 100. The tables were
 // authored as percentages, so using them raw would inflate damage 100x.
-function effectivenessAgainst(attacker, defender) {
-  const weapon = resolveWeapon(attacker)
-  const cls = armorClass(defender)
+function effectivenessAgainst(striker, target) {
+  const weapon = resolveWeapon(striker)
+  const cls = armorClass(target)
   return (weapon.effectiveness[cls] ?? 50) / 100
 }
 
@@ -126,14 +126,14 @@ function isRanged(unit) {
 // BELOW parity, because a horse stuck in a melee is in the wrong place.
 //
 // @param {number} roundsInContact  0 on the round of impact
-// @param {boolean} defenderBraced  defender carries an anti-cavalry weapon
-function chargeMultiplier(unit, roundsInContact, defenderBraced) {
+// @param {boolean} enemyBraced  the enemy carries an anti-cavalry weapon
+function chargeMultiplier(unit, roundsInContact, enemyBraced) {
   if (!unit.mounted) return 1
 
   if (roundsInContact >= T.CHARGE.DECAY.length) return T.CHARGE.SUSTAINED
 
   const spike = T.CHARGE.DECAY[roundsInContact]
-  if (!defenderBraced) return spike
+  if (!enemyBraced) return spike
 
   // Braced spears do not merely blunt the charge; only a fraction of the spike
   // above parity survives contact with the points.
@@ -238,7 +238,7 @@ function attackRating(unit, ctx = {}) {
     chaos = 0,
     enemyBraced = false,
     prepared = false,
-    // Flat situational bonus, e.g. flanking a defender caught in several
+    // Flat situational bonus, e.g. flanking an enemy caught in several
     // engagements at once. Zero in every duel — only the map produces it.
     bonusAttack = 0
   } = ctx

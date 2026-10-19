@@ -147,7 +147,7 @@ test('assertion 5b: horses beat archers', () => {
 test('assertion 5c: cavalry loses the melee it did not choose', () => {
   // [notebook] Cavalry is "bad in long melee engagements". The same pairing
   // flips entirely on who closed the distance — which is the point of the
-  // charge-decay curve and of the [Q5] attacker ruling.
+  // charge-decay curve and of the [Q5] charge-momentum ruling.
   const charged = counter('cavalry', 'professional', 'medium_infantry', 'professional', 'a')
   const caught = counter('cavalry', 'professional', 'medium_infantry', 'professional', 'b')
 
@@ -172,7 +172,7 @@ test('assertion 5d: counters are real but not absolute — quality overrides the
 
 test('assertion 6: Veteran Mercenaries hit hardest in the paid ladder', () => {
   // Damage OUTPUT, measured on a single fresh exchange against one fixed
-  // opponent so only the attacker's tier varies.
+  // opponent so only the striking unit's tier varies.
   //
   // Not measured as total casualties over a whole duel: a vet merc duel is
   // short by design, so summing across the fight measures how long the tier

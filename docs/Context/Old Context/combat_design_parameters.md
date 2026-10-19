@@ -26,7 +26,7 @@
 
 ```javascript
 // STEP 1: Base Damage
-baseDamage = attacker.attack - defender.defense
+baseDamage = striker.attack - target.defense
 
 // STEP 2: Calculate Battlefield Chaos (0-10)
 chaosLevel = terrain + weather + density + situation
@@ -36,22 +36,22 @@ chaosRoll = random(1, chaosLevel)  // 1d[chaosLevel]
 rawChaos = chaosRoll - (chaosLevel / 2)  // Centers around 0
 
 // STEP 4: Apply Preparation (negates chaos)
-attackerChaos = max(0, rawChaos - attacker.preparation)
-defenderChaos = max(0, rawChaos - defender.preparation)
+strikerChaos = max(0, rawChaos - striker.preparation)
+targetChaos = max(0, rawChaos - target.preparation)
 
 // STEP 5: Calculate Effective Values
-effectiveAttack = attacker.attack - attackerChaos
-effectiveDefense = defender.defense - defenderChaos
+effectiveAttack = striker.attack - strikerChaos
+effectiveDefense = target.defense - targetChaos
 
 // STEP 6: Final Damage
 damage = effectiveAttack - effectiveDefense
 
 // STEP 7: Convert to Casualties
 if (damage > 0) {
-    casualties = damage * (attacker.strength / 100) * 5
+    casualties = damage * (striker.strength / 100) * 5
 } else {
     // Negative damage accumulates until overflow
-    accumulateDamage(defender, damage)
+    accumulateDamage(target, damage)
 }
 ```
 
@@ -281,7 +281,7 @@ DAMAGE_ACCUMULATION = {
   
   if (rawDamage > 0) {
     // POSITIVE DAMAGE: Immediate casualties
-    casualties = rawDamage * (attacker.strength / 100) * 5
+    casualties = rawDamage * (striker.strength / 100) * 5
     // Accumulated damage resets to 0
     
   } else if (rawDamage < 0) {
@@ -327,7 +327,7 @@ Overflow! 2 damage = 10 casualties
 Total casualties: 30 (triggers morale check at 30%)
 ```
 
-**Result:** Weak attacker (4) chips away at strong defender (6), causing 10 casualties/turn through accumulated pressure.
+**Result:** A weak striker (4) chips away at a strong target (6), causing 10 casualties/turn through accumulated pressure.
 
 ### **Worked Example: Very Weak Attack vs Strong Defense**
 
@@ -339,7 +339,7 @@ Turn 3: -6 damage → Accumulated: 6.0 → Overflow: 6 damage = 30 casualties
 Total: 90 casualties in 3 turns → Unit routs (90% loss)
 ```
 
-**Result:** Even completely outmatched attacker eventually causes casualties through persistent pressure. But high casualty rate triggers morale collapse quickly.
+**Result:** Even a completely outmatched striker eventually causes casualties through persistent pressure. But high casualty rate triggers morale collapse quickly.
 
 ### **Worked Example: Fractional Accumulation**
 
@@ -377,8 +377,8 @@ The bucket system models this: defense delays but doesn't prevent defeat.
 
 ### **Example 1: Plains Battle (Chaos 0)**
 ```
-Attacker: 8 attack, 4 preparation
-Defender: 5 defense, 6 preparation
+Unit A: 8 attack, 4 preparation
+Unit B: 5 defense, 6 preparation
 
 No chaos roll → Pure math
 Damage: 8 - 5 = 3
@@ -394,8 +394,8 @@ Same forces, but in forest with fog
 Chaos roll: 1d6 = 4
 Raw chaos: 4 - 3 = +1
 
-Attacker chaos: max(0, 1 - 4) = 0 (preparation blocked it)
-Defender chaos: max(0, 1 - 6) = 0 (preparation blocked it)
+Unit A chaos: max(0, 1 - 4) = 0 (preparation blocked it)
+Unit B chaos: max(0, 1 - 6) = 0 (preparation blocked it)
 
 Damage: (8-0) - (5-0) = 3
 Result: 15 casualties (same as plains!)
@@ -405,14 +405,14 @@ Outcome: PREPARATION MATTERS - both sides negated chaos
 
 ### **Example 3: Night Ambush (Chaos 8)**
 ```
-Attacker: 8 attack, 8 preparation (formed, waiting, elevated)
-Defender: 5 defense, 0 preparation (marching column, surprised)
+Unit A: 8 attack, 8 preparation (formed, waiting, elevated)
+Unit B: 5 defense, 0 preparation (marching column, surprised)
 
 Chaos roll: 1d8 = 6
 Raw chaos: 6 - 4 = +2
 
-Attacker chaos: max(0, 2 - 8) = 0 (fully prepared!)
-Defender chaos: max(0, 2 - 0) = 2 (NO preparation!)
+Unit A chaos: max(0, 2 - 8) = 0 (fully prepared!)
+Unit B chaos: max(0, 2 - 0) = 2 (NO preparation!)
 
 Damage: (8-0) - (5-2) = 8 - 3 = 5
 Result: 25 casualties (5 * 5 multiplier)

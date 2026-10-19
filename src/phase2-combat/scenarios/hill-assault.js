@@ -1,17 +1,17 @@
-// Red attacks uphill into a defender holding The Crownhill (Q1).
+// Red advances uphill into Blue, holding The Crownhill (Q1).
 // Hill costs 1.5/tile and is the map's high ground. This is the scenario for
 // testing the elevation modifier — if holding the hill is not worth something,
 // the numbers are wrong.
 //
-// Tuning target (PHASE2_COMBAT_PLAN section 8): "the defender holds high ground
-// with fewer, better troops. If the attacker wins easily, elevation is worth
-// nothing."
+// Tuning target (PHASE2_COMBAT_PLAN section 8): "the side on the high ground
+// holds with fewer, better troops. If the side climbing wins easily, elevation
+// is worth nothing."
 //
-// The defender was originally veteran_mercenary. That is "better troops" on
+// Blue was originally veteran_mercenary. That is "better troops" on
 // paper, but veteran mercenaries carry Militia morale by design — they are the
-// tier that leaves first when losing — so the hill defender broke early for a
+// tier that leaves first when losing — so the hill's holders broke early for a
 // reason that had nothing to do with the hill, and the scenario could not
-// measure what it was for. Both sides are now Professional, and the defender's
+// measure what it was for. Both sides are now Professional, and Blue's
 // advantages are exactly the two the scenario is about: the ground, and better
 // kit on fewer men.
 

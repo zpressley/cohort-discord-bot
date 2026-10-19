@@ -55,7 +55,7 @@ test('edge targets and edge detection agree with each other', () => {
 
 // ── The crest rule ─────────────────────────────────────
 
-test('a defender shoved off a hill loses the high ground — positionally', () => {
+test('a unit shoved off a hill loses the high ground — positionally', () => {
   // F21 is hill with plains at G21 east of it. A heavy elite line drives a
   // frail levy off the crest eastward: the push event itself must say the
   // ground was lost, because terrain is read from position and nothing else.
@@ -175,7 +175,7 @@ test('both armies collapsing together is a draw', () => {
 // ── Flanking ───────────────────────────────────────────
 
 test('a unit fighting on two fronts dies faster than one fighting on one', () => {
-  // Same defender, same attacker quality; the only difference is the second
+  // Same target, same enemy quality; the only difference is the second
   // engagement. Flanking has to reach the casualty ledger, not just a rating.
   const oneFront = runBattle(spec({
     units: [

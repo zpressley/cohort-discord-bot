@@ -9,7 +9,7 @@
 //                     battlefield chain every time it loads
 //
 // Both carry standing orders 'advance': a unit you leave without orders
-// presses the nearest enemy. Type `<unit> hold` to countermand — a defender
+// presses the nearest enemy. Type `<unit> hold` to countermand — a unit
 // is allowed to stand, but only on purpose.
 
 const { buildArmy, toBattleUnits } = require('../phase7-army/builder')

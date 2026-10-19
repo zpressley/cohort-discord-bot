@@ -36,10 +36,10 @@ function detectEngagements(world, engagementRange = DEFAULT_ENGAGEMENT_RANGE) {
       const distance = tileDistance(a.position, b.position)
       if (distance > engagementRange) continue
 
-      // Pair members are named a/b, not attacker/defender. Which side is
-      // attacking is a tactical judgement (who moved into contact, who holds
-      // ground, charge vs. receive) that phase 2's resolver makes — the
-      // harness only reports that these two are in contact.
+      // Pair members are named a/b and carry no roles. Who has the edge is
+      // a matter of position and circumstance (who moved into contact, who
+      // holds ground, charge vs. receive) that phase 2's resolver works out —
+      // the harness only reports that these two are in contact.
       engagements.push({
         aId: a.id,
         bId: b.id,
