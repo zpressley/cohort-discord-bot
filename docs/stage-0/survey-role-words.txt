@@ -1,0 +1,768 @@
+# Appendix to SURVEY.md: every attacker/defender occurrence on main @ 7ff4c0a
+# Generated with: git grep -n -i -E 'attacker|defender' 7ff4c0a
+
+WARP.md:98:Combat System Overhaul: Recently completed transition from ratio-based to chaos-modified attack/defense numerical system where base damage equals attacker's attack rating minus defender's defense rating, with chaos modifiers varying by battlefield conditions. The system creates asymmetric effects based on unit preparation levels - well-prepared forces negate chaos while unprepared forces suffer full penalties. Successfully implemented balance testing framework, though initial 80% competitive balance threshold proved too strict for historically asymmetric warfare.
+docs/Context/Old Context/cohort_master_index.md:415:  result: 'attacker_major_victory',
+docs/Context/Old Context/cohort_master_index.md:417:  casualties: { attacker: 12, defender: 45 }
+docs/Context/Old Context/cohort_master_index.md:439:    engagement.attacker,
+docs/Context/Old Context/cohort_master_index.md:440:    engagement.defender,
+docs/Context/Old Context/combat_design_parameters.md:29:baseDamage = attacker.attack - defender.defense
+docs/Context/Old Context/combat_design_parameters.md:39:attackerChaos = max(0, rawChaos - attacker.preparation)
+docs/Context/Old Context/combat_design_parameters.md:40:defenderChaos = max(0, rawChaos - defender.preparation)
+docs/Context/Old Context/combat_design_parameters.md:43:effectiveAttack = attacker.attack - attackerChaos
+docs/Context/Old Context/combat_design_parameters.md:44:effectiveDefense = defender.defense - defenderChaos
+docs/Context/Old Context/combat_design_parameters.md:51:    casualties = damage * (attacker.strength / 100) * 5
+docs/Context/Old Context/combat_design_parameters.md:54:    accumulateDamage(defender, damage)
+docs/Context/Old Context/combat_design_parameters.md:284:    casualties = rawDamage * (attacker.strength / 100) * 5
+docs/Context/Old Context/combat_design_parameters.md:330:**Result:** Weak attacker (4) chips away at strong defender (6), causing 10 casualties/turn through accumulated pressure.
+docs/Context/Old Context/combat_design_parameters.md:342:**Result:** Even completely outmatched attacker eventually causes casualties through persistent pressure. But high casualty rate triggers morale collapse quickly.
+docs/Context/Old Context/combat_design_parameters.md:380:Attacker: 8 attack, 4 preparation
+docs/Context/Old Context/combat_design_parameters.md:381:Defender: 5 defense, 6 preparation
+docs/Context/Old Context/combat_design_parameters.md:397:Attacker chaos: max(0, 1 - 4) = 0 (preparation blocked it)
+docs/Context/Old Context/combat_design_parameters.md:398:Defender chaos: max(0, 1 - 6) = 0 (preparation blocked it)
+docs/Context/Old Context/combat_design_parameters.md:408:Attacker: 8 attack, 8 preparation (formed, waiting, elevated)
+docs/Context/Old Context/combat_design_parameters.md:409:Defender: 5 defense, 0 preparation (marching column, surprised)
+docs/Context/Old Context/combat_design_parameters.md:414:Attacker chaos: max(0, 2 - 8) = 0 (fully prepared!)
+docs/Context/Old Context/combat_design_parameters.md:415:Defender chaos: max(0, 2 - 0) = 2 (NO preparation!)
+docs/Context/Old Context/commander_implementation.md:670:        wall: "the Defender",
+docs/Context/Old Context/warp_context_doc.md:176:- Ratio-based: Attacker/Defender strength ratio determines casualties
+docs/Context/Old Context/warp_context_doc.md:184:baseDamage = attacker.attack - defender.defense
+docs/Context/Old Context/warp_context_doc.md:195:attackerChaos = max(0, rawChaos - attacker.preparation)
+docs/Context/Old Context/warp_context_doc.md:196:defenderChaos = max(0, rawChaos - defender.preparation)
+docs/Context/Old Context/warp_context_doc.md:199:effectiveAttack = attack - attackerChaos
+docs/Context/Old Context/warp_context_doc.md:200:effectiveDefense = defense - defenderChaos
+docs/Context/Old Context/warp_context_doc.md:282:  // Future: chaosLevel, attackerPrep, defenderPrep
+docs/Context/Old Context/warp_fixes_doc.txt:42:        const attackerSide = combat.result.casualties.attacker[0]?.side || 'player1';
+docs/Context/Old Context/warp_fixes_doc.txt:43:        const defenderSide = attackerSide === 'player1' ? 'player2' : 'player1';
+docs/Context/Old Context/warp_fixes_doc.txt:45:        // Apply attacker casualties
+docs/Context/Old Context/warp_fixes_doc.txt:46:        combat.result.casualties.attacker.forEach(cas => {
+docs/Context/Old Context/warp_fixes_doc.txt:47:            const unitIndex = updated[attackerSide].findIndex(u => 
+docs/Context/Old Context/warp_fixes_doc.txt:51:                updated[attackerSide][unitIndex].currentStrength -= cas.casualties;
+docs/Context/Old Context/warp_fixes_doc.txt:55:        // Apply defender casualties
+docs/Context/Old Context/warp_fixes_doc.txt:56:        combat.result.casualties.defender.forEach(cas => {
+docs/Context/Old Context/warp_fixes_doc.txt:57:            const unitIndex = updated[defenderSide].findIndex(u => 
+docs/Context/Old Context/warp_fixes_doc.txt:61:                updated[defenderSide][unitIndex].currentStrength -= cas.casualties;
+docs/Context/Old Context/warp_fixes_doc.txt:91:        const attackerUnitId = combat.attacker?.unit?.unitId;
+docs/Context/Old Context/warp_fixes_doc.txt:92:        const defenderUnitId = combat.defender?.unit?.unitId;
+docs/Context/Old Context/warp_fixes_doc.txt:94:        if (!attackerUnitId || !defenderUnitId) {
+docs/Context/Old Context/warp_fixes_doc.txt:100:        const attackerSide = attackerUnitId.startsWith('player1') ? 'player1' : 'player2';
+docs/Context/Old Context/warp_fixes_doc.txt:101:        const defenderSide = attackerSide === 'player1' ? 'player2' : 'player1';
+docs/Context/Old Context/warp_fixes_doc.txt:103:        // Apply attacker casualties
+docs/Context/Old Context/warp_fixes_doc.txt:104:        const attackerIndex = updated[attackerSide].findIndex(u => u.unitId === attackerUnitId);
+docs/Context/Old Context/warp_fixes_doc.txt:105:        if (attackerIndex >= 0 && combat.result.casualties.attacker.length > 0) {
+docs/Context/Old Context/warp_fixes_doc.txt:106:            const totalCasualties = combat.result.casualties.attacker.reduce(
+docs/Context/Old Context/warp_fixes_doc.txt:109:            updated[attackerSide][attackerIndex].currentStrength -= totalCasualties;
+docs/Context/Old Context/warp_fixes_doc.txt:110:            console.log(`  Attacker ${attackerUnitId}: -${totalCasualties} casualties`);
+docs/Context/Old Context/warp_fixes_doc.txt:113:        // Apply defender casualties
+docs/Context/Old Context/warp_fixes_doc.txt:114:        const defenderIndex = updated[defenderSide].findIndex(u => u.unitId === defenderUnitId);
+docs/Context/Old Context/warp_fixes_doc.txt:115:        if (defenderIndex >= 0 && combat.result.casualties.defender.length > 0) {
+docs/Context/Old Context/warp_fixes_doc.txt:116:            const totalCasualties = combat.result.casualties.defender.reduce(
+docs/Context/Old Context/warp_fixes_doc.txt:119:            updated[defenderSide][defenderIndex].currentStrength -= totalCasualties;
+docs/Context/Old Context/warp_fixes_doc.txt:120:            console.log(`  Defender ${defenderUnitId}: -${totalCasualties} casualties`);
+docs/Context/PHASE1_IMPLEMENTATION_PLAN.md:727:function calculateFlankingBonus(attacker, defender, allUnits) {
+docs/Context/PHASE1_IMPLEMENTATION_PLAN.md:728:    const defenderPos = parseCoord(defender.position);
+docs/Context/PHASE1_IMPLEMENTATION_PLAN.md:729:    const adjacent = getAdjacentCoords(defender.position);
+docs/Context/PHASE1_IMPLEMENTATION_PLAN.md:731:    // Count enemy units adjacent to defender
+docs/Context/PHASE1_IMPLEMENTATION_PLAN.md:733:        unit.side !== defender.side &&
+docs/Context/PHASE1_IMPLEMENTATION_PLAN.md:751:function getFormationDefenseBonus(defender, attackDirection) {
+docs/Context/PHASE1_IMPLEMENTATION_PLAN.md:752:    const { facing, formation } = defender;
+docs/Context/RANGED_COMBAT_IMPLEMENTATION.md:223:            attacker: p1Unit,
+docs/Context/RANGED_COMBAT_IMPLEMENTATION.md:224:            defender: p2Unit,
+docs/Context/RANGED_COMBAT_IMPLEMENTATION.md:379:            const attackerId = combat.attacker.unitId;
+docs/Context/RANGED_COMBAT_IMPLEMENTATION.md:380:            const defenderId = combat.defender.unitId;
+docs/Context/RANGED_COMBAT_IMPLEMENTATION.md:382:            engagements.get(attackerId).engaged = true;
+docs/Context/RANGED_COMBAT_IMPLEMENTATION.md:383:            engagements.get(attackerId).fightingWith.push(defenderId);
+docs/Context/RANGED_COMBAT_IMPLEMENTATION.md:385:            engagements.get(defenderId).engaged = true;
+docs/Context/RANGED_COMBAT_IMPLEMENTATION.md:386:            engagements.get(defenderId).fightingWith.push(attackerId);
+docs/Context/RANGED_COMBAT_IMPLEMENTATION.md:1225:        combat.result.casualties.attacker.forEach(cas => p1Total += cas.casualties);
+docs/Context/RANGED_COMBAT_IMPLEMENTATION.md:1226:        combat.result.casualties.defender.forEach(cas => p2Total += cas.casualties);
+docs/PHASE2_COMBAT_PLAN.md:67:│   ├── ford-crossing.js         attacker crosses a ford (North Ford W6)
+docs/PHASE2_COMBAT_PLAN.md:110:The pair is deliberately named `a`/`b`, **not** attacker/defender. Which side is
+docs/PHASE2_COMBAT_PLAN.md:369:> (÷100); the unit that entered contact is the attacker, persistent contact is
+docs/PHASE2_COMBAT_PLAN.md:401:   - `hill-assault`: the defender holds high ground with fewer, better troops.
+docs/PHASE2_COMBAT_PLAN.md:402:     If the attacker wins easily, elevation is worth nothing.
+docs/PHASE2_COMBAT_PLAN.md:403:   - `ford-crossing`: the attacker is caught mid-crossing. Should be punishing.
+docs/ai-systems/cohort_ai_systems.md:89:    'defenders hold opposite bank',
+docs/ai-systems/cohort_ai_systems.md:108:'attacker_major_victory': {
+docs/ai-systems/cohort_ai_systems.md:109:  opening: "Steel rings against steel as {attacker_culture} forces surge forward...",
+docs/ai-systems/cohort_ai_systems.md:110:  development: "The {defender_formation} formation wavers under the devastating assault...",
+docs/ai-systems/cohort_ai_systems.md:112:  resolution: "The battlefield belongs to {attacker_culture}, their victory complete."
+docs/ai-systems/cohort_ai_systems.md:117:- `{attacker_culture}`, `{defender_culture}`: Player civilizations
+docs/ai-systems/cohort_ai_systems.md:118:- `{defender_formation}`, `{tactical_development}`: Combat-specific details
+docs/ai-systems/cohort_ai_systems.md:154:    template: 'attacker_victory',
+docs/ai-systems/cohort_ai_systems.md:158:    attacker: {
+docs/ai-systems/cohort_ai_systems.md:165:    defender: { /* similar structure */ }
+docs/ai-systems/cohort_ai_systems.md:170:    threats: ['Defender morale weakening'],
+docs/ai-systems/cohort_ai_systems.md:266:if (key.includes(formations.attacker) || 
+docs/ai-systems/cohort_ai_systems.md:267:    key.includes(formations.defender)) score += 2;
+docs/ai-systems/cohort_ai_systems.md:273:if ((attacker === 'Roman' && defender === 'Celtic') ||
+docs/ai-systems/cohort_ai_systems.md:274:    (attacker === 'Macedonian' && defender === 'Persian')) {
+docs/ai-systems/cohort_ai_systems.md:303:    'Defender morale weakening',
+docs/ai-systems/cohort_ai_systems.md:622:      fullNarrative: `The clash of arms echoes across the ${battleContext.terrain} as ${battleContext.attackerCulture} forces engage ${battleContext.defenderCulture} defenders. After fierce fighting, ${winner} emerges victorious in this ${combatResult.intensity} engagement.`,
+docs/ai-systems/cohort_ai_systems.md:627:      attacker: { speech: '"The battle is decided."', rank: 'Commander' },
+docs/ai-systems/cohort_ai_systems.md:628:      defender: { speech: '"We fight with honor."', rank: 'Commander' }
+docs/architecture/cohort_data_maps.md:450:        location: p1Unit.position,  // Combat at attacker's position
+docs/architecture/cohort_data_maps.md:451:        attacker: { 
+docs/architecture/cohort_data_maps.md:455:        defender: { 
+docs/architecture/cohort_data_maps.md:470:          attacker: { unit: p1Unit, range: distance },
+docs/architecture/cohort_data_maps.md:471:          defender: { unit: p2Unit }
+docs/architecture/cohort_data_maps.md:522:function analyzeTacticalSituation(attacker, defender, map) {
+docs/architecture/cohort_data_maps.md:524:    terrainAdvantage: null,  // 'attacker', 'defender', or 'neutral'
+docs/architecture/cohort_data_maps.md:531:  const attackerTerrain = getTerrainType(attacker.position, map);
+docs/architecture/cohort_data_maps.md:532:  const defenderTerrain = getTerrainType(defender.position, map);
+docs/architecture/cohort_data_maps.md:534:  if (attackerTerrain === 'hill' && defenderTerrain !== 'hill') {
+docs/architecture/cohort_data_maps.md:535:    situation.terrainAdvantage = 'attacker';
+docs/architecture/cohort_data_maps.md:537:  } else if (defenderTerrain === 'hill' && attackerTerrain !== 'hill') {
+docs/architecture/cohort_data_maps.md:538:    situation.terrainAdvantage = 'defender';
+docs/architecture/cohort_function_ref.md:329:    attackerPower: Number,
+docs/architecture/cohort_function_ref.md:330:    defenderPower: Number
+docs/architecture/cohort_function_ref.md:333:    attacker: Array,
+docs/architecture/cohort_function_ref.md:334:    defender: Array
+docs/architecture/cohort_function_ref.md:337:    attacker: Number,
+docs/architecture/cohort_function_ref.md:338:    defender: Number
+docs/architecture/cohort_function_ref.md:350:#### `calculateFormationInteractions(attackerFormation, defenderFormation)`
+docs/architecture/cohort_function_ref.md:360:  attacker: { attack: 0.9, defense: 1.0, mobility: 0.8 },
+docs/architecture/cohort_function_ref.md:361:  defender: { attack: 1.0, defense: 1.2, mobility: 0.7 }
+docs/architecture/cohort_function_ref.md:365:#### `calculateWeaponEffectiveness(attackerEquipment, defenderEquipment)`
+docs/architecture/cohort_function_ref.md:370:#### `applyCulturalModifiers(attackerCulture, defenderCulture, conditions)`
+docs/architecture/cohort_function_ref.md:375:  attacker: { attack: 1.1, engineering: 1.2 },
+docs/architecture/cohort_function_ref.md:376:  defender: { defense: 1.3, phalanx: 1.3 }
+docs/architecture/cohort_function_ref.md:385:  attacker: [{ casualties: 12, type: 'professional' }],
+docs/architecture/cohort_function_ref.md:386:  defender: [{ casualties: 45, type: 'militia' }]
+docs/architecture/cohort_function_ref.md:567:#### `calculatePositionalModifiers(attacker, defender, allUnits, map)`
+docs/architecture/cohort_function_ref.md:580:  attacker: { attack: +2, defense: 0 },
+docs/architecture/cohort_function_ref.md:581:  defender: { attack: 0, defense: +4 },
+docs/architecture/cohort_function_ref.md:584:    'Defender on hill: +2',
+docs/architecture/cohort_function_ref.md:590:#### `calculateFlankingBonus(attacker, defender, allUnits)`
+docs/architecture/cohort_function_ref.md:597:#### `calculateElevationAdvantage(attackerPos, defenderPos, map)`
+docs/architecture/cohort_function_ref.md:601:{ defender: +2, attacker: 0 }  // Defender elevated
+docs/architecture/cohort_function_ref.md:602:{ attacker: +2, defender: 0 }  // Attacker elevated (rare)
+docs/architecture/cohort_function_ref.md:603:{ attacker: 0, defender: 0 }   // Level ground
+docs/architecture/cohort_function_ref.md:606:#### `isCrossingRiver(attackerPos, defenderPos, map)`
+docs/architecture/cohort_function_ref.md:609:- Defender at ford
+docs/architecture/cohort_function_ref.md:610:- Attacker adjacent but not at ford
+docs/architecture/cohort_function_ref.md:616:  attacker: { attack: -4, vulnerable: true },
+docs/architecture/cohort_function_ref.md:617:  defender: { defense: +3, secure: true },
+docs/architecture/cohort_function_ref.md:845:    attacker: Object,
+docs/architecture/cohort_function_ref.md:846:    defender: Object
+docs/architecture/cohort_function_ref.md:875:**Returns:** Object with attacker and defender officer reports
+docs/architecture/cohort_function_ref.md:1256:  - calculatePositionalModifiers(attacker, defender, allUnits, map)
+docs/architecture/cohort_function_ref.md:1269:PHASE 4: battleEngine.resolveCombat(attacker, defender, conditions, context)
+docs/architecture/cohort_variable_index.md:346:    result: 'attacker_major_victory',  // ENUM
+docs/architecture/cohort_variable_index.md:348:    combatRatio: 1.82,                  // Attacker power ÷ defender power
+docs/architecture/cohort_variable_index.md:349:    attackerPower: 456,                 // Final calculated attack
+docs/architecture/cohort_variable_index.md:350:    defenderPower: 250                  // Final calculated defense
+docs/architecture/cohort_variable_index.md:354:    attacker: [
+docs/architecture/cohort_variable_index.md:357:    defender: [
+docs/architecture/cohort_variable_index.md:364:    attacker: +15,                      // Morale boost from victory
+docs/architecture/cohort_variable_index.md:365:    defender: -20                       // Morale penalty from defeat
+docs/architecture/cohort_variable_index.md:369:    'formation_disruption',             // Defender formation broken
+docs/architecture/cohort_variable_index.md:375:    attacker: { attack: 1.0, defense: 1.0, mobility: 0.9 },
+docs/architecture/cohort_variable_index.md:376:    defender: { attack: 0.8, defense: 1.2, mobility: 0.7 }
+docs/architecture/cohort_variable_index.md:391:  attacker: {
+docs/architecture/cohort_variable_index.md:395:  defender: {
+docs/architecture/cohort_variable_index.md:401:    'Defender on hill in forest: +4 defense total',
+docs/architecture/cohort_variable_index.md:560:    template: 'attacker_victory',
+docs/architecture/cohort_variable_index.md:565:    attacker: {
+docs/architecture/cohort_variable_index.md:572:    defender: {
+docs/architecture/cohort_variable_index.md:830:      attacker_penalty: -4,          // Formation disrupted in water
+docs/architecture/cohort_variable_index.md:831:      defender_bonus: +3,            // Secure position
+docs/architecture/cohort_variable_index.md:1038:  attacker: {
+docs/architecture/cohort_variable_index.md:1060:  defender: {
+docs/architecture/cohort_variable_index.md:1086:    'Attacker benefits from flanking (+2)',
+docs/architecture/cohort_variable_index.md:1087:    'Defender holds phalanx formation on high ground (+4)',
+docs/architecture/cohort_variable_index.md:1088:    'Ford crossing increases attacker vulnerability',
+docs/architecture/cohort_variable_index.md:1089:    'Defender has significant tactical advantage'
+docs/architecture/cohort_variable_index.md:1239:const combatRatio = attackerPower ÷ defenderPower;
+docs/architecture/cohort_variable_index.md:1243:if (combatRatio > 1.5) result = 'attacker_major_victory';
+docs/architecture/cohort_variable_index.md:1244:else if (combatRatio > 1.2) result = 'attacker_victory';      // This case
+docs/architecture/cohort_variable_index.md:1245:else if (combatRatio > 1.0) result = 'attacker_advantage';
+docs/architecture/cohort_variable_index.md:1281:  ATTACKER_MAJOR_VICTORY: 'attacker_major_victory',    // Ratio > 1.5
+docs/architecture/cohort_variable_index.md:1282:  ATTACKER_VICTORY: 'attacker_victory',                // Ratio > 1.2
+docs/architecture/cohort_variable_index.md:1283:  ATTACKER_ADVANTAGE: 'attacker_advantage',            // Ratio > 1.0
+docs/architecture/cohort_variable_index.md:1285:  DEFENDER_ADVANTAGE: 'defender_advantage',            // Ratio > 0.6
+docs/architecture/cohort_variable_index.md:1286:  DEFENDER_VICTORY: 'defender_victory',                // Ratio > 0.4
+docs/architecture/cohort_variable_index.md:1287:  DEFENDER_MAJOR_VICTORY: 'defender_major_victory'     // Ratio ≤ 0.4
+docs/design/architecture-roadmap.md:105:- **`prepared` is the most decisive factor in the engine** — a braced defender
+docs/design/architecture-roadmap.md:106:  beats an unbraced attacker in ~100% of otherwise-identical matchups, ahead of
+docs/design/architecture-roadmap.md:108:  (the hill defender wins on flat ground too). Worth a ruling before phase 4
+docs/design/architecture-roadmap.md:110:- **Forest is a trap.** `TERRAIN_MODIFIERS.forest_cover` favours a defender, but
+docs/design/architecture-roadmap.md:112:  morale every round and swamps it: a defender in woods wins 0% of mirror
+docs/design/architecture-roadmap.md:315:| **Q5** | Who attacks? (harness reports an unordered a/b pair) | **The unit that entered contact this turn is the attacker** — charge and momentum bonuses apply to it. Contact persisting from a prior round resolves **symmetrically**, with only prepared-state and terrain asymmetries remaining. This is what makes the cavalry charge-decay curve fall out naturally. |
+docs/design/architecture-roadmap.md:332:6. **The damage-accumulation "bucket" system is mathematically broken as documented.** In `combat_design_parameters.md`, negative damage (attack < defense) fills a bucket that overflows into casualties **for the defender** at the same 5×-per-point rate as positive damage — so the sign is discarded and casualties scale with |attack − defense|. Worked consequence, from the doc's own examples: Attack 2 vs Defense 8 inflicts **30 casualties/turn** on the defender while Attack 8 vs Defense 5 inflicts only 15 — a hopeless attacker out-kills a dominant one, and buying defense makes you die faster. The `damageScalingSandbox.js` recovered from the repo confirms the team was wrestling with exactly this (pre-scaling experiments) when work stopped. The new stamina/push/strength-snowball model replaces the bucket entirely; the anti-stalemate job it was hired for is now done by strength-scaled output + monotonic morale + chaos-seeded divergence. Salvage nothing from it.
+docs/design/combat-design.md:155:3. **Push:** Never causes casualties directly. Its penalties are **morale loss** (being pushed back is a confidence killer — the real cost), **stamina drain**, and **positional consequences**: winning push can flip a terrain advantage (defender loses the crest → the elevation math transfers), and it feeds movement limits + stacking penalties once combat integrates with the map. In pure phase-2 combat, terrain advantage is an input flag that push can flip mid-engagement.
+docs/discord-bot/cohort_commands_detail.md:914:- Phalanx vs cavalry: +8 defender advantage
+docs/discord-bot/cohort_commands_detail.md:1067:  'Hill Fort Assault': 'Fortified hilltop position. Attacker must breach walls, defender holds for 8 turns.',
+docs/discord-bot/cohort_commands_detail.md:1070:  'Mountain Pass': 'Strategic chokepoint. Defender exploits terrain, attacker forces passage.'
+docs/game-logic/cohort_game_logic.md:115:      defensive_multiplier: 1.4  // +4 defenders (Thermopylae)
+docs/game-logic/cohort_game_logic.md:206:    result: 'attacker_major_victory',
+docs/game-logic/cohort_game_logic.md:209:    attackerPower: 450,
+docs/game-logic/cohort_game_logic.md:210:    defenderPower: 250
+docs/game-logic/cohort_game_logic.md:213:    attacker: [{ casualties: 12, type: 'professional' }],
+docs/game-logic/cohort_game_logic.md:214:    defender: [{ casualties: 45, type: 'militia' }]
+docs/game-logic/cohort_game_logic.md:217:    attacker: +15,
+docs/game-logic/cohort_game_logic.md:218:    defender: -20
+docs/game-logic/cohort_game_logic.md:277:finalAttackerPower = attackerStats.attack * 
+docs/game-logic/cohort_game_logic.md:279:  envMods.attacker.attack *               // Multiplier
+docs/game-logic/cohort_game_logic.md:281:  (culturalMods.attacker.attack || 1.0);
+docs/game-logic/cohort_game_logic.md:283:finalDefenderPower = defenderStats.defense *
+docs/game-logic/cohort_game_logic.md:285:  envMods.defender.defense *
+docs/game-logic/cohort_game_logic.md:286:  (culturalMods.defender.defense || 1.0);
+docs/game-logic/cohort_game_logic.md:288:combatRatio = finalAttackerPower / finalDefenderPower;
+docs/game-logic/cohort_game_logic.md:293:if (combatRatio > 1.5) return 'attacker_major_victory';      // Decisive
+docs/game-logic/cohort_game_logic.md:294:else if (combatRatio > 1.2) return 'attacker_victory';       // Significant
+docs/game-logic/cohort_game_logic.md:295:else if (combatRatio > 1.0) return 'attacker_advantage';     // Slight
+docs/game-logic/cohort_game_logic.md:296:else if (combatRatio > 0.8) return 'defender_advantage';     // Slight
+docs/game-logic/cohort_game_logic.md:297:else if (combatRatio > 0.6) return 'defender_victory';       // Significant
+docs/game-logic/cohort_game_logic.md:298:else return 'defender_major_victory';                        // Decisive
+docs/game-logic/cohort_game_logic.md:536:    buildForceFromUnit(engagement.attacker, battleState),
+docs/game-logic/cohort_game_logic.md:537:    buildForceFromUnit(engagement.defender, battleState),
+docs/game-logic/cohort_tactical_systems.md:645:    attacker: p1Unit,
+docs/game-logic/cohort_tactical_systems.md:646:    defender: p2Unit,
+docs/game-logic/cohort_tactical_systems.md:657:      attacker: p1Unit,
+docs/game-logic/cohort_tactical_systems.md:658:      defender: p2Unit,
+docs/game-logic/cohort_tactical_systems.md:670:#### **`calculatePositionalModifiers(attacker, defender, allUnits, map)`**
+docs/game-logic/cohort_tactical_systems.md:675:function calculateFlankingBonus(attacker, defender, allUnits) {
+docs/game-logic/cohort_tactical_systems.md:676:  const defenderPos = defender.position;
+docs/game-logic/cohort_tactical_systems.md:677:  const adjacent = getAdjacentCoords(defenderPos);  // 4 tiles around defender
+docs/game-logic/cohort_tactical_systems.md:680:  const friendlyAttackers = allUnits.filter(unit => 
+docs/game-logic/cohort_tactical_systems.md:681:    unit.side === attacker.side &&
+docs/game-logic/cohort_tactical_systems.md:682:    unit.unitId !== attacker.unitId &&
+docs/game-logic/cohort_tactical_systems.md:686:  if (friendlyAttackers.length === 0) return 0;      // Single attacker
+docs/game-logic/cohort_tactical_systems.md:687:  if (friendlyAttackers.length === 1) return +2;     // 2-sided attack
+docs/game-logic/cohort_tactical_systems.md:688:  if (friendlyAttackers.length >= 2) return +4;      // 3+ sides (surrounded)
+docs/game-logic/cohort_tactical_systems.md:698:function calculateElevationAdvantage(attackerPos, defenderPos, map) {
+docs/game-logic/cohort_tactical_systems.md:699:  const attackerElevation = isOnHill(attackerPos, map) ? 1 : 0;
+docs/game-logic/cohort_tactical_systems.md:700:  const defenderElevation = isOnHill(defenderPos, map) ? 1 : 0;
+docs/game-logic/cohort_tactical_systems.md:702:  if (defenderElevation > attackerElevation) {
+docs/game-logic/cohort_tactical_systems.md:704:      defender: +2,    // +2 defense on high ground
+docs/game-logic/cohort_tactical_systems.md:705:      attacker: 0 
+docs/game-logic/cohort_tactical_systems.md:708:  if (attackerElevation > defenderElevation) {
+docs/game-logic/cohort_tactical_systems.md:710:      attacker: +2,    // +2 attack charging downhill (gravity)
+docs/game-logic/cohort_tactical_systems.md:711:      defender: 0 
+docs/game-logic/cohort_tactical_systems.md:715:  return { attacker: 0, defender: 0 };  // Level ground
+docs/game-logic/cohort_tactical_systems.md:723:function isCrossingRiver(attackerPos, defenderPos, map) {
+docs/game-logic/cohort_tactical_systems.md:724:  // Defender at ford?
+docs/game-logic/cohort_tactical_systems.md:725:  if (!isFord(defenderPos)) return false;
+docs/game-logic/cohort_tactical_systems.md:727:  // Attacker adjacent?
+docs/game-logic/cohort_tactical_systems.md:728:  const distance = calculateDistance(attackerPos, defenderPos);
+docs/game-logic/cohort_tactical_systems.md:731:  // Attacker not at ford = crossing attack
+docs/game-logic/cohort_tactical_systems.md:732:  if (!isFord(attackerPos)) {
+docs/game-logic/cohort_tactical_systems.md:734:      attacker: { attack: -4, vulnerable: true },
+docs/game-logic/cohort_tactical_systems.md:735:      defender: { defense: +3, secure: true },
+docs/game-logic/cohort_tactical_systems.md:736:      description: 'Attacking across water - formation disrupted, defender secure'
+docs/game-logic/cohort_tactical_systems.md:751:  attacker: {
+docs/game-logic/cohort_tactical_systems.md:755:  defender: {
+docs/game-logic/cohort_tactical_systems.md:761:    'Defender on hill in forest: +4 defense total',
+docs/game-logic/cohort_tactical_systems.md:828:  attacker: player1Unit,
+docs/game-logic/cohort_tactical_systems.md:829:  defender: player2Unit,
+docs/game-logic/cohort_tactical_systems.md:838:  attacker: {
+docs/game-logic/cohort_tactical_systems.md:846:  defender: {
+docs/game-logic/cohort_tactical_systems.md:858:    'Attacker benefits from flanking (+2)',
+docs/game-logic/cohort_tactical_systems.md:859:    'Defender holds high ground in forest (+4)',
+docs/game-logic/cohort_workflows.md:337:│   - Flanking check → +2 attacker                │
+docs/game-logic/cohort_workflows.md:338:│   - Elevation check → +2 defender (on hill)     │
+docs/game-logic/cohort_workflows.md:339:│   - River crossing → -4 attacker, +3 defender   │
+docs/game-logic/cohort_workflows.md:378:│   resolveCombat(attacker, defender, conditions) │
+docs/game-logic/cohort_workflows.md:381:│     attackerStats = calculateUnitEffectiveness()│
+docs/game-logic/cohort_workflows.md:405:│     attackerPower = 8.7 × 0.8 × 0.9 × 0.7 × 1.1│
+docs/game-logic/cohort_workflows.md:407:│     defenderPower = 9.4 × 1.8 × 1.2 × 1.0 × 1.3│
+docs/game-logic/cohort_workflows.md:412:│   Result: 'defender_major_victory' (ratio < 0.4)│
+docs/game-logic/cohort_workflows.md:417:│     Attacker (loser): 87 × 0.25 × random(0.8-1.2)│
+docs/game-logic/cohort_workflows.md:419:│     Defender (winner): 94 × 0.05 × random       │
+docs/game-logic/cohort_workflows.md:423:│     Attacker: -20 morale                        │
+docs/game-logic/cohort_workflows.md:424:│     Defender: +15 morale                        │
+docs/game-logic/cohort_workflows.md:480:│   - Result: defender victory                    │
+docs/game-logic/cohort_workflows.md:485:│   For Player 1 (attacker/loser):                │
+docs/game-logic/cohort_workflows.md:491:│   For Player 2 (defender/winner):               │
+docs/game-logic/cohort_workflows.md:1086:    const attacker = {
+docs/game-logic/cohort_workflows.md:1091:    const defender = {
+docs/game-logic/cohort_workflows.md:1097:    const result = resolveCombat(attacker, defender, {}, {});
+docs/game-logic/cohort_workflows.md:1099:    expect(result.combatResult.result).toContain('defender');
+docs/game-logic/cohort_workflows.md:1100:    expect(result.casualties.attacker[0].casualties).toBeGreaterThan(
+docs/game-logic/cohort_workflows.md:1101:      result.casualties.defender[0].casualties
+docs/guides/cohort_system_map.md:243:    attacker: "Centurion Marcus: We've secured the ford...",
+docs/guides/cohort_system_map.md:244:    defender: "Phalangarch: The sarissa holds firm..."
+docs/guides/cohort_system_map.md:419:    result: 'defender_major_victory',
+docs/guides/cohort_system_map.md:424:    attacker: [{casualties: 22}],
+docs/guides/cohort_system_map.md:425:    defender: [{casualties: 5}]
+docs/guides/cohort_system_map.md:454:    attacker: {
+src/bot/commands/create-game.js:39:        specialRules: 'Crossing penalties (-4 Attack), defenders gain elevation bonus',
+src/commanderName/titles/titleDefinitions.js:14:        wall: 'the Defender',
+src/game/battleEngine.js:56:function calculateClosingDistanceBonus(attacker, defender, conditions = {}, isDefender = false) {
+src/game/battleEngine.js:57:    const attackerWeapon = attacker.primaryWeapon?.key || attacker.primaryWeapon?.name?.toLowerCase();
+src/game/battleEngine.js:58:    const defenderWeapon = defender.primaryWeapon?.key || defender.primaryWeapon?.name?.toLowerCase();
+src/game/battleEngine.js:59:    const attackerRanged = attackerWeapon && isRangedWeapon(attackerWeapon);
+src/game/battleEngine.js:60:    const defenderRanged = defenderWeapon && isRangedWeapon(defenderWeapon);
+src/game/battleEngine.js:61:    if (!attackerRanged) return 0;
+src/game/battleEngine.js:62:    if (isDefender && conditions.combat_situation === 'ambush' && !defenderRanged) {
+src/game/battleEngine.js:67:    if (!defenderRanged) {
+src/game/battleEngine.js:72:        if (conditions.combat_situation === 'ambush' && !isDefender) closingBonus += 1;
+src/game/battleEngine.js:75:        if (conditions.combat_situation === 'ambush' && !isDefender) closingBonus += 1;
+src/game/battleEngine.js:97:function calculateAttackRating(unit, situation = {}, targetUnit = null, isDefender = false) {
+src/game/battleEngine.js:119:        const defenderFormation = targetUnit.formation || 'line';
+src/game/battleEngine.js:120:        if (['line', 'phalanx', 'square', 'shield_wall'].includes(defenderFormation)) {
+src/game/battleEngine.js:132:        const closingBonus = calculateClosingDistanceBonus(unit, targetUnit, situation, isDefender);
+src/game/battleEngine.js:200:    'marsh_defender': +2, 'prepared_defense': +2, 'fighting_retreat': +1,
+src/game/battleEngine.js:482:const ATTACKER_ASYMMETRIC_BONUSES = {
+src/game/battleEngine.js:487:const DEFENDER_ASYMMETRIC_BONUSES = {
+src/game/battleEngine.js:502:    'high_ground': 1, 'river_bank_defender': 1,
+src/game/battleEngine.js:530:    if (conditions.isAttacker) {
+src/game/battleEngine.js:531:        Object.keys(ATTACKER_ASYMMETRIC_BONUSES).forEach(bonus => {
+src/game/battleEngine.js:532:            if (conditions[bonus]) { const b = ATTACKER_ASYMMETRIC_BONUSES[bonus]; totalPreparation += b; breakdown.tactical += b; breakdown.factors.push(`ATTACKER ${bonus}: +${b}`); }
+src/game/battleEngine.js:535:    if (conditions.isDefender) {
+src/game/battleEngine.js:536:        Object.keys(DEFENDER_ASYMMETRIC_BONUSES).forEach(bonus => {
+src/game/battleEngine.js:537:            if (conditions[bonus]) { const b = DEFENDER_ASYMMETRIC_BONUSES[bonus]; totalPreparation += b; breakdown.tactical += b; breakdown.factors.push(`DEFENDER ${bonus}: +${b}`); }
+src/game/battleEngine.js:595:function buildPreparationContext(unit, battleState, combatContext, map, isAttacker) {
+src/game/battleEngine.js:596:    const conditions = { isAttacker, isDefender: !isAttacker };
+src/game/battleEngine.js:598:    if (isAttacker && battleState.commanderPosition) {
+src/game/battleEngine.js:620:    if (isAttacker) {
+src/game/battleEngine.js:627:    if (!isAttacker) {
+src/game/battleEngine.js:634:function calculatePreparationLegacy(unit, battleConditions = {}, isAttacker = false) {
+src/game/battleEngine.js:641:        isAttacker, isDefender: !isAttacker
+src/game/battleEngine.js:643:    if (isAttacker) {
+src/game/battleEngine.js:655:    if (!isAttacker) {
+src/game/battleEngine.js:1025:function calculateTotalAttackRating(force, targetForce = null, conditions = {}, isDefender = false) {
+src/game/battleEngine.js:1045:        const unitAttack = calculateAttackRating(combatUnit, conditions, targetUnit, isDefender);
+src/game/battleEngine.js:1071:function calculateTotalPreparation(force, conditions, isAttacker = false) {
+src/game/battleEngine.js:1083:        const preparationResult = calculatePreparationLegacy(combatUnit, conditions, isAttacker);
+src/game/battleEngine.js:1096:        const attackerAttack = calculateTotalAttackRating(attackingForce, defendingForce, battleConditions, false);
+src/game/battleEngine.js:1097:        const attackerDefense = calculateTotalDefenseRating(attackingForce);
+src/game/battleEngine.js:1098:        const defenderAttack = calculateTotalAttackRating(defendingForce, attackingForce, battleConditions, true);
+src/game/battleEngine.js:1099:        const defenderDefense = calculateTotalDefenseRating(defendingForce);
+src/game/battleEngine.js:1100:        console.log(`Attack Ratings - Attacker: ${attackerAttack}, Defender: ${defenderAttack}`);
+src/game/battleEngine.js:1101:        console.log(`Defense Ratings - Attacker: ${attackerDefense}, Defender: ${defenderDefense}`);
+src/game/battleEngine.js:1106:        const attackerPreparation = calculateTotalPreparation(attackingForce, battleConditions, true);
+src/game/battleEngine.js:1107:        const defenderPreparation = calculateTotalPreparation(defendingForce, battleConditions, false);
+src/game/battleEngine.js:1108:        console.log(`Preparation - Attacker: ${attackerPreparation.toFixed(2)}, Defender: ${defenderPreparation.toFixed(2)}`);
+src/game/battleEngine.js:1112:        let attackerChaos = rawChaos / Math.max(1.0, attackerPreparation);
+src/game/battleEngine.js:1113:        let defenderChaos = rawChaos / Math.max(1.0, defenderPreparation);
+src/game/battleEngine.js:1115:            defenderChaos = defenderChaos * 1.5;
+src/game/battleEngine.js:1116:            console.log(`Ambush detected: Defender chaos amplified by 50%`);
+src/game/battleEngine.js:1118:        console.log(`Applied Chaos - Attacker: ${attackerChaos.toFixed(2)}, Defender: ${defenderChaos.toFixed(2)}`);
+src/game/battleEngine.js:1120:            const attackerReduction = ((1 - (attackerChaos / rawChaos)) * 100).toFixed(0);
+src/game/battleEngine.js:1121:            const defenderReduction = ((1 - (defenderChaos / rawChaos)) * 100).toFixed(0);
+src/game/battleEngine.js:1122:            console.log(`Preparation Effect - Attacker chaos reduced by ${attackerReduction}%, Defender by ${defenderReduction}%`);
+src/game/battleEngine.js:1126:        const attackerEffectiveAttack = attackerAttack - attackerChaos;
+src/game/battleEngine.js:1127:        const attackerEffectiveDefense = attackerDefense - attackerChaos;
+src/game/battleEngine.js:1128:        const defenderEffectiveAttack = defenderAttack - defenderChaos;
+src/game/battleEngine.js:1129:        const defenderEffectiveDefense = defenderDefense - defenderChaos;
+src/game/battleEngine.js:1131:        console.log(`  Attacker: Attack ${attackerEffectiveAttack.toFixed(2)}, Defense ${attackerEffectiveDefense.toFixed(2)}`);
+src/game/battleEngine.js:1132:        console.log(`  Defender: Attack ${defenderEffectiveAttack.toFixed(2)}, Defense ${defenderEffectiveDefense.toFixed(2)}`);
+src/game/battleEngine.js:1133:        const attackerDamage = attackerEffectiveAttack - defenderEffectiveDefense;
+src/game/battleEngine.js:1134:        const defenderDamage = defenderEffectiveAttack - attackerEffectiveDefense;
+src/game/battleEngine.js:1135:        console.log(`Raw Damage - Attacker deals: ${attackerDamage.toFixed(2)}, Defender deals: ${defenderDamage.toFixed(2)}`);
+src/game/battleEngine.js:1136:        const casualties = applyDamageWithAccumulationToForces(attackerDamage, defenderDamage, attackingForce, defendingForce, tacticalContext.turn || 1);
+src/game/battleEngine.js:1137:        const combatResult = determineCombatResult(attackerDamage, defenderDamage, casualties);
+src/game/battleEngine.js:1141:        console.log(`Casualties: Attacker ${casualties.attacker.total}, Defender ${casualties.defender.total}`);
+src/game/battleEngine.js:1144:                chaosLevel, chaosRoll, rawChaos, attackerPreparation, defenderPreparation,
+src/game/battleEngine.js:1145:                attackerChaos, defenderChaos, attackerAttack, defenderAttack, attackerDefense, defenderDefense,
+src/game/battleEngine.js:1146:                effectiveAttack: { attacker: attackerEffectiveAttack, defender: defenderEffectiveAttack },
+src/game/battleEngine.js:1147:                effectiveDefense: { attacker: attackerEffectiveDefense, defender: defenderEffectiveDefense },
+src/game/battleEngine.js:1148:                rawDamage: { attacker: attackerDamage, defender: defenderDamage },
+src/game/battleEngine.js:1150:                    attacker: casualties.attacker.accumulationData || [],
+src/game/battleEngine.js:1151:                    defender: casualties.defender.accumulationData || [],
+src/game/battleEngine.js:1153:                        attacker: casualties.attacker.accumulationData?.some(unit => unit.accumulatedAfter < 0) || false,
+src/game/battleEngine.js:1154:                        defender: casualties.defender.accumulationData?.some(unit => unit.accumulatedAfter < 0) || false
+src/game/battleEngine.js:1157:                        attacker: casualties.attacker.accumulationData?.filter(unit => unit.overflow).length || 0,
+src/game/battleEngine.js:1158:                        defender: casualties.defender.accumulationData?.filter(unit => unit.overflow).length || 0
+src/game/battleEngine.js:1177:function applyDamageWithAccumulationToForces(attackerDamage, defenderDamage, attackingForce, defendingForce, turnNumber) {
+src/game/battleEngine.js:1179:        attacker: { casualties: 0, total: 0, units: [], accumulationData: [] },
+src/game/battleEngine.js:1180:        defender: { casualties: 0, total: 0, units: [], accumulationData: [] }
+src/game/battleEngine.js:1182:    const ATTACKER_DAMAGE_SCALE = 0.5;
+src/game/battleEngine.js:1183:    const DEFENDER_DAMAGE_SCALE = 0.5;
+src/game/battleEngine.js:1184:    const scaledAttackerDamage = attackerDamage * ATTACKER_DAMAGE_SCALE;
+src/game/battleEngine.js:1185:    const scaledDefenderDamage = defenderDamage * DEFENDER_DAMAGE_SCALE;
+src/game/battleEngine.js:1187:        const damagePerUnit = scaledAttackerDamage / defendingForce.units.length;
+src/game/battleEngine.js:1193:            casualties.defender.casualties += result.casualties;
+src/game/battleEngine.js:1194:            casualties.defender.total += result.casualties;
+src/game/battleEngine.js:1195:            casualties.defender.units.push({ casualties: result.casualties, type: unit.qualityType || 'professional', strength: maxStr, accumulated: result.accumulatedAfter, overflow: result.overflow });
+src/game/battleEngine.js:1196:            casualties.defender.accumulationData.push({ unitIndex: index, ...result });
+src/game/battleEngine.js:1200:        const damagePerUnit = scaledDefenderDamage / attackingForce.units.length;
+src/game/battleEngine.js:1206:            casualties.attacker.casualties += result.casualties;
+src/game/battleEngine.js:1207:            casualties.attacker.total += result.casualties;
+src/game/battleEngine.js:1208:            casualties.attacker.units.push({ casualties: result.casualties, type: unit.qualityType || 'professional', strength: maxStr, accumulated: result.accumulatedAfter, overflow: result.overflow });
+src/game/battleEngine.js:1209:            casualties.attacker.accumulationData.push({ unitIndex: index, ...result });
+src/game/battleEngine.js:1215:function determineCombatResult(attackerDamage, defenderDamage, casualties) {
+src/game/battleEngine.js:1217:    const damageDifference = attackerDamage - defenderDamage;
+src/game/battleEngine.js:1218:    if (damageDifference >= 4) { result = 'attacker_major_victory'; intensity = 'decisive'; }
+src/game/battleEngine.js:1219:    else if (damageDifference >= 2) { result = 'attacker_victory'; intensity = 'significant'; }
+src/game/battleEngine.js:1220:    else if (damageDifference >= 0.5) { result = 'attacker_advantage'; intensity = 'slight'; }
+src/game/battleEngine.js:1221:    else if (damageDifference <= -4) { result = 'defender_major_victory'; intensity = 'decisive'; }
+src/game/battleEngine.js:1222:    else if (damageDifference <= -2) { result = 'defender_victory'; intensity = 'significant'; }
+src/game/battleEngine.js:1223:    else if (damageDifference <= -0.5) { result = 'defender_advantage'; intensity = 'slight'; }
+src/game/battleEngine.js:1224:    return { result, intensity, damageDifference, attackerDamage, defenderDamage };
+src/game/battleEngine.js:1229:        'attacker_major_victory': { attacker: +15, defender: -20 },
+src/game/battleEngine.js:1230:        'attacker_victory': { attacker: +10, defender: -15 },
+src/game/battleEngine.js:1231:        'attacker_advantage': { attacker: +5, defender: -8 },
+src/game/battleEngine.js:1232:        'stalemate': { attacker: -2, defender: -2 },
+src/game/battleEngine.js:1233:        'defender_advantage': { attacker: -8, defender: +5 },
+src/game/battleEngine.js:1234:        'defender_victory': { attacker: -15, defender: +10 },
+src/game/battleEngine.js:1235:        'defender_major_victory': { attacker: -20, defender: +15 }
+src/game/battleEngine.js:1237:    return baseMoraleChanges[combatResult.result] || { attacker: 0, defender: 0 };
+src/game/battleEngine.js:1243:    if (casualties.attacker.total > casualties.defender.total * 2) developments.push('defender_advantage');
+src/game/battleEngine.js:1244:    else if (casualties.defender.total > casualties.attacker.total * 2) developments.push('attacker_advantage');
+src/game/battleEngine.js:1271:    const attackerForce = { units: [shooter], formation: shooter.formation || 'line', experience: shooter.experience || 'regular' };
+src/game/battleEngine.js:1272:    const defenderForce = { units: [target], formation: target.formation || 'line', experience: target.experience || 'regular' };
+src/game/battleEngine.js:1274:    const baseAttack = calculateTotalAttackRating(attackerForce, defenderForce, conditions, false);
+src/game/battleEngine.js:1275:    const baseDefense = calculateTotalDefenseRating(defenderForce);
+src/game/battleEngine.js:1278:    const casualties = applyDamageWithAccumulationToForces(rangedDamage, 0, attackerForce, defenderForce, battleState.currentTurn || 1);
+src/game/battleEngine.js:1279:    const totalCasualties = casualties.defender.total || 0;
+src/game/battleEngine.js:1305: * Derive a coarse cardinal attack direction (N/S/E/W) from attacker to defender.
+src/game/battleEngine.js:1308:function _getAttackCardinalDirection(attackerPos, defenderPos) {
+src/game/battleEngine.js:1309:    const dirStr = getDirection(attackerPos, defenderPos);
+src/game/battleEngine.js:1316:    const from = parseCoord(attackerPos);
+src/game/battleEngine.js:1317:    const to = parseCoord(defenderPos);
+src/game/battleEngine.js:1328:function _getFormationDefenseBonus(defender, attackDirection) {
+src/game/battleEngine.js:1329:    const facing = (defender.facing || 'N').toUpperCase();
+src/game/battleEngine.js:1330:    const formation = (defender.formation || '').toLowerCase();
+src/game/battleEngine.js:1366:function calculateFlankingBonus(attacker, defender, allUnits) {
+src/game/battleEngine.js:1367:    const defenderPos = defender.position;
+src/game/battleEngine.js:1368:    const adjacent = getAdjacentCoords(defenderPos);
+src/game/battleEngine.js:1370:    // Enemy units of defender that are adjacent (other than this attacker)
+src/game/battleEngine.js:1372:        unit.side !== defender.side &&
+src/game/battleEngine.js:1373:        unit.unitId !== attacker.unitId &&
+src/game/battleEngine.js:1381:        const dir = _getAttackCardinalDirection(unit.position, defenderPos);
+src/game/battleEngine.js:1396:function calculateElevationAdvantage(attackerPos, defenderPos, map) {
+src/game/battleEngine.js:1397:    const attackerTerrain = _getTerrainType(attackerPos, map);
+src/game/battleEngine.js:1398:    const defenderTerrain = _getTerrainType(defenderPos, map);
+src/game/battleEngine.js:1400:    const attackerElevation = attackerTerrain === 'hill' ? 1 : 0;
+src/game/battleEngine.js:1401:    const defenderElevation = defenderTerrain === 'hill' ? 1 : 0;
+src/game/battleEngine.js:1403:    if (defenderElevation > attackerElevation) return { defender: +2, attacker: 0 };
+src/game/battleEngine.js:1404:    if (attackerElevation > defenderElevation) return { attacker: +2, defender: 0 };
+src/game/battleEngine.js:1405:    return { attacker: 0, defender: 0 };
+src/game/battleEngine.js:1409: * Check if attacker is crossing river to attack
+src/game/battleEngine.js:1411:function isCrossingRiver(attackerPos, defenderPos, map) {
+src/game/battleEngine.js:1412:    if (!isFord(defenderPos)) return false;
+src/game/battleEngine.js:1413:    const distance = calculateDistance(attackerPos, defenderPos);
+src/game/battleEngine.js:1415:    return !isFord(attackerPos);
+src/game/battleEngine.js:1421:function calculatePositionalModifiers(attacker, defender, allUnits, map) {
+src/game/battleEngine.js:1422:    if (defender.formationChanging && defender.formationChanging.remaining > 0) {
+src/game/battleEngine.js:1423:        defender.positionModifiers = defender.positionModifiers || {};
+src/game/battleEngine.js:1424:        defender.positionModifiers.defense = (defender.positionModifiers.defense || 0) - 3;
+src/game/battleEngine.js:1427:        attacker: { attack: 0, defense: 0 },
+src/game/battleEngine.js:1428:        defender: { attack: 0, defense: 0 },
+src/game/battleEngine.js:1432:    const flankingBonus = calculateFlankingBonus(attacker, defender, allUnits);
+src/game/battleEngine.js:1434:        modifiers.attacker.attack += flankingBonus;
+src/game/battleEngine.js:1438:    const elevationMod = calculateElevationAdvantage(attacker.position, defender.position, map);
+src/game/battleEngine.js:1439:    if (elevationMod.defender > 0) {
+src/game/battleEngine.js:1440:        modifiers.defender.defense += elevationMod.defender;
+src/game/battleEngine.js:1441:        modifiers.description.push(`High ground defense: +${elevationMod.defender}`);
+src/game/battleEngine.js:1443:    if (elevationMod.attacker > 0) {
+src/game/battleEngine.js:1444:        modifiers.attacker.attack += elevationMod.attacker;
+src/game/battleEngine.js:1445:        modifiers.description.push(`Downhill attack: +${elevationMod.attacker}`);
+src/game/battleEngine.js:1448:    const attackDir = _getAttackCardinalDirection(attacker.position, defender.position);
+src/game/battleEngine.js:1449:    const facingBonus = _getFormationDefenseBonus(defender, attackDir);
+src/game/battleEngine.js:1451:        modifiers.defender.defense += facingBonus;
+src/game/battleEngine.js:1453:            modifiers.description.push(`Formation facing advantage (${attackDir} vs ${defender.facing || 'N'}): +${facingBonus} defense`);
+src/game/battleEngine.js:1455:            modifiers.description.push(`Hit from flank/rear (${attackDir} vs ${defender.facing || 'N'}): ${facingBonus} defense`);
+src/game/battleEngine.js:1459:    if ((defender.formationStatus || 'deployed') === 'marching' && attackDir) {
+src/game/battleEngine.js:1460:        const defFacing = (defender.facing || 'N').toUpperCase();
+src/game/battleEngine.js:1462:            const strength = defender.currentStrength || defender.maxStrength || 400;
+src/game/battleEngine.js:1466:                modifiers.defender.defense -= frontagePenalty;
+src/game/battleEngine.js:1474:    if (isCrossingRiver(attacker.position, defender.position, map)) {
+src/game/battleEngine.js:1475:        modifiers.attacker.attack -= 4;
+src/game/battleEngine.js:1476:        modifiers.defender.defense += 3;
+src/game/battleEngine.js:1477:        modifiers.description.push('Attacking across ford: -4 attack, defender +3 defense');
+src/game/battleEngine.js:1480:    const defenderTerrain = _getTerrainType(defender.position, map);
+src/game/battleEngine.js:1481:    if (defenderTerrain === 'forest') {
+src/game/battleEngine.js:1482:        modifiers.defender.defense += 2;
+src/game/battleEngine.js:1484:        if (attacker.mounted) {
+src/game/battleEngine.js:1485:            modifiers.attacker.attack -= 4;
+src/game/battleEngine.js:1490:    if (defenderTerrain === 'marsh') {
+src/game/battleEngine.js:1491:        modifiers.defender.defense -= 2;
+src/game/battleEngine.js:1492:        modifiers.attacker.attack -= 2;
+src/game/battleEngine.js:1509:        combat.attacker,
+src/game/battleEngine.js:1510:        combat.defender,
+src/game/battleEngine.js:1516:        attacker: {
+src/game/battleEngine.js:1517:            unit: combat.attacker,
+src/game/battleEngine.js:1518:            positionModifiers: positionMods.attacker,
+src/game/battleEngine.js:1519:            position: combat.attacker.position
+src/game/battleEngine.js:1521:        defender: {
+src/game/battleEngine.js:1522:            unit: combat.defender,
+src/game/battleEngine.js:1523:            positionModifiers: positionMods.defender,
+src/game/battleEngine.js:1524:            position: combat.defender.position
+src/game/maps/bridgeControl.js:20:    ford: { crossingPenalty: -4, defenderBonus: +3, maxWidth: 3 },
+src/game/maps/mapUtils.js:1525:        ford: { crossingPenalty: -4, defenderBonus: +3, maxWidth: 3 },
+src/game/movement.js:294:                    attacker: p1Unit,
+src/game/movement.js:295:                    defender: p2Unit,
+src/game/movement.js:357:        const attackerId = combat.attacker.unitId;
+src/game/movement.js:358:        const defenderId = combat.defender.unitId;
+src/game/movement.js:360:        if (!engagements.has(attackerId) || !engagements.has(defenderId)) return;
+src/game/movement.js:362:        const att = engagements.get(attackerId);
+src/game/movement.js:363:        const def = engagements.get(defenderId);
+src/game/movement.js:367:        att.fightingWith.push(defenderId);
+src/game/movement.js:368:        def.fightingWith.push(attackerId);
+src/game/movement.js:391: * Derive a coarse cardinal attack direction (N/S/E/W) from attacker to defender.
+src/game/movement.js:394:function getAttackCardinalDirection(attackerPos, defenderPos) {
+src/game/movement.js:395:    const dirStr = getDirection(attackerPos, defenderPos); // e.g. 'northwest'
+src/game/movement.js:403:    const from = parseCoord(attackerPos);
+src/game/movement.js:404:    const to = parseCoord(defenderPos);
+src/game/movement.js:419:function getFormationDefenseBonus(defender, attackDirection) {
+src/game/movement.js:420:    const facing = (defender.facing || 'N').toUpperCase();
+src/game/movement.js:421:    const formation = (defender.formation || '').toLowerCase();
+src/game/movement.js:922:        completeMissionsForEngagementUnit(combat.attacker);
+src/game/movement.js:923:        completeMissionsForEngagementUnit(combat.defender);
+src/game/officers/progression.js:262:                    defenderCount: defendedCrossing.length,
+src/game/turnOrchestrator.js:148:                buildForceFromUnit(engagement.attacker, battleState),
+src/game/turnOrchestrator.js:149:                buildForceFromUnit(engagement.defender, battleState),
+src/game/turnOrchestrator.js:154:                        attacker: engagement.attacker.positionModifiers,
+src/game/turnOrchestrator.js:155:                        defender: engagement.defender.positionModifiers
+src/game/turnOrchestrator.js:166:                attackerUnit: engagement.attacker.unit,
+src/game/turnOrchestrator.js:167:                defenderUnit: engagement.defender.unit,
+src/game/turnOrchestrator.js:331:        const attackerUnitId = combat.attackerUnit?.unitId;
+src/game/turnOrchestrator.js:332:        const defenderUnitId = combat.defenderUnit?.unitId;
+src/game/turnOrchestrator.js:334:        if (!attackerUnitId || !defenderUnitId) return;
+src/game/turnOrchestrator.js:336:        const attackerSide = updated.player1.some(u => u.unitId === attackerUnitId) ? 'player1' : 'player2';
+src/game/turnOrchestrator.js:337:        const defenderSide = updated.player1.some(u => u.unitId === defenderUnitId) ? 'player1' : 'player2';
+src/game/turnOrchestrator.js:339:        const attackerCasualties = combat.result?.casualties?.attacker?.total || 0;
+src/game/turnOrchestrator.js:340:        const defenderCasualties = combat.result?.casualties?.defender?.total || 0;
+src/game/turnOrchestrator.js:342:        if (attackerCasualties > 0) {
+src/game/turnOrchestrator.js:343:            const idx = updated[attackerSide].findIndex(u => u.unitId === attackerUnitId);
+src/game/turnOrchestrator.js:345:                updated[attackerSide][idx].currentStrength = Math.max(0, 
+src/game/turnOrchestrator.js:346:                    updated[attackerSide][idx].currentStrength - attackerCasualties
+src/game/turnOrchestrator.js:351:        if (defenderCasualties > 0) {
+src/game/turnOrchestrator.js:352:            const idx = updated[defenderSide].findIndex(u => u.unitId === defenderUnitId);
+src/game/turnOrchestrator.js:354:                updated[defenderSide][idx].currentStrength = Math.max(0,
+src/game/turnOrchestrator.js:355:                    updated[defenderSide][idx].currentStrength - defenderCasualties
+src/game/turnOrchestrator.js:373:        p1Total += combat.result?.casualties?.attacker?.total || 0;
+src/game/turnOrchestrator.js:374:        p2Total += combat.result?.casualties?.defender?.total || 0;
+src/game/turnOrchestrator.js:732:        const attackerId = combat.attackerUnit?.unitId || '';
+src/game/turnOrchestrator.js:733:        const defenderId = combat.defenderUnit?.unitId || '';
+src/game/turnOrchestrator.js:734:        const isAttacker = attackerId.startsWith(sidePrefix);
+src/game/turnOrchestrator.js:735:        const isDefender = defenderId.startsWith(sidePrefix);
+src/game/turnOrchestrator.js:736:        if (!isAttacker && !isDefender) continue;
+src/game/turnOrchestrator.js:739:        const ourCasualties = isAttacker
+src/game/turnOrchestrator.js:740:            ? (result.casualties?.attacker?.total || 0)
+src/game/turnOrchestrator.js:741:            : (result.casualties?.defender?.total || 0);
+src/game/turnOrchestrator.js:742:        const enemyCasualties = isAttacker
+src/game/turnOrchestrator.js:743:            ? (result.casualties?.defender?.total || 0)
+src/game/turnOrchestrator.js:744:            : (result.casualties?.attacker?.total || 0);
+src/game/turnOrchestrator.js:753:                unitId: isAttacker ? attackerId : defenderId,
+src/phase2-combat/combat/damage.js:20:// One direction of one exchange: what `attacker` does to `defender`.
+src/phase2-combat/combat/damage.js:26://   2. as the column of the attacker's `effectiveness` table it is looked up
+src/phase2-combat/combat/damage.js:42: * @param {Object} attacker  harness unit
+src/phase2-combat/combat/damage.js:43: * @param {Object} defender  harness unit
+src/phase2-combat/combat/damage.js:44: * @param {Object} attackerCtx  see ratings.attackRating
+src/phase2-combat/combat/damage.js:45: * @param {Object} defenderCtx  see ratings.defenseRating
+src/phase2-combat/combat/damage.js:48:function casualtiesFrom(attacker, defender, attackerCtx = {}, defenderCtx = {}) {
+src/phase2-combat/combat/damage.js:49:  const rawAttack = R.attackRating(attacker, attackerCtx)
+src/phase2-combat/combat/damage.js:50:  const effectiveness = R.effectivenessAgainst(attacker, defender)
+src/phase2-combat/combat/damage.js:52:  const defense = R.defenseRating(defender, defenderCtx)
+src/phase2-combat/combat/damage.js:57:  // Casualties are a fraction of the defender's CURRENT strength, not a flat
+src/phase2-combat/combat/damage.js:70:  const raw = defender.strength * fraction
+src/phase2-combat/combat/damage.js:71:  const killed = Math.min(defender.strength, Math.round(raw))
+src/phase2-combat/combat/damage.js:171:// gets to act on the other's losses until the next one. [Q5] Attacker and
+src/phase2-combat/combat/damage.js:172:// defender differ only in what modifiers they carry — the charge bonus for the
+src/phase2-combat/combat/ratings.js:92:// Which column of an attacker's `effectiveness` table this unit is looked up
+src/phase2-combat/combat/ratings.js:102:function effectivenessAgainst(attacker, defender) {
+src/phase2-combat/combat/ratings.js:103:  const weapon = resolveWeapon(attacker)
+src/phase2-combat/combat/ratings.js:104:  const cls = armorClass(defender)
+src/phase2-combat/combat/ratings.js:129:// @param {boolean} defenderBraced  defender carries an anti-cavalry weapon
+src/phase2-combat/combat/ratings.js:130:function chargeMultiplier(unit, roundsInContact, defenderBraced) {
+src/phase2-combat/combat/ratings.js:136:  if (!defenderBraced) return spike
+src/phase2-combat/combat/ratings.js:241:    // Flat situational bonus, e.g. flanking a defender caught in several
+src/phase2-combat/combat/resolve.js:110:    const flankBonusAgainst = (defenderId) => {
+src/phase2-combat/combat/resolve.js:111:      const extra = (engagementCounts.get(defenderId) ?? 1) - 1
+src/phase2-combat/combat/resolve.js:118:    // attacker, and the one that held is prepared.
+src/phase2-combat/combat/resolve.js:332:// [Q5] This is the practical shape of the attacker ruling. It matters only for
+src/phase2-combat/combat/tables.js:244:// The clearest case is forest. Cover is supposed to favour a defender, and
+src/phase2-combat/combat/tables.js:246:// carries 2 chaos, and measured against a mirror the defender wins 0% standing
+src/phase2-combat/combat/tables.js:341:// defender is caught in, capped. Direction (flank vs rear) needs facing,
+src/phase2-combat/combat/tables.js:413:  // defender's CURRENT strength (ruling: fraction, not flat), so an even
+src/phase2-combat/harness/placeholderResolver.js:31:    const attacker = getUnit(world, engagement.aId)
+src/phase2-combat/harness/placeholderResolver.js:32:    const defender = getUnit(world, engagement.bId)
+src/phase2-combat/harness/placeholderResolver.js:33:    if (!attacker || !defender) continue
+src/phase2-combat/harness/placeholderResolver.js:36:    const attackerLoss = Math.round(attacker.strength * FLAT_CASUALTY_RATE * (0.5 + random()))
+src/phase2-combat/harness/placeholderResolver.js:37:    const defenderLoss = Math.round(defender.strength * FLAT_CASUALTY_RATE * (0.5 + random()))
+src/phase2-combat/harness/placeholderResolver.js:39:    casualties.push({ unitId: attacker.id, killed: attackerLoss })
+src/phase2-combat/harness/placeholderResolver.js:40:    casualties.push({ unitId: defender.id, killed: defenderLoss })
+src/phase2-combat/harness/placeholderResolver.js:42:    events.push(`${attacker.id} and ${defender.id} exchange blows [PLACEHOLDER MATH]`)
+src/phase2-combat/harness/runner.js:39:      // Pair members are named a/b, not attacker/defender. Which side is
+src/phase2-combat/scenarios/ford-crossing.js:1:// Red crosses North Ford (W6-X6) into a defender waiting on the dry far bank.
+src/phase2-combat/scenarios/ford-crossing.js:3:// attacker fights with wet feet while the defender does not. This is the
+src/phase2-combat/scenarios/ford-crossing.js:6:// Tuning target (PHASE2_COMBAT_PLAN section 8): "the attacker is caught
+src/phase2-combat/scenarios/ford-crossing.js:15://     what "a waiting defender" meant in the first place.
+src/phase2-combat/scenarios/hill-assault.js:1:// Red attacks uphill into a defender holding The Crownhill (Q1).
+src/phase2-combat/scenarios/hill-assault.js:6:// Tuning target (PHASE2_COMBAT_PLAN section 8): "the defender holds high ground
+src/phase2-combat/scenarios/hill-assault.js:7:// with fewer, better troops. If the attacker wins easily, elevation is worth
+src/phase2-combat/scenarios/hill-assault.js:10:// The defender was originally veteran_mercenary. That is "better troops" on
+src/phase2-combat/scenarios/hill-assault.js:12:// tier that leaves first when losing — so the hill defender broke early for a
+src/phase2-combat/scenarios/hill-assault.js:14:// measure what it was for. Both sides are now Professional, and the defender's
+src/phase2-combat/tests/balance.assertions.test.js:150:  // charge-decay curve and of the [Q5] attacker ruling.
+src/phase2-combat/tests/balance.assertions.test.js:175:  // opponent so only the attacker's tier varies.
+src/phase2-combat/tests/damage.test.js:31:  const attacker = unit()
+src/phase2-combat/tests/damage.test.js:35:  const vsFull = D.casualtiesFrom(attacker, full)
+src/phase2-combat/tests/damage.test.js:36:  const vsHalf = D.casualtiesFrom(attacker, half)
+src/phase2-combat/tests/damage.test.js:72:  // Section 9.6 of the roadmap: in the old bucket model a hopeless attacker
+src/phase2-combat/tests/damage.test.js:84:    'a dominant attacker must out-kill a hopeless one — the bucket got this backwards')
+src/phase2-combat/tests/damage.test.js:90:  const attacker = unit({ primaryWeapon: 'sword_standard' })
+src/phase2-combat/tests/damage.test.js:94:    const killed = D.casualtiesFrom(attacker, unit({ armor })).killed
+src/phase2-combat/tests/damage.test.js:122:  // same losses from the same attacker.
+src/phase2-combat/tests/damage.test.js:123:  const attacker = unit({ id: 'a' })
+src/phase2-combat/tests/damage.test.js:134:  const result = D.casualtiesFrom(attacker, shoved)
+src/phase2-combat/tests/damage.test.js:135:  const withoutPushKit = D.casualtiesFrom(attacker, unit({ id: 'shoved', shield: 'medium_shield' }))
+src/phase2-combat/tests/damage.test.js:287:  // [Q5] The unit that entered contact is the attacker, and this is the whole
+src/phase2-combat/tests/ratings.test.js:113:  const attacker = unit({ primaryWeapon: 'heavy_mace' })
+src/phase2-combat/tests/ratings.test.js:116:    const value = R.effectivenessAgainst(attacker, unit({ armor }))
+src/phase2-combat/tests/scenarios.test.js:16:// defender beats an unbraced attacker in ~100% of otherwise-identical matchups.
+src/phase2-combat/tests/scenarios.test.js:18:// So "the defender won the hill scenario" does NOT show that elevation matters;
+src/phase2-combat/tests/scenarios.test.js:19:// the same defender wins on flat ground. Terrain has to be measured with
+src/phase2-combat/tests/scenarios.test.js:88:  // The hill-assault scenario asks "if the attacker wins easily, elevation is
+src/phase2-combat/tests/scenarios.test.js:123:    `braced defenders should dominate, got ${(100 * bracedWins / 200).toFixed(0)}%`)
+src/phase2-combat/tests/scenarios.test.js:140:test('hill-assault: the defenders hold the crest', () => {
+src/phase2-combat/tests/scenarios.test.js:147:test('ford-crossing: the attacker is caught in the water and loses', () => {
+src/phase2-combat/tests/scenarios.test.js:150:    `crossing into a braced defender should fail, blue won ${(100 * winRate(runs, 'blue')).toFixed(0)}%`)
+src/phase2-combat/tests/scenarios.test.js:153:  // The scenario originally ordered the defender INTO the water, so both sides
+src/phase4-integration/battle.js:102:    // holds, which is also a choice: a defender is allowed to stand.)
+src/phase4-integration/battle.js:262:// defender shoved off a hill has lost the high ground the moment they land,
+src/phase4-integration/tests/battle.test.js:58:test('a defender shoved off a hill loses the high ground — positionally', () => {
+src/phase4-integration/tests/battle.test.js:178:  // Same defender, same attacker quality; the only difference is the second
+src/phase7-hotseat/scenarios.js:12:// presses the nearest enemy. Type `<unit> hold` to countermand — a defender
+src/tests/combat/comprehensiveBalanceTest.js:18:        attacker: {
+src/tests/combat/comprehensiveBalanceTest.js:29:        defender: {
+src/tests/combat/comprehensiveBalanceTest.js:47:        expectedWinRate: { attacker: 0.5, defender: 0.5 }
+src/tests/combat/comprehensiveBalanceTest.js:52:        attacker: {
+src/tests/combat/comprehensiveBalanceTest.js:64:        defender: {
+src/tests/combat/comprehensiveBalanceTest.js:81:        expectedBalance: 'attacker_favored',
+src/tests/combat/comprehensiveBalanceTest.js:82:        expectedWinRate: { attacker: 0.7, defender: 0.3 }
+src/tests/combat/comprehensiveBalanceTest.js:87:        attacker: {
+src/tests/combat/comprehensiveBalanceTest.js:99:        defender: {
+src/tests/combat/comprehensiveBalanceTest.js:116:        expectedBalance: 'defender_favored',
+src/tests/combat/comprehensiveBalanceTest.js:117:        expectedWinRate: { attacker: 0.25, defender: 0.75 }
+src/tests/combat/comprehensiveBalanceTest.js:123:        attacker: {
+src/tests/combat/comprehensiveBalanceTest.js:134:        defender: {
+src/tests/combat/comprehensiveBalanceTest.js:151:        expectedBalance: 'attacker_favored',
+src/tests/combat/comprehensiveBalanceTest.js:152:        expectedWinRate: { attacker: 0.8, defender: 0.2 }
+src/tests/combat/comprehensiveBalanceTest.js:157:        attacker: {
+src/tests/combat/comprehensiveBalanceTest.js:168:        defender: {
+src/tests/combat/comprehensiveBalanceTest.js:186:        expectedWinRate: { attacker: 0.55, defender: 0.45 }
+src/tests/combat/comprehensiveBalanceTest.js:192:        attacker: {
+src/tests/combat/comprehensiveBalanceTest.js:203:        defender: {
+src/tests/combat/comprehensiveBalanceTest.js:222:        expectedWinRate: { attacker: 0.6, defender: 0.4 }
+src/tests/combat/comprehensiveBalanceTest.js:228:        attacker: {
+src/tests/combat/comprehensiveBalanceTest.js:239:        defender: {
+src/tests/combat/comprehensiveBalanceTest.js:256:        expectedBalance: 'attacker_favored',
+src/tests/combat/comprehensiveBalanceTest.js:257:        expectedWinRate: { attacker: 0.85, defender: 0.15 }
+src/tests/combat/comprehensiveBalanceTest.js:262:        attacker: {
+src/tests/combat/comprehensiveBalanceTest.js:274:        defender: {
+src/tests/combat/comprehensiveBalanceTest.js:293:        expectedWinRate: { attacker: 0.45, defender: 0.55 }
+src/tests/combat/comprehensiveBalanceTest.js:299:        attacker: {
+src/tests/combat/comprehensiveBalanceTest.js:310:        defender: {
+src/tests/combat/comprehensiveBalanceTest.js:328:        expectedWinRate: { attacker: 0.4, defender: 0.6 }
+src/tests/combat/comprehensiveBalanceTest.js:334:        attacker: {
+src/tests/combat/comprehensiveBalanceTest.js:346:        defender: {
+src/tests/combat/comprehensiveBalanceTest.js:361:            combat_situation: 'flanked'  // Defender penalty
+src/tests/combat/comprehensiveBalanceTest.js:363:        expectedBalance: 'attacker_favored',
+src/tests/combat/comprehensiveBalanceTest.js:364:        expectedWinRate: { attacker: 0.75, defender: 0.25 }
+src/tests/combat/comprehensiveBalanceTest.js:369:        attacker: {
+src/tests/combat/comprehensiveBalanceTest.js:380:        defender: {
+src/tests/combat/comprehensiveBalanceTest.js:395:            combat_situation: 'flanked'  // Defender penalty
+src/tests/combat/comprehensiveBalanceTest.js:397:        expectedBalance: 'attacker_favored',
+src/tests/combat/comprehensiveBalanceTest.js:398:        expectedWinRate: { attacker: 0.8, defender: 0.2 }
+src/tests/combat/comprehensiveBalanceTest.js:402:        description: 'Double envelopment - defender surrounded',
+src/tests/combat/comprehensiveBalanceTest.js:403:        attacker: {
+src/tests/combat/comprehensiveBalanceTest.js:414:        defender: {
+src/tests/combat/comprehensiveBalanceTest.js:429:            combat_situation: 'surrounded'  // Major defender penalty
+src/tests/combat/comprehensiveBalanceTest.js:431:        expectedBalance: 'attacker_favored',
+src/tests/combat/comprehensiveBalanceTest.js:432:        expectedWinRate: { attacker: 0.9, defender: 0.1 }
+src/tests/combat/comprehensiveBalanceTest.js:446:            scenario.attacker,
+src/tests/combat/comprehensiveBalanceTest.js:447:            scenario.defender, 
+src/tests/combat/comprehensiveBalanceTest.js:455:            console.log(`  Prep: Att ${result.combatData.attackerPreparation.toFixed(1)} vs Def ${result.combatData.defenderPreparation.toFixed(1)}`);
+src/tests/combat/comprehensiveBalanceTest.js:456:            console.log(`  Damage: Att ${result.combatData.rawDamage.attacker.toFixed(1)} vs Def ${result.combatData.rawDamage.defender.toFixed(1)}`);
+src/tests/combat/comprehensiveBalanceTest.js:461:            winner: result.combatResult.result.includes('attacker') ? 'attacker' : 
+src/tests/combat/comprehensiveBalanceTest.js:462:                   result.combatResult.result.includes('defender') ? 'defender' : 'draw',
+src/tests/combat/comprehensiveBalanceTest.js:467:                attacker: result.combatData.attackerPreparation,
+src/tests/combat/comprehensiveBalanceTest.js:468:                defender: result.combatData.defenderPreparation
+src/tests/combat/comprehensiveBalanceTest.js:483:    console.log(`Expected: ${scenario.expectedBalance} (A:${(scenario.expectedWinRate.attacker*100).toFixed(0)}% D:${(scenario.expectedWinRate.defender*100).toFixed(0)}%)`);
+src/tests/combat/comprehensiveBalanceTest.js:485:    const results = { attacker: 0, defender: 0, draw: 0 };
+src/tests/combat/comprehensiveBalanceTest.js:495:        totalPrepDiff += Math.abs(battle.preparation.attacker - battle.preparation.defender);
+src/tests/combat/comprehensiveBalanceTest.js:498:    const attackerWinRate = results.attacker / battles;
+src/tests/combat/comprehensiveBalanceTest.js:499:    const defenderWinRate = results.defender / battles;
+src/tests/combat/comprehensiveBalanceTest.js:503:    console.log(`Results: A:${results.attacker} (${(attackerWinRate*100).toFixed(0)}%) D:${results.defender} (${(defenderWinRate*100).toFixed(0)}%) Draw:${results.draw} (${(results.draw/battles*100).toFixed(0)}%)`);
+src/tests/combat/comprehensiveBalanceTest.js:506:    const balanced = attackerWinRate <= 0.8 && defenderWinRate <= 0.8;
+src/tests/combat/comprehensiveBalanceTest.js:507:    const meetsExpectation = Math.abs(attackerWinRate - scenario.expectedWinRate.attacker) < 0.3;
+src/tests/combat/comprehensiveBalanceTest.js:513:        attackerWinRate,
+src/tests/combat/comprehensiveBalanceTest.js:514:        defenderWinRate,
+src/tests/combat/comprehensiveBalanceTest.js:547:        console.log(`${r.scenarioName}: A:${(r.attackerWinRate*100).toFixed(0)}% D:${((1-r.attackerWinRate-results.find(res => res.scenarioName === r.scenarioName)?.drawRate || 0)*100).toFixed(0)}% Chaos:${r.avgChaos.toFixed(1)} ${r.balanced ? '✅' : '❌'}`);
+src/tests/combat/riverCrossingBalance.js:17:    'equal_forces_defender_advantage': {
+src/tests/combat/riverCrossingBalance.js:18:        description: 'Equal forces, defender has fortified river crossing',
+src/tests/combat/riverCrossingBalance.js:19:        attacker: {
+src/tests/combat/riverCrossingBalance.js:30:        defender: {
+src/tests/combat/riverCrossingBalance.js:47:        expectedBalance: 'defender_favored', // Defender should win 60-70% due to position
+src/tests/combat/riverCrossingBalance.js:48:        expectedWinRate: { attacker: 0.3, defender: 0.7 }
+src/tests/combat/riverCrossingBalance.js:52:        description: 'Professional attackers vs militia defenders at river crossing',
+src/tests/combat/riverCrossingBalance.js:53:        attacker: {
+src/tests/combat/riverCrossingBalance.js:64:        defender: {
+src/tests/combat/riverCrossingBalance.js:82:        expectedWinRate: { attacker: 0.55, defender: 0.45 }
+src/tests/combat/riverCrossingBalance.js:87:        attacker: {
+src/tests/combat/riverCrossingBalance.js:99:        defender: {
+src/tests/combat/riverCrossingBalance.js:116:        expectedBalance: 'defender_favored', // Pike wall should counter cavalry
+src/tests/combat/riverCrossingBalance.js:117:        expectedWinRate: { attacker: 0.25, defender: 0.75 }
+src/tests/combat/riverCrossingBalance.js:122:        attacker: {
+src/tests/combat/riverCrossingBalance.js:133:        defender: {
+src/tests/combat/riverCrossingBalance.js:150:        expectedBalance: 'attacker_favored', // Elite should overcome numbers
+src/tests/combat/riverCrossingBalance.js:151:        expectedWinRate: { attacker: 0.8, defender: 0.2 }
+src/tests/combat/riverCrossingBalance.js:156:        attacker: {
+src/tests/combat/riverCrossingBalance.js:167:        defender: {
+src/tests/combat/riverCrossingBalance.js:185:        expectedWinRate: { attacker: 0.45, defender: 0.55 }
+src/tests/combat/riverCrossingBalance.js:242:            scenario.attacker,
+src/tests/combat/riverCrossingBalance.js:243:            scenario.defender, 
+src/tests/combat/riverCrossingBalance.js:251:            console.log(`  Damage: Att ${result.combatData.rawDamage.attacker} vs Def ${result.combatData.rawDamage.defender}`);
+src/tests/combat/riverCrossingBalance.js:252:            console.log(`  Casualties: Att ${result.casualties.attacker.total} vs Def ${result.casualties.defender.total}`);
+src/tests/combat/riverCrossingBalance.js:257:            winner: result.combatResult.result.includes('attacker') ? 'attacker' : 
+src/tests/combat/riverCrossingBalance.js:258:                   result.combatResult.result.includes('defender') ? 'defender' : 'draw',
+src/tests/combat/riverCrossingBalance.js:261:            attackerCasualties: result.casualties.attacker.total,
+src/tests/combat/riverCrossingBalance.js:262:            defenderCasualties: result.casualties.defender.total,
+src/tests/combat/riverCrossingBalance.js:278:    console.log(`Expected: ${scenario.expectedBalance} (A:${scenario.expectedWinRate.attacker*100}% D:${scenario.expectedWinRate.defender*100}%)`);
+src/tests/combat/riverCrossingBalance.js:281:        attacker_wins: 0,
+src/tests/combat/riverCrossingBalance.js:282:        defender_wins: 0,
+src/tests/combat/riverCrossingBalance.js:295:            case 'attacker': results.attacker_wins++; break;
+src/tests/combat/riverCrossingBalance.js:296:            case 'defender': results.defender_wins++; break;
+src/tests/combat/riverCrossingBalance.js:301:    const total = results.attacker_wins + results.defender_wins + results.draws;
+src/tests/combat/riverCrossingBalance.js:302:    const attackerWinRate = results.attacker_wins / total;
+src/tests/combat/riverCrossingBalance.js:303:    const defenderWinRate = results.defender_wins / total;
+src/tests/combat/riverCrossingBalance.js:306:    const attackerCheese = detectCheeseStrategies(scenario.attacker, attackerWinRate);
+src/tests/combat/riverCrossingBalance.js:307:    const defenderCheese = detectCheeseStrategies(scenario.defender, defenderWinRate);
+src/tests/combat/riverCrossingBalance.js:309:    if (attackerCheese.length > 0 || defenderCheese.length > 0) {
+src/tests/combat/riverCrossingBalance.js:311:        results.cheese_strategies = [...attackerCheese, ...defenderCheese];
+src/tests/combat/riverCrossingBalance.js:315:    const isBalanced = attackerWinRate <= 0.8 && defenderWinRate <= 0.8;
+src/tests/combat/riverCrossingBalance.js:316:    const meetsExpectation = Math.abs(attackerWinRate - scenario.expectedWinRate.attacker) < 0.2;
+src/tests/combat/riverCrossingBalance.js:319:    console.log(`  Attacker wins: ${results.attacker_wins} (${(attackerWinRate*100).toFixed(1)}%)`);
+src/tests/combat/riverCrossingBalance.js:320:    console.log(`  Defender wins: ${results.defender_wins} (${(defenderWinRate*100).toFixed(1)}%)`);
+src/tests/combat/riverCrossingBalance.js:334:        attackerWinRate,
+src/tests/combat/riverCrossingBalance.js:335:        defenderWinRate,
+src/tests/combat/simpleCombatTest.js:54:    console.log('Attacker: Longsword + Chainmail + Round Shield + Professional + Swordsman Basic');
+src/tests/combat/simpleCombatTest.js:55:    console.log('Defender: Spear + Bronze + Hoplon + Militia + Spear Basic + Phalanx');
+src/tests/combat/simpleCombatTest.js:64:    console.log(`Preparation - Attacker: ${result.combatData.attackerPreparation}, Defender: ${result.combatData.defenderPreparation}`);
+src/tests/combat/simpleCombatTest.js:65:    console.log(`Applied Chaos - Attacker: ${result.combatData.attackerChaos}, Defender: ${result.combatData.defenderChaos}`);
+src/tests/combat/simpleCombatTest.js:67:    console.log(`\nAttack Ratings - Attacker: ${result.combatData.attackerAttack}, Defender: ${result.combatData.defenderAttack}`);
+src/tests/combat/simpleCombatTest.js:68:    console.log(`Defense Ratings - Attacker: ${result.combatData.attackerDefense}, Defender: ${result.combatData.defenderDefense}`);
+src/tests/combat/simpleCombatTest.js:69:    console.log(`Effective Attack - Attacker: ${result.combatData.effectiveAttack.attacker}, Defender: ${result.combatData.effectiveAttack.defender}`);
+src/tests/combat/simpleCombatTest.js:70:    console.log(`Effective Defense - Attacker: ${result.combatData.effectiveDefense.attacker}, Defender: ${result.combatData.effectiveDefense.defender}`);
+src/tests/combat/simpleCombatTest.js:72:    console.log(`\nRaw Damage - Attacker deals: ${result.combatData.rawDamage.attacker}, Defender deals: ${result.combatData.rawDamage.defender}`);
+src/tests/combat/simpleCombatTest.js:73:    console.log(`Casualties - Attacker: ${result.casualties.attacker.total}, Defender: ${result.casualties.defender.total}`);
+src/tests/core/coreEngine.test.js:46:    const attacker = { units: [makeUnit('a1', 'E5', { weapon: 'spear', armor: 'light_armor' })], formation: 'line' };
+src/tests/core/coreEngine.test.js:47:    const defender = { units: [makeUnit('d1', 'E6', { weapon: 'sword', armor: 'medium_armor' })], formation: 'line' };
+src/tests/core/coreEngine.test.js:51:    const result = await resolveCombat(attacker, defender, conditions, ctx);
+src/tests/core/coreEngine.test.js:53:    ok('casualties non-negative (attacker)', (result.casualties.attacker.total || 0) >= 0);
+src/tests/core/coreEngine.test.js:54:    ok('casualties non-negative (defender)', (result.casualties.defender.total || 0) >= 0);
+test_ambush_scenarios.js:8:        attacker: {
+test_ambush_scenarios.js:19:        defender: {
+test_ambush_scenarios.js:36:        expectedBalance: 'attacker_favored',
+test_ambush_scenarios.js:37:        expectedWinRate: { attacker: 0.8, defender: 0.2 }
+test_ambush_scenarios.js:42:        attacker: {
+test_ambush_scenarios.js:53:        defender: {
+test_ambush_scenarios.js:70:        expectedBalance: 'attacker_slight_advantage',
+test_ambush_scenarios.js:71:        expectedWinRate: { attacker: 0.65, defender: 0.35 }
+test_ambush_scenarios.js:76:        attacker: {
+test_ambush_scenarios.js:87:        defender: {
+test_ambush_scenarios.js:105:        expectedWinRate: { attacker: 0.6, defender: 0.4 }
+test_ambush_scenarios.js:110:        attacker: {
+test_ambush_scenarios.js:121:        defender: {
+test_ambush_scenarios.js:138:        expectedBalance: 'attacker_slight_advantage',
+test_ambush_scenarios.js:139:        expectedWinRate: { attacker: 0.65, defender: 0.35 }
+test_ambush_scenarios.js:154:    console.log('1. Archers vs Swordsmen: 80% attacker wins (massive range advantage)');
+test_ambush_scenarios.js:155:    console.log('2. Archers vs Archers: 65% attacker wins (first shot advantage)');  
+test_ambush_scenarios.js:156:    console.log('3. Swordsmen vs Archers: 60% attacker wins (surprise negates range)');
+test_ambush_scenarios.js:157:    console.log('4. Swordsmen vs Swordsmen: 65% attacker wins (ambush advantage only)');
