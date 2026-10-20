@@ -10,49 +10,49 @@
 // consumer of the fog contract, which is the point of building it now — the
 // Discord embeds will show precisely what this shows.
 
-const { parseCoord, coordToString } = require('../../engine/movement/pathfinding')
-const { getCell } = require('../../engine/map/mapData')
+const { toLabel, fromLabel, samePosition } = require('../../engine/map/labels')
 const { sideView } = require('../../engine/orchestrator')
 
 const TERRAIN_GLYPHS = {
   plains: '.', road: '=', hill: '^', forest: 'F',
   marsh: 'm', river: '~', ford: 'f', bridge: 'B'
 }
-const GRID = 40
 
 // ── The map ──────────────────────────────────────────────
 //
 // A viewport clipped to the action: the bounding box of everything the side
-// knows about (own units + intel), padded, clamped to the 40x40 grid. Own
+// knows about (own units + intel), padded, clamped to the map's edges. Own
 // units draw as uppercase letters, visible enemies as lowercase, ghosts as
 // '?'; the legend below decodes them. Rendering the whole map is available
 // (`fullMap: true`) but forty rows of scroll between orders helps nobody.
 function renderMap(game, side, { fullMap = false, pad = 4, minSpan = 12 } = {}) {
   const view = sideView(game, side)
-  const markers = new Map() // coord -> glyph
+  const map = game.battle.map
+  const markers = new Map() // label -> glyph
   const ownLegend = []
   const enemyLegend = []
 
   view.own.filter(u => u.strength > 0).forEach((unit, index) => {
     const letter = String.fromCharCode(65 + (index % 26))
-    markers.set(unit.position, letter)
+    markers.set(toLabel(unit.position), letter)
     ownLegend.push(`${letter}=${unit.id} (${unit.strength}/${unit.maxStrength})`)
   })
 
   view.intel.forEach((entry, index) => {
     const letter = String.fromCharCode(97 + (index % 26))
     if (entry.status === 'visible') {
-      markers.set(entry.position, letter)
+      markers.set(toLabel(entry.position), letter)
       enemyLegend.push(`${letter}=${entry.id} (~${entry.strength})`)
     } else {
-      if (!markers.has(entry.position)) markers.set(entry.position, '?')
-      enemyLegend.push(`?=${entry.id} last seen ${entry.position}, turn ${entry.seenOnTurn}`)
+      const label = toLabel(entry.position)
+      if (!markers.has(label)) markers.set(label, '?')
+      enemyLegend.push(`?=${entry.id} last seen ${label}, turn ${entry.seenOnTurn}`)
     }
   })
 
   const box = fullMap
-    ? { minRow: 0, maxRow: GRID - 1, minCol: 0, maxCol: GRID - 1 }
-    : viewportFor([...markers.keys()], pad, minSpan)
+    ? { minRow: 0, maxRow: map.height - 1, minCol: 0, maxCol: map.width - 1 }
+    : viewportFor(map, [...markers.keys()], pad, minSpan)
 
   const lines = []
   let header = '    '
@@ -64,8 +64,8 @@ function renderMap(game, side, { fullMap = false, pad = 4, minSpan = 12 } = {}) 
   for (let row = box.minRow; row <= box.maxRow; row++) {
     let line = String(row + 1).padStart(3) + ' '
     for (let col = box.minCol; col <= box.maxCol; col++) {
-      const coord = coordToString({ row, col })
-      line += markers.get(coord) ?? (TERRAIN_GLYPHS[getCell(coord).terrain] ?? '?')
+      const position = { x: col, y: row }
+      line += markers.get(toLabel(position)) ?? (TERRAIN_GLYPHS[map.terrainAt(position)] ?? '?')
     }
     lines.push(line)
   }
@@ -77,25 +77,25 @@ function renderMap(game, side, { fullMap = false, pad = 4, minSpan = 12 } = {}) 
   return lines.join('\n')
 }
 
-function viewportFor(coords, pad, minSpan) {
-  if (coords.length === 0) return { minRow: 0, maxRow: minSpan, minCol: 0, maxCol: minSpan }
-  let minRow = GRID, maxRow = 0, minCol = GRID, maxCol = 0
-  for (const coord of coords) {
-    const p = parseCoord(coord)
-    minRow = Math.min(minRow, p.row); maxRow = Math.max(maxRow, p.row)
-    minCol = Math.min(minCol, p.col); maxCol = Math.max(maxCol, p.col)
+function viewportFor(map, labels, pad, minSpan) {
+  if (labels.length === 0) return { minRow: 0, maxRow: minSpan, minCol: 0, maxCol: minSpan }
+  let minRow = map.height, maxRow = 0, minCol = map.width, maxCol = 0
+  for (const label of labels) {
+    const p = fromLabel(label)
+    minRow = Math.min(minRow, p.y); maxRow = Math.max(maxRow, p.y)
+    minCol = Math.min(minCol, p.x); maxCol = Math.max(maxCol, p.x)
   }
   minRow -= pad; maxRow += pad; minCol -= pad; maxCol += pad
   while (maxRow - minRow < minSpan) { minRow--; maxRow++ }
   while (maxCol - minCol < minSpan) { minCol--; maxCol++ }
   return {
-    minRow: Math.max(0, minRow), maxRow: Math.min(GRID - 1, maxRow),
-    minCol: Math.max(0, minCol), maxCol: Math.min(GRID - 1, maxCol)
+    minRow: Math.max(0, minRow), maxRow: Math.min(map.height - 1, maxRow),
+    minCol: Math.max(0, minCol), maxCol: Math.min(map.width - 1, maxCol)
   }
 }
 
 function columnLabel(col) {
-  return coordToString({ row: 0, col }).replace(/\d+$/, '')
+  return toLabel({ x: col, y: 0 }).replace(/\d+$/, '')
 }
 
 // ── The roster ───────────────────────────────────────────
@@ -110,7 +110,7 @@ function renderRoster(game, side) {
   // a zero-strength line in the roster reads like a unit awaiting orders.
   for (const unit of view.own.filter(u => u.strength > 0)) {
     const state = game.battle.resolver.getState(unit.id)
-    let line = `  ${unit.id.padEnd(14)} ${unit.position.padEnd(5)} ` +
+    let line = `  ${unit.id.padEnd(14)} ${toLabel(unit.position).padEnd(5)} ` +
       `men ${bar(unit.strength, unit.maxStrength)} ${unit.strength}`
     if (state) {
       line += `   morale ${bar(state.morale, 100)}   wind ${bar(state.stamina, 120)}`
@@ -161,15 +161,15 @@ function renderTurnReport(game, turnEntry) {
 function wordEvent(event) {
   switch (event.type) {
     case 'move':
-      if (event.blockedBy && event.from === event.to) {
+      if (event.blockedBy && samePosition(event.from, event.to)) {
         return `${event.unitId} cannot advance — ${event.blockedBy} bars the way`
       }
-      if (event.blockedBy) return `${event.unitId} advances ${event.from}→${event.to}, stopped by ${event.blockedBy}`
-      return event.from === event.to ? null : `${event.unitId} moves ${event.from}→${event.to}`
+      if (event.blockedBy) return `${event.unitId} advances ${toLabel(event.from)}→${toLabel(event.to)}, stopped by ${event.blockedBy}`
+      return samePosition(event.from, event.to) ? null : `${event.unitId} moves ${toLabel(event.from)}→${toLabel(event.to)}`
     case 'contact': return `CONTACT: ${event.aId} meets ${event.bId}`
     case 'exchange': return event.detail
     case 'push':
-      return `${event.by} drives ${event.unitId} back to ${event.to}` +
+      return `${event.by} drives ${event.unitId} back to ${toLabel(event.to)}` +
         (event.lostHighGround ? ' — off the high ground!' : '')
     case 'crush': return `${event.unitId} has nowhere to give — crushed against ${event.reason}`
     case 'rout': return `${event.unitId} BREAKS and runs from ${event.by}`

@@ -2,11 +2,13 @@
 // Multi-unit battlefield state.
 //
 // Phase 1 carried a single unit in a module-level variable. Combat needs at
-// least two sides, so this holds the roster. Same 40x40 map, same coordinate
-// strings, same terrain source — nothing here forks phase 1's map.
+// least two sides, so this holds the roster. The world holds units only; the
+// map is passed alongside it, so a snapshot of the world never copies a map.
+//
+// Positions are { x, y }. A unit spec may give its position as a label
+// ("D4"); it is translated here, once, as the unit enters the world.
 
-const { getCell } = require('./map/mapData')
-const { parseCoord } = require('./movement/pathfinding')
+const { toPosition, distance } = require('./map/labels')
 
 // A harness unit. Field names match phase 1's createUnit() where they overlap
 // so movementEngine.executeMove() can consume one unchanged.
@@ -22,7 +24,7 @@ function createUnit(spec) {
     side: spec.side,
     culture: spec.culture ?? 'Roman Republic',
     role: spec.role ?? 'heavy_infantry',
-    position: spec.position,
+    position: toPosition(spec.position),
     strength: spec.strength ?? maxStrength,
     maxStrength,
     movementRange: spec.movementRange ?? 3,
@@ -76,15 +78,13 @@ function sides(world) {
 
 // Manhattan distance in tiles. Phase 1's pathfinder moves orthogonally and
 // uses a Manhattan heuristic, so distance is measured the same way here.
-function tileDistance(coordA, coordB) {
-  const a = parseCoord(coordA)
-  const b = parseCoord(coordB)
-  return Math.abs(a.row - b.row) + Math.abs(a.col - b.col)
+function tileDistance(a, b) {
+  return distance(a, b)
 }
 
 // Terrain under a unit — the thing positional combat modifiers key off.
-function terrainAt(coord) {
-  return getCell(coord).terrain
+function terrainAt(map, position) {
+  return map.terrainAt(toPosition(position))
 }
 
 module.exports = {

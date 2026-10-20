@@ -26,6 +26,7 @@ const T = require('./tables')
 const R = require('./ratings')
 const D = require('./damage')
 const { getUnit } = require('../world')
+const { samePosition } = require('../map/labels')
 
 /**
  * @param {Object} [options]
@@ -133,8 +134,8 @@ function createCombatResolver(options = {}) {
     const held = new Map()
     for (const unit of world.units) {
       const previous = lastPositions.get(unit.id)
-      charging.set(unit.id, previous === undefined || previous !== unit.position)
-      held.set(unit.id, previous !== undefined && previous === unit.position)
+      charging.set(unit.id, previous === undefined || !samePosition(previous, unit.position))
+      held.set(unit.id, previous !== undefined && samePosition(previous, unit.position))
     }
 
     for (let round = 0; round < roundsPerTurn; round++) {
@@ -275,7 +276,7 @@ function createCombatResolver(options = {}) {
     }
 
     for (const unit of world.units) {
-      lastPositions.set(unit.id, unit.position)
+      lastPositions.set(unit.id, { ...unit.position })
     }
 
     return {

@@ -6,27 +6,30 @@
 // object key whose order is not fixed.
 
 const { terrainAt } = require('../engine/world')
+const { resolveMap } = require('../engine/map/map')
+const { toLabel } = require('../engine/map/labels')
 
-function formatUnit(unit) {
+function formatUnit(unit, map) {
   const pct = Math.round((unit.strength / unit.maxStrength) * 100)
   const state = unit.strength === 0 ? 'DESTROYED' : `${unit.strength}/${unit.maxStrength} (${pct}%)`
-  return `    ${unit.id.padEnd(18)} ${unit.side.padEnd(6)} ${unit.position.padEnd(5)} ${terrainAt(unit.position).padEnd(8)} ${state}`
+  return `    ${unit.id.padEnd(18)} ${unit.side.padEnd(6)} ${toLabel(unit.position).padEnd(5)} ${terrainAt(map, unit.position).padEnd(8)} ${state}`
 }
 
 function formatMovement(move) {
   if (move.skipped) return `    ${move.unitId}: skipped (${move.skipped})`
-  if (move.held) return `    ${move.unitId}: held at ${move.position}`
+  if (move.held) return `    ${move.unitId}: held at ${toLabel(move.position)}`
   if (move.failed) return `    ${move.unitId}: FAILED — ${move.failed}`
 
   const arrival = move.reachedTarget
     ? 'arrived'
     : move.blockedBy
       ? `blocked by ${move.blockedBy}`
-      : `en route to ${move.target}`
-  return `    ${move.unitId}: ${move.from} -> ${move.to} (${move.tilesMoved} tiles, ${move.terrain}, ${arrival})`
+      : `en route to ${toLabel(move.target)}`
+  return `    ${move.unitId}: ${toLabel(move.from)} -> ${toLabel(move.to)} (${move.tilesMoved} tiles, ${move.terrain}, ${arrival})`
 }
 
 function formatReport(record) {
+  const map = resolveMap(record.map)
   const lines = []
 
   lines.push(`SCENARIO: ${record.scenario}`)
@@ -58,7 +61,7 @@ function formatReport(record) {
     }
 
     lines.push('  state:')
-    for (const unit of turn.snapshot.units) lines.push(formatUnit(unit))
+    for (const unit of turn.snapshot.units) lines.push(formatUnit(unit, map))
     lines.push('')
   }
 

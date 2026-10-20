@@ -79,6 +79,10 @@ each step.
    to show the engine is not tied to 40×40. No new hand-made map.
 9. **Report and PR.**
 
+Steps 4 and 5 landed as one commit: nearly every call site that needed the
+map also handled a position, so splitting them would have meant rewriting the
+same lines twice.
+
 ## Out of scope
 
 Designing the 2 km map, the player-facing coordinate format, officer death

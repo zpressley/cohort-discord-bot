@@ -8,7 +8,11 @@ const { parseIntent } = require('../../../interpreter/intentParser')
 const { executeMove } = require('../../../engine/movement/pathfinding')
 const { narrateResult } = require('../../../narrator/narrator')
 const { createUnit } = require('./unitState')
-const { getCell } = require('../../../engine/map/mapData')
+const { resolveMap } = require('../../../engine/map/map')
+
+// The demo plays on Crownhill, the only map so far.
+const map = resolveMap()
+const getCell = (position) => map.cell(position)
 
 // Channel ID for the battle-test channel
 const BATTLE_TEST_CHANNEL_ID = '1519439030633369670'
@@ -28,8 +32,8 @@ async function handleMessage(message) {
 
   try {
     // Step 1 — parse intent via AI
-    const mapContext = buildLocalContext(unitState)
-    const intent = await parseIntent(orderText, unitState, mapContext)
+    const mapContext = buildLocalContext(map, unitState)
+    const intent = await parseIntent(orderText, unitState, mapContext, map)
 
     // Step 2 — ask for clarification if needed
     if (intent.action === 'clarify') {
@@ -45,15 +49,15 @@ async function handleMessage(message) {
 
     // Step 4 — resolve landmark to coordinate
     if (!intent.landmark) {
-      await message.reply("I understand the order but couldn't identify a destination. Known positions are: " + listLandmarks().join(', ') + '.')
+      await message.reply("I understand the order but couldn't identify a destination. Known positions are: " + listLandmarks(map).join(', ') + '.')
       return
     }
 
-    const resolved = resolve(intent.landmark)
+    const resolved = resolve(map, intent.landmark)
 
     if (resolved.confidence === 'none') {
       await message.reply(
-        `I don't recognise that location, Commander. Known positions are: ${listLandmarks().join(', ')}.`
+        `I don't recognise that location, Commander. Known positions are: ${listLandmarks(map).join(', ')}.`
       )
       return
     }
@@ -65,7 +69,7 @@ async function handleMessage(message) {
     }
 
     // Step 5 — execute movement
-    const moveResult = executeMove(unitState, resolved.coord)
+    const moveResult = executeMove(map, unitState, resolved.position)
 
     if (!moveResult.success) {
       await message.reply(`*The officers report: ${moveResult.reason}*`)
@@ -76,7 +80,7 @@ async function handleMessage(message) {
     unitState.position = moveResult.finalPosition
 
     // Step 7 — narrate
-    const { narrative, statusBlock } = await narrateResult(moveResult, unitState)
+    const { narrative, statusBlock } = await narrateResult(moveResult, unitState, map)
 
     // Step 8 — send response
     const response = [

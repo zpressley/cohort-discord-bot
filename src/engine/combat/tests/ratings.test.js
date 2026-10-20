@@ -293,7 +293,7 @@ test('prepared adds defense — the phase 2 stand-in for named formations', () =
 test('every phase 1 terrain key has a chaos value — no silent undefined', () => {
   // The build plan warns that the legacy chaos keys and phase 1's terrain keys
   // do not match. This asserts the mapping is total.
-  const { MOVEMENT_COSTS } = require('../../map/mapData')
+  const { MOVEMENT_COSTS } = require('../../map/terrain')
   for (const terrain of Object.keys(MOVEMENT_COSTS)) {
     assert.equal(typeof T.TERRAIN_CHAOS[terrain], 'number', `${terrain} has no chaos value`)
   }

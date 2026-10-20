@@ -4,7 +4,8 @@
 //   statusBlock — plain-text status card
 
 const Groq = require('groq-sdk')
-const { getCell } = require('../engine/map/mapData')
+const { resolveMap } = require('../engine/map/map')
+const { toLabel } = require('../engine/map/labels')
 
 const NARRATOR_PROMPT = `
 You are narrating movement in an ancient Roman battle.
@@ -15,10 +16,10 @@ Do not mention game mechanics, movement points, or numbers of tiles.
 If the unit didn't fully reach its destination, say so clearly.
 `.trim()
 
-async function narrateResult(moveResult, unit) {
-  const fromCell = getCell(moveResult.startPosition)
-  const toCell = getCell(moveResult.finalPosition)
-  const targetCell = getCell(moveResult.targetCoord)
+async function narrateResult(moveResult, unit, map = resolveMap()) {
+  const fromCell = map.cell(moveResult.startPosition)
+  const toCell = map.cell(moveResult.finalPosition)
+  const targetCell = map.cell(moveResult.targetCoord)
 
   const mechanicalSummary = buildMechanicalSummary(moveResult, fromCell, toCell, targetCell)
 
@@ -70,7 +71,7 @@ function buildStatusBlock(unit, moveResult, currentCell, targetCell) {
   lines.push(locationLine)
 
   if (moveResult.partialMove) {
-    const target = targetCell.landmark || moveResult.targetCoord
+    const target = targetCell.landmark || toLabel(moveResult.targetCoord)
     const turns = moveResult.turnsToTarget
     lines.push(`⏳ Still en route to ${target} — ~${turns} turn${turns !== 1 ? 's' : ''} remaining`)
   }

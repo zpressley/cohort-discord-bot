@@ -19,33 +19,35 @@
 // contact, and contact is combat's business (phase 4), not movement's.
 
 const { livingUnits } = require('../world')
+const { positionKey } = require('../map/labels')
 
-// Build a live index: coord -> unit. Only living units occupy ground; a
+// Build a live index: position -> unit. Only living units occupy ground; a
 // destroyed unit's tile is passable the moment it empties.
 function buildOccupancy(world) {
   const index = new Map()
   for (const unit of livingUnits(world)) {
-    index.set(unit.position, unit)
+    index.set(positionKey(unit.position), unit)
   }
   return index
 }
 
-function getUnitAt(occupancy, coord) {
-  return occupancy.get(coord) ?? null
+function getUnitAt(occupancy, position) {
+  return occupancy.get(positionKey(position)) ?? null
 }
 
-function isOccupied(occupancy, coord) {
-  return occupancy.has(coord)
+function isOccupied(occupancy, position) {
+  return occupancy.has(positionKey(position))
 }
 
 // Move a unit in the index. The index and the unit's own position field are
 // kept in step here so neither can drift from the other mid-resolution.
-function moveUnit(occupancy, unit, toCoord) {
-  if (occupancy.get(unit.position) === unit) {
-    occupancy.delete(unit.position)
+function moveUnit(occupancy, unit, to) {
+  const fromKey = positionKey(unit.position)
+  if (occupancy.get(fromKey) === unit) {
+    occupancy.delete(fromKey)
   }
-  occupancy.set(toCoord, unit)
-  unit.position = toCoord
+  occupancy.set(positionKey(to), unit)
+  unit.position = { x: to.x, y: to.y }
 }
 
 // May `unit` step onto `coord` right now?
@@ -54,8 +56,8 @@ function moveUnit(occupancy, unit, toCoord) {
 //  - friendly tile: no (may open later this tick if the friendly moves off;
 //    the tick loop in simultaneous.js retries, which is what lets columns
 //    flow through each other without ever co-occupying a tile)
-function canEnter(occupancy, unit, coord) {
-  const occupant = occupancy.get(coord)
+function canEnter(occupancy, unit, position) {
+  const occupant = occupancy.get(positionKey(position))
   if (!occupant) return { ok: true }
   if (occupant.side !== unit.side) return { ok: false, reason: 'enemy', blocker: occupant.id }
   return { ok: false, reason: 'friendly', blocker: occupant.id }

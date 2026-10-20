@@ -21,6 +21,7 @@
 // never a guess, which is the same rule the AI prompt enforces.
 
 const { resolve: resolveLandmark } = require('../../engine/map/landmarkResolver')
+const { resolveMap } = require('../../engine/map/map')
 
 const COORD = /^[a-z]{1,2}\d{1,2}$/i
 
@@ -33,7 +34,7 @@ const COORD = /^[a-z]{1,2}\d{1,2}$/i
  *   { kind: 'ask', question }          ambiguity or an unknown place
  *   { kind: 'empty' }
  */
-function parseOrderLine(line) {
+function parseOrderLine(line, map = resolveMap()) {
   const text = String(line ?? '').trim()
   if (!text) return { kind: 'empty' }
 
@@ -61,15 +62,15 @@ function parseOrderLine(line) {
     return { kind: 'ask', question: `Who goes where? ("${text}")` }
   }
 
-  const target = resolveTarget(rawTarget)
+  const target = resolveTarget(rawTarget, map)
   if (target.coord) return { kind: 'order', unitRef, target: target.coord }
   return { kind: 'ask', question: target.question }
 }
 
-function resolveTarget(raw) {
+function resolveTarget(raw, map) {
   if (COORD.test(raw)) return { coord: raw.toUpperCase() }
 
-  const landmark = resolveLandmark(raw)
+  const landmark = resolveLandmark(map, raw)
   if (landmark.confidence === 'exact' || landmark.confidence === 'partial') {
     return { coord: landmark.coord }
   }
@@ -85,13 +86,13 @@ function resolveTarget(raw) {
  * `hold` maps to target 'hold', which the movement resolver treats as
  * standing fast — it also overrides a standing 'advance' for that unit.
  */
-function parseOrderBlock(lines) {
+function parseOrderBlock(lines, map = resolveMap()) {
   const orders = []
   const questions = []
   let surrender = false
 
   for (const line of lines) {
-    const parsed = parseOrderLine(line)
+    const parsed = parseOrderLine(line, map)
     if (parsed.kind === 'order') orders.push({ unitRef: parsed.unitRef, target: parsed.target })
     else if (parsed.kind === 'hold') orders.push({ unitRef: parsed.unitRef, target: 'hold' })
     else if (parsed.kind === 'surrender') surrender = true

@@ -30,13 +30,15 @@ const { createBattleState, stepTurn } = require('../battle/battle')
 const { unitsOnSide, sides } = require('../world')
 const { createIntel, updateIntel, sideView: fogSideView } = require('./fogOfWar')
 const { evaluateVictory, objectiveController, OBJECTIVE_TURNS_TO_WIN } = require('./victory')
+const { toPosition } = require('../map/labels')
 
 const MAX_TICKS_PER_TURN = 6   // one hour of battle time per decision
 const MINUTES_PER_TICK = 10    // locked decision 1
 
 /**
  * @param {Object} spec  a phase 4 battle spec, plus optionally:
- *   objectives:          [{ id, coord }] — named ground worth holding
+ *   objectives:          [{ id, coord }] — named ground worth holding; coord
+ *                        is a position or a map label
  *   objectiveTurnsToWin: consecutive player turns of total control to win
  * @param {Object} [options] { seed }
  */
@@ -46,6 +48,7 @@ function createGame(spec, options = {}) {
   const game = {
     spec,
     battle,
+    objectives: (spec.objectives ?? []).map(o => ({ ...o, coord: toPosition(o.coord) })),
     playerTurn: 0,
     minutesElapsed: 0,
     submitted: {},              // side -> orders (this player turn)
@@ -62,7 +65,7 @@ function createGame(spec, options = {}) {
     game.startingStrength[side] =
       unitsOnSide(battle.world, side).reduce((sum, u) => sum + u.strength, 0)
     // Opening intel: you can see whatever is in range from your deployment.
-    updateIntel(game.intel[side], battle.world, side, 0)
+    updateIntel(game.intel[side], battle.world, side, 0, battle.map)
   }
 
   return game
@@ -141,7 +144,7 @@ function processPlayerTurn(game) {
     // and the simultaneity contract says you both decide on equal footing.
     const sightings = []
     for (const side of sides(battle.world)) {
-      sightings.push(...updateIntel(game.intel[side], battle.world, side, battle.turn))
+      sightings.push(...updateIntel(game.intel[side], battle.world, side, battle.turn, battle.map))
     }
 
     const objectiveChanges = updateObjectiveHolds(game)
@@ -168,7 +171,7 @@ function processPlayerTurn(game) {
 // PLAYER turns — updateObjectiveHolds runs per tick so a mid-turn loss of the
 // ford resets the clock, which is what "holding" means.
 function updateObjectiveHolds(game) {
-  const objectives = game.spec.objectives ?? []
+  const objectives = game.objectives
   let changed = false
 
   for (const objective of objectives) {

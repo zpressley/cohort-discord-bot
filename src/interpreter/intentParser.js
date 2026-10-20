@@ -4,7 +4,7 @@
 
 const Groq = require('groq-sdk')
 const { buildLocalContext, listLandmarks } = require('../engine/map/landmarkResolver')
-const { getCell } = require('../engine/map/mapData')
+const { resolveMap } = require('../engine/map/map')
 
 const SYSTEM_PROMPT = `
 You are a Roman military officer interpreting your commander's orders.
@@ -25,8 +25,8 @@ If the order is ambiguous between two landmarks, return:
 Never invent landmark names. Never output coordinates. Only use landmark names from the list provided.
 `.trim()
 
-async function parseIntent(orderText, unit, mapContext) {
-  const prompt = buildPrompt(orderText, unit, mapContext)
+async function parseIntent(orderText, unit, mapContext, map = resolveMap()) {
+  const prompt = buildPrompt(orderText, unit, mapContext, map)
 
   const groq = new Groq({ apiKey: process.env.GROQ_API_KEY })
 
@@ -55,8 +55,8 @@ async function parseIntent(orderText, unit, mapContext) {
   }
 }
 
-function buildPrompt(orderText, unit, mapContext) {
-  const currentCell = getCell(unit.position)
+function buildPrompt(orderText, unit, mapContext, map) {
+  const currentCell = map.cell(unit.position)
   const locationDesc = currentCell.landmark || 'their current position'
 
   return `Commander's order: "${orderText}"
@@ -65,7 +65,7 @@ Your unit: ${unit.role} (${unit.strength} men), currently at ${locationDesc}
 
 ${mapContext}
 
-Landmark names you may use: ${listLandmarks().join(', ')}
+Landmark names you may use: ${listLandmarks(map).join(', ')}
 
 Return JSON only.`.trim()
 }

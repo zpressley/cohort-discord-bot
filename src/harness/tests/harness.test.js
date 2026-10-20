@@ -10,6 +10,10 @@ const {
 } = require('..')
 const { placeholderResolver } = require('../placeholderResolver')
 const { getScenario, SCENARIOS } = require('../scenarios')
+const { resolveMap } = require('../../engine/map/map')
+const { toLabel } = require('../../engine/map/labels')
+
+const map = resolveMap('crownhill')
 
 // ── determinism ────────────────────────────────────────────────
 
@@ -58,10 +62,10 @@ test('a unit cannot end its move on an occupied tile', () => {
     ]
   })
 
-  runMovementPhase(world, [{ unitId: 'mover', target: 'D8' }])
+  runMovementPhase(world, [{ unitId: 'mover', target: 'D8' }], map)
 
   const mover = world.units.find(u => u.id === 'mover')
-  assert.notEqual(mover.position, 'D6', 'mover walked onto the blocker')
+  assert.notEqual(toLabel(mover.position), 'D6', 'mover walked onto the blocker')
   assert.equal(tileDistance(mover.position, 'D6'), 1, 'mover should stop adjacent')
 })
 
@@ -75,7 +79,7 @@ test('movement resolves in unit-id order regardless of roster order', () => {
   const forward = runScenario(spec(['alpha', 'beta']))
   const reversed = runScenario(spec(['beta', 'alpha']))
 
-  const posOf = (run, id) => run.turns[0].snapshot.units.find(u => u.id === id).position
+  const posOf = (run, id) => toLabel(run.turns[0].snapshot.units.find(u => u.id === id).position)
   assert.equal(posOf(forward, 'alpha'), posOf(reversed, 'alpha'))
   assert.equal(posOf(forward, 'beta'), posOf(reversed, 'beta'))
 })
@@ -85,7 +89,7 @@ test('orders for unknown or dead units are skipped, not thrown', () => {
   const results = runMovementPhase(world, [
     { unitId: 'ghost', target: 'D6' },
     { unitId: 'nobody', target: 'D6' }
-  ])
+  ], map)
   assert.equal(results.find(r => r.unitId === 'ghost').skipped, 'destroyed')
   assert.equal(results.find(r => r.unitId === 'nobody').skipped, 'no such unit')
 })
@@ -101,7 +105,7 @@ test('engagements pair enemies only, never allies', () => {
     ]
   })
 
-  const engagements = detectEngagements(world)
+  const engagements = detectEngagements(world, undefined, map)
   assert.equal(engagements.length, 1)
   assert.deepEqual([engagements[0].aId, engagements[0].bId].sort(), ['blue_a', 'red_b'])
 })
@@ -113,7 +117,7 @@ test('units out of engagement range do not engage', () => {
       { id: 'blue_a', side: 'blue', position: 'D20' }
     ]
   })
-  assert.equal(detectEngagements(world).length, 0)
+  assert.equal(detectEngagements(world, undefined, map).length, 0)
 })
 
 test('destroyed units stop engaging', () => {
@@ -123,7 +127,7 @@ test('destroyed units stop engaging', () => {
       { id: 'blue_a', side: 'blue', position: 'D5' }
     ]
   })
-  assert.equal(detectEngagements(world).length, 0)
+  assert.equal(detectEngagements(world, undefined, map).length, 0)
 })
 
 // ── casualties and outcome ─────────────────────────────────────

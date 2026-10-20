@@ -39,7 +39,7 @@ function createSession(spec, options = {}) {
      * @returns {{ status, questions?, report?, outcome? }}
      */
     submitLines(side, lines) {
-      const { orders, questions, surrender } = parseOrderBlock(lines)
+      const { orders, questions, surrender } = parseOrderBlock(lines, game.battle.map)
       if (questions.length > 0) {
         return { status: 'clarify', questions }
       }

@@ -14,7 +14,13 @@ const {
   evaluateVictory, objectiveController,
   MAX_TICKS_PER_TURN
 } = require('../index')
-const { createWorld } = require('../../world')
+const { createWorld, createUnit } = require('../../world')
+const { resolveMap } = require('../../map/map')
+const { toLabel, toPosition } = require('../../map/labels')
+
+// These rules were written on Crownhill; positions are set and compared as
+// labels so the tests stay readable.
+const map = resolveMap('crownhill')
 
 function unit(overrides = {}) {
   return {
@@ -40,11 +46,11 @@ function gameSpec(overrides = {}) {
 // ── Fog of war ─────────────────────────────────────────
 
 test('vision: 6 standard, 10 for scouts, +4 on high ground', () => {
-  assert.equal(visionRange(unit({ position: 'H10' })), 6)
-  assert.equal(visionRange(unit({ role: 'scout', position: 'H10' })), 10)
+  assert.equal(visionRange(createUnit(unit({ position: 'H10' })), map), 6)
+  assert.equal(visionRange(createUnit(unit({ role: 'scout', position: 'H10' })), map), 10)
   // F21 is hill (verified terrain).
-  assert.equal(visionRange(unit({ position: 'F21' })), 10)
-  assert.equal(visionRange(unit({ role: 'scout', position: 'F21' })), 14)
+  assert.equal(visionRange(createUnit(unit({ position: 'F21' })), map), 10)
+  assert.equal(visionRange(createUnit(unit({ role: 'scout', position: 'F21' })), map), 14)
 })
 
 test('an enemy out of range is unknown, in range is visible, and after moving away is a ghost', () => {
@@ -56,20 +62,20 @@ test('an enemy out of range is unknown, in range is visible, and after moving aw
   })
   const intel = createIntel()
 
-  updateIntel(intel, world, 'red', 1)
+  updateIntel(intel, world, 'red', 1, map)
   assert.equal(intel.known['theirs'], undefined, '20 tiles away is over the horizon')
 
-  world.units[1].position = 'H14'
-  const sightings = updateIntel(intel, world, 'red', 2)
+  world.units[1].position = toPosition('H14')
+  const sightings = updateIntel(intel, world, 'red', 2, map)
   assert.deepEqual(sightings, ['theirs'], 'coming into range is a sighting')
   assert.equal(intel.known['theirs'].status, 'visible')
   assert.equal(intel.known['theirs'].strength, 100)
 
-  world.units[1].position = 'H30'
-  updateIntel(intel, world, 'red', 3)
+  world.units[1].position = toPosition('H30')
+  updateIntel(intel, world, 'red', 3, map)
   const ghost = intel.known['theirs']
   assert.equal(ghost.status, 'ghost', 'gone from sight, not from memory')
-  assert.equal(ghost.position, 'H14', 'the ghost keeps the LAST seen position')
+  assert.equal(toLabel(ghost.position), 'H14', 'the ghost keeps the LAST seen position')
   assert.equal(ghost.seenOnTurn, 2, 'and says how stale it is')
 })
 
@@ -81,11 +87,11 @@ test('a re-sighted ghost counts as a fresh sighting', () => {
     ]
   })
   const intel = createIntel()
-  updateIntel(intel, world, 'red', 1)     // visible
-  world.units[1].position = 'H30'
-  updateIntel(intel, world, 'red', 2)     // ghost
-  world.units[1].position = 'H13'
-  const sightings = updateIntel(intel, world, 'red', 3)
+  updateIntel(intel, world, 'red', 1, map)     // visible
+  world.units[1].position = toPosition('H30')
+  updateIntel(intel, world, 'red', 2, map)     // ghost
+  world.units[1].position = toPosition('H13')
+  const sightings = updateIntel(intel, world, 'red', 3, map)
   assert.deepEqual(sightings, ['theirs'])
 })
 
@@ -154,7 +160,7 @@ test('objective control: one side adjacent and unopposed controls; contested is 
   })
   assert.equal(objectiveController(world, new Set(), { id: 'ford', coord: 'W6' }), 'red')
 
-  world.units[1].position = 'W7' // now both adjacent — contested
+  world.units[1].position = toPosition('W7') // now both adjacent — contested
   assert.equal(objectiveController(world, new Set(), { id: 'ford', coord: 'W6' }), null)
 })
 
@@ -226,8 +232,8 @@ test('forceProcess is the timeout path — the silent side holds', () => {
   assert.equal(result.status, 'processed')
   const a = game.battle.world.units.find(u => u.id === 'a')
   const b = game.battle.world.units.find(u => u.id === 'b')
-  assert.notEqual(a.position, 'C7', 'the side that spoke moved')
-  assert.equal(b.position, 'C30', 'the silent side held')
+  assert.notEqual(toLabel(a.position), 'C7', 'the side that spoke moved')
+  assert.equal(toLabel(b.position), 'C30', 'the silent side held')
 })
 
 test('a submitted surrender is honoured even while the other side is mid-plan', () => {

@@ -18,7 +18,6 @@
 // work, where the old docs' LOS rules land — flagged, not forgotten.
 
 const { tileDistance } = require('../world')
-const { getCell } = require('../map/mapData')
 const { tables: T } = require('../combat')
 
 const VISION = {
@@ -27,11 +26,12 @@ const VISION = {
   ELEVATED_BONUS: 4  // [§6] was +2
 }
 
-function visionRange(unit) {
+function visionRange(unit, map) {
+  if (!map) throw new Error('visionRange needs the map')
   const base = (unit.role === 'scout' || unit.role === 'scouts')
     ? VISION.SCOUT
     : VISION.STANDARD
-  const elevated = T.HIGH_GROUND_TERRAIN.includes(getCell(unit.position).terrain)
+  const elevated = T.HIGH_GROUND_TERRAIN.includes(map.terrainAt(unit.position))
   return base + (elevated ? VISION.ELEVATED_BONUS : 0)
 }
 
@@ -45,7 +45,7 @@ function createIntel() {
  * returns the ids of enemies sighted THIS update that were not visible in the
  * last one — the orchestrator's elastic time interrupts on exactly that.
  */
-function updateIntel(intel, world, side, turn) {
+function updateIntel(intel, world, side, turn, map) {
   const friendlies = world.units.filter(u => u.side === side && u.strength > 0)
   const enemies = world.units.filter(u => u.side !== side && u.strength > 0)
   const sightings = []
@@ -53,7 +53,7 @@ function updateIntel(intel, world, side, turn) {
   const visibleNow = new Set()
   for (const enemy of enemies) {
     const seen = friendlies.some(f =>
-      tileDistance(f.position, enemy.position) <= visionRange(f))
+      tileDistance(f.position, enemy.position) <= visionRange(f, map))
     if (!seen) continue
 
     visibleNow.add(enemy.id)
@@ -63,7 +63,7 @@ function updateIntel(intel, world, side, turn) {
     }
     intel.known[enemy.id] = {
       status: 'visible',
-      position: enemy.position,
+      position: { ...enemy.position },
       strength: enemy.strength,
       seenOnTurn: turn
     }
@@ -88,7 +88,7 @@ function sideView(world, side, intel) {
   return {
     own: world.units
       .filter(u => u.side === side)
-      .map(u => ({ id: u.id, position: u.position, strength: u.strength, maxStrength: u.maxStrength })),
+      .map(u => ({ id: u.id, position: { ...u.position }, strength: u.strength, maxStrength: u.maxStrength })),
     intel: Object.entries(intel.known)
       .map(([id, entry]) => ({ id, ...entry }))
       .sort((a, b) => a.id.localeCompare(b.id))

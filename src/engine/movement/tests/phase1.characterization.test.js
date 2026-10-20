@@ -7,31 +7,41 @@
 const test = require('node:test')
 const assert = require('node:assert/strict')
 
-const { parseCoord, coordToString, findPath, executeMove } = require('../pathfinding')
-const { getCell, getTerrainType, MOVEMENT_COSTS } = require('../../map/mapData')
-const { resolve, listLandmarks } = require('../../map/landmarkResolver')
+const { findPath, executeMove } = require('../pathfinding')
+const { MOVEMENT_COSTS } = require('../../map/terrain')
+const { resolveMap } = require('../../map/map')
+const { fromLabel, toLabel, distance } = require('../../map/labels')
+const { resolve: resolveOn, listLandmarks: listOn } = require('../../map/landmarkResolver')
 const { createUnit } = require('../../../adapters/discord/movement-demo/unitState')
 
-test('coordinates round-trip across the whole 40x40 grid', () => {
-  for (let row = 0; row < 40; row++) {
-    for (let col = 0; col < 40; col++) {
-      const coord = coordToString({ row, col })
-      assert.deepEqual(parseCoord(coord), { row, col }, `round-trip failed for ${coord}`)
+// Phase 1 was Crownhill and string coordinates. Stage 1 made the map a value
+// and positions numeric; these helpers keep the pins readable in labels.
+const map = resolveMap('crownhill')
+const getCell = (label) => map.cell(fromLabel(label))
+const getTerrainType = (label) => map.terrainAt(fromLabel(label))
+const resolve = (text) => resolveOn(map, text)
+const listLandmarks = () => listOn(map)
+
+test('coordinates round-trip across the whole Crownhill grid', () => {
+  for (let y = 0; y < map.height; y++) {
+    for (let x = 0; x < map.width; x++) {
+      const label = toLabel({ x, y })
+      assert.deepEqual(fromLabel(label), { x, y }, `round-trip failed for ${label}`)
     }
   }
 })
 
 test('two-letter columns address the eastern third, not single-letter columns', () => {
   // Regression: the original copy of parseCoord collapsed AA1 onto col 1.
-  assert.equal(parseCoord('AA1').col, 26)
-  assert.equal(parseCoord('AN40').col, 39)
-  assert.notEqual(parseCoord('AA1').col, parseCoord('B1').col)
+  assert.equal(fromLabel('AA1').x, 26)
+  assert.equal(fromLabel('AN40').x, 39)
+  assert.notEqual(fromLabel('AA1').x, fromLabel('B1').x)
 })
 
-test('out-of-bounds coordinates are rejected', () => {
-  assert.throws(() => parseCoord('A41'))
-  assert.throws(() => parseCoord('AO1'))
-  assert.throws(() => parseCoord('nonsense'))
+test('out-of-bounds coordinates are off the map; nonsense is rejected', () => {
+  assert.ok(!map.inBounds(fromLabel('A41')))
+  assert.ok(!map.inBounds(fromLabel('AO1')))
+  assert.throws(() => fromLabel('nonsense'))
 })
 
 test('named landmarks sit on their documented terrain', () => {
@@ -67,33 +77,31 @@ test('movement costs rank terrain the way the design intends', () => {
 })
 
 test('pathfinding returns a contiguous path between its endpoints', () => {
-  const path = findPath('D4', 'H7')
+  const path = findPath(map, 'D4', 'H7')
   assert.ok(path, 'expected a path')
-  assert.equal(path[0], 'D4')
-  assert.equal(path.at(-1), 'H7')
+  assert.equal(toLabel(path[0]), 'D4')
+  assert.equal(toLabel(path.at(-1)), 'H7')
 
   for (let i = 1; i < path.length; i++) {
-    const a = parseCoord(path[i - 1])
-    const b = parseCoord(path[i])
-    const step = Math.abs(a.row - b.row) + Math.abs(a.col - b.col)
-    assert.equal(step, 1, `path jumps between ${path[i - 1]} and ${path[i]}`)
+    const step = distance(path[i - 1], path[i])
+    assert.equal(step, 1, `path jumps between ${toLabel(path[i - 1])} and ${toLabel(path[i])}`)
   }
 })
 
 test('a unit that cannot reach its target reports a partial move', () => {
   const unit = createUnit({ position: 'D4', movementRange: 3 })
-  const result = executeMove(unit, 'D20')
+  const result = executeMove(map, unit, 'D20')
 
   assert.equal(result.success, true)
   assert.equal(result.reachedTarget, false)
   assert.equal(result.partialMove, true)
   assert.ok(result.turnsToTarget > 1)
-  assert.notEqual(result.finalPosition, 'D20')
+  assert.notEqual(toLabel(result.finalPosition), 'D20')
 })
 
 test('movement never overspends the movement allowance', () => {
   const unit = createUnit({ position: 'D4', movementRange: 3 })
-  const result = executeMove(unit, 'D10')
+  const result = executeMove(map, unit, 'D10')
 
   const spent = result.tilesTraversed
     .reduce((total, tile) => total + (MOVEMENT_COSTS[tile.terrain] ?? 1.0), 0)
@@ -103,7 +111,7 @@ test('movement never overspends the movement allowance', () => {
 
 test('ordering a unit to its own tile is rejected', () => {
   const unit = createUnit({ position: 'D4' })
-  const result = executeMove(unit, 'D4')
+  const result = executeMove(map, unit, 'D4')
   assert.equal(result.success, false)
   assert.match(result.reason, /already/i)
 })

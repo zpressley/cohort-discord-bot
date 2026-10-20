@@ -13,6 +13,8 @@
 //   5. snapshot   — recorded for the report
 
 const { executeMove } = require('./movement/pathfinding')
+const { resolveMap } = require('./map/map')
+const { toPosition, samePosition, positionKey } = require('./map/labels')
 const {
   createWorld, cloneWorld, getUnit, isAlive,
   livingUnits, unitsOnSide, sides, tileDistance, terrainAt
@@ -23,7 +25,8 @@ const DEFAULT_ENGAGEMENT_RANGE = 1  // tiles — adjacent means in contact
 
 // Every enemy pair currently within engagement range.
 // Sorted so the list never depends on roster insertion order.
-function detectEngagements(world, engagementRange = DEFAULT_ENGAGEMENT_RANGE) {
+function detectEngagements(world, engagementRange = DEFAULT_ENGAGEMENT_RANGE, map) {
+  if (!map) throw new Error('detectEngagements needs the map')
   const alive = livingUnits(world)
   const engagements = []
 
@@ -44,8 +47,8 @@ function detectEngagements(world, engagementRange = DEFAULT_ENGAGEMENT_RANGE) {
         aId: a.id,
         bId: b.id,
         distance,
-        aTerrain: terrainAt(a.position),
-        bTerrain: terrainAt(b.position)
+        aTerrain: terrainAt(map, a.position),
+        bTerrain: terrainAt(map, b.position)
       })
     }
   }
@@ -67,7 +70,7 @@ function truncateForOccupancy(world, unit, move) {
   const occupied = new Map()
   for (const other of livingUnits(world)) {
     if (other.id === unit.id) continue
-    occupied.set(other.position, other)
+    occupied.set(positionKey(other.position), other)
   }
 
   let finalPosition = move.startPosition
@@ -75,7 +78,7 @@ function truncateForOccupancy(world, unit, move) {
   let blockedBy = null
 
   for (const step of move.tilesTraversed) {
-    const blocker = occupied.get(step.coord)
+    const blocker = occupied.get(positionKey(step.coord))
     if (blocker) {
       blockedBy = blocker.id
       break
@@ -88,14 +91,15 @@ function truncateForOccupancy(world, unit, move) {
     ...move,
     finalPosition,
     tilesTraversed,
-    reachedTarget: finalPosition === move.targetCoord,
+    reachedTarget: samePosition(finalPosition, move.targetCoord),
     blockedBy
   }
 }
 
 // Movement for one turn. Orders are sorted by unit id before execution so
 // two units racing for the same tile always resolve the same way.
-function runMovementPhase(world, orders) {
+function runMovementPhase(world, orders, map) {
+  if (!map) throw new Error('runMovementPhase needs the map')
   const results = []
   const sorted = [...orders].sort((a, b) => a.unitId.localeCompare(b.unitId))
 
@@ -115,7 +119,7 @@ function runMovementPhase(world, orders) {
       continue
     }
 
-    const rawMove = executeMove(unit, order.target)
+    const rawMove = executeMove(map, unit, order.target)
 
     if (!rawMove.success) {
       results.push({ unitId: unit.id, failed: rawMove.reason, position: unit.position })
@@ -123,7 +127,7 @@ function runMovementPhase(world, orders) {
     }
 
     const move = truncateForOccupancy(world, unit, rawMove)
-    unit.position = move.finalPosition
+    unit.position = toPosition(move.finalPosition)
 
     results.push({
       unitId: unit.id,
@@ -132,7 +136,7 @@ function runMovementPhase(world, orders) {
       target: move.targetCoord,
       reachedTarget: move.reachedTarget,
       tilesMoved: move.tilesTraversed.length,
-      terrain: terrainAt(move.finalPosition),
+      terrain: terrainAt(map, move.finalPosition),
       blockedBy: move.blockedBy
     })
   }
@@ -209,10 +213,12 @@ function runScenario(scenario, options = {}) {
   const engagementRange = scenario.engagementRange ?? DEFAULT_ENGAGEMENT_RANGE
 
   const random = createRng(seed)
+  const map = resolveMap(scenario.map)
   const world = createWorld({ units: scenario.units })
 
   const record = {
     scenario: scenario.name,
+    map: map.name,
     seed,
     combatEnabled: Boolean(combatResolver),
     turns: [],
@@ -228,8 +234,8 @@ function runScenario(scenario, options = {}) {
     world.turn = turnIndex + 1
 
     const orders = orderScript[turnIndex].orders ?? []
-    const movement = runMovementPhase(world, orders)
-    const engagements = detectEngagements(world, engagementRange)
+    const movement = runMovementPhase(world, orders, map)
+    const engagements = detectEngagements(world, engagementRange, map)
 
     let combat = null
     let casualties = []

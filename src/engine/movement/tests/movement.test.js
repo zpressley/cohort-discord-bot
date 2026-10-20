@@ -9,11 +9,18 @@ const assert = require('node:assert/strict')
 
 const { createWorld, livingUnits } = require('../../world')
 const {
-  resolveSimultaneousMovement,
+  resolveSimultaneousMovement: resolveOn,
   initiativeTier, inInitiativeOrder,
   buildOccupancy, canEnter,
   resolveUnitReference, expandOrders
 } = require('../index')
+const { resolveMap } = require('../../map/map')
+const { toLabel, toPosition } = require('../../map/labels')
+
+// These rules were written on Crownhill. Positions are compared as labels so
+// the expected values stay readable.
+const map = resolveMap('crownhill')
+const resolveSimultaneousMovement = (world, orders) => resolveOn(world, orders, map)
 
 function unit(overrides = {}) {
   return {
@@ -36,9 +43,9 @@ function unit(overrides = {}) {
 function assertNoCoOccupancy(world, label = '') {
   const seen = new Map()
   for (const u of livingUnits(world)) {
-    const holder = seen.get(u.position)
-    assert.ok(!holder, `${label} ${holder} and ${u.id} both stand on ${u.position}`)
-    seen.set(u.position, u.id)
+    const holder = seen.get(toLabel(u.position))
+    assert.ok(!holder, `${label} ${holder} and ${u.id} both stand on ${toLabel(u.position)}`)
+    seen.set(toLabel(u.position), u.id)
   }
 }
 
@@ -76,8 +83,8 @@ test('one unit per tile: the occupancy index refuses nobody but tells the truth'
   })
   const occ = buildOccupancy(world)
 
-  assert.equal(canEnter(occ, world.units[0], 'D6').ok, true)
-  const enemy = canEnter(occ, world.units[0], 'D5')
+  assert.equal(canEnter(occ, world.units[0], toPosition('D6')).ok, true)
+  const enemy = canEnter(occ, world.units[0], toPosition('D5'))
   assert.equal(enemy.ok, false)
   assert.equal(enemy.reason, 'enemy')
 })
@@ -87,7 +94,7 @@ test('a destroyed unit does not hold ground', () => {
     units: [unit({ id: 'a' }), unit({ id: 'dead', side: 'blue', position: 'D5', strength: 0 })]
   })
   const occ = buildOccupancy(world)
-  assert.equal(canEnter(occ, world.units[0], 'D5').ok, true)
+  assert.equal(canEnter(occ, world.units[0], toPosition('D5')).ok, true)
 })
 
 // ── Simultaneous resolution ────────────────────────────
@@ -108,8 +115,8 @@ test('two units racing for one tile: the faster one takes it', () => {
   const scout = results.find(r => r.unitId === 'zz_scout')
   const heavy = results.find(r => r.unitId === 'aa_heavy')
 
-  assert.equal(scout.to, 'F4', 'the scout claims the tile despite sorting later by id')
-  assert.notEqual(heavy.to, 'F4')
+  assert.equal(toLabel(scout.to), 'F4', 'the scout claims the tile despite sorting later by id')
+  assert.notEqual(toLabel(heavy.to), 'F4')
   assert.equal(heavy.blockedBy, 'zz_scout')
   assertNoCoOccupancy(world)
 })
@@ -131,7 +138,7 @@ test('a column follows its own vanguard through the same ground', () => {
     { unitId: 'c_rear', target: 'D6' }
   ])
 
-  const at = (id) => world.units.find(u => u.id === id).position
+  const at = (id) => toLabel(world.units.find(u => u.id === id).position)
   assert.equal(at('a_lead'), 'D8')
   assert.equal(at('b_mid'), 'D7')
   assert.equal(at('c_rear'), 'D6')
@@ -150,7 +157,7 @@ test('head-on units cannot swap tiles — they stop facing each other', () => {
     { unitId: 'b', target: 'D4' }
   ])
 
-  const at = (id) => world.units.find(u => u.id === id).position
+  const at = (id) => toLabel(world.units.find(u => u.id === id).position)
   assert.equal(at('a'), 'D4')
   assert.equal(at('b'), 'D5')
   assertNoCoOccupancy(world)
@@ -166,7 +173,7 @@ test('an enemy in the path stops the move at once — walking into an enemy is c
   const results = resolveSimultaneousMovement(world, [{ unitId: 'a', target: 'D8' }])
   const a = results.find(r => r.unitId === 'a')
 
-  assert.equal(a.to, 'D5', 'stopped adjacent to the enemy')
+  assert.equal(toLabel(a.to), 'D5', 'stopped adjacent to the enemy')
   assert.equal(a.blockedBy, 'wall')
 })
 
@@ -185,7 +192,7 @@ test('a friendly blocker gets one tick to clear before the mover gives up', () =
   ])
   const mover = results.find(r => r.unitId === 'mover')
 
-  assert.equal(mover.to, 'D4', 'no way through a friend who is holding')
+  assert.equal(toLabel(mover.to), 'D4', 'no way through a friend who is holding')
   assert.equal(mover.blockedBy, 'still')
 })
 
@@ -313,10 +320,10 @@ test('exit: six units a side, five turns, zero collision anomalies', () => {
       let prev = r.from
       for (const step of r.tilesTraversed) {
         const dist = tileDistanceStr(prev, step.coord)
-        assert.equal(dist, 1, `turn ${turn}: ${r.unitId} jumped ${prev} -> ${step.coord}`)
+        assert.equal(dist, 1, `turn ${turn}: ${r.unitId} jumped ${toLabel(prev)} -> ${toLabel(step.coord)}`)
         prev = step.coord
       }
-      assert.equal(prev, r.to, `turn ${turn}: ${r.unitId} report does not end where the unit stands`)
+      assert.equal(toLabel(prev), toLabel(r.to), `turn ${turn}: ${r.unitId} report does not end where the unit stands`)
     }
   }
 

@@ -11,6 +11,11 @@ const assert = require('node:assert/strict')
 const { runBattle, checkBattleOutcome, tileAwayFrom, edgeTarget, isOnEdge } =
   require('../battle')
 const { createWorld } = require('../../world')
+const { resolveMap } = require('../../map/map')
+const { toLabel } = require('../../map/labels')
+
+const map = resolveMap('crownhill')
+const label = (position) => position && toLabel(position)
 const meetingBattle = require('../../../harness/scenarios/meeting-battle')
 
 function unit(overrides = {}) {
@@ -40,17 +45,17 @@ function spec(overrides = {}) {
 // ── Geometry helpers ───────────────────────────────────
 
 test('tileAwayFrom continues the winner-loser line one tile', () => {
-  assert.equal(tileAwayFrom('H10', 'H11'), 'H12', 'shoved south')
-  assert.equal(tileAwayFrom('H11', 'H10'), 'H9', 'shoved north')
-  assert.equal(tileAwayFrom('H10', 'I10'), 'J10', 'shoved east')
-  assert.equal(tileAwayFrom('B10', 'A10'), null, 'off the west edge is nowhere')
+  assert.equal(label(tileAwayFrom(map, 'H10', 'H11')), 'H12', 'shoved south')
+  assert.equal(label(tileAwayFrom(map, 'H11', 'H10')), 'H9', 'shoved north')
+  assert.equal(label(tileAwayFrom(map, 'H10', 'I10')), 'J10', 'shoved east')
+  assert.equal(tileAwayFrom(map, 'B10', 'A10'), null, 'off the west edge is nowhere')
 })
 
 test('edge targets and edge detection agree with each other', () => {
   for (const edge of ['west', 'east', 'north', 'south']) {
-    assert.ok(isOnEdge(edgeTarget('K20', edge), edge), `${edge} target must lie on the ${edge} edge`)
+    assert.ok(isOnEdge(map, edgeTarget(map, 'K20', edge), edge), `${edge} target must lie on the ${edge} edge`)
   }
-  assert.ok(!isOnEdge('K20', 'west'))
+  assert.ok(!isOnEdge(map, 'K20', 'west'))
 })
 
 // ── The crest rule ─────────────────────────────────────

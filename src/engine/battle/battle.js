@@ -31,14 +31,14 @@ const {
 } = require('../world')
 const { detectEngagements, applyCasualties } = require('../runner')
 const { createCombatResolver, tables: T } = require('../combat')
-const { parseCoord, coordToString, findPath } = require('../movement/pathfinding')
-const { getCell, MOVEMENT_COSTS } = require('../map/mapData')
+const { findPath } = require('../movement/pathfinding')
+const { resolveMap } = require('../map/map')
+const { toPosition, samePosition } = require('../map/labels')
 const { resolveSimultaneousMovement, expandOrders, buildOccupancy, canEnter, moveUnit } =
   require('../movement')
 const { createEventLog } = require('./events')
 
 const DEFAULT_MAX_TURNS = 20
-const GRID = 40
 
 // ── State ────────────────────────────────────────────────
 
@@ -52,6 +52,10 @@ function createBattleState(spec, options = {}) {
   return {
     spec,
     seed,
+    // The battlefield. spec.map may name an authored map, carry a definition,
+    // or be absent (Crownhill). Kept beside the world, never inside it, so
+    // world snapshots stay small.
+    map: resolveMap(spec.map),
     world: createWorld({ units: spec.units }),
     random: createRng(seed),
     resolver: createCombatResolver(),
@@ -79,7 +83,7 @@ function createBattleState(spec, options = {}) {
  *                   ledger; runBattle and the orchestrator each keep their own)
  */
 function stepTurn(state, sideOrders = {}) {
-  const { spec, world, random, resolver, log, broken, fledUnits } = state
+  const { spec, map, world, random, resolver, log, broken, fledUnits } = state
   const engagementRange = spec.engagementRange ?? 1
 
   state.turn += 1
@@ -111,20 +115,20 @@ function stepTurn(state, sideOrders = {}) {
   }
 
   const positionsAtTurnStart = new Map(
-    livingUnits(world).map(u => [u.id, u.position]))
+    livingUnits(world).map(u => [u.id, { ...u.position }]))
 
   for (const unit of livingUnits(world)) {
     if (!broken.has(unit.id)) continue
     const edge = spec.sides?.[unit.side]?.homeEdge ?? 'west'
-    orders.push({ unitId: unit.id, target: chooseFlightTarget(world, unit, edge) })
+    orders.push({ unitId: unit.id, target: chooseFlightTarget(map, world, unit, edge) })
   }
 
   // ── Movement (phase 3) ──────────────────────────
-  const movement = resolveSimultaneousMovement(world, orders)
+  const movement = resolveSimultaneousMovement(world, orders, map)
   for (const move of movement) {
     if (move.skipped || move.held || move.failed) continue
     log.emit('move', turn, {
-      unitId: move.unitId, from: move.from, to: move.to,
+      unitId: move.unitId, from: { ...move.from }, to: { ...move.to },
       reachedTarget: move.reachedTarget, blockedBy: move.blockedBy
     })
   }
@@ -137,7 +141,7 @@ function stepTurn(state, sideOrders = {}) {
   for (const unit of [...livingUnits(world)]) {
     if (!broken.has(unit.id)) continue
     const edge = spec.sides?.[unit.side]?.homeEdge ?? 'west'
-    if (isOnEdge(unit.position, edge)) {
+    if (isOnEdge(map, unit.position, edge)) {
       world.units.splice(world.units.indexOf(unit), 1)
       fledUnits.push({ ...unit })
       log.emit('fled', turn, { unitId: unit.id, side: unit.side, strength: unit.strength })
@@ -148,7 +152,7 @@ function stepTurn(state, sideOrders = {}) {
   // Broken units do not fight — they are handled by pursuit, not by the
   // resolver. Filtered here rather than removed from the world, because
   // they still hold ground (a fleeing column blocks a tile like anyone).
-  const engagements = detectEngagements(world, engagementRange)
+  const engagements = detectEngagements(world, engagementRange, map)
     .filter(e => !broken.has(e.aId) && !broken.has(e.bId))
 
   for (const engagement of engagements) {
@@ -173,7 +177,7 @@ function stepTurn(state, sideOrders = {}) {
     }
 
     // ── Push, positionally ────────────────────────
-    applyPushes(world, combat.pushes, turn, log)
+    applyPushes(map, world, combat.pushes, turn, log)
 
     // ── Routs ─────────────────────────────────────
     for (const rout of combat.routed) {
@@ -191,7 +195,7 @@ function stepTurn(state, sideOrders = {}) {
   for (const unit of livingUnits(world)) {
     if (!broken.has(unit.id)) continue
     if (log.forTurn(turn).some(e => e.type === 'rout' && e.unitId === unit.id)) continue
-    const trapped = positionsAtTurnStart.get(unit.id) === unit.position
+    const trapped = samePosition(positionsAtTurnStart.get(unit.id), unit.position)
     applyPursuit(world, unit, turn, log, trapped)
   }
 
@@ -264,7 +268,7 @@ function runBattle(spec, options = {}) {
 // off-map tile does not move anyone; it is logged as `crush`. Whether crush
 // should cost extra morale is an open tuning question (locked decision 3
 // hints at stacking pressure), left visible in the log rather than guessed.
-function applyPushes(world, pushes, turn, log) {
+function applyPushes(map, world, pushes, turn, log) {
   const occupancy = buildOccupancy(world)
 
   for (const push of pushes) {
@@ -272,14 +276,14 @@ function applyPushes(world, pushes, turn, log) {
     const winner = getUnit(world, push.winnerId)
     if (!loser || !winner || loser.strength === 0) continue
 
-    const backTile = tileAwayFrom(winner.position, loser.position)
+    const backTile = tileAwayFrom(map, winner.position, loser.position)
     if (!backTile) {
       log.emit('crush', turn, { unitId: loser.id, by: winner.id, reason: 'map edge' })
       continue
     }
 
-    const terrain = getCell(backTile).terrain
-    if ((MOVEMENT_COSTS[terrain] ?? 1) >= 999) {
+    const terrain = map.terrainAt(backTile)
+    if (!map.passable(backTile)) {
       log.emit('crush', turn, { unitId: loser.id, by: winner.id, reason: 'impassable' })
       continue
     }
@@ -290,19 +294,18 @@ function applyPushes(world, pushes, turn, log) {
       continue
     }
 
-    const fromTerrain = getCell(loser.position).terrain
-    const vacated = loser.position
+    const fromTerrain = map.terrainAt(loser.position)
+    const vacated = { ...loser.position }
     moveUnit(occupancy, loser, backTile)
 
-    const followTerrain = getCell(vacated).terrain
-    if ((MOVEMENT_COSTS[followTerrain] ?? 1) < 999) {
+    if (map.passable(vacated)) {
       moveUnit(occupancy, winner, vacated)
     }
 
     log.emit('push', turn, {
       unitId: loser.id, by: winner.id, from: fromTerrain,
-      to: backTile, toTerrain: terrain,
-      winnerAdvancedTo: winner.position,
+      to: { ...backTile }, toTerrain: terrain,
+      winnerAdvancedTo: { ...winner.position },
       lostHighGround: T.HIGH_GROUND_TERRAIN.includes(fromTerrain) &&
         !T.HIGH_GROUND_TERRAIN.includes(terrain)
     })
@@ -312,13 +315,11 @@ function applyPushes(world, pushes, turn, log) {
 // One orthogonal tile continuing the winner->loser line, or null off-map.
 // Engagement range is 1 Manhattan, so the pair is orthogonally adjacent and
 // the line is always a clean row or column step.
-function tileAwayFrom(winnerCoord, loserCoord) {
-  const w = parseCoord(winnerCoord)
-  const l = parseCoord(loserCoord)
-  const row = l.row + Math.sign(l.row - w.row)
-  const col = l.col + Math.sign(l.col - w.col)
-  if (row < 0 || row >= GRID || col < 0 || col >= GRID) return null
-  return coordToString({ row, col })
+function tileAwayFrom(map, winnerPosition, loserPosition) {
+  const w = toPosition(winnerPosition)
+  const l = toPosition(loserPosition)
+  const back = { x: l.x + Math.sign(l.x - w.x), y: l.y + Math.sign(l.y - w.y) }
+  return map.inBounds(back) ? back : null
 }
 
 // ── Pursuit ──────────────────────────────────────────────
@@ -359,15 +360,15 @@ function applyPursuit(world, unit, turn, log, trapped = false) {
 // the way does not reroute the flight — running along the enemy line instead
 // of away from it is not flight — it means the unit is caught, and the
 // trapped-overrun rule above settles it.
-function chooseFlightTarget(world, unit, edge) {
+function chooseFlightTarget(map, world, unit, edge) {
   const occupancy = buildOccupancy(world)
-  const pos = parseCoord(unit.position)
+  const pos = unit.position
 
   for (const offset of [0, -1, 1, -2, 2, -3, 3]) {
-    const target = offsetEdgeTarget(pos, edge, offset)
-    if (!target || target === unit.position) continue
+    const target = offsetEdgeTarget(map, pos, edge, offset)
+    if (!target || samePosition(target, unit.position)) continue
 
-    const path = findPath(unit.position, target)
+    const path = findPath(map, unit.position, target)
     if (!path || path.length < 2) continue
 
     const entry = canEnter(occupancy, unit, path[1])
@@ -376,15 +377,15 @@ function chooseFlightTarget(world, unit, edge) {
 
   // Every lane is walled off by friends. Aim down the unit's own row anyway —
   // it will stand, count as trapped, and the overrun rule applies.
-  return edgeTarget(unit.position, edge)
+  return edgeTarget(map, unit.position, edge)
 }
 
-function offsetEdgeTarget(pos, edge, offset) {
+function offsetEdgeTarget(map, pos, edge, offset) {
   const horizontal = edge === 'west' || edge === 'east'
-  const row = horizontal ? pos.row + offset : (edge === 'north' ? 0 : GRID - 1)
-  const col = horizontal ? (edge === 'west' ? 0 : GRID - 1) : pos.col + offset
-  if (row < 0 || row >= GRID || col < 0 || col >= GRID) return null
-  return coordToString({ row, col })
+  const y = horizontal ? pos.y + offset : (edge === 'north' ? 0 : map.height - 1)
+  const x = horizontal ? (edge === 'west' ? 0 : map.width - 1) : pos.x + offset
+  const target = { x, y }
+  return map.inBounds(target) ? target : null
 }
 
 // Nearest fighting enemy by tile distance, unit-id tiebreak. Broken units are
@@ -424,25 +425,25 @@ function checkBattleOutcome(world, broken) {
 }
 
 // ── Edges ────────────────────────────────────────────────
-function edgeTarget(fromCoord, edge) {
-  const pos = parseCoord(fromCoord)
+function edgeTarget(map, from, edge) {
+  const pos = toPosition(from)
   switch (edge) {
-    case 'west': return coordToString({ row: pos.row, col: 0 })
-    case 'east': return coordToString({ row: pos.row, col: GRID - 1 })
-    case 'north': return coordToString({ row: 0, col: pos.col })
-    case 'south': return coordToString({ row: GRID - 1, col: pos.col })
-    default: return coordToString({ row: pos.row, col: 0 })
+    case 'west': return { x: 0, y: pos.y }
+    case 'east': return { x: map.width - 1, y: pos.y }
+    case 'north': return { x: pos.x, y: 0 }
+    case 'south': return { x: pos.x, y: map.height - 1 }
+    default: return { x: 0, y: pos.y }
   }
 }
 
-function isOnEdge(coord, edge) {
-  const pos = parseCoord(coord)
+function isOnEdge(map, position, edge) {
+  const pos = toPosition(position)
   switch (edge) {
-    case 'west': return pos.col === 0
-    case 'east': return pos.col === GRID - 1
-    case 'north': return pos.row === 0
-    case 'south': return pos.row === GRID - 1
-    default: return pos.col === 0
+    case 'west': return pos.x === 0
+    case 'east': return pos.x === map.width - 1
+    case 'north': return pos.y === 0
+    case 'south': return pos.y === map.height - 1
+    default: return pos.x === 0
   }
 }
 

@@ -33,8 +33,8 @@
 // draws no randomness — movement is fully deterministic, chaos stays combat's
 // single RNG channel.
 
-const { getCell, MOVEMENT_COSTS } = require('../map/mapData')
 const { findPath } = require('./pathfinding')
+const { toPosition, samePosition } = require('../map/labels')
 const { inInitiativeOrder, tierName } = require('./initiative')
 const { buildOccupancy, canEnter, moveUnit } = require('./occupancy')
 const { getUnit, isAlive } = require('../world')
@@ -46,10 +46,13 @@ const BLOCKED_TICKS_TO_STOP = 2
  * Resolve one turn of simultaneous movement.
  *
  * @param {Object} world   phase 2 harness world (mutated: unit positions)
- * @param {Array}  orders  [{ unitId, target }] — target is a coord or 'hold'
+ * @param {Array}  orders  [{ unitId, target }] — target is a position, a map
+ *                         label, or 'hold'
+ * @param {Object} map     the battlefield (src/engine/map/map.js)
  * @returns {Array} per-unit movement results, sorted by unit id
  */
-function resolveSimultaneousMovement(world, orders) {
+function resolveSimultaneousMovement(world, orders, map) {
+  if (!map) throw new Error('resolveSimultaneousMovement needs the map')
   const occupancy = buildOccupancy(world)
   const plans = new Map()
   const results = new Map()
@@ -70,12 +73,13 @@ function resolveSimultaneousMovement(world, orders) {
       results.set(unit.id, { unitId: unit.id, held: true, position: unit.position })
       continue
     }
-    if (order.target === unit.position) {
+    const target = toPosition(order.target)
+    if (samePosition(target, unit.position)) {
       results.set(unit.id, { unitId: unit.id, failed: 'already there', position: unit.position })
       continue
     }
 
-    const path = findPath(unit.position, order.target)
+    const path = findPath(map, unit.position, target)
     if (!path) {
       results.set(unit.id, { unitId: unit.id, failed: 'no path', position: unit.position })
       continue
@@ -83,11 +87,11 @@ function resolveSimultaneousMovement(world, orders) {
 
     plans.set(unit.id, {
       unit,
-      target: order.target,
+      target,
       steps: path.slice(1),            // path[0] is where the unit stands
       stepIndex: 0,
       budget: unit.movementRange,
-      from: unit.position,
+      from: { ...unit.position },
       tilesTraversed: [],
       blockedTicks: 0,
       blockedBy: null,
@@ -110,8 +114,8 @@ function resolveSimultaneousMovement(world, orders) {
       if (plan.stepIndex >= plan.steps.length) continue
 
       const nextCoord = plan.steps[plan.stepIndex]
-      const terrain = getCell(nextCoord).terrain
-      const cost = MOVEMENT_COSTS[terrain] ?? 1.0
+      const terrain = map.terrainAt(nextCoord)
+      const cost = map.moveCost(nextCoord)
 
       if (plan.budget < cost) {
         plan.stopped = true
@@ -149,12 +153,12 @@ function resolveSimultaneousMovement(world, orders) {
       from: plan.from,
       to: plan.unit.position,
       target: plan.target,
-      reachedTarget: plan.unit.position === plan.target,
+      reachedTarget: samePosition(plan.unit.position, plan.target),
       tilesMoved: plan.tilesTraversed.length,
       tilesTraversed: plan.tilesTraversed,
       movementRemaining: plan.budget,
       blockedBy: plan.blockedBy,
-      terrain: getCell(plan.unit.position).terrain
+      terrain: map.terrainAt(plan.unit.position)
     })
   }
 

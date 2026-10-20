@@ -1,10 +1,13 @@
-// src/engine/map/mapData.js
-// Single source of truth for the battlefield.
-// Named cells get a full entry. Everything else defaults to plains.
-
-// Grid dimensions in tiles. Columns run A..Z, AA.. and rows 1..height.
-// Read the map's size from here rather than writing the number again.
-const MAP_SIZE = { width: 40, height: 40 }
+// src/data/maps/crownhill.js
+//
+// Crownhill: the 40x40 battlefield phase 1 was built on (25 m tiles, so 1 km
+// square). Landmarks: North Ford, South Ford, Harrow Bridge, Miller's
+// Crossing, The Crownhill, Shepherd's Ridge, The Merchant Road.
+//
+// Pure data, authored in map labels (column letters, row numbers: "W6"). The
+// engine reads it through createMap() in src/engine/map/map.js, which turns
+// labels into numeric positions. Named cells get a full entry; any other tile
+// takes its terrain from the TERRAIN lists, and anything unlisted is plains.
 
 const CELLS = {
   "W6": {
@@ -58,20 +61,8 @@ const CELLS = {
   }
 }
 
-// Phase 1 uses road: 0.5 so roads are meaningfully faster
-const MOVEMENT_COSTS = {
-  plains: 1.0,
-  road:   0.5,
-  hill:   1.5,
-  forest: 2.0,
-  marsh:  3.0,
-  river:  999,
-  ford:   1.5,
-  bridge: 0.5
-}
-
 // Terrain arrays copied verbatim from createTacticalMap() in mapUtils.js
-const TERRAIN_MAP = {
+const TERRAIN = {
   river: [
     'AA1','AB1','AC1','AD1','AA2','AB2','Y3','Z3','AA3','AB3',
     'X4','Y4','Z4','AA4','W5','X5','Y5','V7','W7','X7',
@@ -184,26 +175,11 @@ const TERRAIN_MAP = {
   ],
 }
 
-// Lookup terrain for a coordinate.
-// CELLS entries are authoritative; fall back to TERRAIN_MAP arrays.
-function getTerrainType(coord) {
-  if (CELLS[coord]) return CELLS[coord].terrain
-  for (const [terrainType, coords] of Object.entries(TERRAIN_MAP)) {
-    if (coords.includes(coord)) return terrainType
-  }
-  return 'plains'
+module.exports = {
+  name: 'crownhill',
+  title: 'Crownhill',
+  width: 40,
+  height: 40,
+  cells: CELLS,
+  terrain: TERRAIN
 }
-
-// Full cell data — terrain + tags + landmark + description
-function getCell(coord) {
-  if (CELLS[coord]) return CELLS[coord]
-  return {
-    terrain: getTerrainType(coord),
-    tags: [],
-    landmark: null,
-    aliases: [],
-    description: null
-  }
-}
-
-module.exports = { MAP_SIZE, CELLS, MOVEMENT_COSTS, TERRAIN_MAP, getCell, getTerrainType }
