@@ -8,6 +8,7 @@
 const { terrainAt } = require('../engine/world')
 const { resolveMap } = require('../engine/map/map')
 const { toLabel } = require('../engine/map/labels')
+const { describeCombatEvent } = require('../narrator/eventText')
 
 function formatUnit(unit, map) {
   const pct = Math.round((unit.strength / unit.maxStrength) * 100)
@@ -50,7 +51,7 @@ function formatReport(record) {
 
     if (turn.events.length > 0) {
       lines.push('  events:')
-      for (const event of turn.events) lines.push(`    ${event}`)
+      for (const event of turn.events) lines.push(`    ${describeCombatEvent(event)}`)
     }
 
     if (turn.casualties.length > 0) {

@@ -6,6 +6,7 @@
 // exactly what moved and nothing else.
 
 const T = require('../../engine/combat/tables')
+const { describeCombatEvent } = require('../../narrator/eventText')
 
 const BAND_MIN = 2   // [design goal 2] the rout floor
 const BAND_MAX = 8   // [design goal 2] the no-stalemate cap
@@ -72,7 +73,7 @@ function formatLadder(ladder) {
 function formatSample(sample) {
   const lines = []
   lines.push(`SAMPLE  seed=${sample.seed}  ${sample.winner} wins by ${sample.resolution} in ${sample.rounds} rounds`)
-  for (const event of sample.events) lines.push(`  ${event}`)
+  for (const event of sample.events) lines.push(`  ${describeCombatEvent(event)}`)
   lines.push(`  final  a: ${sample.a.strength}/${sample.a.maxStrength} men, ` +
     `morale ${sample.a.morale.toFixed(0)}, stamina ${sample.a.stamina.toFixed(0)}` +
     (sample.a.routed ? ' ROUTED' : ''))

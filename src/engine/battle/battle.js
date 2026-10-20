@@ -169,7 +169,12 @@ function stepTurn(state, sideOrders = {}) {
     const combat = resolver({ engagements, world, random, turn })
     casualties = applyCasualties(world, combat.casualties)
 
-    for (const event of combat.events) log.emit('exchange', turn, { detail: event })
+    // The resolver's own rout events are not copied: the battle emits one
+    // rout per broken unit below, with pursuit, and the log holds each fact
+    // once.
+    for (const { type, ...fields } of combat.events) {
+      if (type !== 'rout') log.emit(type, turn, fields)
+    }
     for (const applied of casualties) {
       if (applied.destroyed) {
         log.emit('destroyed', turn, { unitId: applied.unitId })
@@ -303,7 +308,7 @@ function applyPushes(map, world, pushes, turn, log) {
     }
 
     log.emit('push', turn, {
-      unitId: loser.id, by: winner.id, from: fromTerrain,
+      unitId: loser.id, by: winner.id, fromTerrain,
       to: { ...backTile }, toTerrain: terrain,
       winnerAdvancedTo: { ...winner.position },
       lostHighGround: T.HIGH_GROUND_TERRAIN.includes(fromTerrain) &&

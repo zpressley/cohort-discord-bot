@@ -248,6 +248,55 @@ test('the event log carries the battle: contacts, exchanges, and a victory', () 
   }
 })
 
+// The schema in events.js, pinned: every event is data a narrator can use
+// without reading engine state. No prose, and positions are numeric.
+const EVENT_FIELDS = {
+  move: ['unitId', 'from', 'to', 'reachedTarget', 'blockedBy'],
+  fled: ['unitId', 'side', 'strength'],
+  contact: ['aId', 'bId'],
+  exchange: ['roundInContact', 'a', 'b', 'push'],
+  standoff: ['aId', 'bId'],
+  destroyed: ['unitId'],
+  push: ['unitId', 'by', 'fromTerrain', 'to', 'toTerrain', 'winnerAdvancedTo', 'lostHighGround'],
+  crush: ['unitId', 'by', 'reason'],
+  rout: ['unitId', 'by'],
+  pursuit: ['unitId', 'by', 'killed', 'remaining', 'trapped'],
+  victory: ['winner', 'reason']
+}
+const EXCHANGE_SIDE = ['unitId', 'killed', 'morale', 'stamina', 'chaos', 'terrain',
+  'prepared', 'chargeImpact', 'flankBonus']
+
+test('every event is structured data matching the documented schema', () => {
+  const isPosition = (p) => p && Number.isInteger(p.x) && Number.isInteger(p.y)
+  const seen = new Set()
+
+  for (const seed of [1, 2, 3, 4, 5]) {
+    for (const event of runBattle(meetingBattle, { seed }).events) {
+      const fields = EVENT_FIELDS[event.type]
+      assert.ok(fields, `undocumented event type: ${event.type}`)
+      seen.add(event.type)
+      for (const field of fields) {
+        assert.ok(field in event, `${event.type} is missing ${field}`)
+      }
+      assert.equal(event.detail, undefined, 'no prose in the engine log')
+
+      if (event.type === 'move') assert.ok(isPosition(event.from) && isPosition(event.to))
+      if (event.type === 'push') assert.ok(isPosition(event.to) && isPosition(event.winnerAdvancedTo))
+      if (event.type === 'exchange') {
+        for (const side of [event.a, event.b]) {
+          for (const field of EXCHANGE_SIDE) assert.ok(field in side, `exchange side is missing ${field}`)
+          assert.ok(Number.isInteger(side.killed) && side.killed >= 0)
+        }
+        assert.ok('winnerId' in event.push && typeof event.push.differential === 'number')
+      }
+    }
+  }
+
+  for (const type of ['move', 'contact', 'exchange', 'rout', 'victory']) {
+    assert.ok(seen.has(type), `the meeting battle should produce ${type} events`)
+  }
+})
+
 test('units that flee the field are preserved in the record, not erased', () => {
   // The veterans phase needs to know who lived. A unit that escapes over its
   // home edge keeps its identity and its remaining strength.

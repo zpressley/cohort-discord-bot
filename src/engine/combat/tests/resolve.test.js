@@ -97,9 +97,11 @@ test('events carry no timestamp or wall-clock value', () => {
   const { world, engagements } = pair()
   const result = createCombatResolver()({ engagements, world, random: createRng(3), turn: 1 })
 
+  assert.ok(result.events.length > 0, 'the round must report something')
   for (const event of result.events) {
-    assert.ok(!/\d{4}-\d{2}-\d{2}/.test(event), `date leaked into: ${event}`)
-    assert.ok(!/\d{2}:\d{2}:\d{2}/.test(event), `clock time leaked into: ${event}`)
+    const text = JSON.stringify(event)
+    assert.ok(!/\d{4}-\d{2}-\d{2}/.test(text), `date leaked into: ${text}`)
+    assert.ok(!/\d{2}:\d{2}:\d{2}/.test(text), `clock time leaked into: ${text}`)
   }
 })
 
@@ -369,7 +371,8 @@ test('cavalry charges on the round of impact', () => {
   const { world, engagements } = pair({ mounted: true, armor: 'light_armor' }, {})
   const result = createCombatResolver()({ engagements, world, random: createRng(8), turn: 1 })
 
-  assert.ok(result.events.some(e => e.includes('[charge]')),
+  const charged = (e) => e.type === 'exchange' && (e.a.chargeImpact || e.b.chargeImpact)
+  assert.ok(result.events.some(charged),
     'a cavalry unit arriving in contact is charging')
 })
 
@@ -381,7 +384,8 @@ test('the charge does not fire again once the pair is locked together', () => {
   resolver({ engagements, world, random, turn: 1 })
   const second = resolver({ engagements, world, random, turn: 2 })
 
-  assert.ok(!second.events.some(e => e.includes('[charge]')),
+  const charged = (e) => e.type === 'exchange' && (e.a.chargeImpact || e.b.chargeImpact)
+  assert.ok(!second.events.some(charged),
     'momentum is spent — from here the decay curve takes over')
 })
 

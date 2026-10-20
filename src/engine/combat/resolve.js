@@ -227,7 +227,7 @@ function createCombatResolver(options = {}) {
           })
         }
 
-        events.push(describeExchange(a, b, exchange, aCtx, bCtx, roundsInContact, aKilled, bKilled))
+        events.push(exchangeEvent(a, b, exchange, aCtx, bCtx, aState, bState, roundsInContact, aKilled, bKilled))
 
         // ── Rout ───────────────────────────────────────
         //
@@ -263,9 +263,7 @@ function createCombatResolver(options = {}) {
           if (loser === 'a') rout(aState, a, b, turn, events, routed)
           else if (loser === 'b') rout(bState, b, a, turn, events, routed)
           else {
-            events.push(
-              `${a.id} and ${b.id} are both at breaking point — neither breaks, ` +
-              'there is nobody to run from')
+            events.push({ type: 'standoff', aId: a.id, bId: b.id })
           }
         } else if (floorPassed && aBroken) {
           rout(aState, a, b, turn, events, routed)
@@ -368,7 +366,7 @@ function breakingLoser(aState, bState, a, b) {
 function rout(state, unit, victor, turn, events, routed) {
   state.routed = true
   state.routedOnTurn = turn
-  events.push(`${unit.id} breaks and routs from ${victor.id}`)
+  events.push({ type: 'rout', unitId: unit.id, by: victor.id })
   if (routed) routed.push({ unitId: unit.id, by: victor.id, turn })
 }
 
@@ -392,21 +390,35 @@ function addCasualty(map, unitId, killed) {
   map.set(unitId, (map.get(unitId) ?? 0) + killed)
 }
 
-// Stable, diffable, no wall clock. Numbers are fixed-width so a report diff
-// shows what actually moved rather than reflowing.
-function describeExchange(a, b, exchange, aCtx, bCtx, roundsInContact, aKilled, bKilled) {
-  const push = exchange.push.winner
-    ? `${exchange.push.winner === 'a' ? a.id : b.id} shoves (+${exchange.push.differential.toFixed(1)})`
-    : 'the shove is even'
+// One combat round between a pair, as data. Everything a narrator or a test
+// needs is here, so nobody has to read engine state to say what happened.
+// Wording it is not the engine's job: see src/narrator/eventText.js.
+// Stable and diffable: no wall clock, fixed key order.
+function exchangeEvent(a, b, exchange, aCtx, bCtx, aState, bState, roundsInContact, aKilled, bKilled) {
+  const side = (unit, ctx, state, killed) => ({
+    unitId: unit.id,
+    killed,
+    morale: state.morale,
+    stamina: state.stamina,
+    chaos: ctx.chaos,
+    terrain: ctx.terrain,
+    prepared: Boolean(ctx.prepared),
+    // The round of impact of a cavalry charge: the unit moved into contact,
+    // is mounted, and the decay curve is at its start.
+    chargeImpact: Boolean(unit.mounted && ctx.roundsInContact === 0),
+    flankBonus: ctx.bonusAttack ?? 0
+  })
 
-  const charge = (a.mounted && aCtx.roundsInContact === 0) || (b.mounted && bCtx.roundsInContact === 0)
-    ? ' [charge]'
-    : ''
-
-  return (
-    `r${roundsInContact + 1} ${a.id} -${aKilled} / ${b.id} -${bKilled}; ` +
-    `${push}; chaos ${aCtx.chaos.toFixed(1)}/${bCtx.chaos.toFixed(1)}${charge}`
-  )
+  return {
+    type: 'exchange',
+    roundInContact: roundsInContact + 1,
+    a: side(a, aCtx, aState, aKilled),
+    b: side(b, bCtx, bState, bKilled),
+    push: {
+      winnerId: exchange.push.winner ? (exchange.push.winner === 'a' ? a.id : b.id) : null,
+      differential: exchange.push.differential
+    }
+  }
 }
 
 module.exports = {

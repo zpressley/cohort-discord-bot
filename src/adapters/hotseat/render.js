@@ -12,6 +12,7 @@
 
 const { toLabel, fromLabel, samePosition } = require('../../engine/map/labels')
 const { sideView } = require('../../engine/orchestrator')
+const { describeCombatEvent } = require('../../narrator/eventText')
 
 const TERRAIN_GLYPHS = {
   plains: '.', road: '=', hill: '^', forest: 'F',
@@ -167,7 +168,8 @@ function wordEvent(event) {
       if (event.blockedBy) return `${event.unitId} advances ${toLabel(event.from)}→${toLabel(event.to)}, stopped by ${event.blockedBy}`
       return samePosition(event.from, event.to) ? null : `${event.unitId} moves ${toLabel(event.from)}→${toLabel(event.to)}`
     case 'contact': return `CONTACT: ${event.aId} meets ${event.bId}`
-    case 'exchange': return event.detail
+    case 'exchange': return describeCombatEvent(event)
+    case 'standoff': return describeCombatEvent(event)
     case 'push':
       return `${event.by} drives ${event.unitId} back to ${toLabel(event.to)}` +
         (event.lostHighGround ? ' — off the high ground!' : '')
