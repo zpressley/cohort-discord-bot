@@ -162,3 +162,19 @@ test('every listed scenario loads and passes its own builder', () => {
     assert.ok(spec.sides.red && spec.sides.blue)
   }
 })
+
+test('a hotseat game saves as data and replays to the same battle', () => {
+  const { gameRecord, replayGame } = require('../../../engine/orchestrator')
+  const session = createSession(loadScenario('legions-vs-celts'), { seed: 4 })
+  session.submitLines('red', ['the archers hold', 'everyone to K8'])
+  session.submitLines('blue', ['everyone to the north ford'])
+  for (let i = 0; i < 40 && !session.finished(); i++) {
+    session.submitLines('red', [])
+    session.submitLines('blue', [])
+  }
+
+  const record = JSON.parse(JSON.stringify(gameRecord(session.game)))
+  const replayed = replayGame(record)
+  assert.equal(JSON.stringify(replayed.battle.log.all()), JSON.stringify(session.game.battle.log.all()))
+  assert.deepEqual(replayed.outcome, session.game.outcome)
+})

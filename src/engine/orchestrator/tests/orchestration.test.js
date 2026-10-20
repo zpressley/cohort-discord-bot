@@ -9,7 +9,7 @@ const { test } = require('node:test')
 const assert = require('node:assert/strict')
 
 const {
-  createGame, submitOrders, forceProcess, sideView,
+  createGame, submitOrders, forceProcess, sideView, gameRecord, replayGame,
   visionRange, createIntel, updateIntel,
   evaluateVictory, objectiveController,
   MAX_TICKS_PER_TURN
@@ -340,4 +340,65 @@ test('exit: a two-player battle runs from creation to declared victory through t
   }
   assert.deepEqual(rerun.outcome, game.outcome)
   assert.equal(rerun.playerTurn, game.playerTurn)
+})
+
+// ── Replay ─────────────────────────────────────────────
+
+// A game with everything in it: typed orders on both sides, a hold, a target
+// given as a position rather than a label, a forced (timed-out) turn, then
+// standing orders to the end.
+function playFullGame(seed) {
+  const meetingSpec = require('../../../harness/scenarios/meeting-battle')
+  const game = createGame({ ...meetingSpec, maxTurns: undefined }, { seed })
+  submitOrders(game, 'red', [{ unitRef: 'everyone', target: 'K8' }, { unitRef: 'red_archers', target: 'hold' }])
+  submitOrders(game, 'blue', [{ unitRef: 'everyone', target: { x: 9, y: 7 } }])
+  submitOrders(game, 'red', [{ unitRef: 'red_horse', target: 'M10' }])
+  forceProcess(game)
+  for (let i = 0; i < 60 && !game.outcome.decided; i++) {
+    submitOrders(game, 'red', [])
+    submitOrders(game, 'blue', [])
+  }
+  return game
+}
+
+test('replay: a saved game rebuilds byte for byte from spec, seed and orders', () => {
+  const game = playFullGame(5)
+  assert.ok(game.outcome.decided, 'the fixture game must finish')
+
+  // Through JSON, the way it would be saved.
+  const record = JSON.parse(JSON.stringify(gameRecord(game)))
+  const replayed = replayGame(record)
+
+  assert.equal(JSON.stringify(replayed.battle.log.all()), JSON.stringify(game.battle.log.all()),
+    'the event log must match exactly')
+  assert.equal(JSON.stringify(replayed.history), JSON.stringify(game.history))
+  assert.deepEqual(replayed.outcome, game.outcome)
+  assert.equal(replayed.playerTurn, game.playerTurn)
+  assert.equal(replayed.minutesElapsed, game.minutesElapsed)
+})
+
+test('replay: stopping part-way shows the game exactly as it stood then', () => {
+  const game = playFullGame(8)
+  const record = gameRecord(game)
+
+  // Rebuild the game live, entry by entry, and compare at every step.
+  const live = createGame(record.spec, { seed: record.seed })
+  record.orderLog.forEach((entry, i) => {
+    if (entry.forced) forceProcess(live)
+    else submitOrders(live, entry.side, entry.orders)
+    if (i % 5 === 0) {
+      const partial = replayGame(record, { upTo: i + 1 })
+      assert.equal(JSON.stringify(partial.battle.log.all()), JSON.stringify(live.battle.log.all()),
+        `log diverged after entry ${i}`)
+    }
+  })
+})
+
+test('the order log is a copy: editing orders after submitting changes nothing', () => {
+  const meetingSpec = require('../../../harness/scenarios/meeting-battle')
+  const game = createGame(meetingSpec, { seed: 1 })
+  const orders = [{ unitRef: 'everyone', target: 'K8' }]
+  submitOrders(game, 'red', orders)
+  orders[0].target = 'A1'
+  assert.equal(gameRecord(game).orderLog[0].orders[0].target, 'K8')
 })

@@ -25,6 +25,14 @@
 // with whatever has been submitted (an absent commander's army holds — or
 // presses on under standing orders, which is exactly what standing orders
 // are for).
+//
+// ── Replay ─────────────────────────────────────────────
+//
+// The engine is a pure function of (spec, seed, orders), so a game is fully
+// described by those three. Every submission and every forced turn is logged
+// in game.orderLog, gameRecord(game) packages the three as plain data for
+// saving, and replayGame(record) plays them back into an identical game: the
+// same event log byte for byte, the same history, the same verdict.
 
 const { createBattleState, stepTurn } = require('../battle/battle')
 const { unitsOnSide, sides } = require('../world')
@@ -47,7 +55,11 @@ function createGame(spec, options = {}) {
 
   const game = {
     spec,
+    seed: battle.seed,
     battle,
+    // Everything submitted, in order: { side, orders } or { forced: true }.
+    // With spec and seed this is the whole game (see replayGame).
+    orderLog: [],
     objectives: (spec.objectives ?? []).map(o => ({ ...o, coord: toPosition(o.coord) })),
     playerTurn: 0,
     minutesElapsed: 0,
@@ -82,6 +94,7 @@ function createGame(spec, options = {}) {
  */
 function submitOrders(game, side, orders) {
   if (game.outcome.decided) return { status: 'finished', outcome: game.outcome }
+  game.orderLog.push({ side, orders: copyOrders(orders) })
 
   if (orders && orders.surrender === true) {
     game.surrendered = side
@@ -107,6 +120,7 @@ function submitOrders(game, side, orders) {
 // never spoke hold (or follow their standing orders).
 function forceProcess(game) {
   if (game.outcome.decided) return { status: 'finished', outcome: game.outcome }
+  game.orderLog.push({ forced: true })
   const turnReport = processPlayerTurn(game)
   return {
     status: game.outcome.decided ? 'finished' : 'processed',
@@ -229,8 +243,45 @@ function sideView(game, side) {
   }
 }
 
+// Orders are logged as data, detached from whatever object the caller keeps
+// editing. Orders are plain JSON (unit references, labels or positions,
+// 'hold'), so a JSON round trip is an exact copy.
+function copyOrders(orders) {
+  return orders === undefined ? undefined : JSON.parse(JSON.stringify(orders))
+}
+
+/**
+ * The whole game as plain data: the spec it started from, its seed, and every
+ * submission in order. Save this and the game can be rebuilt exactly.
+ * The spec must itself be data (a map named or defined, not a built map
+ * object) for the record to survive JSON.
+ */
+function gameRecord(game) {
+  return JSON.parse(JSON.stringify({
+    spec: game.spec,
+    seed: game.seed,
+    orderLog: game.orderLog
+  }))
+}
+
+/**
+ * Rebuild a game from its record by playing every submission back in order.
+ * Pass `upTo` to stop after that many log entries (to look at a game as it
+ * stood mid-battle).
+ */
+function replayGame(record, { upTo = Infinity } = {}) {
+  const game = createGame(record.spec, { seed: record.seed })
+  record.orderLog.slice(0, upTo).forEach(entry => {
+    if (entry.forced) forceProcess(game)
+    else submitOrders(game, entry.side, entry.orders)
+  })
+  return game
+}
+
 module.exports = {
   createGame,
+  gameRecord,
+  replayGame,
   submitOrders,
   forceProcess,
   sideView,
