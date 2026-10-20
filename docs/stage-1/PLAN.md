@@ -39,11 +39,12 @@ each step.
    | `phase1-movement/movementEngine.js` | `engine/movement/pathfinding.js` |
    | `phase3-movement/*` | `engine/movement/` |
    | `phase2-combat/combat/*` | `engine/combat/` |
-   | `phase2-combat/harness/rng.js`, `world.js`, `runner.js` | `engine/` (`rng.js`, `world.js`, `contact.js`) |
+   | `phase2-combat/harness/rng.js`, `world.js`, `runner.js` | `engine/` (`rng.js`, `world.js`, `runner.js`) |
    | `phase4-integration/battle.js`, `events.js` | `engine/battle/` |
    | `phase5-orchestration/*` | `engine/orchestrator/` |
    | `phase6-veterans/*` | `engine/veterans/` |
    | `phase7-army/*` | `engine/army/` |
+| `phase6-veterans/persistence.js` (writes files) | `adapters/persistence/veteransRepository.js` |
    | `phase2-combat/scenarios`, `balance`, `run.js`, harness report and placeholder; `phase4-integration/scenarios` | `harness/` |
    | `phase7-hotseat/*` | `adapters/hotseat/` |
    | `phase1-movement/handler.js`, `unitState.js` | `adapters/discord/movement-demo/` |

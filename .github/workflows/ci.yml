@@ -16,4 +16,4 @@ jobs:
           node-version: '22'
       - run: npm ci
       - run: npm run test:core
-      - run: npm run test:phase2
+      - run: npm test

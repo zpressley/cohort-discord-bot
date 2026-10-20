@@ -5,20 +5,15 @@
   "scripts": {
     "start": "node src/index.js",
     "dev": "nodemon src/index.js",
+    "test": "node --test \"src/engine/**/*.test.js\" \"src/harness/**/*.test.js\" \"src/adapters/**/*.test.js\"",
+    "test:engine": "node --test \"src/engine/**/*.test.js\"",
+    "test:harness": "node --test \"src/harness/**/*.test.js\"",
     "test:core": "node src/tests/core/coreEngine.test.js",
-    "test": "node --test \"src/phase2-combat/tests/**/*.test.js\" \"src/phase3-movement/tests/**/*.test.js\" \"src/phase4-integration/tests/**/*.test.js\" \"src/phase5-orchestration/tests/**/*.test.js\" \"src/phase6-veterans/tests/**/*.test.js\" \"src/phase7-army/tests/**/*.test.js\" \"src/phase7-hotseat/tests/**/*.test.js\"",
-    "replay": "node scripts/replayBattle.js",
-    "test:phase2": "node --test \"src/phase2-combat/tests/**/*.test.js\"",
-    "sim": "node src/phase2-combat/run.js",
     "test:legacy": "node src/tests/core/coreEngine.test.js",
-    "balance": "node src/phase2-combat/balance/run-balance.js",
-    "test:phase3": "node --test \"src/phase3-movement/tests/**/*.test.js\"",
-    "test:phase4": "node --test \"src/phase4-integration/tests/**/*.test.js\"",
-    "test:phase5": "node --test \"src/phase5-orchestration/tests/**/*.test.js\"",
-    "test:phase6": "node --test \"src/phase6-veterans/tests/**/*.test.js\"",
-    "test:phase7": "node --test \"src/phase7-army/tests/**/*.test.js\"",
-    "play": "node src/phase7-hotseat/play.js",
-    "test:hotseat": "node --test \"src/phase7-hotseat/tests/**/*.test.js\""
+    "sim": "node src/harness/run.js",
+    "balance": "node src/harness/balance/run-balance.js",
+    "play": "node src/adapters/hotseat/play.js",
+    "replay": "node scripts/replayBattle.js"
   },
   "keywords": [
     "discord",
