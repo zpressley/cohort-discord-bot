@@ -16,8 +16,9 @@ const {
   createVeteranState, applyBattle, addRecruits, averageExperience,
   veteranLevel, veteranResistance, regularUnitLevel, namingMilestone,
   createRoster, livingOfficers, resolveOfficerFates, deathProbability,
-  createRepository, createCommander, recordBattle, eliteBattleFields
+  createCommander, recordBattle, eliteBattleFields
 } = require('../index')
+const { createRepository } = require('../../../adapters/persistence/veteransRepository')
 const { createRng } = require('../../rng')
 const { moraleResistance } = require('../../combat/ratings')
 
