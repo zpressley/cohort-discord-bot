@@ -34,7 +34,7 @@
 // single RNG channel.
 
 const { findPath } = require('./pathfinding')
-const { toPosition, samePosition } = require('../map/labels')
+const { toPosition, samePosition, positionKey } = require('../map/labels')
 const { inInitiativeOrder, tierName } = require('./initiative')
 const { buildOccupancy, canEnter, moveUnit } = require('./occupancy')
 const { getUnit, isAlive } = require('../world')
@@ -88,6 +88,7 @@ function resolveSimultaneousMovement(world, orders, map) {
     plans.set(unit.id, {
       unit,
       target,
+      fleeing: Boolean(order.fleeing),
       steps: path.slice(1),            // path[0] is where the unit stands
       stepIndex: 0,
       budget: unit.movementRange,
@@ -123,6 +124,22 @@ function resolveSimultaneousMovement(world, orders, map) {
       }
 
       const entry = canEnter(occupancy, unit, nextCoord)
+      // A friend in the way: once per turn, look for a way around the tiles
+      // other units stand on. Paths are planned over an empty field, so
+      // without this, units sharing a destination file up behind one another
+      // and a broken unit wedged in the line can block both armies for good.
+      // An enemy in the way is contact, and stops the move (below).
+      if (!entry.ok && entry.reason === 'friendly' && !plan.detoured) {
+        plan.detoured = true
+        const avoid = new Set([...occupancy.keys()].filter(k => occupancy.get(k) !== unit))
+        const detour = findPath(map, unit.position, plan.target, { avoid })
+        if (detour && detour.length > 1) {
+          plan.steps = detour.slice(1)
+          plan.stepIndex = 0
+          anyoneMoving = true
+          continue
+        }
+      }
       if (!entry.ok) {
         plan.blockedTicks += 1
         plan.blockedBy = entry.blocker
@@ -142,6 +159,19 @@ function resolveSimultaneousMovement(world, orders, map) {
       plan.blockedTicks = 0
       plan.blockedBy = null
       anyoneMoving = true
+
+      // Contact stops movement: a unit that steps next to an enemy halts
+      // there and fights. Contact used to be checked only after everyone had
+      // moved, so two units could slip past each other through the
+      // diagonals, swap places, and repeat for ever without a blow. Fleeing
+      // units are exempt: they keep running, and pursuit deals with them.
+      if (!plan.fleeing) {
+        const enemy = adjacentEnemy(occupancy, unit, map)
+        if (enemy) {
+          plan.stopped = true
+          plan.blockedBy = enemy.id
+        }
+      }
     }
   }
 
@@ -163,6 +193,14 @@ function resolveSimultaneousMovement(world, orders, map) {
   }
 
   return [...results.values()].sort((a, b) => a.unitId.localeCompare(b.unitId))
+}
+
+function adjacentEnemy(occupancy, unit, map) {
+  for (const next of map.neighbors(unit.position)) {
+    const other = occupancy.get(positionKey(next))
+    if (other && other.side !== unit.side) return other
+  }
+  return null
 }
 
 module.exports = { resolveSimultaneousMovement, BLOCKED_TICKS_TO_STOP }

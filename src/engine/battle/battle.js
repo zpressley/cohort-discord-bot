@@ -142,7 +142,7 @@ function stepTurn(state, sideOrders = {}) {
   for (const unit of livingUnits(world)) {
     if (!broken.has(unit.id)) continue
     const edge = spec.sides?.[unit.side]?.homeEdge ?? 'west'
-    orders.push({ unitId: unit.id, target: chooseFlightTarget(map, world, unit, edge) })
+    orders.push({ unitId: unit.id, target: chooseFlightTarget(map, world, unit, edge), fleeing: true })
   }
 
   // ── Movement (phase 3) ──────────────────────────

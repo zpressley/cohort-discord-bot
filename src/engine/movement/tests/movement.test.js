@@ -177,9 +177,9 @@ test('an enemy in the path stops the move at once — walking into an enemy is c
   assert.equal(a.blockedBy, 'wall')
 })
 
-test('a friendly blocker gets one tick to clear before the mover gives up', () => {
-  // 'still' holds its ground and never moves; 'mover' should stop rather than
-  // wait forever.
+test('a unit walks around a friend who holds its path', () => {
+  // Paths are planned over an empty field; a friend standing in the way is
+  // stepped around rather than waited on forever.
   const world = createWorld({
     units: [
       unit({ id: 'mover', position: 'D4' }),
@@ -191,8 +191,29 @@ test('a friendly blocker gets one tick to clear before the mover gives up', () =
     { unitId: 'still', target: 'hold' }
   ])
   const mover = results.find(r => r.unitId === 'mover')
+  assert.ok(mover.tilesMoved > 0, 'it went around')
+  assert.equal(toLabel(world.units.find(u => u.id === 'still').position), 'D5')
+  assertNoCoOccupancy(world)
+})
 
-  assert.equal(toLabel(mover.to), 'D4', 'no way through a friend who is holding')
+test('with no way around a holding friend, the mover gives up after one tick', () => {
+  // A 5x3 field split by a river with a single ford, and a friend holding
+  // the ford.
+  const { createMap } = require('../../map/map')
+  const ford = createMap({
+    name: 'one-ford', width: 5, height: 3,
+    cells: { C2: { terrain: 'ford' } },
+    terrain: { river: ['C1', 'C3'] }
+  })
+  const world = createWorld({
+    units: [unit({ id: 'mover', position: 'A2' }), unit({ id: 'still', position: 'C2' })]
+  })
+  const results = resolveOn(world, [
+    { unitId: 'mover', target: 'E2' },
+    { unitId: 'still', target: 'hold' }
+  ], ford)
+  const mover = results.find(r => r.unitId === 'mover')
+  assert.equal(toLabel(mover.to), 'B2', 'up to the ford and no further')
   assert.equal(mover.blockedBy, 'still')
 })
 
