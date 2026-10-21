@@ -8,6 +8,7 @@
 const { createGame, submitOrders, sideView } = require('../../engine/orchestrator')
 const { sides } = require('../../engine/world')
 const { interpretLines, interpretText } = require('../../interpreter/orders')
+const { narrateTurn } = require('../../narrator/turnNarrator')
 const { renderMap, renderRoster, renderTurnReport } = require('./render')
 
 /**
@@ -93,6 +94,28 @@ function createSession(spec, options = {}) {
         report: renderTurnReport(game, turnEntry),
         outcome: game.outcome
       }
+    },
+
+    /**
+     * The last turn told from one side's point of view, by the AI narrator
+     * when one is configured, else the plain report. Fog of war holds.
+     */
+    async narrate(side) {
+      const turnEntry = game.history.at(-1)
+      const plain = turnEntry ? renderTurnReport(game, turnEntry) : 'Nothing has happened yet.'
+      if (!turnEntry) return { text: plain, source: 'plain' }
+      const events = turnEntry.ticks.flatMap(t => game.battle.log.forTurn(t.battleTurn))
+      const own = [...game.battle.world.units, ...game.battle.fledUnits].filter(u => u.side === side)
+      const seen = sideView(game, side).intel.filter(e => e.status === 'visible').map(e => e.id)
+      return narrateTurn(options.ai, {
+        map: game.battle.map,
+        side,
+        culture: own[0]?.culture ?? 'unknown',
+        ownIds: new Set(own.map(u => u.id)),
+        seenEnemyIds: new Set(seen),
+        events,
+        plain
+      })
     },
 
     finished() {

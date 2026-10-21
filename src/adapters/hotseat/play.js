@@ -131,7 +131,14 @@ async function main() {
       if (session.finished()) break
     }
 
-    if (report) console.log('\n' + report + '\n')
+    // With the AI on and one human at the keyboard, the turn is told in that
+    // side's voice; otherwise the plain report (two humans share the screen).
+    if (report && ai.configured && session.humanSides().length === 1) {
+      const told = await session.narrate(session.humanSides()[0])
+      console.log('\n' + told.text + '\n')
+    } else if (report) {
+      console.log('\n' + report + '\n')
+    }
   }
 
   console.log('\n' + session.finalSummary() + '\n')
