@@ -8,15 +8,13 @@
 // Context, all from one side's own point of view:
 //   { map, units: [own living, unbroken units] }
 //
-// Places may be a map label ("K8"), a landmark's name, or a description of
-// the ground ("the ridge to the east"), resolved from where the ordered
-// units stand.
+// Places may be a grid reference ("C7", "C7-NE": the ruled player grid of
+// 100 m squares), a landmark's name, or a description of the ground ("the
+// ridge to the east"), resolved from where the ordered units stand.
 
 const { resolveUnitReference } = require('../engine/movement/unitResolver')
 const { findPlace } = require('../engine/map/places')
-const { fromLabel, toLabel } = require('../engine/map/labels')
-
-const LABEL = /^[a-z]{1,3}\d{1,3}$/i
+const { isGridRef, gridTarget, gridLabel } = require('../engine/map/grid')
 
 // Where a group stands, for "the ridge to the east" said to several units:
 // the unit nearest the group's middle, so the reference is read from a real
@@ -35,15 +33,15 @@ function groupOrigin(units) {
 
 function resolvePlace(map, origin, words) {
   const text = String(words).trim()
-  if (LABEL.test(text)) {
-    const position = fromLabel(text)
-    if (!map.inBounds(position)) return { question: `${text.toUpperCase()} is off the map.` }
-    return { position, description: text.toUpperCase() }
+  if (isGridRef(text)) {
+    const square = gridTarget(map, text)
+    if (square.none) return { question: `${square.none}.` }
+    return { position: square.position, description: square.label }
   }
   const found = findPlace(map, origin, text)
   if (found.position) return { position: found.position, description: found.description }
   if (found.question) return { question: found.question }
-  return { question: `I can't place "${text}": ${found.none}. Try the ground (the ridge to the east, the clearing) or a square like K8.` }
+  return { question: `I can't place "${text}": ${found.none}. Try the ground (the ridge to the east, the clearing) or a grid square like C7.` }
 }
 
 /**
@@ -94,7 +92,7 @@ function resolveIntents(intents, context) {
     }
     const who = match.units.map(u => u.id).join(', ')
     const what = intent.action === 'move' && intent.then === 'hold' ? 'defend' : intent.action
-    understood.push(`${who}: ${what}${where}${target ? ` (${toLabel(target)})` : ''}`)
+    understood.push(`${who}: ${what}${where}${target ? ` (${gridLabel(target, { quarter: true })})` : ''}`)
   }
 
   return { orders, questions, surrender, understood }

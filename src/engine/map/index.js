@@ -8,6 +8,7 @@ const { MOVEMENT_COSTS, IMPASSABLE } = require('./terrain')
 const landmarks = require('./landmarkResolver')
 const { detectFeatures, featuresAt, KINDS: FEATURE_KINDS } = require('./features')
 const { parsePlace, findPlace } = require('./places')
+const grid = require('./grid')
 
 module.exports = {
   createMap,
@@ -23,5 +24,10 @@ module.exports = {
   featuresAt,
   FEATURE_KINDS,
   parsePlace,
-  findPlace
+  findPlace,
+  gridLabel: grid.gridLabel,
+  gridSize: grid.gridSize,
+  isGridRef: grid.isGridRef,
+  parseGridRef: grid.parseGridRef,
+  gridTarget: grid.gridTarget
 }

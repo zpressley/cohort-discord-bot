@@ -13,7 +13,7 @@
 //   horse dig in at the clearing            defend
 //   archers hold        / hold              hold (bare "hold" = everyone)
 //   everyone advance    / advance           advance on the enemy
-//   swords withdraw     / fall back to K8   withdraw (to a place, or home)
+//   swords withdraw     / fall back to C7   withdraw (to a place, or home)
 //   surrender           / done
 //
 // The result is an intent: words for which units and words for where.

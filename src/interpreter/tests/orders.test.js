@@ -15,6 +15,7 @@ const { scriptedTransport } = require('../../llm/fixtures')
 const { resolveMap } = require('../../engine/map/map')
 const { createWorld } = require('../../engine/world')
 const { toLabel } = require('../../engine/map/labels')
+const { gridLabel } = require('../../engine/map/grid')
 
 const map = resolveMap('crownhill')
 const world = createWorld({
@@ -51,7 +52,7 @@ test('grammar: the ways a commander gives each kind of order', () => {
     'everyone advance': ['everyone', 'advance', null, null],
     'the cavalry charge': ['the cavalry', 'advance', null, null],
     'swords withdraw': ['swords', 'withdraw', null, null],
-    'fall back to K8': ['everyone', 'withdraw', 'K8', null]
+    'fall back to C7': ['everyone', 'withdraw', 'C7', null]
   }
   for (const [line, [unitRef, action, place, then]] of Object.entries(cases)) {
     assert.deepEqual(parseLine(line), { kind: 'order', unitRef, action, place, then }, line)
@@ -76,7 +77,8 @@ test('places resolve from where the units stand, and the player gets a read-back
   const read = interpretLines(['spears to the ridge to the east'], context)
   assert.equal(read.questions.length, 0)
   assert.equal(toLabel(read.orders[0].target), 'T2', 'The Crownhill')
-  assert.match(read.understood[0], /red_spears: move The Crownhill \d+ m east \(T2\)/)
+  assert.match(read.understood[0], /red_spears: move The Crownhill \d+ m east \(E1-NE\)/,
+    'the read-back gives the grid quarter')
 
   const defend = interpretLines(['archers defend the woods'], context)
   assert.equal(defend.orders[0].action, 'defend')
@@ -121,10 +123,10 @@ test('AI: a question from the model goes to the player, and nothing is submitted
 })
 
 test('AI: a reply that breaks the schema falls back to the grammar', async () => {
-  const ai = aiReplying({ orders: [{ units: 'spears', action: 'teleport', place: 'K8', then: null }], question: null, surrender: false })
-  const read = await interpretText('spears to K8', context, { ai })
+  const ai = aiReplying({ orders: [{ units: 'spears', action: 'teleport', place: 'C2', then: null }], question: null, surrender: false })
+  const read = await interpretText('spears to C2', context, { ai })
   assert.equal(read.source, 'grammar', 'unknown action rejected, grammar used instead')
-  assert.equal(toLabel(read.orders[0].target), 'K8')
+  assert.equal(gridLabel(read.orders[0].target), 'C2')
 })
 
 test('AI: down, missing or slow, the grammar takes over', async () => {

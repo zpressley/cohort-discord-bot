@@ -55,7 +55,7 @@ Reply with one JSON object:
 - units: the commander's words for ONE unit (e.g. "the spears", "the archers") or "everyone". If an order names several units, write one order per unit.
 - action: one of move, hold, defend, advance, withdraw.
   move = go somewhere. hold = stay where you are. defend = go somewhere and hold it (dig in, set up a defensive position). advance = attack or press the nearest enemy. withdraw = fall back (to a place if given, otherwise toward home).
-- place: the commander's own words for where, e.g. "the ridge to the east", "the clearing", "Harrow Bridge", "K8". Copy the words; do not translate them into coordinates. null when no place is given.
+- place: the commander's own words for where, e.g. "the ridge to the east", "the clearing", "Harrow Bridge", or a grid square like "C7" or "C7-NE". Copy the words; do not translate them into coordinates. null when no place is given.
 - then: "hold" if they should hold once they arrive, else null.
 - question: if an order cannot be understood at all, ask one short question instead of guessing; otherwise null.
 - surrender: true only if the commander yields the battle.

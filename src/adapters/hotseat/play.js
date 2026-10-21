@@ -80,7 +80,7 @@ async function main() {
   console.log(session.humanSides().length === 2
     ? 'Two commanders, one keyboard. The curtain drops between turns.\n'
     : `You command ${session.humanSides()[0]}; ${args.auto} fights itself.\n`)
-  console.log('Orders: "spears to the ridge to the east", "archers defend the ford",')
+  console.log('Orders: "spears to the ridge to the east", "archers defend C2-NE",')
   console.log('        "everyone advance", "swords fall back", "hold", then "done".')
   console.log(ai.configured ? '(Orders are read by the AI; plain sentences work too.)' : '(No GROQ_API_KEY: orders use the fixed grammar.)')
   console.log('Also: map · surrender · quit\n')

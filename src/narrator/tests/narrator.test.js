@@ -76,7 +76,7 @@ test('the hotseat session narrates its last turn for one side', async () => {
   const transport = scriptedTransport((req) => ({ text: `Report for ${/the (\w+) side/.exec(req.system)[1]}.` }))
   const ai = createAiClient({ transport, retries: 0 })
   const session = createSession(loadScenario('meeting-battle'), { seed: 1, auto: 'blue', ai })
-  session.submitLines('red', ['everyone to K8'])
+  session.submitLines('red', ['everyone to C2-SE'])
   const told = await session.narrate('red')
   assert.equal(told.source, 'ai')
   assert.equal(told.text, 'Report for red.')

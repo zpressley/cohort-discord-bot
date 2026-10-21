@@ -11,6 +11,10 @@
 // Discord embeds will show precisely what this shows.
 
 const { toLabel, fromLabel, samePosition } = require('../../engine/map/labels')
+const { gridLabel, SQUARE_TILES } = require('../../engine/map/grid')
+
+// Players see the ruled grid: squares of 100 m ("C7"), quarters of 50 m.
+const where = (position) => gridLabel(position, { quarter: true })
 const { sideView } = require('../../engine/orchestrator')
 const { describeCombatEvent } = require('../../narrator/eventText')
 
@@ -47,7 +51,7 @@ function renderMap(game, side, { fullMap = false, pad = 4, minSpan = 12 } = {}) 
     } else {
       const label = toLabel(entry.position)
       if (!markers.has(label)) markers.set(label, '?')
-      enemyLegend.push(`?=${entry.id} last seen ${label}, turn ${entry.seenOnTurn}`)
+      enemyLegend.push(`?=${entry.id} last seen ${where(entry.position)}, turn ${entry.seenOnTurn}`)
     }
   })
 
@@ -55,15 +59,21 @@ function renderMap(game, side, { fullMap = false, pad = 4, minSpan = 12 } = {}) 
     ? { minRow: 0, maxRow: map.height - 1, minCol: 0, maxCol: map.width - 1 }
     : viewportFor(map, [...markers.keys()], pad, minSpan)
 
+  // Grid letters over the first column of each 100 m square, grid numbers
+  // beside its first row; each square is SQUARE_TILES characters wide.
   const lines = []
-  let header = '    '
+  const header = Array(box.maxCol - box.minCol + 1).fill(' ')
   for (let col = box.minCol; col <= box.maxCol; col++) {
-    header += columnLabel(col).slice(-1)
+    if (col % SQUARE_TILES !== 0) continue
+    const letters = columnLabel(col)
+    for (let i = 0; i < letters.length && col - box.minCol + i < header.length; i++) {
+      header[col - box.minCol + i] = letters[i]
+    }
   }
-  lines.push(header)
+  lines.push(('    ' + header.join('')).replace(/\s+$/, ''))
 
   for (let row = box.minRow; row <= box.maxRow; row++) {
-    let line = String(row + 1).padStart(3) + ' '
+    let line = (row % SQUARE_TILES === 0 ? String(Math.floor(row / SQUARE_TILES) + 1) : '').padStart(3) + ' '
     for (let col = box.minCol; col <= box.maxCol; col++) {
       const position = { x: col, y: row }
       line += markers.get(toLabel(position)) ?? (TERRAIN_GLYPHS[map.terrainAt(position)] ?? '?')
@@ -74,7 +84,7 @@ function renderMap(game, side, { fullMap = false, pad = 4, minSpan = 12 } = {}) 
   lines.push('')
   lines.push(`  yours:  ${ownLegend.join('  ') || 'none standing'}`)
   lines.push(`  enemy:  ${enemyLegend.join('  ') || 'nothing sighted'}`)
-  lines.push(`  ground: .plains =road ^hill Fforest ~river fford Bbridge  (cols ${columnLabel(box.minCol)}-${columnLabel(box.maxCol)})`)
+  lines.push(`  ground: .plains =road ^hill Fforest ~river fford Bbridge  (squares ${columnLabel(box.minCol)}-${columnLabel(box.maxCol)}, 100 m each)`)
   return lines.join('\n')
 }
 
@@ -95,8 +105,9 @@ function viewportFor(map, labels, pad, minSpan) {
   }
 }
 
+// The grid column letter for a tile column.
 function columnLabel(col) {
-  return toLabel({ x: col, y: 0 }).replace(/\d+$/, '')
+  return gridLabel({ x: col, y: 0 }).replace(/\d+$/, '')
 }
 
 // ── The roster ───────────────────────────────────────────
@@ -111,7 +122,7 @@ function renderRoster(game, side) {
   // a zero-strength line in the roster reads like a unit awaiting orders.
   for (const unit of view.own.filter(u => u.strength > 0)) {
     const state = game.battle.resolver.getState(unit.id)
-    let line = `  ${unit.id.padEnd(14)} ${toLabel(unit.position).padEnd(5)} ` +
+    let line = `  ${unit.id.padEnd(14)} ${where(unit.position).padEnd(7)} ` +
       `men ${bar(unit.strength, unit.maxStrength)} ${unit.strength}`
     if (state) {
       line += `   morale ${bar(state.morale, 100)}   wind ${bar(state.stamina, 120)}`
@@ -165,10 +176,10 @@ function wordEvent(event) {
       if (event.blockedBy && samePosition(event.from, event.to)) {
         return `${event.unitId} cannot advance — ${event.blockedBy} bars the way`
       }
-      if (event.blockedBy) return `${event.unitId} advances ${toLabel(event.from)}→${toLabel(event.to)}, stopped by ${event.blockedBy}`
-      return samePosition(event.from, event.to) ? null : `${event.unitId} moves ${toLabel(event.from)}→${toLabel(event.to)}`
+      if (event.blockedBy) return `${event.unitId} advances ${where(event.from)}→${where(event.to)}, stopped by ${event.blockedBy}`
+      return samePosition(event.from, event.to) ? null : `${event.unitId} moves ${where(event.from)}→${where(event.to)}`
     case 'arrived':
-      return `${event.unitId} reaches ${toLabel(event.at)}` + (event.then === 'hold' ? ' and digs in' : '')
+      return `${event.unitId} reaches ${where(event.at)}` + (event.then === 'hold' ? ' and digs in' : '')
     case 'halted':
       return `${event.unitId} can get no further` +
         (event.blockedBy ? ` — ${event.blockedBy} is in the way` : ' — there is no way through') +
@@ -177,7 +188,7 @@ function wordEvent(event) {
     case 'exchange': return describeCombatEvent(event)
     case 'standoff': return describeCombatEvent(event)
     case 'push':
-      return `${event.by} drives ${event.unitId} back to ${toLabel(event.to)}` +
+      return `${event.by} drives ${event.unitId} back to ${where(event.to)}` +
         (event.lostHighGround ? ' — off the high ground!' : '')
     case 'crush': return `${event.unitId} has nowhere to give — crushed against ${event.reason}`
     case 'rout': return `${event.unitId} BREAKS and runs from ${event.by}`
