@@ -76,7 +76,20 @@ From Zach's review of the Stage 2 movement changes. Items marked
 other, with penalties once a tile holds more than a threshold, growing
 worse the more it holds. This is how an earlier build handled unit
 collision, and it replaces one-unit-per-tile occupancy (and the Stage 2
-detour rule, which works around it). Threshold and penalties to be set.
+detour rule, which works around it). Starting point: the density table
+from the earlier build (`archive/docs/Context/Old Context/cohort_task_list.md`,
+STACK-002), with thresholds quartered for 25 m tiles as
+`docs/design/architecture-roadmap.md` §6 already planned:
+
+| Tier | Old (50 m tile) | 25 m tile | Penalty |
+|---|---|---|---|
+| organized | 0-400 men | 0-100 | none |
+| crowded | 401-600 | 101-150 | -25% move, -1 combat |
+| compressed | 601-800 | 151-200 | -50% move, -2 combat |
+| crushing | 801-1000 | 201-250 | -75% move, -3 combat |
+| critical | 1001-1200 | 251-300 | -90% move, -4 combat, -2 morale |
+
+Hard cap 300 men per tile. Numbers to be tuned in play.
 
 **Contact and defensive movement.** *Direction:* a unit that comes next to
 an enemy is not forced to fight. Units can decide not to engage and move
@@ -93,3 +106,15 @@ hotseat CLI defaults to 4 hours of battle time.
 if it saw combat, so the incentive is to fight. Open: how to push that
 without bad incentives (for example, throwing units into pointless fights
 to farm battles, or a time-out rule that rewards turtling).
+
+**Deployment, hidden foes and posture.** *Direction:* how an army is
+deployed matters. A column on the march that runs into a hidden enemy does
+not know it is happening. A hidden force in woods may let a few units pass
+and then strike the rear. Units on guard, in a defensive posture, may make
+an attack not worth it at that moment, and then no attack takes place.
+This ties to the contact rule above: whether a fight starts depends on
+posture and on who has seen whom, not only on being adjacent.
+
+**Objective control.** *Direction, for testing:* holding objectives as a
+way to win or score, giving units a reason to move and fight. How it fits
+the story is still open.
