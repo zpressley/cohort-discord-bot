@@ -7,12 +7,13 @@
 
 const { createGame, submitOrders, sideView } = require('../../engine/orchestrator')
 const { sides } = require('../../engine/world')
-const { parseOrderBlock } = require('./parser')
+const { interpretLines, interpretText } = require('../../interpreter/orders')
 const { renderMap, renderRoster, renderTurnReport } = require('./render')
 
 /**
  * @param {Object} spec     a phase 4/5 battle spec
- * @param {Object} options  { seed, auto: 'blue'|null, fullMap }
+ * @param {Object} options  { seed, auto: 'blue'|null, fullMap, ai }
+ *   ai: an AI client (src/llm); without one, orders use the fixed grammar
  */
 function createSession(spec, options = {}) {
   const game = createGame(spec, { seed: options.seed })
@@ -32,16 +33,42 @@ function createSession(spec, options = {}) {
     },
 
     /**
-     * Parse and submit one side's typed orders. If parsing raised questions,
-     * nothing is submitted — the commander answers and resubmits the block.
-     * When the last side is in, the turn processes and the report comes back.
+     * What one side knows, for reading its orders: its own living, unbroken
+     * units, the map, and the enemies its intel carries (fog of war holds).
+     */
+    context(side) {
+      return {
+        map: game.battle.map,
+        units: game.battle.world.units.filter(u =>
+          u.side === side && u.strength > 0 && !game.battle.broken.has(u.id)),
+        enemies: sideView(game, side).intel
+      }
+    },
+
+    /**
+     * Read and submit one side's typed orders with the fixed grammar. If any
+     * line raised a question, nothing is submitted: the commander answers and
+     * resubmits the block. When the last side is in, the turn processes and
+     * the report comes back.
      *
-     * @returns {{ status, questions?, report?, outcome? }}
+     * @returns {{ status, questions?, understood?, report?, outcome? }}
      */
     submitLines(side, lines) {
-      const { orders, questions, surrender } = parseOrderBlock(lines, game.battle.map)
+      return this.submit(side, interpretLines(lines, this.context(side)))
+    },
+
+    /**
+     * The same, reading free text with the AI when one is configured and
+     * falling back to the grammar when it is not or when it fails.
+     */
+    async submitText(side, text) {
+      return this.submit(side, await interpretText(text, this.context(side), { ai: options.ai }))
+    },
+
+    submit(side, read) {
+      const { orders, questions, surrender, understood, source } = read
       if (questions.length > 0) {
-        return { status: 'clarify', questions }
+        return { status: 'clarify', questions, understood, source }
       }
 
       let result = submitOrders(game, side, surrender ? { surrender: true } : orders)
@@ -55,12 +82,14 @@ function createSession(spec, options = {}) {
       }
 
       if (result.status === 'waiting') {
-        return { status: 'waiting', waitingOn: result.waitingOn }
+        return { status: 'waiting', waitingOn: result.waitingOn, understood, source }
       }
 
       const turnEntry = game.history.at(-1)
       return {
         status: result.status, // 'processed' | 'finished'
+        understood,
+        source,
         report: renderTurnReport(game, turnEntry),
         outcome: game.outcome
       }

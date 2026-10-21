@@ -73,6 +73,13 @@ function resolveUnitReference(reference, units) {
     (u.aliases ?? []).some(alias => stripArticle(normalize(alias)) === ref))
   if (byAlias.length > 0) return { units: byAlias, matchedBy: 'alias', reason: null }
 
+  // A word of the unit's own name: "spears" for red_spears, "horse" for
+  // blue_horse. Plural and singular both count.
+  const singular = (w) => w.endsWith('s') ? w.slice(0, -1) : w
+  const byNameWord = units.filter(u => normalize(u.id).split(/[\s_]+/)
+    .some(word => word === ref || singular(word) === singular(ref)))
+  if (byNameWord.length > 0) return { units: byNameWord, matchedBy: 'name', reason: null }
+
   const byRole = units.filter(u => {
     const words = roleWords(u.role ?? '')
     return words.has(ref) || ref.split(' ').some(w => words.has(w))

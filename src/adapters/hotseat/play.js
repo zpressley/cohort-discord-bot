@@ -22,6 +22,7 @@ const readline = require('node:readline')
 const { createSession } = require('./session')
 const { loadScenario, SCENARIOS } = require('./scenarios')
 const { renderHandoff } = require('./render')
+const { aiClientFromEnv } = require('../../llm')
 
 function parseArgs(argv) {
   const args = { scenario: 'meeting-battle', seed: undefined, auto: null, fullMap: false }
@@ -44,8 +45,11 @@ async function main() {
     return
   }
 
+  // With GROQ_API_KEY set, orders are read by the AI (and fall back to the
+  // fixed grammar when it fails); without it, the grammar alone.
+  const ai = aiClientFromEnv()
   const session = createSession(spec, {
-    seed: args.seed, auto: args.auto, fullMap: args.fullMap
+    seed: args.seed, auto: args.auto, fullMap: args.fullMap, ai
   })
 
   // Not rl.question: with piped input (the smoke tests, or a scripted game)
@@ -76,7 +80,9 @@ async function main() {
   console.log(session.humanSides().length === 2
     ? 'Two commanders, one keyboard. The curtain drops between turns.\n'
     : `You command ${session.humanSides()[0]}; ${args.auto} fights itself.\n`)
-  console.log('Orders: "spears to K7", "everyone to the bridge", "hold", then "done".')
+  console.log('Orders: "spears to the ridge to the east", "archers defend the ford",')
+  console.log('        "everyone advance", "swords fall back", "hold", then "done".')
+  console.log(ai.configured ? '(Orders are read by the AI; plain sentences work too.)' : '(No GROQ_API_KEY: orders use the fixed grammar.)')
   console.log('Also: map · surrender · quit\n')
 
   while (!session.finished()) {
@@ -96,10 +102,11 @@ async function main() {
         const lines = []
         let raw
         while ((raw = await ask(`${side}> `)) !== null) {
-          const line = raw.trim().toLowerCase()
-          if (line === 'done') break
-          if (line === 'quit') { console.log('Battle abandoned.'); rl.close(); return }
-          if (line === 'map') { console.log('\n' + session.briefing(side) + '\n'); continue }
+          const line = raw.trim()
+          const word = line.toLowerCase()
+          if (word === 'done') break
+          if (word === 'quit') { console.log('Battle abandoned.'); rl.close(); return }
+          if (word === 'map') { console.log('\n' + session.briefing(side) + '\n'); continue }
           if (line) lines.push(line)
         }
         if (raw === null && lines.length === 0) {
@@ -108,7 +115,10 @@ async function main() {
           return
         }
 
-        const result = session.submitLines(side, lines)
+        const result = ai.configured
+          ? await session.submitText(side, lines.join('\n'))
+          : session.submitLines(side, lines)
+        for (const line of result.understood ?? []) console.log('  understood: ' + line)
         if (result.status === 'clarify') {
           for (const question of result.questions) console.log('  ' + question)
           console.log('  (orders not sent — give the block again)')
