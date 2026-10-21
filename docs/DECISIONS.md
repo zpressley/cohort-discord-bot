@@ -114,6 +114,9 @@ and then strike the rear. Units on guard, in a defensive posture, may make
 an attack not worth it at that moment, and then no attack takes place.
 This ties to the contact rule above: whether a fight starts depends on
 posture and on who has seen whom, not only on being adjacent.
+Ruling: ambushes are ordered by the player (for example, "hold in the
+woods and hit anything that passes"); units do not spring them on their
+own judgement.
 
 **Objective control.** *Direction, for testing:* holding objectives as a
 way to win or score, giving units a reason to move and fight. How it fits
