@@ -21,3 +21,42 @@ Ruled by Zach Pressley, October 14, 2026, unless marked as proposed. Proposed it
 **Damage system.** The formula in `combat_design_parameters.md` is inverted against its worked examples. The tested damage rebuild on the recovered branch is the starting point. Where code, tests and worked examples agree, fix the doc to match. Where they disagree, log it for Zach.
 
 **Not yet ruled.** Whether commander quality and unit quality are separate stats (proposed: separate, with the quality ladder governing how a unit fights and the commander governing how deep an order it can execute), and the player-facing coordinate format.
+
+## Rulings, October 21, 2026
+
+Ruled by Zach Pressley in conversation, October 21, 2026. Where a ruling
+needs interpreting, the reading is marked as such and stays open until
+confirmed.
+
+**Player surface.** A web app, for now. The legacy Discord bot stays as it
+is until the web app can run a full battle, then retires to `archive/`.
+
+**Commander quality vs. unit quality.** Separate. Every commander has the
+same quality (no commander is better at executing orders than another).
+Commanders differ in personality. Unit quality still comes from the quality
+ladder.
+
+**Q3. Officer death rate.** It should hurt about 1 battle in 10 on a winning
+side and about 1 in 5 on a losing side: a chance each battle, not something
+that always happens. Risk also rises with the officer's unit's losses: the
+fewer men left in a unit, the more likely its officer was killed in action.
+Exact numbers are tuned by simulation to hit those rates.
+
+**Q4. How bonuses combine.** The order (flat bonuses before multipliers or
+not) does not matter much. What matters is that results scale well and the
+game is fun. The current implementation stands; tune for outcomes.
+
+**Player-facing coordinates.** Not settled. Direction: a coarse grid that
+is easy to say and read, letters for columns and numbers for rows, about
+20×20 squares, each square split into 4 smaller ones. Map features and
+landmarks do most of the work. *Reading, to confirm:* on a 2 km map (80×80
+tiles of 25 m), a 20×20 grid makes each square 100 m (4×4 tiles), and its 4
+quarters are 50 m each (2×2 tiles). The engine keeps its numeric x,y
+underneath.
+
+**Landmarks and navigation.** Named landmarks started as a way to give the
+AI something to describe, and turned into the main way to navigate. That
+was not the intent. Players should mostly give orders in general terms
+about the ground: "approach the ridge to the east", "stop at the clearing
+and set up a defensive position". Named landmarks stay for flavour and
+summaries.
