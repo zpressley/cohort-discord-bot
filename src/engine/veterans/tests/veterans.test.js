@@ -15,7 +15,7 @@ const os = require('os')
 const {
   createVeteranState, applyBattle, addRecruits, averageExperience,
   veteranLevel, veteranResistance, regularUnitLevel, namingMilestone,
-  createRoster, livingOfficers, resolveOfficerFates, deathProbability,
+  createRoster, livingOfficers, resolveOfficerFates, fateChances, perOfficer, exposureFromEvents,
   createCommander, recordBattle, eliteBattleFields
 } = require('../index')
 const { createRepository } = require('../../../adapters/persistence/veteransRepository')
@@ -106,12 +106,55 @@ test('veterancy raises rout resistance on top of the purchased tier', () => {
 
 // ── Officers ───────────────────────────────────────────
 
-test('the death ladder runs 15 percent for recruits down to 6 for legends', () => {
-  assert.equal(deathProbability({ battlesExperience: 0 }), 0.15)
-  assert.equal(deathProbability({ battlesExperience: 1 }), 0.12)
-  assert.equal(deathProbability({ battlesExperience: 3 }), 0.10)
-  assert.equal(deathProbability({ battlesExperience: 6 }), 0.08)
-  assert.equal(deathProbability({ battlesExperience: 11 }), 0.06)
+// A stand-in RNG that returns the given draws in order, so a test can say
+// exactly which officer the dice favour.
+const draws = (...values) => { let i = 0; return () => values[i++] }
+
+const TYPICAL = { win: 0.35, loss: 0.5 } // elite losses measured over 300 legions-vs-celts games
+
+test('Q3: a typical win costs an officer about 1 battle in 10, a typical loss about 1 in 5', () => {
+  assert.ok(Math.abs(fateChances({ result: 'victory', losses: TYPICAL.win }).kill - 0.1) < 0.005)
+  assert.ok(Math.abs(fateChances({ result: 'defeat', losses: TYPICAL.loss }).kill - 0.2) < 0.005)
+
+  // And the dice agree, whatever the roster size.
+  for (const size of [3, 10]) {
+    for (const [result, losses, target] of [['victory', TYPICAL.win, 0.1], ['defeat', TYPICAL.loss, 0.2]]) {
+      const rng = createRng(size * 7 + target * 100)
+      let costly = 0
+      const battles = 20000
+      for (let b = 0; b < battles; b++) {
+        const roster = createRoster(Array.from({ length: size }, (_, i) => ({ position: `P${i}`, name: `o${i}` })))
+        if (resolveOfficerFates(roster, rng, { battle: { result, losses } }).deaths.length > 0) costly++
+      }
+      const rate = costly / battles
+      assert.ok(Math.abs(rate - target) < 0.012, `${result}, roster ${size}: ${rate.toFixed(3)} of battles cost an officer, want ${target}`)
+    }
+  }
+})
+
+test('Q3: the more men the unit lost, the likelier its officer fell', () => {
+  const light = fateChances({ result: 'victory', losses: 0.05 }).kill
+  const heavy = fateChances({ result: 'victory', losses: 0.8 }).kill
+  assert.ok(heavy > light * 2, `${heavy} vs ${light}`)
+  assert.ok(fateChances({ result: 'defeat', losses: 0.3 }).kill > fateChances({ result: 'victory', losses: 0.3 }).kill)
+})
+
+test('capture only happens to a unit that broke and was caught', () => {
+  assert.equal(fateChances({ result: 'victory', losses: 0.3, exposure: {} }).capture, 0)
+  assert.equal(fateChances({ result: 'defeat', losses: 0.5, exposure: { routed: true } }).capture, 0,
+    'broke but got away clean')
+  const caught = fateChances({ result: 'defeat', losses: 0.5, exposure: { routed: true, pursued: true } }).capture
+  const trapped = fateChances({ result: 'defeat', losses: 0.5, exposure: { routed: true, pursued: true, trapped: true } }).capture
+  assert.ok(caught > 0 && trapped > caught)
+})
+
+test('wounds: a near miss, and more for poor choices (fighting surrounded, getting trapped)', () => {
+  const clean = fateChances({ result: 'victory', losses: 0.35 })
+  const surrounded = fateChances({ result: 'victory', losses: 0.35, exposure: { outnumbered: true } })
+  assert.ok(clean.wound > 0, 'a near miss is always possible')
+  assert.ok(surrounded.wound > clean.wound + 0.09)
+  assert.ok(Math.abs(perOfficer(0.2, 1) - 0.2) < 1e-12)
+  assert.ok(Math.abs(1 - Math.pow(1 - perOfficer(0.2, 10), 10) - 0.2) < 1e-12)
 })
 
 test('a dead officer is promoted over, and his knowledge dies with him', () => {
@@ -121,19 +164,9 @@ test('a dead officer is promoted over, and his knowledge dies with him', () => {
   ])
   roster[0].knowledge.push('knows the north ford is passable in spring')
 
-  // A seeded RNG whose first draw kills Marcus (p=0.15 needs < 0.15) and
-  // whose second spares Gaius. Found by scanning seeds — the point is the
-  // determinism, not the particular seed.
-  let seed = null
-  for (let s = 1; s < 500; s++) {
-    const rng = createRng(s)
-    const first = rng()
-    const second = rng()
-    if (first < 0.15 && second >= 0.15) { seed = s; break }
-  }
-  assert.ok(seed, 'a suitable seed exists in the first 500')
-
-  const outcome = resolveOfficerFates(roster, createRng(seed), { recruitNames: ['Titus'] })
+  // First draw kills Marcus, second spares Gaius.
+  const outcome = resolveOfficerFates(roster, draws(0.001, 0.999),
+    { recruitNames: ['Titus'], battle: { result: 'defeat', losses: 0.5 } })
 
   assert.equal(outcome.deaths.length, 1)
   assert.equal(outcome.deaths[0].name, 'Marcus')
@@ -149,6 +182,51 @@ test('a dead officer is promoted over, and his knowledge dies with him', () => {
   assert.deepEqual(living.map(o => o.name).sort(), ['Gaius', 'Titus'])
   const titus = living.find(o => o.name === 'Titus')
   assert.equal(titus.battlesExperience, 0, 'the replacement knows nothing — that is the loss')
+})
+
+test('a captured officer leaves the roster alive, is replaced, and rolls no more', () => {
+  const roster = createRoster([{ position: 'First Spear', name: 'Marcus' }])
+  const battle = { result: 'defeat', losses: 0.6, exposure: { routed: true, pursued: true } }
+  const { kill, capture } = fateChances(battle)
+  // A draw just past the kill band, inside the capture band.
+  const outcome = resolveOfficerFates(roster, draws(kill + capture / 2), { recruitNames: ['Titus'], battle })
+
+  assert.deepEqual(outcome.captures.map(c => c.name), ['Marcus'])
+  assert.equal(roster[0].alive, true, 'captured, not dead')
+  assert.equal(roster[0].status, 'captured')
+  assert.deepEqual(livingOfficers(roster).map(o => o.name), ['Titus'])
+
+  const next = resolveOfficerFates(roster, draws(0.999), { battle: { result: 'victory', losses: 0.1 } })
+  assert.equal(next.deaths.length + next.captures.length + next.wounds.length, 0)
+  assert.equal(roster[0].status, 'captured', 'a captive is not at the next battle')
+})
+
+test('a wounded officer misses the next battle, then returns', () => {
+  const roster = createRoster([{ position: 'First Spear', name: 'Marcus' }])
+  const battle = { result: 'victory', losses: 0.35, exposure: { outnumbered: true } }
+  const { kill, capture, wound } = fateChances(battle)
+  const outcome = resolveOfficerFates(roster, draws(kill + capture + wound / 2), { battle })
+  assert.equal(outcome.wounds.length, 1)
+  assert.equal(outcome.wounds[0].reason, 'fought surrounded')
+  assert.equal(roster[0].status, 'wounded')
+
+  // The next battle: no draw is taken for him (the stand-in RNG has none
+  // left to give), and he is back afterwards.
+  const next = resolveOfficerFates(roster, draws(), { battle: { result: 'victory', losses: 0.2 } })
+  assert.deepEqual(next.recovered.map(r => r.name), ['Marcus'])
+  assert.equal(roster[0].status, 'active')
+})
+
+test('exposure is read from a real battle: the beaten elite broke, was chased and fought surrounded', () => {
+  const { runBattle } = require('../../battle/battle')
+  const { loadScenario } = require('../../../adapters/hotseat/scenarios')
+  const spec = { ...loadScenario('legions-vs-celts'), maxTurns: 40 }
+  const result = runBattle(spec, { seed: 3 })
+  const loser = result.outcome.winner === 'red' ? 'blue_elite' : 'red_elite'
+  const exposure = exposureFromEvents(result.events, loser)
+  assert.equal(exposure.routed, true)
+  assert.equal(exposure.pursued, true)
+  assert.equal(exposure.outnumbered, true)
 })
 
 test('survivors gain a battle of experience; the roster keeps its dead as a record', () => {
@@ -273,13 +351,10 @@ test('an officer death is a survivable disk event: die, save, load, promote inta
     roster: createRoster([{ position: 'First Spear', name: 'Marcus' }])
   }
 
-  // Find a seed that kills him.
-  let seed = 1
-  while (createRng(seed)() >= 0.15) seed++
-
+  // A draw inside the kill band.
   const { deaths, promotions } = recordBattle(commander,
     { battleId: 'b1', result: 'defeat', eliteSurvivors: 70, regularsFought: {} },
-    createRng(seed), { recruitNames: ['Titus'] }).officers
+    draws(0.001), { recruitNames: ['Titus'] }).officers
 
   assert.equal(deaths.length, 1)
   assert.equal(promotions.length, 1)

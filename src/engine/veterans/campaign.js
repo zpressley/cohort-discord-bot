@@ -16,16 +16,23 @@ const { resolveOfficerFates, livingOfficers } = require('./officers')
  * @param {string}   battleReport.battleId
  * @param {string}   battleReport.result        'victory' | 'defeat' | 'draw'
  * @param {Object}   battleReport.eliteSurvivors  men standing (null = did not fight)
+ * @param {Object}   [battleReport.eliteExposure] what befell the elite unit:
+ *                   { routed, pursued, trapped, destroyed, outnumbered } (see
+ *                   exposureFromEvents); raises capture and wound chances
  * @param {Object}   battleReport.regularsFought  unitId -> survived:boolean
- * @param {Function} random        seeded RNG for the officer death rolls
+ * @param {Function} random        seeded RNG for the officer fate rolls
  * @param {Object}   [opts]        { recruitNames }
  * @returns {{ milestones: Array, officers: Object }}
  */
 function recordBattle(commander, battleReport, random, opts = {}) {
   const milestones = []
-  let officerOutcome = { deaths: [], promotions: [], memorials: [] }
+  let officerOutcome = { deaths: [], captures: [], wounds: [], recovered: [], promotions: [], memorials: [] }
 
   if (commander.elite && battleReport.eliteSurvivors !== null) {
+    const strengthBefore = commander.elite.veteran.strength
+    const losses = strengthBefore > 0
+      ? Math.max(0, strengthBefore - battleReport.eliteSurvivors) / strengthBefore
+      : 0
     const before = namingMilestone(commander.elite.veteran.battlesParticipated)
     applyBattle(commander.elite.veteran, { survivors: battleReport.eliteSurvivors })
     const after = namingMilestone(commander.elite.veteran.battlesParticipated)
@@ -35,7 +42,10 @@ function recordBattle(commander, battleReport, random, opts = {}) {
       milestones.push({ type: after, atBattle: commander.elite.veteran.battlesParticipated })
     }
 
-    officerOutcome = resolveOfficerFates(commander.elite.roster, random, opts)
+    officerOutcome = resolveOfficerFates(commander.elite.roster, random, {
+      ...opts,
+      battle: { result: battleReport.result, losses, exposure: battleReport.eliteExposure ?? {} }
+    })
   }
 
   for (const [unitId, survived] of Object.entries(battleReport.regularsFought ?? {})) {
@@ -49,6 +59,8 @@ function recordBattle(commander, battleReport, random, opts = {}) {
     result: battleReport.result,
     eliteSurvivors: battleReport.eliteSurvivors,
     officerDeaths: officerOutcome.deaths.map(d => d.name),
+    officerCaptures: officerOutcome.captures.map(c => c.name),
+    officerWounds: officerOutcome.wounds.map(w => w.name),
     milestones: milestones.map(m => m.type)
   })
 
@@ -70,4 +82,23 @@ function eliteBattleFields(commander) {
   }
 }
 
-module.exports = { recordBattle, eliteBattleFields }
+/**
+ * What befell one unit in a battle, read from the battle's event log: the
+ * circumstances officer fates depend on.
+ */
+function exposureFromEvents(events, unitId) {
+  const about = (e) => [e.unitId, e.a?.unitId, e.b?.unitId].includes(unitId)
+  const mine = events.filter(about)
+  return {
+    routed: mine.some(e => e.type === 'rout' && e.unitId === unitId),
+    pursued: mine.some(e => e.type === 'pursuit' && e.unitId === unitId),
+    trapped: mine.some(e => e.type === 'pursuit' && e.unitId === unitId && e.trapped),
+    destroyed: mine.some(e => e.type === 'destroyed' && e.unitId === unitId),
+    // Fought more than one enemy at once: an enemy striking it had a flank
+    // bonus, which only comes from its target being in several engagements.
+    outnumbered: mine.some(e => e.type === 'exchange' &&
+      ((e.a.unitId === unitId && e.b.flankBonus > 0) || (e.b.unitId === unitId && e.a.flankBonus > 0)))
+  }
+}
+
+module.exports = { recordBattle, eliteBattleFields, exposureFromEvents }

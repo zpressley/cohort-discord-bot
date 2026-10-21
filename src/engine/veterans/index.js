@@ -6,7 +6,7 @@
 const veterancy = require('./veterancy')
 const officers = require('./officers')
 const { createCommander, stableStringify } = require('./commander')
-const { recordBattle, eliteBattleFields } = require('./campaign')
+const { recordBattle, eliteBattleFields, exposureFromEvents } = require('./campaign')
 
 module.exports = {
   ...veterancy,
@@ -14,5 +14,6 @@ module.exports = {
   createCommander,
   stableStringify,
   recordBattle,
-  eliteBattleFields
+  eliteBattleFields,
+  exposureFromEvents
 }
