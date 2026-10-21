@@ -42,17 +42,23 @@ that always happens. Risk also rises with the officer's unit's losses: the
 fewer men left in a unit, the more likely its officer was killed in action.
 Exact numbers are tuned by simulation to hit those rates.
 
+**Officers captured or wounded.** Both, as well as killed. Capture is a fate
+in its own right. A wound is a near miss, or the result of the player's
+poor choices, such as leaving a unit exposed.
+
+**AI provider.** Groq. When it fails, the game falls back to the
+deterministic order grammar and plain event text.
+
 **Q4. How bonuses combine.** The order (flat bonuses before multipliers or
 not) does not matter much. What matters is that results scale well and the
 game is fun. The current implementation stands; tune for outcomes.
 
-**Player-facing coordinates.** Not settled. Direction: a coarse grid that
-is easy to say and read, letters for columns and numbers for rows, about
-20×20 squares, each square split into 4 smaller ones. Map features and
-landmarks do most of the work. *Reading, to confirm:* on a 2 km map (80×80
-tiles of 25 m), a 20×20 grid makes each square 100 m (4×4 tiles), and its 4
-quarters are 50 m each (2×2 tiles). The engine keeps its numeric x,y
-underneath.
+**Player-facing coordinates.** A coarse grid that is easy to say and read:
+letters for columns, numbers for rows, 20×20 squares, each square split
+into 4 quarters. On a 2 km map (80×80 tiles of 25 m), a square is 100 m
+(4×4 tiles) and a quarter is 50 m (2×2 tiles). Map features and landmarks
+do most of the work. The engine keeps its numeric x,y underneath.
+(Confirmed October 21.)
 
 **Landmarks and navigation.** Named landmarks started as a way to give the
 AI something to describe, and turned into the main way to navigate. That

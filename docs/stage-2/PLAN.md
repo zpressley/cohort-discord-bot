@@ -72,10 +72,11 @@ would need one is noted for later, not built.
 
 ### C. The order parser (AI)
 
-1. **One AI client for the project.** It tries providers in order and falls
-   back to the next on error or timeout. It enforces timeouts, logs the cost
-   of every call, and reads keys from the environment. If every provider
-   fails, the deterministic grammar takes over.
+1. **One AI client for the project.** Groq (ruled). It enforces timeouts,
+   retries once, logs the cost of every call, and reads its key from the
+   environment. If Groq fails, the deterministic grammar takes over. The
+   client is written so another provider can be added later without
+   touching the parser.
 2. **The parser.** Plain text in, the intent from B out, as strict JSON
    checked against a schema (the `ajv` dependency already exists). The AI
    sees the unit's surroundings described in words (features from A,
@@ -97,26 +98,34 @@ would need one is noted for later, not built.
    event plainly; that is the fallback.
 3. Same testing approach: recorded fixtures, no network in CI.
 
-### E. Officer deaths (ruled Q3)
+### E. Officer fates (ruled Q3)
 
-1. **The model.** After each battle, each officer whose unit fought has a
+1. **Killed.** After each battle, each officer whose unit fought has a
    chance of dying. The chance depends on whether their side won or lost,
    and rises as their unit's losses rise: a unit at a third of its strength
    puts its officer in far more danger than one that barely fought.
-2. **Calibrated by simulation.** Run many battles through the harness and
+2. **Captured.** Most likely when the unit broke and was caught: trapped,
+   overrun, or cut down in pursuit. A captured officer is gone from the
+   roster for now. Ransom and release belong to the later diplomacy work,
+   so the record keeps them, ready for it.
+3. **Wounded.** A near miss: a death roll that only just missed. Also the
+   result of poor choices, such as keeping a broken unit in the fight,
+   sending a unit in alone against several, or leaving it trapped. A wounded
+   officer misses the next battle and then returns. The event log records
+   why, so the narrator can tell the player.
+4. **Calibrated by simulation.** Run many battles through the harness and
    tune the numbers until, across a typical army, about 1 battle in 10 on a
    winning side and about 1 in 5 on a losing side costs at least one
-   officer. A test pins those rates within a tolerance.
-3. Still chance-based and seeded, so a campaign replays exactly.
+   officer killed. Captures and wounds get their own target rates, set once
+   the first simulations show what feels right. A test pins the rates
+   within a tolerance.
+5. Still chance-based and seeded, so a campaign replays exactly.
    Experience no longer protects an officer on its own; their unit's
    survival does.
 
-### F. Player-facing grid (proposed, needs confirming)
+### F. Player-facing grid (ruled)
 
-The ruling sets a direction, not a format. Built only once the reading in
-`docs/DECISIONS.md` is confirmed:
-
-- A letter-and-number grid of about 20×20 squares over the whole map (`C7`),
+- A letter-and-number grid of 20×20 squares over the whole map (`C7`),
   each square split into 4 quarters (`C7-NE`, or similar).
 - On a 2 km map, a square is 100 m and a quarter is 50 m.
 - A translation module like `labels.js`; the engine keeps numeric x,y.
@@ -135,8 +144,8 @@ The ruling sets a direction, not a format. Built only once the reading in
 6. The order parser, wired into the hotseat CLI with the grammar as fallback.
 7. The narrator, wired into the hotseat turn report with plain text as
    fallback.
-8. Officer death model, calibrated by simulation.
-9. Player-facing grid, if confirmed by then.
+8. Officer fates (killed, captured, wounded), calibrated by simulation.
+9. Player-facing grid.
 10. Report and PR. Before the PR, run the full suite on a fresh clone so
     nothing that exists only locally can slip through (the Stage 1 lesson).
 
@@ -152,11 +161,16 @@ The ruling sets a direction, not a format. Built only once the reading in
 - **New combat rules:** formations, ranged combat, line of sight.
 - **The legacy Discord bot:** retires after Stage 3.
 
-## Open questions for Zach
+## Answered October 21
 
-1. The grid reading in `docs/DECISIONS.md`: 20×20 squares of 100 m on a
-   2 km map, each split into 4 quarters of 50 m?
-2. AI providers: which do you have keys for, and in what order should they
-   be tried? The repo has Anthropic, Groq and OpenAI SDKs installed.
-3. Should officers be wounded or captured as well as killed, or keep it to
-   death for now?
+1. Grid: 20×20 squares, 100 m each on a 2 km map, split into 4 quarters of
+   50 m. Confirmed.
+2. AI provider: Groq.
+3. Officers: captured as well as killed; wounded as a near miss or the
+   result of poor choices.
+
+## Note on Crownhill
+
+Crownhill is 40×40 (1 km), so its 20×20 grid squares are 50 m (2×2 tiles)
+and quarters are a single tile. The grid divides whatever map it is on into
+20×20, so the 2 km map gets the 100 m squares described above.
