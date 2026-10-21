@@ -167,6 +167,12 @@ function wordEvent(event) {
       }
       if (event.blockedBy) return `${event.unitId} advances ${toLabel(event.from)}→${toLabel(event.to)}, stopped by ${event.blockedBy}`
       return samePosition(event.from, event.to) ? null : `${event.unitId} moves ${toLabel(event.from)}→${toLabel(event.to)}`
+    case 'arrived':
+      return `${event.unitId} reaches ${toLabel(event.at)}` + (event.then === 'hold' ? ' and digs in' : '')
+    case 'halted':
+      return `${event.unitId} can get no further` +
+        (event.blockedBy ? ` — ${event.blockedBy} is in the way` : ' — there is no way through') +
+        (event.then === 'hold' ? '; it holds where it stands' : '; it rejoins the line')
     case 'contact': return `CONTACT: ${event.aId} meets ${event.bId}`
     case 'exchange': return describeCombatEvent(event)
     case 'standoff': return describeCombatEvent(event)

@@ -37,6 +37,7 @@ const { toPosition, samePosition } = require('../map/labels')
 const { resolveSimultaneousMovement, expandOrders, buildOccupancy, canEnter, moveUnit } =
   require('../movement')
 const { createEventLog } = require('./events')
+const { normalizeOrder, planUnit } = require('./orders')
 
 const DEFAULT_MAX_TURNS = 20
 
@@ -66,6 +67,9 @@ function createBattleState(spec, options = {}) {
     // would make every existing snapshot lie about it.
     broken: new Set(),
     fledUnits: [],
+    // Each unit's standing order (see orders.js): unitId -> normalized order.
+    // Orders persist until replaced or done.
+    orderBook: new Map(),
     turn: 0,
     previousEngagementKeys: new Set(),
     outcome: { decided: false, winner: null, reason: 'battle still open' }
@@ -92,22 +96,40 @@ function stepTurn(state, sideOrders = {}) {
 
   // ── Orders ──────────────────────────────────────
   const orders = []
+  const freshThisTurn = new Set()
 
   for (const side of sides(world)) {
     const effective = unitsOnSide(world, side).filter(u => !broken.has(u.id))
     const { orders: expanded } = expandOrders(sideOrders[side] ?? [], effective)
-    orders.push(...expanded)
 
-    // Standing orders. A side declared as `advance` presses the nearest
-    // enemy whenever the script gives a unit nothing better to do — the
-    // simplest deterministic aggression there is, and the reason a battle
-    // between two willing armies cannot stall into two lines standing out
-    // of range staring at each other. (A side without standing orders
-    // holds, which is also a choice: a unit is allowed to stand.)
-    if (spec.standingOrders?.[side] === 'advance') {
-      const ordered = new Set(expanded.map(o => o.unitId))
-      for (const unit of effective) {
-        if (ordered.has(unit.id)) continue
+    // Orders given this turn replace each unit's standing order.
+    const fresh = new Set()
+    for (const order of expanded) {
+      state.orderBook.set(order.unitId, normalizeOrder(order))
+      fresh.add(order.unitId)
+      freshThisTurn.add(order.unitId)
+    }
+
+    const edge = spec.sides?.[side]?.homeEdge ?? 'west'
+    const context = (unit) => ({
+      fresh: fresh.has(unit.id),
+      nearestEnemy: (u) => nearestEnemy(world, u, broken),
+      homeTarget: (u) => edgeTarget(map, u.position, edge)
+    })
+
+    for (const unit of effective) {
+      const { move, order } = planUnit(unit, state.orderBook.get(unit.id), context(unit))
+      if (order) state.orderBook.set(unit.id, order)
+      else state.orderBook.delete(unit.id)
+      if (move) { orders.push(move); continue }
+
+      // Standing orders. A side declared as `advance` presses the nearest
+      // enemy whenever a unit has no order of its own — the simplest
+      // deterministic aggression there is, and the reason a battle between
+      // two willing armies cannot stall into two lines standing out of range
+      // staring at each other. (A side without standing orders holds, which
+      // is also a choice: a unit is allowed to stand.)
+      if (spec.standingOrders?.[side] === 'advance') {
         const enemy = nearestEnemy(world, unit, broken)
         if (enemy) orders.push({ unitId: unit.id, target: enemy.position })
       }
@@ -130,6 +152,38 @@ function stepTurn(state, sideOrders = {}) {
     log.emit('move', turn, {
       unitId: move.unitId, from: { ...move.from }, to: { ...move.to },
       reachedTarget: move.reachedTarget, blockedBy: move.blockedBy
+    })
+    // A unit that just reached the place its order sent it. `then` says what
+    // it does now: 'hold' (digs in) or 'standing' (back to its side's
+    // standing orders).
+    const order = state.orderBook.get(move.unitId)
+    if (move.reachedTarget && order && order.action !== 'hold' && order.action !== 'advance') {
+      log.emit('arrived', turn, {
+        unitId: move.unitId, action: order.action, at: { ...move.to },
+        then: order.then === 'hold' ? 'hold' : 'standing'
+      })
+    }
+  }
+
+  // An order carried over from an earlier turn that got nowhere this tick is
+  // done: the place is taken or out of reach. Without this, a unit sent to a
+  // tile a friend now holds would stand beside it forever. It digs in if
+  // told to, else rejoins its side's standing orders, and the log says why.
+  // (Orders given this turn keep trying: traffic may clear.)
+  for (const move of movement) {
+    const order = state.orderBook.get(move.unitId)
+    if (!order || freshThisTurn.has(move.unitId)) continue
+    if (!['move', 'defend', 'withdraw'].includes(order.action)) continue
+    const stuck = move.failed || (!move.held && !move.skipped && move.tilesMoved === 0)
+    if (!stuck || move.failed === 'already there') continue
+
+    const then = order.then === 'hold' ? 'hold' : 'standing'
+    if (then === 'hold') state.orderBook.set(move.unitId, { action: 'hold', target: null, then: null })
+    else state.orderBook.delete(move.unitId)
+    const unit = getUnit(world, move.unitId)
+    log.emit('halted', turn, {
+      unitId: move.unitId, action: order.action, at: { ...unit.position },
+      reason: move.failed ? 'no way there' : 'blocked', blockedBy: move.blockedBy ?? null, then
     })
   }
 

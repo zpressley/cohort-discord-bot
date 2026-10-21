@@ -103,7 +103,12 @@ function expandOrders(sideOrders, sideUnits) {
       continue
     }
     for (const unit of match.units) {
-      byUnit.set(unit.id, { unitId: unit.id, target: order.target })
+      byUnit.set(unit.id, {
+        unitId: unit.id,
+        target: order.target,
+        ...(order.action ? { action: order.action } : {}),
+        ...(order.then ? { then: order.then } : {})
+      })
     }
   }
 
