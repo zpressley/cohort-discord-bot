@@ -89,7 +89,7 @@ client.on(Events.MessageCreate, async (message) => {
 client.on(Events.MessageCreate, async (message) => {
     try {
         if (!message.guild || message.author.bot) return;
-        const { handleMessage } = require('./phase1-movement/handler');
+        const { handleMessage } = require('./adapters/discord/movement-demo/handler');
         await handleMessage(message);
     } catch (e) {
         console.error('Phase1 handler error:', e);
