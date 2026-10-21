@@ -117,6 +117,10 @@ posture and on who has seen whom, not only on being adjacent.
 Ruling: ambushes are ordered by the player (for example, "hold in the
 woods and hit anything that passes"); units do not spring them on their
 own judgement.
+Ruling on hiding: woods and reverse slopes reduce how far a unit can be
+seen. On top of that, a unit can spend a turn hiding; once hidden, it is
+not seen even by an enemy one tile away unless that enemy checks (searches
+the ground).
 
 **Objective control.** *Direction, for testing:* holding objectives as a
 way to win or score, giving units a reason to move and fight. How it fits
