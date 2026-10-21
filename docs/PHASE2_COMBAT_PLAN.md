@@ -64,7 +64,7 @@ src/phase2-combat/
 │   └── placeholderResolver.js   ⚠️ NOT the engine — a stub so the loop runs
 ├── scenarios/
 │   ├── bridge-standoff.js       frontal contact, no flank (Harrow Bridge H15)
-│   ├── ford-crossing.js         attacker crosses a ford (North Ford W6)
+│   ├── ford-crossing.js         one side crosses a ford (North Ford W6)
 │   └── hill-assault.js          uphill attack (The Crownhill Q1)
 └── tests/
     ├── phase1-movement.characterization.test.js   15 tests — pins phase 1
@@ -107,10 +107,10 @@ function resolveCombat({ engagements, world, random, turn }) { }
 { aId, bId, distance, aTerrain, bTerrain }
 ```
 
-The pair is deliberately named `a`/`b`, **not** attacker/defender. Which side is
-attacking is a tactical judgement — who moved into contact, who holds ground,
-charge versus receive — and the harness cannot make it. Your resolver decides,
-and that decision is part of the combat design.
+The pair is deliberately named `a`/`b` and carries no roles. Who has the edge
+is a matter of position and circumstance — who moved into contact, who holds
+ground, charge versus receive — and the harness cannot judge it. The resolver
+works it out, and how it does so is part of the combat design.
 
 **Four rules, all enforced by the tests:**
 
@@ -366,9 +366,10 @@ simpler.
 
 > **All six are now ruled.** See `docs/design/architecture-roadmap.md` §8,
 > "Ruled — session 2026-08-30". Summary: `effectiveness` is a damage multiplier
-> (÷100); the unit that entered contact is the attacker, persistent contact is
-> symmetric; a turn is N ten-minute rounds (elastic time); casualties are a
-> fraction of current strength; morale **is** in phase 2; standard units are
+> (÷100); charge momentum belongs to the unit that moved into contact (ruling
+> Q5 of 2026-10-14, `docs/DECISIONS.md`), persistent contact is symmetric; a
+> turn is N ten-minute rounds (elastic time); casualties are a fraction of
+> current strength; morale **is** in phase 2; standard units are
 > ~100 strong, elites 80. The list below is kept for the reasoning behind each
 > question.
 
@@ -398,9 +399,9 @@ fall back to.
 3. **`combat/resolve.js`** — the resolver. Adds `random`, satisfies §3.
    Wire into `run.js`, then sweep all three scenarios.
 4. **Tune.** `--sweep 50` per scenario. Targets to argue about:
-   - `hill-assault`: the defender holds high ground with fewer, better troops.
-     If the attacker wins easily, elevation is worth nothing.
-   - `ford-crossing`: the attacker is caught mid-crossing. Should be punishing.
+   - `hill-assault`: the side on the high ground holds with fewer, better troops.
+     If the side climbing wins easily, elevation is worth nothing.
+   - `ford-crossing`: the side crossing is caught mid-crossing. Should be punishing.
    - `bridge-standoff`: even matchup, no flank. Should be bloody and slow.
 5. **Add scenarios** as questions come up — cavalry vs spears, ranged
    skirmishing, quality mismatch. One scenario per question.

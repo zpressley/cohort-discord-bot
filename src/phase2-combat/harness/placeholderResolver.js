@@ -28,18 +28,18 @@ function placeholderResolver({ engagements, world, random }) {
   const events = []
 
   for (const engagement of engagements) {
-    const attacker = getUnit(world, engagement.aId)
-    const defender = getUnit(world, engagement.bId)
-    if (!attacker || !defender) continue
+    const a = getUnit(world, engagement.aId)
+    const b = getUnit(world, engagement.bId)
+    if (!a || !b) continue
 
     // Flat rate with a small deterministic jitter, nothing more.
-    const attackerLoss = Math.round(attacker.strength * FLAT_CASUALTY_RATE * (0.5 + random()))
-    const defenderLoss = Math.round(defender.strength * FLAT_CASUALTY_RATE * (0.5 + random()))
+    const aLoss = Math.round(a.strength * FLAT_CASUALTY_RATE * (0.5 + random()))
+    const bLoss = Math.round(b.strength * FLAT_CASUALTY_RATE * (0.5 + random()))
 
-    casualties.push({ unitId: attacker.id, killed: attackerLoss })
-    casualties.push({ unitId: defender.id, killed: defenderLoss })
+    casualties.push({ unitId: a.id, killed: aLoss })
+    casualties.push({ unitId: b.id, killed: bLoss })
 
-    events.push(`${attacker.id} and ${defender.id} exchange blows [PLACEHOLDER MATH]`)
+    events.push(`${a.id} and ${b.id} exchange blows [PLACEHOLDER MATH]`)
   }
 
   return { casualties, events }

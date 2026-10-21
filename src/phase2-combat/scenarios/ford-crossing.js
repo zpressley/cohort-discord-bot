@@ -1,9 +1,9 @@
-// Red crosses North Ford (W6-X6) into a defender waiting on the dry far bank.
-// Ford costs 1.5/tile and carries a crossing penalty and extra chaos, so the
-// attacker fights with wet feet while the defender does not. This is the
+// Red crosses North Ford (W6-X6) into Blue, waiting on the dry far bank.
+// Ford costs 1.5/tile and carries a crossing penalty and extra chaos, so Red
+// fights with wet feet while Blue does not. This is the
 // scenario for testing the crossing penalty.
 //
-// Tuning target (PHASE2_COMBAT_PLAN section 8): "the attacker is caught
+// Tuning target (PHASE2_COMBAT_PLAN section 8): "the side crossing is caught
 // mid-crossing. Should be punishing."
 //
 // Two authoring bugs were fixed here after the engine could actually measure
@@ -12,7 +12,7 @@
 //   - Blue was ordered from the dry bank at Y6 INTO the ford at X6 on turn one,
 //     so both units stood in the water and the crossing penalty applied to both
 //     sides equally. The scenario measured nothing. Blue now holds Y6, which is
-//     what "a waiting defender" meant in the first place.
+//     what "waiting on the far bank" meant in the first place.
 //   - No unit set `primaryWeapon`, so a spearman formed in phalanx was fighting
 //     with the default sword. The whole spear/cavalry counter was absent from
 //     every scenario.

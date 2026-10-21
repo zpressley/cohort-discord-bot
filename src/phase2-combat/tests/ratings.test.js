@@ -57,7 +57,10 @@ test('Q7: Tribal Warriors match Militia on cost and stats, and differ only on mo
   assert.equal(tribal.cost, militia.cost, 'the loyalty bonus is faction identity, not a price premium')
   assert.equal(tribal.attack, militia.attack)
   assert.equal(tribal.defense, militia.defense)
+  assert.equal(tribal.push, militia.push)
   assert.equal(tribal.staminaPool, militia.staminaPool)
+  assert.equal(tribal.size, militia.size)
+  assert.deepEqual(tribal.restrictions, militia.restrictions, 'same kit as Militia')
 
   assert.equal(tribal.morale, professional.morale, 'morale equal to Professional is the whole bonus')
   assert.ok(tribal.factionGated, 'availability is the cost, so it must be gated')
@@ -110,10 +113,10 @@ test('Q8: no quality tier carries a separate training purchase', () => {
 // ── Rock-paper-scissors ────────────────────────────────
 
 test('Q4: effectiveness is a multiplier in 0..1, never a raw percentage', () => {
-  const attacker = unit({ primaryWeapon: 'heavy_mace' })
+  const striker = unit({ primaryWeapon: 'heavy_mace' })
 
   for (const armor of ['no_armor', 'light_armor', 'medium_armor', 'heavy_armor']) {
-    const value = R.effectivenessAgainst(attacker, unit({ armor }))
+    const value = R.effectivenessAgainst(striker, unit({ armor }))
     assert.ok(value > 0 && value <= 1,
       `${armor}: got ${value} — treating the table as a raw percentage inflates damage 100x`)
   }

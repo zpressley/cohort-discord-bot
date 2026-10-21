@@ -146,12 +146,10 @@ async function showMainArmyBuilder(interaction, commander) {
             if (unit.primaryWeapon) {
                 const rangedText = unit.rangedWeapons && unit.rangedWeapons.length > 0 ? 
                     ` + ${unit.rangedWeapons.map(w => w.name).join(', ')}` : '';
-                const trainingText = unit.training && unit.training.level !== 'none' ? 
-                    ` | ${unit.training.type} (${unit.training.level})` : '';
                 
                 // Split equipment display into multiple lines for better readability
                 unitsDisplay += `│   └── ${unit.primaryWeapon.name}${rangedText} + ${unit.armor.name} +\n`;
-                unitsDisplay += `│       ${unit.shields.name}${trainingText}\n`;
+                unitsDisplay += `│       ${unit.shields.name}\n`;
             }
         });
         unitsDisplay += '\n';
@@ -230,7 +228,6 @@ function calculateUnitCost(unit) {
     }
     if (unit.armor) cost += unit.armor.cost;
     if (unit.shields) cost += unit.shields.cost;
-    if (unit.training) cost += unit.training.cost;
     return cost;
 }
 

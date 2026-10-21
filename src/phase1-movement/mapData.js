@@ -2,6 +2,10 @@
 // Single source of truth for the battlefield.
 // Named cells get a full entry. Everything else defaults to plains.
 
+// Grid dimensions in tiles. Columns run A..Z, AA.. and rows 1..height.
+// Read the map's size from here rather than writing the number again.
+const MAP_SIZE = { width: 40, height: 40 }
+
 const CELLS = {
   "W6": {
     terrain: "ford",
@@ -202,4 +206,4 @@ function getCell(coord) {
   }
 }
 
-module.exports = { CELLS, MOVEMENT_COSTS, TERRAIN_MAP, getCell, getTerrainType }
+module.exports = { MAP_SIZE, CELLS, MOVEMENT_COSTS, TERRAIN_MAP, getCell, getTerrainType }
