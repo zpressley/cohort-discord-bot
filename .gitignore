@@ -1,5 +1,7 @@
 node_modules/
 data/
+# src/data/ is game data (maps), not runtime data: keep it in git
+!src/data/
 *.db
 .env
 *.log
