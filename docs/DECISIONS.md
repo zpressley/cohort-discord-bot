@@ -54,11 +54,11 @@ not) does not matter much. What matters is that results scale well and the
 game is fun. The current implementation stands; tune for outcomes.
 
 **Player-facing coordinates.** A coarse grid that is easy to say and read:
-letters for columns, numbers for rows, 20×20 squares, each square split
-into 4 quarters. On a 2 km map (80×80 tiles of 25 m), a square is 100 m
-(4×4 tiles) and a quarter is 50 m (2×2 tiles). Map features and landmarks
-do most of the work. The engine keeps its numeric x,y underneath.
-(Confirmed October 21.)
+letters for columns, numbers for rows. Every square is 100 m on every map
+(4×4 tiles of 25 m), split into 4 quarters of 50 m (2×2 tiles). Bigger maps
+simply have more squares: a 2 km map is 20×20 squares, Crownhill (1 km) is
+10×10. Map features and landmarks do most of the work. The engine keeps its
+numeric x,y underneath. (Confirmed October 21.)
 
 **Landmarks and navigation.** Named landmarks started as a way to give the
 AI something to describe, and turned into the main way to navigate. That

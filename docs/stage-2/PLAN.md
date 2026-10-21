@@ -125,8 +125,9 @@ would need one is noted for later, not built.
 
 ### F. Player-facing grid (ruled)
 
-- A letter-and-number grid of 20×20 squares over the whole map (`C7`),
-  each square split into 4 quarters (`C7-NE`, or similar).
+- A letter-and-number grid of 100 m squares (`C7`), the same size on every
+  map, each split into 4 quarters of 50 m (`C7-NE`, or similar). A 2 km map
+  is 20×20 squares; Crownhill is 10×10.
 - On a 2 km map, a square is 100 m and a quarter is 50 m.
 - A translation module like `labels.js`; the engine keeps numeric x,y.
 - The hotseat CLI and parser accept grid squares; orders to a square aim at
@@ -163,14 +164,9 @@ would need one is noted for later, not built.
 
 ## Answered October 21
 
-1. Grid: 20×20 squares, 100 m each on a 2 km map, split into 4 quarters of
-   50 m. Confirmed.
+1. Grid: 100 m squares on every map, each split into 4 quarters of 50 m.
+   A 2 km map is 20×20 squares. Confirmed.
 2. AI provider: Groq.
 3. Officers: captured as well as killed; wounded as a near miss or the
    result of poor choices.
 
-## Note on Crownhill
-
-Crownhill is 40×40 (1 km), so its 20×20 grid squares are 50 m (2×2 tiles)
-and quarters are a single tile. The grid divides whatever map it is on into
-20×20, so the 2 km map gets the 100 m squares described above.
