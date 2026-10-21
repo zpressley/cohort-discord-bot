@@ -402,3 +402,48 @@ test('the order log is a copy: editing orders after submitting changes nothing',
   orders[0].target = 'A1'
   assert.equal(gameRecord(game).orderLog[0].orders[0].target, 'K8')
 })
+
+// ── Time limit (a testing aid, ruled 2026-10-21) ───────
+
+test('time limit: a mutual hold ends when the clock runs out', () => {
+  const meetingSpec = require('../../../harness/scenarios/meeting-battle')
+  const game = createGame({ ...meetingSpec, standingOrders: {}, timeLimitMinutes: 60 }, { seed: 1 })
+  let turns = 0
+  while (!game.outcome.decided && turns < 50) {
+    submitOrders(game, 'red', [{ unitRef: 'everyone', target: 'hold' }])
+    submitOrders(game, 'blue', [{ unitRef: 'everyone', target: 'hold' }])
+    turns++
+  }
+  assert.ok(game.outcome.decided, 'the clock ends it')
+  assert.equal(game.minutesElapsed, 60)
+  assert.deepEqual(game.outcome, { decided: true, winner: 'draw', reason: 'time ran out: equal losses' },
+    'nobody fought, so nobody lost more')
+})
+
+test('time limit: the side that lost the larger share of its men loses', () => {
+  const world = createWorld({
+    units: [
+      unit({ id: 'r', side: 'red', strength: 70, maxStrength: 100 }),
+      unit({ id: 'b', side: 'blue', position: 'H20', strength: 90, maxStrength: 100 })
+    ]
+  })
+  const ctx = {
+    world, broken: new Set(), startingStrength: { red: 100, blue: 100 },
+    minutesElapsed: 120, timeLimitMinutes: 120
+  }
+  assert.deepEqual(evaluateVictory(ctx), { decided: true, winner: 'blue', reason: 'time ran out: fewer losses' })
+  // Men who fled are not casualties: red's 30 missing all escaped.
+  assert.deepEqual(evaluateVictory({ ...ctx, fledStrength: { red: 30 } }).winner, 'red')
+  // Before the limit, nothing is decided by it.
+  assert.equal(evaluateVictory({ ...ctx, minutesElapsed: 110 }).decided, false)
+})
+
+test('without a time limit, a mutual hold goes on', () => {
+  const meetingSpec = require('../../../harness/scenarios/meeting-battle')
+  const game = createGame({ ...meetingSpec, standingOrders: {} }, { seed: 1 })
+  for (let i = 0; i < 30; i++) {
+    submitOrders(game, 'red', [{ unitRef: 'everyone', target: 'hold' }])
+    submitOrders(game, 'blue', [{ unitRef: 'everyone', target: 'hold' }])
+  }
+  assert.equal(game.outcome.decided, false)
+})

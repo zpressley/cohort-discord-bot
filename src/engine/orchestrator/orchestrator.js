@@ -48,6 +48,8 @@ const MINUTES_PER_TICK = 10    // locked decision 1
  *   objectives:          [{ id, coord }] — named ground worth holding; coord
  *                        is a position or a map label
  *   objectiveTurnsToWin: consecutive player turns of total control to win
+ *   timeLimitMinutes:    battle time after which the side that lost the
+ *                        larger share of its men loses (a testing aid)
  * @param {Object} [options] { seed }
  */
 function createGame(spec, options = {}) {
@@ -222,7 +224,10 @@ function victoryContext(game) {
     surrendered: game.surrendered,
     startingStrength: game.startingStrength,
     objectiveHolds: game.objectiveHolds,
-    objectiveTurnsToWin: game.spec.objectiveTurnsToWin ?? OBJECTIVE_TURNS_TO_WIN
+    objectiveTurnsToWin: game.spec.objectiveTurnsToWin ?? OBJECTIVE_TURNS_TO_WIN,
+    minutesElapsed: game.minutesElapsed,
+    timeLimitMinutes: game.spec.timeLimitMinutes ?? null,
+    fledStrength: game.battle.fledUnits.reduce((m, u) => ({ ...m, [u.side]: (m[u.side] ?? 0) + u.strength }), {})
   }
 }
 

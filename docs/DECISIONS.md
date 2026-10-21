@@ -66,3 +66,30 @@ was not the intent. Players should mostly give orders in general terms
 about the ground: "approach the ridge to the east", "stop at the clearing
 and set up a defensive position". Named landmarks stay for flavour and
 summaries.
+
+## Rulings and direction, October 21, 2026 (after Stage 2)
+
+From Zach's review of the Stage 2 movement changes. Items marked
+*direction* set the intent for the next stage; details are open.
+
+**Stacking.** *Direction:* units may share a tile instead of blocking each
+other, with penalties once a tile holds more than a threshold, growing
+worse the more it holds. This is how an earlier build handled unit
+collision, and it replaces one-unit-per-tile occupancy (and the Stage 2
+detour rule, which works around it). Threshold and penalties to be set.
+
+**Contact and defensive movement.** *Direction:* a unit that comes next to
+an enemy is not forced to fight. Units can decide not to engage and move
+defensively. Stage 2 made contact stop movement, to end a bug where two
+units circled each other for ever; that rule should become a choice the
+unit's order or posture makes, not an automatic stop.
+
+**Mutual hold.** For testing, a battle has a time limit. When it runs out,
+the army with more casualties loses (implemented as the larger share of
+its starting men; men who fled are not casualties; equal is a draw). The
+hotseat CLI defaults to 4 hours of battle time.
+
+**Veterancy needs fighting.** A unit earns a battle toward veterancy only
+if it saw combat, so the incentive is to fight. Open: how to push that
+without bad incentives (for example, throwing units into pointless fights
+to farm battles, or a time-out rule that rewards turtling).

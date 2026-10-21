@@ -13,11 +13,14 @@ const { renderMap, renderRoster, renderTurnReport } = require('./render')
 
 /**
  * @param {Object} spec     a phase 4/5 battle spec
- * @param {Object} options  { seed, auto: 'blue'|null, fullMap, ai }
+ * @param {Object} options  { seed, auto: 'blue'|null, fullMap, ai, timeLimitMinutes }
  *   ai: an AI client (src/llm); without one, orders use the fixed grammar
  */
 function createSession(spec, options = {}) {
-  const game = createGame(spec, { seed: options.seed })
+  // timeLimitMinutes: end the battle at this battle time, the side with the
+  // larger share of losses losing (a testing aid; see victory.js).
+  const withLimit = options.timeLimitMinutes ? { ...spec, timeLimitMinutes: options.timeLimitMinutes } : spec
+  const game = createGame(withLimit, { seed: options.seed })
   const autoSide = options.auto ?? null
   const fullMap = Boolean(options.fullMap)
 

@@ -42,13 +42,19 @@ function objectiveController(world, broken, objective) {
  * @param {Object} ctx.objectiveHolds    objectiveId -> { side, turns } —
  *                                       maintained by the orchestrator
  * @param {number} [ctx.objectiveTurnsToWin]
+ * @param {number} [ctx.minutesElapsed]     battle time so far
+ * @param {number} [ctx.timeLimitMinutes]   when set, the battle ends at this
+ *                                          time; the side that lost the
+ *                                          larger share of its men loses
+ * @param {Object} [ctx.fledStrength]       side -> men who left the field
  * @returns {{decided, winner, reason}}
  */
 function evaluateVictory(ctx) {
   const {
     world, broken, surrendered = null,
     startingStrength = {}, objectiveHolds = {},
-    objectiveTurnsToWin = OBJECTIVE_TURNS_TO_WIN
+    objectiveTurnsToWin = OBJECTIVE_TURNS_TO_WIN,
+    minutesElapsed = 0, timeLimitMinutes = null, fledStrength = {}
   } = ctx
 
   if (surrendered) {
@@ -85,6 +91,24 @@ function evaluateVictory(ctx) {
         return { decided: true, winner: side, reason: 'objectives held' }
       }
     }
+  }
+
+  // Time limit (a testing aid, ruled 2026-10-21): when the clock runs out,
+  // the side that lost the larger share of its men loses. Men who fled the
+  // field are not casualties. A share exactly equal is a draw.
+  if (timeLimitMinutes && minutesElapsed >= timeLimitMinutes) {
+    const lostShare = (side) => {
+      const start = startingStrength[side] ?? 0
+      if (!start) return 0
+      const standing = unitsOnSide(world, side).reduce((sum, u) => sum + u.strength, 0)
+      return (start - standing - (fledStrength[side] ?? 0)) / start
+    }
+    const ranked = sides(world).map(side => ({ side, lost: lostShare(side) }))
+      .sort((a, b) => a.lost - b.lost)
+    if (ranked.length >= 2 && ranked[0].lost < ranked[1].lost) {
+      return { decided: true, winner: ranked[0].side, reason: 'time ran out: fewer losses' }
+    }
+    return { decided: true, winner: 'draw', reason: 'time ran out: equal losses' }
   }
 
   return { decided: false, winner: null, reason: null }
