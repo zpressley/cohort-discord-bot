@@ -128,7 +128,7 @@ would need one is noted for later, not built.
 - A letter-and-number grid of 100 m squares (`C7`), the same size on every
   map, each split into 4 quarters of 50 m (`C7-NE`, or similar). A 2 km map
   is 20×20 squares; Crownhill is 10×10.
-- On a 2 km map, a square is 100 m and a quarter is 50 m.
+- A square is 4×4 tiles and a quarter is 2×2 tiles, on every map.
 - A translation module like `labels.js`; the engine keeps numeric x,y.
 - The hotseat CLI and parser accept grid squares; orders to a square aim at
   its centre.
