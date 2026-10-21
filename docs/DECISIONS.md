@@ -66,3 +66,58 @@ was not the intent. Players should mostly give orders in general terms
 about the ground: "approach the ridge to the east", "stop at the clearing
 and set up a defensive position". Named landmarks stay for flavour and
 summaries.
+
+## Rulings and direction, October 21, 2026 (after Stage 2)
+
+From Zach's review of the Stage 2 movement changes. Items marked
+*direction* set the intent for the next stage; details are open.
+
+**Stacking.** *Direction:* units may share a tile instead of blocking each
+other, with penalties once a tile holds more than a threshold, growing
+worse the more it holds. This is how an earlier build handled unit
+collision, and it replaces one-unit-per-tile occupancy (and the Stage 2
+detour rule, which works around it). Starting point: the density table
+from the earlier build (`archive/docs/Context/Old Context/cohort_task_list.md`,
+STACK-002), with thresholds quartered for 25 m tiles as
+`docs/design/architecture-roadmap.md` §6 already planned:
+
+| Tier | Old (50 m tile) | 25 m tile | Penalty |
+|---|---|---|---|
+| organized | 0-400 men | 0-100 | none |
+| crowded | 401-600 | 101-150 | -25% move, -1 combat |
+| compressed | 601-800 | 151-200 | -50% move, -2 combat |
+| crushing | 801-1000 | 201-250 | -75% move, -3 combat |
+| critical | 1001-1200 | 251-300 | -90% move, -4 combat, -2 morale |
+
+Hard cap 300 men per tile. Numbers to be tuned in play.
+
+**Contact and defensive movement.** *Direction:* a unit that comes next to
+an enemy is not forced to fight. Units can decide not to engage and move
+defensively. Stage 2 made contact stop movement, to end a bug where two
+units circled each other for ever; that rule should become a choice the
+unit's order or posture makes, not an automatic stop.
+
+**Mutual hold.** For testing, a battle has a time limit. When it runs out,
+the army with more casualties loses (implemented as the larger share of
+its starting men; men who fled are not casualties; equal is a draw). The
+hotseat CLI defaults to 4 hours of battle time.
+
+**Veterancy needs fighting.** A unit earns a battle toward veterancy only
+if it saw combat, so the incentive is to fight. Open: how to push that
+without bad incentives (for example, throwing units into pointless fights
+to farm battles, or a time-out rule that rewards turtling).
+
+**Deployment, hidden foes and posture.** *Direction:* how an army is
+deployed matters. A column on the march that runs into a hidden enemy does
+not know it is happening. A hidden force in woods may let a few units pass
+and then strike the rear. Units on guard, in a defensive posture, may make
+an attack not worth it at that moment, and then no attack takes place.
+This ties to the contact rule above: whether a fight starts depends on
+posture and on who has seen whom, not only on being adjacent.
+Ruling: ambushes are ordered by the player (for example, "hold in the
+woods and hit anything that passes"); units do not spring them on their
+own judgement.
+
+**Objective control.** *Direction, for testing:* holding objectives as a
+way to win or score, giving units a reason to move and fight. How it fits
+the story is still open.

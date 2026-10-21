@@ -9,6 +9,8 @@
 //   npm run play -- meeting-battle --auto blue    solo: blue runs itself
 //   npm run play -- meeting-battle --seed 7       a different battle
 //   npm run play -- meeting-battle --full-map     the whole 40x40
+//   npm run play -- meeting-battle --time-limit 120  end after 2 hours of battle
+//                                                 (default 240; 0 = no limit)
 //
 // At the prompt, one order per line:
 //   spears to K7        everyone to the bridge      the archers hold
@@ -25,12 +27,13 @@ const { renderHandoff } = require('./render')
 const { aiClientFromEnv } = require('../../llm')
 
 function parseArgs(argv) {
-  const args = { scenario: 'meeting-battle', seed: undefined, auto: null, fullMap: false }
+  const args = { scenario: 'meeting-battle', seed: undefined, auto: null, fullMap: false, timeLimit: 240 }
   for (let i = 0; i < argv.length; i++) {
     const arg = argv[i]
     if (arg === '--seed') args.seed = Number(argv[++i])
     else if (arg === '--auto') args.auto = argv[++i]
     else if (arg === '--full-map') args.fullMap = true
+    else if (arg === '--time-limit') args.timeLimit = Number(argv[++i])
     else if (!arg.startsWith('--')) args.scenario = arg
   }
   return args
@@ -49,7 +52,10 @@ async function main() {
   // fixed grammar when it fails); without it, the grammar alone.
   const ai = aiClientFromEnv()
   const session = createSession(spec, {
-    seed: args.seed, auto: args.auto, fullMap: args.fullMap, ai
+    seed: args.seed, auto: args.auto, fullMap: args.fullMap, ai,
+    // A battle ends after this much battle time (default 4 hours), the side
+    // with the larger share of losses losing. --time-limit 0 turns it off.
+    timeLimitMinutes: args.timeLimit || null
   })
 
   // Not rl.question: with piped input (the smoke tests, or a scripted game)
