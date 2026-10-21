@@ -15,6 +15,12 @@
 //   move       unitId, from, to, reachedTarget, blockedBy
 //              a unit moved, or was stopped short (from = to when blocked
 //              on its first step)
+//   arrived    unitId, action, at, then
+//              a unit reached the place its order sent it; then is 'hold'
+//              (it digs in) or 'standing' (back to its side's standing orders)
+//   halted     unitId, action, at, reason, blockedBy, then
+//              an order from an earlier turn got nowhere (blocked, or no way
+//              there) and is given up; then as for arrived
 //   fled       unitId, side, strength
 //              a broken unit left the field over its home edge
 //   contact    aId, bId

@@ -28,7 +28,8 @@ const SCANNED_DIRS = [
   'src/harness',
   'src/adapters',
   'src/interpreter',
-  'src/narrator'
+  'src/narrator',
+  'src/llm'
 ]
 
 const DOCS = [

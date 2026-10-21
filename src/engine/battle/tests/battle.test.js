@@ -252,6 +252,8 @@ test('the event log carries the battle: contacts, exchanges, and a victory', () 
 // without reading engine state. No prose, and positions are numeric.
 const EVENT_FIELDS = {
   move: ['unitId', 'from', 'to', 'reachedTarget', 'blockedBy'],
+  arrived: ['unitId', 'action', 'at', 'then'],
+  halted: ['unitId', 'action', 'at', 'reason', 'blockedBy', 'then'],
   fled: ['unitId', 'side', 'strength'],
   contact: ['aId', 'bId'],
   exchange: ['roundInContact', 'a', 'b', 'push'],

@@ -12,10 +12,14 @@ const { toPosition, samePosition, positionKey } = require('../map/labels')
 // ── A* PATHFINDING ─────────────────────────────────────────────
 
 /**
+ * @param {Object} [options]
+ * @param {Set<string>} [options.avoid]  position keys to treat as impassable
+ *   (tiles other units stand on, for a detour); the goal is never avoided
  * @returns {Array<{x,y}>|null} the path including both ends, or null when the
  *   target is off the map or every route is impassable
  */
-function findPath(map, from, to) {
+function findPath(map, from, to, options = {}) {
+  const avoid = options.avoid ?? null
   const start = toPosition(from)
   const goal = toPosition(to)
   if (!map.inBounds(goal) || !map.inBounds(start)) return null
@@ -48,8 +52,9 @@ function findPath(map, from, to) {
 
       const moveCost = map.moveCost(neighbor)
 
-      // Impassable
+      // Impassable, or standing room taken (detours only)
       if (!map.passable(neighbor)) continue
+      if (avoid && key !== goalKey && avoid.has(key)) continue
 
       const tentativeG = gScore.get(current.key) + moveCost
 

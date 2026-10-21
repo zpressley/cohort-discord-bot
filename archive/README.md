@@ -34,6 +34,11 @@ sixth step, which sold a separate `training` upgrade for 2/4/6 SP that no
 combat code read. Removed by ruling Q8: a unit's training comes from its
 quality tier. Archived 2026-10-19, Stage 0 task 5.
 
+**Hotseat order parser (`hotseat-parser/`).** The phase 7 hotseat CLI's
+fixed order grammar ("spears to K7", landmarks by name only). Replaced in
+Stage 2 by `src/interpreter/` (the grammar, the AI reader and place
+resolution shared by every interface). Archived 2026-10-21.
+
 ## What is not here, and why
 
 `src/game/battleEngine.js` (the legacy combat engine) was scheduled to move

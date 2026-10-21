@@ -8,52 +8,62 @@
 const { test } = require('node:test')
 const assert = require('node:assert/strict')
 
-const { parseOrderLine, parseOrderBlock } = require('../parser')
 const { createSession } = require('../session')
 const { loadScenario, SCENARIOS } = require('../scenarios')
 const { renderMap, renderTurnReport } = require('../render')
+const { interpretLines } = require('../../../interpreter/orders')
+const { toLabel } = require('../../../engine/map/labels')
+const { gridLabel } = require('../../../engine/map/grid')
 
-// ── The order grammar ──────────────────────────────────
+// ── Reading orders ─────────────────────────────────────
+// The hotseat CLI reads orders through src/interpreter (shared with every
+// interface). These pin what a commander at the keyboard gets.
 
-test('orders parse: unit to coordinate, unit to landmark, holds, surrender', () => {
-  assert.deepEqual(parseOrderLine('spears to K7'),
-    { kind: 'order', unitRef: 'spears', target: 'K7' })
-  assert.deepEqual(parseOrderLine('everyone to aa12'),
-    { kind: 'order', unitRef: 'everyone', target: 'AA12' })
+const redContext = () => createSession(loadScenario('meeting-battle'), { seed: 1 }).context('red')
 
-  const landmark = parseOrderLine('the swords to north ford')
-  assert.equal(landmark.kind, 'order')
-  assert.equal(landmark.target, 'W6', 'phase 1 landmarks resolve to their coordinates')
+test('orders read: a grid square, a quarter, a landmark, the ground, holds, surrender', () => {
+  const read = (line) => interpretLines([line], redContext())
 
-  assert.deepEqual(parseOrderLine('the archers hold'), { kind: 'hold', unitRef: 'the archers' })
-  assert.deepEqual(parseOrderLine('hold'), { kind: 'hold', unitRef: 'everyone' })
-  assert.equal(parseOrderLine('surrender').kind, 'surrender')
-  assert.equal(parseOrderLine('done').kind, 'done')
+  // Players use the ruled grid: 100 m squares, 50 m quarters.
+  const square = read('spears to C2')
+  assert.equal(square.orders.length, 1)
+  assert.equal(square.orders[0].unitRef, 'red_spears')
+  assert.equal(gridLabel(square.orders[0].target), 'C2')
+  assert.equal(gridLabel(read('everyone to g3-ne').orders[0].target, { quarter: true }), 'G3-NE')
+  assert.match(read('spears to K1').questions[0], /off the map/, 'Crownhill is squares A-J')
+
+  assert.equal(toLabel(read('the swords to north ford').orders[0].target), 'W6',
+    'a landmark by name still works')
+  assert.equal(read('the swords to the ridge to the east').orders[0].action, 'move',
+    'and so does the ground')
+
+  assert.deepEqual(read('the archers hold').orders, [{ unitRef: 'red_archers', action: 'hold' }])
+  assert.equal(read('hold').orders.length, 4, 'bare hold is everyone')
+  assert.equal(read('surrender').surrender, true)
 })
 
 test('an unknown place is a question, never a guess', () => {
-  const parsed = parseOrderLine('spears to the fields of asphodel')
-  assert.equal(parsed.kind, 'ask')
-  assert.ok(parsed.question.includes('asphodel'))
+  const { questions } = interpretLines(['spears to the fields of asphodel'], redContext())
+  assert.equal(questions.length, 1)
+  assert.ok(questions[0].includes('asphodel'))
 })
 
 test('gibberish gets the usage hint instead of a stack trace', () => {
-  const parsed = parseOrderLine('charge the thing at the place')
-  assert.equal(parsed.kind, 'ask')
+  const { questions } = interpretLines(['blah blah'], redContext())
+  assert.match(questions[0], /Orders read like/)
 })
 
 test('a block with any question submits nothing — orders are all-or-nothing', () => {
-  const { orders, questions } = parseOrderBlock([
-    'spears to K7',
-    'swords to nowhere-real'
-  ])
-  assert.equal(questions.length, 1)
-  assert.equal(orders.length, 1, 'the parse still reports what DID parse')
+  const session = createSession(loadScenario('meeting-battle'), { seed: 1 })
+  const result = session.submitLines('red', ['spears to C2', 'swords to nowhere-real'])
+  assert.equal(result.status, 'clarify')
+  assert.equal(result.questions.length, 1)
+  assert.equal(session.game.orderLog.length, 0, 'nothing reached the game')
 })
 
 test('lines after done are not read', () => {
-  const { orders } = parseOrderBlock(['spears to K7', 'done', 'swords to K8'])
-  assert.deepEqual(orders.map(o => o.unitRef), ['spears'])
+  const { orders } = interpretLines(['spears to C2', 'done', 'swords to C3'], redContext())
+  assert.deepEqual(orders.map(o => o.unitRef), ['red_spears'])
 })
 
 // ── The fog on the map ─────────────────────────────────
@@ -73,8 +83,8 @@ test('a sighted enemy appears; after contact breaks, the ghost keeps the stale p
   // March both lines together until someone is seen.
   let result
   for (let i = 0; i < 5; i++) {
-    session.submitLines('red', ['everyone to K8'])
-    result = session.submitLines('blue', ['everyone to J8'])
+    session.submitLines('red', ['everyone to C2-SE'])
+    result = session.submitLines('blue', ['everyone to C2-SW'])
     if (session.game.intel.red.known && Object.keys(session.game.intel.red.known).length > 0) break
   }
   const map = renderMap(session.game, 'red')
@@ -127,8 +137,8 @@ test('exit: two commanders trade typed orders until one army breaks — the old 
 
   // Turn one: both commanders type real orders. After that, both lean on
   // standing orders and watch it play out.
-  session.submitLines('red', ['the archers hold', 'everyone to K8'])
-  let result = session.submitLines('blue', ['everyone to J8'])
+  session.submitLines('red', ['the archers hold', 'everyone to C2-SE'])
+  let result = session.submitLines('blue', ['everyone to C2-SW'])
   assert.ok(['processed', 'finished'].includes(result.status))
 
   for (let i = 0; i < 40 && !session.finished(); i++) {
@@ -144,8 +154,8 @@ test('exit: two commanders trade typed orders until one army breaks — the old 
 test('the whole session is deterministic — same seed, same orders, same battle', () => {
   const play = () => {
     const session = createSession(loadScenario('legions-vs-celts'), { seed: 9 })
-    session.submitLines('red', ['everyone to K8'])
-    session.submitLines('blue', ['everyone to J8'])
+    session.submitLines('red', ['everyone to C2-SE'])
+    session.submitLines('blue', ['everyone to C2-SW'])
     for (let i = 0; i < 40 && !session.finished(); i++) {
       session.submitLines('red', [])
       session.submitLines('blue', [])
@@ -166,7 +176,7 @@ test('every listed scenario loads and passes its own builder', () => {
 test('a hotseat game saves as data and replays to the same battle', () => {
   const { gameRecord, replayGame } = require('../../../engine/orchestrator')
   const session = createSession(loadScenario('legions-vs-celts'), { seed: 4 })
-  session.submitLines('red', ['the archers hold', 'everyone to K8'])
+  session.submitLines('red', ['the archers hold', 'everyone to C2-SE'])
   session.submitLines('blue', ['everyone to the north ford'])
   for (let i = 0; i < 40 && !session.finished(); i++) {
     session.submitLines('red', [])
