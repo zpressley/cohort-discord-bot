@@ -7,6 +7,7 @@ const labels = require('./labels')
 const { MOVEMENT_COSTS, IMPASSABLE } = require('./terrain')
 const landmarks = require('./landmarkResolver')
 const { detectFeatures, featuresAt, KINDS: FEATURE_KINDS } = require('./features')
+const { parsePlace, findPlace } = require('./places')
 
 module.exports = {
   createMap,
@@ -20,5 +21,7 @@ module.exports = {
   listLandmarks: landmarks.listLandmarks,
   detectFeatures,
   featuresAt,
-  FEATURE_KINDS
+  FEATURE_KINDS,
+  parsePlace,
+  findPlace
 }
