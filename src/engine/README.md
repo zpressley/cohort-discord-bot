@@ -6,11 +6,13 @@ clock, and no randomness except the seeded RNG in `rng.js`.
 
 ```
 map/           the battlefield: terrain, features (ridges, woods, clearings),
-               places as players describe them, the player grid, landmarks
-movement/      pathfinding and simultaneous multi-unit movement
+               places as players describe them, the player grid, landmarks,
+               line of sight
+movement/      pathfinding, simultaneous multi-unit movement, friends sharing
+               tiles (crowding)
 combat/        the round loop: ratings, damage, push, morale, chaos
 battle/        one battle turn by turn (movement + combat + rout), orders that
-               persist, and the event log
+               persist, hiding, ambush and surprise, and the event log
 orchestrator/  the two-player game loop: orders, elastic time, fog of war, victory
 veterans/      experience, officers (killed, captured, wounded), the campaign
                record (pure calculation)
