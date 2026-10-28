@@ -88,7 +88,15 @@ function resolveSimultaneousMovement(world, orders, map) {
       fleeing: Boolean(order.fleeing),
       steps: path.slice(1),            // path[0] is where the unit stands
       stepIndex: 0,
-      budget: crowdedRange(unit, crowding.get(unit.id)),
+      // Careful (on guard) marches at half speed, after crowding.
+      budget: order.careful
+        ? Math.round(crowdedRange(unit, crowding.get(unit.id)) / 2 * 100) / 100
+        : crowdedRange(unit, crowding.get(unit.id)),
+      careful: Boolean(order.careful),
+      // Looking for a fight (Stage 3): only such a unit stops when it meets
+      // an enemy. Others walk on past, if the way is open. Callers that do
+      // not say are treated as seeking, the rule before Stage 3.
+      seeking: order.seeking ?? true,
       from: { ...unit.position },
       tilesTraversed: [],
       blockedTicks: 0,
@@ -118,7 +126,7 @@ function resolveSimultaneousMovement(world, orders, map) {
       // contact now, and turns to fight instead of walking on. Without this,
       // a unit chasing an enemy could step out of the contact the enemy had
       // just made, and the two could circle each other for ever.
-      if (!plan.fleeing && !plan.startedInContact) {
+      if (plan.seeking && !plan.fleeing && !plan.startedInContact) {
         const enemy = adjacentEnemy(occupancy, unit, map)
         if (enemy) {
           plan.stopped = true
@@ -175,12 +183,13 @@ function resolveSimultaneousMovement(world, orders, map) {
       plan.blockedBy = null
       anyoneMoving = true
 
-      // Contact stops movement: a unit that steps next to an enemy halts
-      // there and fights. Contact used to be checked only after everyone had
-      // moved, so two units could slip past each other through the
-      // diagonals, swap places, and repeat for ever without a blow. Fleeing
-      // units are exempt: they keep running, and pursuit deals with them.
-      if (!plan.fleeing) {
+      // Contact stops a unit looking for a fight: it steps next to an enemy,
+      // halts there and fights. Contact used to be checked only after
+      // everyone had moved, so two units could slip past each other through
+      // the diagonals, swap places, and repeat for ever without a blow.
+      // Fleeing units are exempt: they keep running, and pursuit deals with
+      // them. A unit not looking for a fight walks on (Stage 3).
+      if (plan.seeking && !plan.fleeing) {
         const enemy = adjacentEnemy(occupancy, unit, map)
         if (enemy) {
           plan.stopped = true
@@ -200,6 +209,7 @@ function resolveSimultaneousMovement(world, orders, map) {
       target: plan.target,
       reachedTarget: samePosition(plan.unit.position, plan.target),
       tilesMoved: plan.tilesTraversed.length,
+      careful: plan.careful,
       tilesTraversed: plan.tilesTraversed,
       movementRemaining: plan.budget,
       blockedBy: plan.blockedBy,

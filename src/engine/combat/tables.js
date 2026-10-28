@@ -379,6 +379,19 @@ const CROWDING = {
   MIN_MOVE: 1
 }
 
+// ── Surprise ───────────────────────────────────────────
+//
+// Stage 3 plan, C4: a unit its target's side did not see as the turn
+// began, falling on a unit that was marching, gets an edge in the first
+// round of the fight, and the shock costs the target morale. Nothing
+// against a unit moving carefully or standing. This stands in for "hitting
+// the rear" until units have facing. Starting values, to be tuned.
+
+const SURPRISE = {
+  ATTACK: 2,
+  MORALE: 10
+}
+
 // ── Pursuit ────────────────────────────────────────────
 //
 // [derived] A broken unit caught at the start of its flight bleeds. The old
@@ -511,6 +524,7 @@ module.exports = {
   PUSH,
   FLANKING,
   CROWDING,
+  SURPRISE,
   PURSUIT,
   MORALE,
   DAMAGE,

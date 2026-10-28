@@ -24,12 +24,17 @@
 //   fled       unitId, side, strength
 //              a broken unit left the field over its home edge
 //   contact    aId, bId
-//              two enemy units came into engagement range
+//              two enemy units began to fight: side by side, and at least one
+//              of them looking for a fight (Stage 3)
+//   surprise   unitId, by, posture
+//              unitId was caught unawares: by attacked it unseen by its side
+//              as the turn began, while it was marching
 //   exchange   roundInContact, a, b, push
 //              one combat round between a pair. a and b each carry unitId,
 //              killed, morale and stamina after the round, chaos, terrain,
-//              prepared, chargeImpact, flankBonus, crowding (the combat
-//              penalty for friends packed on its tile). push is { winnerId,
+//              prepared, chargeImpact, flankBonus, surprise (it caught the
+//              other unawares this round), crowding (the combat penalty for
+//              friends packed on its tile). push is { winnerId,
 //              differential }; winnerId is null for an even shove
 //   standoff   aId, bId
 //              both broke in the same round with nothing to tell them apart,

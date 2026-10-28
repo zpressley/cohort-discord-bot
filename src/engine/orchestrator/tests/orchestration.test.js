@@ -283,7 +283,8 @@ test('a turn in contact resolves one tick — the commanders decide every round'
     ]
   }))
 
-  submitOrders(game, 'red', [])
+  // Since Stage 3 side-by-side units fight only if one seeks it.
+  submitOrders(game, 'red', [{ unitRef: 'a', action: 'advance' }])
   submitOrders(game, 'blue', [])
 
   const turn = game.history[0]

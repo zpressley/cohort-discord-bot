@@ -10,8 +10,19 @@
 //   defend    go to target if one is given, then hold there. "Set up a
 //             defensive position."
 //   advance   press the nearest enemy, every tick, until told otherwise.
+//   attack    go to target looking for a fight (Stage 3); without a target
+//             it is advance.
 //   withdraw  fall back toward your own home edge, or to target if given,
 //             then hold.
+//
+// Any order that moves may be careful (Stage 3): the unit marches on guard,
+// at half speed, and cannot be caught by surprise. Otherwise a moving unit is
+// marching.
+//
+// Seeking a fight (Stage 3, ruled direction): only advance and attack, or a
+// unit with no order on a side whose standing order is to advance, look for
+// a fight. Two enemy units side by side fight only if one of them is
+// seeking one (or they were already fighting).
 //
 // The older shape still works: { unitRef, target } is a move, and
 // { unitRef, target: 'hold' } is a hold.
@@ -28,7 +39,8 @@
 
 const { toPosition, samePosition } = require('../map/labels')
 
-const ACTIONS = ['move', 'hold', 'defend', 'advance', 'withdraw']
+const ACTIONS = ['move', 'hold', 'defend', 'advance', 'attack', 'withdraw']
+const SEEKING = ['advance', 'attack']
 
 /**
  * Bring any accepted order shape to { action, target, then }.
@@ -43,10 +55,11 @@ function normalizeOrder(order) {
     const then = order.then ?? (holdsAfter ? 'hold' : null)
     if (order.action === 'defend' && !target) return { action: 'hold', target: null, then: null }
     if (order.action === 'move' && !target) throw new Error('a move order needs a target')
-    return { action: order.action, target, then }
+    if (order.action === 'attack' && !target) return withCareful({ action: 'advance', target: null, then: null }, order)
+    return withCareful({ action: order.action, target, then }, order)
   }
   if (!order.target || order.target === 'hold') return { action: 'hold', target: null, then: null }
-  return { action: 'move', target: toPosition(order.target), then: null }
+  return withCareful({ action: 'move', target: toPosition(order.target), then: null }, order)
 }
 
 /**
@@ -73,6 +86,7 @@ function planUnit(unit, order, context) {
     }
 
     case 'move':
+    case 'attack':
     case 'defend':
     case 'withdraw': {
       const target = order.target ?? context.homeTarget(unit)
@@ -95,4 +109,16 @@ function planUnit(unit, order, context) {
   }
 }
 
-module.exports = { normalizeOrder, planUnit, ACTIONS }
+// careful is carried only when set, so plain orders keep their old shape.
+function withCareful(normalized, order) {
+  return order.careful ? { ...normalized, careful: true } : normalized
+}
+
+// Is this unit looking for a fight? Its own order decides; a unit with none
+// follows its side's standing order.
+function isSeeking(order, standingOrder) {
+  if (order) return SEEKING.includes(order.action)
+  return standingOrder === 'advance'
+}
+
+module.exports = { normalizeOrder, planUnit, isSeeking, ACTIONS, SEEKING }

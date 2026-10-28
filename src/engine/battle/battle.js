@@ -38,7 +38,8 @@ const {
   resolveSimultaneousMovement, expandOrders, buildOccupancy, canEnter, moveUnit, crowdingByUnit
 } = require('../movement')
 const { createEventLog } = require('./events')
-const { normalizeOrder, planUnit } = require('./orders')
+const { normalizeOrder, planUnit, isSeeking } = require('./orders')
+const { canSee } = require('../map/sight')
 
 const DEFAULT_MAX_TURNS = 20
 
@@ -98,6 +99,12 @@ function stepTurn(state, sideOrders = {}) {
   const turn = state.turn
   world.turn = turn
 
+  // ── What each side can see as the turn opens ────
+  // Surprise is judged against this: an enemy no one on a side could see
+  // when the turn began, and who then attacks a marching unit, catches it
+  // unawares.
+  const seenAtStart = sightBySide(map, world)
+
   // ── Orders ──────────────────────────────────────
   const orders = []
   const freshThisTurn = new Set()
@@ -125,7 +132,15 @@ function stepTurn(state, sideOrders = {}) {
       const { move, order } = planUnit(unit, state.orderBook.get(unit.id), context(unit))
       if (order) state.orderBook.set(unit.id, order)
       else state.orderBook.delete(unit.id)
-      if (move) { orders.push(move); continue }
+      if (move) {
+        const held = state.orderBook.get(unit.id)
+        orders.push({
+          ...move,
+          seeking: isSeeking(held, spec.standingOrders?.[side]),
+          careful: Boolean(held?.careful)
+        })
+        continue
+      }
 
       // Standing orders. A side declared as `advance` presses the nearest
       // enemy whenever a unit has no order of its own — the simplest
@@ -135,7 +150,7 @@ function stepTurn(state, sideOrders = {}) {
       // is also a choice: a unit is allowed to stand.)
       if (spec.standingOrders?.[side] === 'advance') {
         const enemy = nearestEnemy(world, unit, broken)
-        if (enemy) orders.push({ unitId: unit.id, target: enemy.position })
+        if (enemy) orders.push({ unitId: unit.id, target: enemy.position, seeking: true })
       }
     }
   }
@@ -210,14 +225,41 @@ function stepTurn(state, sideOrders = {}) {
   // Broken units do not fight — they are handled by pursuit, not by the
   // resolver. Filtered here rather than removed from the world, because
   // they still hold ground (a fleeing column blocks a tile like anyone).
+  //
+  // Two units side by side fight only if one of them is looking for a fight,
+  // or they were already fighting (Stage 3). A unit that is not can stand
+  // beside an enemy, or walk past it, and no blow is struck.
+  const seeking = (id) => {
+    const unit = getUnit(world, id)
+    return isSeeking(state.orderBook.get(id), spec.standingOrders?.[unit.side])
+  }
   const engagements = detectEngagements(world, engagementRange, map)
     .filter(e => !broken.has(e.aId) && !broken.has(e.bId))
+    .filter(e => seeking(e.aId) || seeking(e.bId) ||
+      state.previousEngagementKeys.has(`${e.aId}|${e.bId}`))
+
+  // How each unit spent the turn: marching (moved at full pace) or on guard
+  // (moved carefully, or stood).
+  const marching = new Set(movement
+    .filter(m => !m.skipped && !m.held && !m.failed && m.tilesMoved > 0 && !m.careful)
+    .map(m => m.unitId))
 
   for (const engagement of engagements) {
     const key = `${engagement.aId}|${engagement.bId}`
-    if (!state.previousEngagementKeys.has(key)) {
-      log.emit('contact', turn, { aId: engagement.aId, bId: engagement.bId })
+    if (state.previousEngagementKeys.has(key)) continue
+    log.emit('contact', turn, { aId: engagement.aId, bId: engagement.bId })
+
+    // Surprise: the one who sought the fight was unseen by the other side
+    // when the turn began, and caught the other on the march.
+    const surprises = []
+    for (const [by, target] of [[engagement.aId, engagement.bId], [engagement.bId, engagement.aId]]) {
+      const victim = getUnit(world, target)
+      if (!seeking(by) || !marching.has(target)) continue
+      if (seenAtStart.get(victim.side)?.has(by)) continue
+      surprises.push(by)
+      log.emit('surprise', turn, { unitId: target, by, posture: 'marching' })
     }
+    if (surprises.length > 0) engagement.surprisedBy = surprises
   }
   state.previousEngagementKeys = new Set(engagements.map(e => `${e.aId}|${e.bId}`))
 
@@ -485,6 +527,23 @@ function nearestEnemy(world, unit, broken) {
     }
   }
   return best
+}
+
+// ── Sight ────────────────────────────────────────────────
+// side -> the set of enemy unit ids any of its units can see (map/sight.js).
+function sightBySide(map, world) {
+  const living = livingUnits(world)
+  const result = new Map()
+  for (const side of sides(world)) {
+    const watchers = living.filter(u => u.side === side)
+    const seen = new Set()
+    for (const enemy of living) {
+      if (enemy.side === side) continue
+      if (watchers.some(w => canSee(map, w, enemy))) seen.add(enemy.id)
+    }
+    result.set(side, seen)
+  }
+  return result
 }
 
 // ── Victory ──────────────────────────────────────────────

@@ -53,7 +53,7 @@ test('packed ranks fight worse: the crowding penalty reaches every exchange', ()
     unit({ id: 'one', position: 'P24' }),
     unit({ id: 'two', position: 'P24' }),
     unit({ id: 'foe', side: 'blue', position: 'Q24' })
-  ]))
+  ], { standingOrders: { blue: 'advance' } }))
   stepTurn(state, { red: [{ unitRef: 'one', target: 'hold' }, { unitRef: 'two', target: 'hold' }] })
   const exchanges = state.log.ofType('exchange')
   assert.ok(exchanges.length > 0, 'they fought')
@@ -69,7 +69,7 @@ test('a lone unit, however large, is never crowded', () => {
   const state = createBattleState(spec([
     unit({ id: 'big', position: 'P24', strength: 280, maxStrength: 280 }),
     unit({ id: 'foe', side: 'blue', position: 'Q24' })
-  ]))
+  ], { standingOrders: { blue: 'advance' } }))
   stepTurn(state, {})
   assert.equal(state.log.ofType('crowding').length, 0)
   for (const e of state.log.ofType('exchange')) {

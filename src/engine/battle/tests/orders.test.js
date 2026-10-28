@@ -137,7 +137,7 @@ test('an order that gets nowhere is given up, and the log says why', () => {
 
 test('broken units ignore their orders and flee', () => {
   const result = runBattle(spec({
-    standingOrders: { red: 'advance' },
+    standingOrders: { red: 'advance', blue: 'advance' },
     units: [
       unit({ id: 'levy', side: 'red', position: 'P24', quality: 'levy', armor: 'no_armor', shield: 'no_shield', primaryWeapon: 'daggers' }),
       unit({ id: 'anchor', side: 'red', position: 'J40' }),

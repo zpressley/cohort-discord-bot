@@ -185,6 +185,21 @@ function createCombatResolver(options = {}) {
         const aState = stateFor(a)
         const bState = stateFor(b)
 
+        // Surprise (Stage 3): only on the round contact is made. The battle
+        // runner decides who was caught unawares and says so on the
+        // engagement.
+        const surprised = roundsInContact === 0 ? (engagement.surprisedBy ?? []) : []
+        const aSurprises = surprised.includes(a.id)
+        const bSurprises = surprised.includes(b.id)
+        if (aSurprises && !bState.routed) {
+          bState.morale = Math.max(0, bState.morale - T.SURPRISE.MORALE)
+          bState.moraleDamageTaken += T.SURPRISE.MORALE
+        }
+        if (bSurprises && !aState.routed) {
+          aState.morale = Math.max(0, aState.morale - T.SURPRISE.MORALE)
+          aState.moraleDamageTaken += T.SURPRISE.MORALE
+        }
+
         // A routed unit is out of the fight. Pursuit casualties and flight
         // across the map are phase 4, when combat meets movement.
         if (aState.routed || bState.routed) continue
@@ -206,7 +221,8 @@ function createCombatResolver(options = {}) {
           enemyTerrain: engagement.bTerrain,
           chaos: aChaos,
           prepared: aPrepared,
-          bonusAttack: flankBonusAgainst(b.id),
+          bonusAttack: flankBonusAgainst(b.id) + (aSurprises ? T.SURPRISE.ATTACK : 0),
+          surprise: aSurprises,
           crowding: crowdingPenalty(a)
         }
         const bCtx = {
@@ -216,7 +232,8 @@ function createCombatResolver(options = {}) {
           enemyTerrain: engagement.aTerrain,
           chaos: bChaos,
           prepared: bPrepared,
-          bonusAttack: flankBonusAgainst(a.id),
+          bonusAttack: flankBonusAgainst(a.id) + (bSurprises ? T.SURPRISE.ATTACK : 0),
+          surprise: bSurprises,
           crowding: crowdingPenalty(b)
         }
 
@@ -426,7 +443,8 @@ function exchangeEvent(a, b, exchange, aCtx, bCtx, aState, bState, roundsInConta
     // The round of impact of a cavalry charge: the unit moved into contact,
     // is mounted, and the decay curve is at its start.
     chargeImpact: Boolean(unit.mounted && ctx.roundsInContact === 0),
-    flankBonus: ctx.bonusAttack ?? 0,
+    flankBonus: (ctx.bonusAttack ?? 0) - (ctx.surprise ? T.SURPRISE.ATTACK : 0),
+    surprise: Boolean(ctx.surprise),
     crowding: ctx.crowding ?? 0
   })
 

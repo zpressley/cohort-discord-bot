@@ -60,6 +60,7 @@ function fact(map, event) {
     case 'arrived': return `${event.unitId} reached its objective ${placeName(map, event.at)}` + (event.then === 'hold' ? ' and dug in' : '')
     case 'halted': return `${event.unitId} could get no further${event.blockedBy ? `, ${event.blockedBy} in the way` : ''}`
     case 'contact': return `${event.aId} and ${event.bId} came to blows`
+    case 'surprise': return `${event.unitId} was caught on the march by ${event.by}, an enemy no one had seen`
     case 'exchange': return `fighting: ${describeCombatEvent(event).replace(/^r\d+ /, '').replace(/; chaos.*$/, '')} (men lost each side; morale ${Math.round(event.a.morale)} vs ${Math.round(event.b.morale)})`
     case 'standoff': return `${event.aId} and ${event.bId} were both close to breaking`
     case 'push': return `${event.by} drove ${event.unitId} back${event.lostHighGround ? ' off the high ground' : ''}`

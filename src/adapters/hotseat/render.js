@@ -185,6 +185,7 @@ function wordEvent(event) {
         (event.blockedBy ? ` — ${event.blockedBy} is in the way` : ' — there is no way through') +
         (event.then === 'hold' ? '; it holds where it stands' : '; it rejoins the line')
     case 'contact': return `CONTACT: ${event.aId} meets ${event.bId}`
+    case 'surprise': return `SURPRISE: ${event.by} falls on ${event.unitId} while it marches`
     case 'exchange': return describeCombatEvent(event)
     case 'standoff': return describeCombatEvent(event)
     case 'push':
