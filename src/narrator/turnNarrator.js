@@ -72,6 +72,15 @@ function fact(map, event) {
     case 'crowding': return event.tier === 'organized'
       ? `${event.unitId} had room to fight again`
       : `${event.unitId}'s ranks were ${event.tier}, ${event.men} men packed onto one spot ${placeName(map, event.at)}, slowing them and blunting their fighting`
+    case 'hidden': return `${event.unitId} went to ground ${placeName(map, event.at)}`
+    case 'hideFailed': return event.reason === 'watched'
+      ? `${event.unitId} tried to hide but the enemy was watching`
+      : `${event.unitId} found no cover to hide in`
+    case 'checked': return `${event.unitId} searched the ground ${placeName(map, event.at)}` +
+      (event.found.length ? ` and found ${event.found.join(', ')} hidden there` : ' and found nothing')
+    case 'revealed': return event.reason === 'found' ? `${event.unitId} was discovered`
+      : event.reason === 'stumbled on' ? `${event.unitId} was stumbled upon`
+      : `${event.unitId} came out of hiding`
     case 'victory': return event.winner === 'draw' ? `the battle ended in mutual ruin (${event.reason})` : `${event.winner} won the battle (${event.reason})`
     default: return null
   }

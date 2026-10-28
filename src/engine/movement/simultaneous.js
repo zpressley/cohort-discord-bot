@@ -47,7 +47,11 @@ const BLOCKED_TICKS_TO_STOP = 2
  * @param {Object} map     the battlefield (src/engine/map/map.js)
  * @returns {Array} per-unit movement results, sorted by unit id
  */
-function resolveSimultaneousMovement(world, orders, map) {
+function resolveSimultaneousMovement(world, orders, map, options = {}) {
+  // Enemies hidden from everyone (Stage 3): a unit looking for a fight does
+  // not stop for one it cannot see, and one that walks into its tile has
+  // stumbled on it.
+  const hidden = options.hidden ?? new Set()
   if (!map) throw new Error('resolveSimultaneousMovement needs the map')
   const occupancy = buildOccupancy(world)
   const crowding = crowdingByUnit(world)
@@ -104,7 +108,8 @@ function resolveSimultaneousMovement(world, orders, map) {
       stopped: false,
       // In contact before anyone moved: such a unit may step away (a
       // withdrawal), so only contact made during the turn stops it below.
-      startedInContact: Boolean(adjacentEnemy(occupancy, unit, map))
+      startedInContact: Boolean(adjacentEnemy(occupancy, unit, map, hidden)),
+      stumbledOn: null
     })
   }
 
@@ -127,7 +132,7 @@ function resolveSimultaneousMovement(world, orders, map) {
       // a unit chasing an enemy could step out of the contact the enemy had
       // just made, and the two could circle each other for ever.
       if (plan.seeking && !plan.fleeing && !plan.startedInContact) {
-        const enemy = adjacentEnemy(occupancy, unit, map)
+        const enemy = adjacentEnemy(occupancy, unit, map, hidden)
         if (enemy) {
           plan.stopped = true
           plan.blockedBy = enemy.id
@@ -166,6 +171,7 @@ function resolveSimultaneousMovement(world, orders, map) {
       if (!entry.ok) {
         plan.blockedTicks += 1
         plan.blockedBy = entry.blocker
+        if (entry.reason === 'enemy' && hidden.has(entry.blocker)) plan.stumbledOn = entry.blocker
         if (entry.reason === 'enemy' || plan.blockedTicks >= BLOCKED_TICKS_TO_STOP) {
           // An enemy never moves aside for you; a friend gets one tick to.
           plan.stopped = true
@@ -190,7 +196,7 @@ function resolveSimultaneousMovement(world, orders, map) {
       // Fleeing units are exempt: they keep running, and pursuit deals with
       // them. A unit not looking for a fight walks on (Stage 3).
       if (plan.seeking && !plan.fleeing) {
-        const enemy = adjacentEnemy(occupancy, unit, map)
+        const enemy = adjacentEnemy(occupancy, unit, map, hidden)
         if (enemy) {
           plan.stopped = true
           plan.blockedBy = enemy.id
@@ -213,6 +219,7 @@ function resolveSimultaneousMovement(world, orders, map) {
       tilesTraversed: plan.tilesTraversed,
       movementRemaining: plan.budget,
       blockedBy: plan.blockedBy,
+      ...(plan.stumbledOn ? { stumbledOn: plan.stumbledOn } : {}),
       terrain: map.terrainAt(plan.unit.position)
     })
   }
@@ -220,9 +227,9 @@ function resolveSimultaneousMovement(world, orders, map) {
   return [...results.values()].sort((a, b) => a.unitId.localeCompare(b.unitId))
 }
 
-function adjacentEnemy(occupancy, unit, map) {
+function adjacentEnemy(occupancy, unit, map, hidden = new Set()) {
   for (const next of map.neighbors(unit.position)) {
-    const other = (occupancy.get(positionKey(next)) ?? []).find(u => u.side !== unit.side)
+    const other = (occupancy.get(positionKey(next)) ?? []).find(u => u.side !== unit.side && !hidden.has(u.id))
     if (other) return other
   }
   return null

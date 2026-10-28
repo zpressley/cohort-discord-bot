@@ -40,6 +40,7 @@ const {
 const { createEventLog } = require('./events')
 const { normalizeOrder, planUnit, isSeeking } = require('./orders')
 const { canSee } = require('../map/sight')
+const { coverFor } = require('./hiding')
 
 const DEFAULT_MAX_TURNS = 20
 
@@ -77,6 +78,9 @@ function createBattleState(spec, options = {}) {
     // Each unit's crowding tier at the end of the last turn, so the log can
     // say when it changes. unitId -> tier name.
     crowding: new Map(),
+    // Units hiding (Stage 3), and how well: unitId -> the row of hiding.js
+    // they hide by. Moving or fighting gives a unit away.
+    hidden: new Map(),
     outcome: { decided: false, winner: null, reason: 'battle still open' }
   }
 }
@@ -103,7 +107,11 @@ function stepTurn(state, sideOrders = {}) {
   // Surprise is judged against this: an enemy no one on a side could see
   // when the turn began, and who then attacks a marching unit, catches it
   // unawares.
-  const seenAtStart = sightBySide(map, world)
+  const seenAtStart = sightBySide(map, world, state.hidden)
+  const reveal = (unitId, reason, by = null) => {
+    if (!state.hidden.delete(unitId)) return
+    log.emit('revealed', turn, { unitId, reason, by })
+  }
 
   // ── Orders ──────────────────────────────────────
   const orders = []
@@ -124,7 +132,7 @@ function stepTurn(state, sideOrders = {}) {
     const edge = spec.sides?.[side]?.homeEdge ?? 'west'
     const context = (unit) => ({
       fresh: fresh.has(unit.id),
-      nearestEnemy: (u) => nearestEnemy(world, u, broken),
+      nearestEnemy: (u) => nearestEnemy(world, u, broken, state.hidden),
       homeTarget: (u) => edgeTarget(map, u.position, edge)
     })
 
@@ -149,7 +157,7 @@ function stepTurn(state, sideOrders = {}) {
       // staring at each other. (A side without standing orders holds, which
       // is also a choice: a unit is allowed to stand.)
       if (spec.standingOrders?.[side] === 'advance') {
-        const enemy = nearestEnemy(world, unit, broken)
+        const enemy = nearestEnemy(world, unit, broken, state.hidden)
         if (enemy) orders.push({ unitId: unit.id, target: enemy.position, seeking: true })
       }
     }
@@ -165,7 +173,13 @@ function stepTurn(state, sideOrders = {}) {
   }
 
   // ── Movement (phase 3) ──────────────────────────
-  const movement = resolveSimultaneousMovement(world, orders, map)
+  const movement = resolveSimultaneousMovement(world, orders, map, { hidden: new Set(state.hidden.keys()) })
+
+  // Moving gives a hidden unit away, and so does being walked into.
+  for (const move of movement) {
+    if (move.tilesMoved > 0) reveal(move.unitId, 'moved')
+    if (move.stumbledOn) reveal(move.stumbledOn, 'stumbled on', move.unitId)
+  }
   for (const move of movement) {
     if (move.skipped || move.held || move.failed) continue
     log.emit('move', turn, {
@@ -229,14 +243,23 @@ function stepTurn(state, sideOrders = {}) {
   // Two units side by side fight only if one of them is looking for a fight,
   // or they were already fighting (Stage 3). A unit that is not can stand
   // beside an enemy, or walk past it, and no blow is struck.
+  // A unit cannot pick a fight with an enemy its side cannot see, so a
+  // hidden force lets a column march by unless it chooses to strike.
   const seeking = (id) => {
     const unit = getUnit(world, id)
     return isSeeking(state.orderBook.get(id), spec.standingOrders?.[unit.side])
   }
+  const seenNow = sightBySide(map, world, state.hidden)
+  const picksFight = (id, otherId) =>
+    seeking(id) && seenNow.get(getUnit(world, id).side)?.has(otherId)
   const engagements = detectEngagements(world, engagementRange, map)
     .filter(e => !broken.has(e.aId) && !broken.has(e.bId))
-    .filter(e => seeking(e.aId) || seeking(e.bId) ||
+    .filter(e => picksFight(e.aId, e.bId) || picksFight(e.bId, e.aId) ||
       state.previousEngagementKeys.has(`${e.aId}|${e.bId}`))
+  for (const e of engagements) {
+    reveal(e.aId, 'fought')
+    reveal(e.bId, 'fought')
+  }
 
   // How each unit spent the turn: marching (moved at full pace) or on guard
   // (moved carefully, or stood).
@@ -302,6 +325,54 @@ function stepTurn(state, sideOrders = {}) {
     if (log.forTurn(turn).some(e => e.type === 'rout' && e.unitId === unit.id)) continue
     const trapped = samePosition(positionsAtTurnStart.get(unit.id), unit.position)
     applyPursuit(world, unit, turn, log, trapped)
+  }
+
+  // ── Searching and hiding ────────────────────
+  // Both take the turn, standing still, and settle at its end.
+  const moved = new Set(movement.filter(m => m.tilesMoved > 0).map(m => m.unitId))
+  const fought = new Set(engagements.flatMap(e => [e.aId, e.bId]))
+  for (const unit of livingUnits(world)) {
+    const order = state.orderBook.get(unit.id)
+    if (!order || broken.has(unit.id) || moved.has(unit.id)) continue
+
+    if (order.action === 'check') {
+      // What it would see if no one were hiding: in a wood, 1 tile.
+      const found = livingUnits(world)
+        .filter(e => e.side !== unit.side && state.hidden.has(e.id) && canSee(map, unit, e))
+        .map(e => e.id)
+        .sort()
+      for (const id of found) reveal(id, 'found', unit.id)
+      log.emit('checked', turn, { unitId: unit.id, at: { ...unit.position }, found })
+      state.orderBook.set(unit.id, { action: 'hold', target: null, then: null })
+    }
+
+    if (order.action === 'hide' && !state.hidden.has(unit.id) && !fought.has(unit.id)) {
+      const cover = coverFor(map, unit)
+      if (cover.seenWithin === null) {
+        log.emit('hideFailed', turn, { unitId: unit.id, at: { ...unit.position }, reason: 'no cover', by: null })
+        state.orderBook.set(unit.id, { action: 'hold', target: null, then: null })
+        continue
+      }
+      // A unit cannot hide from an enemy watching it do so. It keeps
+      // trying, turn by turn, until it is out of sight.
+      const watcher = livingUnits(world)
+        .filter(e => e.side !== unit.side && canSee(map, e, unit))
+        .sort((x, y) => x.id.localeCompare(y.id))[0]
+      if (watcher) {
+        log.emit('hideFailed', turn, { unitId: unit.id, at: { ...unit.position }, reason: 'watched', by: watcher.id })
+        continue
+      }
+      state.hidden.set(unit.id, cover)
+      log.emit('hidden', turn, { unitId: unit.id, at: { ...unit.position }, cover: cover.name })
+    }
+  }
+
+  // The cost of hiding where it hurts, such as a marsh; and the dead hide
+  // from no one.
+  for (const [id, cover] of [...state.hidden]) {
+    const unit = getUnit(world, id)
+    if (!unit || unit.strength <= 0) { state.hidden.delete(id); continue }
+    if (cover.cost?.staminaPerTurn) resolver.tire(unit, cover.cost.staminaPerTurn)
   }
 
   // ── Crowding ────────────────────────────────
@@ -514,11 +585,11 @@ function offsetEdgeTarget(map, pos, edge, offset) {
 
 // Nearest fighting enemy by tile distance, unit-id tiebreak. Broken units are
 // not targets — chasing them is pursuit's job, not the battle line's.
-function nearestEnemy(world, unit, broken) {
+function nearestEnemy(world, unit, broken, hidden = new Map()) {
   let best = null
   let bestDistance = Infinity
   for (const other of livingUnits(world)) {
-    if (other.side === unit.side || broken.has(other.id)) continue
+    if (other.side === unit.side || broken.has(other.id) || hidden.has(other.id)) continue
     const distance = tileDistance(unit.position, other.position)
     if (distance < bestDistance ||
         (distance === bestDistance && other.id.localeCompare(best.id) < 0)) {
@@ -530,8 +601,9 @@ function nearestEnemy(world, unit, broken) {
 }
 
 // ── Sight ────────────────────────────────────────────────
-// side -> the set of enemy unit ids any of its units can see (map/sight.js).
-function sightBySide(map, world) {
+// side -> the set of enemy unit ids any of its units can see (map/sight.js),
+// hidden units only as closely as their cover allows.
+function sightBySide(map, world, hidden = new Map()) {
   const living = livingUnits(world)
   const result = new Map()
   for (const side of sides(world)) {
@@ -539,7 +611,8 @@ function sightBySide(map, world) {
     const seen = new Set()
     for (const enemy of living) {
       if (enemy.side === side) continue
-      if (watchers.some(w => canSee(map, w, enemy))) seen.add(enemy.id)
+      const options = hidden.has(enemy.id) ? { seenWithin: hidden.get(enemy.id).seenWithin } : {}
+      if (watchers.some(w => canSee(map, w, enemy, options))) seen.add(enemy.id)
     }
     result.set(side, seen)
   }

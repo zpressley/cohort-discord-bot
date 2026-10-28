@@ -27,14 +27,17 @@ function createIntel() {
  * returns the ids of enemies sighted THIS update that were not visible in the
  * last one — the orchestrator's elastic time interrupts on exactly that.
  */
-function updateIntel(intel, world, side, turn, map) {
+function updateIntel(intel, world, side, turn, map, hidden = new Map()) {
   const friendlies = world.units.filter(u => u.side === side && u.strength > 0)
   const enemies = world.units.filter(u => u.side !== side && u.strength > 0)
   const sightings = []
 
   const visibleNow = new Set()
   for (const enemy of enemies) {
-    const seen = friendlies.some(f => canSee(map, f, enemy))
+    // A hidden enemy (battle/hiding.js) is seen only as closely as its
+    // cover allows.
+    const options = hidden.has(enemy.id) ? { seenWithin: hidden.get(enemy.id).seenWithin } : {}
+    const seen = friendlies.some(f => canSee(map, f, enemy, options))
     if (!seen) continue
 
     visibleNow.add(enemy.id)

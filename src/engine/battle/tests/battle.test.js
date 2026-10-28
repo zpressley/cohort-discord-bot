@@ -273,6 +273,10 @@ const EVENT_FIELDS = {
   pursuit: ['unitId', 'by', 'killed', 'remaining', 'trapped'],
   crowding: ['unitId', 'at', 'men', 'tier', 'was'],
   surprise: ['unitId', 'by', 'posture'],
+  revealed: ['unitId', 'reason', 'by'],
+  checked: ['unitId', 'at', 'found'],
+  hidden: ['unitId', 'at', 'cover'],
+  hideFailed: ['unitId', 'at', 'reason', 'by'],
   victory: ['winner', 'reason']
 }
 const EXCHANGE_SIDE = ['unitId', 'killed', 'morale', 'stamina', 'chaos', 'terrain',

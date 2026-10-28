@@ -330,6 +330,13 @@ function createCombatResolver(options = {}) {
     const state = unitState.get(unitId)
     return state ? { ...state } : null
   }
+  // Wear a unit down outside a fight (Stage 3: hiding in a marsh). Stamina
+  // lives here, so the battle asks the resolver to spend it.
+  resolveCombat.tire = (unit, amount) => {
+    const state = stateFor(unit)
+    state.stamina = Math.max(0, state.stamina - amount)
+    return state.stamina
+  }
   resolveCombat.snapshot = () => {
     const out = {}
     for (const [id, state] of unitState) out[id] = { ...state }

@@ -16,7 +16,8 @@
 //     them stands on high ground. This is what lets a reverse slope hide a
 //     unit.
 //
-// Hiding (Stage 3, step 5) narrows this further; this file is the ground.
+// A hidden unit (battle/hiding.js) is harder still to see: see canSee's
+// seenWithin.
 
 const { toPosition, distance } = require('./labels')
 const { HIGH_GROUND_TERRAIN } = require('../combat/tables')
@@ -81,9 +82,17 @@ function lineOfSight(map, from, to) {
 
 /**
  * Can this unit see that one? Range first, then the ground.
+ *
+ * @param {Object} [options]
+ *   seenWithin  the target is hidden (battle/hiding.js): it is seen only by
+ *               a viewer this close, and only if the ground allows. 0 or
+ *               null: looking is not enough at all.
  */
-function canSee(map, viewer, target) {
+function canSee(map, viewer, target, options = {}) {
   const d = distance(viewer.position, target.position)
+  if (options.seenWithin !== undefined) {
+    if (!options.seenWithin || d > options.seenWithin) return false
+  }
   if (d <= 1) return true
   if (d > visionRange(viewer, map)) return false
   if (COVER.includes(map.terrainAt(toPosition(target.position)))) return false

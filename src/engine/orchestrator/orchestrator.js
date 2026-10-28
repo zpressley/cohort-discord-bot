@@ -79,7 +79,7 @@ function createGame(spec, options = {}) {
     game.startingStrength[side] =
       unitsOnSide(battle.world, side).reduce((sum, u) => sum + u.strength, 0)
     // Opening intel: you can see whatever is in range from your deployment.
-    updateIntel(game.intel[side], battle.world, side, 0, battle.map)
+    updateIntel(game.intel[side], battle.world, side, 0, battle.map, battle.hidden)
   }
 
   return game
@@ -160,7 +160,7 @@ function processPlayerTurn(game) {
     // and the simultaneity contract says you both decide on equal footing.
     const sightings = []
     for (const side of sides(battle.world)) {
-      sightings.push(...updateIntel(game.intel[side], battle.world, side, battle.turn, battle.map))
+      sightings.push(...updateIntel(game.intel[side], battle.world, side, battle.turn, battle.map, battle.hidden))
     }
 
     const objectiveChanges = updateObjectiveHolds(game)

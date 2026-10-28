@@ -14,6 +14,12 @@
 //             it is advance.
 //   withdraw  fall back toward your own home edge, or to target if given,
 //             then hold.
+//   hide      go to target if one is given, then hide there. Hiding takes a
+//             turn standing still; how well it works is the ground's and the
+//             unit's (hiding.js). Moving or fighting gives the unit away.
+//   check     go to target if one is given, then spend a turn searching the
+//             ground: hidden enemies the unit could see if they were not
+//             hiding are found. Then hold.
 //
 // Any order that moves may be careful (Stage 3): the unit marches on guard,
 // at half speed, and cannot be caught by surprise. Otherwise a moving unit is
@@ -39,7 +45,7 @@
 
 const { toPosition, samePosition } = require('../map/labels')
 
-const ACTIONS = ['move', 'hold', 'defend', 'advance', 'attack', 'withdraw']
+const ACTIONS = ['move', 'hold', 'defend', 'advance', 'attack', 'withdraw', 'hide', 'check']
 const SEEKING = ['advance', 'attack']
 
 /**
@@ -83,6 +89,16 @@ function planUnit(unit, order, context) {
     case 'advance': {
       const enemy = context.nearestEnemy(unit)
       return { move: enemy ? { unitId: unit.id, target: enemy.position } : { unitId: unit.id, target: 'hold' }, order }
+    }
+
+    case 'hide':
+    case 'check': {
+      // Go there first, if told where; then stand still for the turn the
+      // hiding or the search takes. The battle settles both at turn's end.
+      if (order.target && !samePosition(order.target, unit.position)) {
+        return { move: { unitId: unit.id, target: order.target }, order }
+      }
+      return { move: { unitId: unit.id, target: 'hold' }, order }
     }
 
     case 'move':

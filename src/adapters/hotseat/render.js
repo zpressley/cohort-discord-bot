@@ -202,6 +202,21 @@ function wordEvent(event) {
       return event.tier === 'organized'
         ? `${event.unitId} has room to fight again at ${where(event.at)}`
         : `${event.unitId} is ${event.tier} at ${where(event.at)} — ${event.men} men packed on one spot`
+    case 'hidden': return `${event.unitId} goes to ground at ${where(event.at)} (${event.cover})`
+    case 'hideFailed':
+      return event.reason === 'watched'
+        ? `${event.unitId} cannot hide — ${event.by} is watching`
+        : `${event.unitId} finds no cover to hide in at ${where(event.at)}`
+    case 'checked':
+      return `${event.unitId} searches the ground at ${where(event.at)}` +
+        (event.found.length ? ` — and finds ${event.found.join(', ')}!` : ' — nothing')
+    case 'revealed':
+      return {
+        moved: `${event.unitId} breaks cover`,
+        fought: `${event.unitId} is out of hiding, fighting`,
+        found: `${event.unitId} is discovered by ${event.by}`,
+        'stumbled on': `${event.by} stumbles onto ${event.unitId}, hidden there`
+      }[event.reason] ?? `${event.unitId} is seen`
     case 'victory': return null // rendered as the banner instead
     default: return null
   }

@@ -55,6 +55,18 @@
 //              a unit's crowding tier changed: friends packed onto its tile
 //              (organized, crowded, compressed, crushing, critical). See
 //              CROWDING in combat/tables.js
+//   revealed   unitId, reason, by
+//              a hidden unit was given away: it 'moved', 'fought', was
+//              'found' by a unit checking (by), or was 'stumbled on' by an
+//              enemy walking into it (by)
+//   checked    unitId, at, found
+//              a unit spent the turn searching the ground; found lists the
+//              hidden enemies it turned up (may be empty)
+//   hidden     unitId, at, cover
+//              a unit finished hiding; cover is its row in battle/hiding.js
+//   hideFailed unitId, at, reason, by
+//              a unit could not hide: 'no cover' (it holds instead) or
+//              'watched' by an enemy (by) that can see it (it keeps trying)
 //   victory    winner, reason
 //              the battle ended
 
