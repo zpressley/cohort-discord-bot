@@ -137,9 +137,13 @@ Hiding and seeing, details (Oct 22):
 - **A unit can try to hide almost anywhere** the commander tries to hide
   it. How well it works depends on the ground and the unit, and hiding can
   carry costs (for example, archers hidden in a marsh may shoot worse).
-  *Open:* the ruling has the AI judge how effective a hiding place is;
-  that must fit the rule that the engine decides outcomes (see the Stage 3
-  plan).
+  Ruling (Oct 28): **the engine decides** how well a place hides a unit
+  and what it costs, from a fixed table of ground and unit types. **The AI
+  fits the player's words to the best matching entry**, like a child's
+  shape-sorter: a square block fits the square or the rectangle hole, never
+  the triangle. "Hide behind the burning farmhouse" goes to the closest
+  kind of cover the engine knows; the AI never invents a new number, and
+  without the AI the grammar fallback picks the plain match.
 
 **Objective control.** *Direction, for testing:* holding objectives as a
 way to win or score, giving units a reason to move and fight. How it fits
