@@ -117,6 +117,33 @@ posture and on who has seen whom, not only on being adjacent.
 Ruling: ambushes are ordered by the player (for example, "hold in the
 woods and hit anything that passes"); units do not spring them on their
 own judgement.
+Ruling on hiding: woods and reverse slopes reduce how far a unit can be
+seen. On top of that, a unit can spend a turn hiding; once hidden, it is
+not seen even by an enemy one tile away unless that enemy checks (searches
+the ground).
+
+Hiding and seeing, details (Oct 22):
+
+- **Checking takes a turn**, because time passes. A march does not have to
+  stop for it (a scout can be sent into the woods while the column moves),
+  but a careful inspection is rewarded when an ambush is expected.
+- **Woods cut sight both ways.** Inside a forest a unit sees and is seen at
+  1 tile instead of normal line of sight. From the edge of a wood a unit
+  can see out, but others cannot see in. So a hidden force in the trees may
+  itself miss an enemy creeping up through the woods behind it: if a scout
+  sees the enemy go into a wood and stay, the commander can send a flanking
+  force through the trees, and it may go unseen.
+- **Moving or attacking reveals** a hidden unit.
+- **A unit can try to hide almost anywhere** the commander tries to hide
+  it. How well it works depends on the ground and the unit, and hiding can
+  carry costs (for example, archers hidden in a marsh may shoot worse).
+  Ruling (Oct 28): **the engine decides** how well a place hides a unit
+  and what it costs, from a fixed table of ground and unit types. **The AI
+  fits the player's words to the best matching entry**, like a child's
+  shape-sorter: a square block fits the square or the rectangle hole, never
+  the triangle. "Hide behind the burning farmhouse" goes to the closest
+  kind of cover the engine knows; the AI never invents a new number, and
+  without the AI the grammar fallback picks the plain match.
 
 **Objective control.** *Direction, for testing:* holding objectives as a
 way to win or score, giving units a reason to move and fight. How it fits
