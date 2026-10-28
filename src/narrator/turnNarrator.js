@@ -72,6 +72,10 @@ function fact(map, event) {
     case 'crowding': return event.tier === 'organized'
       ? `${event.unitId} had room to fight again`
       : `${event.unitId}'s ranks were ${event.tier}, ${event.men} men packed onto one spot ${placeName(map, event.at)}, slowing them and blunting their fighting`
+    case 'ambush': return `${event.unitId} sprang an ambush on ${event.on} ${placeName(map, event.at)}`
+    case 'ambushHeld': return event.reason === 'on guard'
+      ? `${event.unitId} let ${event.on} pass: it came on guard, not worth the strike`
+      : `${event.unitId} let ${event.on} pass, as ordered`
     case 'hidden': return `${event.unitId} went to ground ${placeName(map, event.at)}`
     case 'hideFailed': return event.reason === 'watched'
       ? `${event.unitId} tried to hide but the enemy was watching`

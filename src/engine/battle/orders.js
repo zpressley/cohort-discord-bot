@@ -20,6 +20,13 @@
 //   check     go to target if one is given, then spend a turn searching the
 //             ground: hidden enemies the unit could see if they were not
 //             hiding are found. Then hold.
+//   ambush    hide (as hide), then lie in wait and strike an enemy that
+//             passes within reach (ruled: the player orders ambushes).
+//             against: what to strike (null for anything; 'cavalry',
+//             'infantry', 'archers', 'scouts', or a unit name); letPass: how
+//             many to let go by first; regardless: strike even a unit on
+//             guard (by default an ambush springs only on a unit marching,
+//             since one on guard is not worth it).
 //
 // Any order that moves may be careful (Stage 3): the unit marches on guard,
 // at half speed, and cannot be caught by surprise. Otherwise a moving unit is
@@ -45,7 +52,7 @@
 
 const { toPosition, samePosition } = require('../map/labels')
 
-const ACTIONS = ['move', 'hold', 'defend', 'advance', 'attack', 'withdraw', 'hide', 'check']
+const ACTIONS = ['move', 'hold', 'defend', 'advance', 'attack', 'withdraw', 'hide', 'check', 'ambush']
 const SEEKING = ['advance', 'attack']
 
 /**
@@ -92,6 +99,7 @@ function planUnit(unit, order, context) {
     }
 
     case 'hide':
+    case 'ambush':
     case 'check': {
       // Go there first, if told where; then stand still for the turn the
       // hiding or the search takes. The battle settles both at turn's end.
@@ -125,9 +133,17 @@ function planUnit(unit, order, context) {
   }
 }
 
-// careful is carried only when set, so plain orders keep their old shape.
+// The optional parts of an order are carried only when set, so plain orders
+// keep their old shape.
 function withCareful(normalized, order) {
-  return order.careful ? { ...normalized, careful: true } : normalized
+  const out = { ...normalized }
+  if (order.careful) out.careful = true
+  if (normalized.action === 'ambush') {
+    out.against = order.against ?? null
+    out.letPass = Math.max(0, Math.floor(order.letPass ?? 0))
+    out.regardless = Boolean(order.regardless)
+  }
+  return out
 }
 
 // Is this unit looking for a fight? Its own order decides; a unit with none

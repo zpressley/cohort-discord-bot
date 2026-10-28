@@ -55,6 +55,12 @@
 //              a unit's crowding tier changed: friends packed onto its tile
 //              (organized, crowded, compressed, crushing, critical). See
 //              CROWDING in combat/tables.js
+//   ambush     unitId, on, at
+//              an ambush (unitId) sprang on a unit passing within reach (on),
+//              stopping it at at
+//   ambushHeld unitId, on, reason
+//              an ambush let a unit pass: it was 'on guard' (not worth it),
+//              or the ambush was 'letting it pass' as ordered
 //   revealed   unitId, reason, by
 //              a hidden unit was given away: it 'moved', 'fought', was
 //              'found' by a unit checking (by), or was 'stumbled on' by an

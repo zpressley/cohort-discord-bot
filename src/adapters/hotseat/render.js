@@ -202,6 +202,11 @@ function wordEvent(event) {
       return event.tier === 'organized'
         ? `${event.unitId} has room to fight again at ${where(event.at)}`
         : `${event.unitId} is ${event.tier} at ${where(event.at)} — ${event.men} men packed on one spot`
+    case 'ambush': return `AMBUSH! ${event.unitId} falls on ${event.on} at ${where(event.at)}`
+    case 'ambushHeld':
+      return event.reason === 'on guard'
+        ? `${event.unitId} lets ${event.on} pass: it comes on guard, not worth the strike`
+        : `${event.unitId} lets ${event.on} pass, as ordered`
     case 'hidden': return `${event.unitId} goes to ground at ${where(event.at)} (${event.cover})`
     case 'hideFailed':
       return event.reason === 'watched'

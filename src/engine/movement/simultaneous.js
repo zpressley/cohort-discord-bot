@@ -52,6 +52,12 @@ function resolveSimultaneousMovement(world, orders, map, options = {}) {
   // not stop for one it cannot see, and one that walks into its tile has
   // stumbled on it.
   const hidden = options.hidden ?? new Set()
+  // Ambushes lying in wait (Stage 3): unitId set, and the battle's decision,
+  // asked each time an enemy steps within reach of one. 'spring' stops the
+  // passing unit where it stands: it has been caught.
+  const ambushers = options.ambushers ?? new Set()
+  const decideAmbush = options.ambush ?? (() => null)
+  const sprung = new Set()
   if (!map) throw new Error('resolveSimultaneousMovement needs the map')
   const occupancy = buildOccupancy(world)
   const crowding = crowdingByUnit(world)
@@ -189,6 +195,22 @@ function resolveSimultaneousMovement(world, orders, map, options = {}) {
       plan.blockedBy = null
       anyoneMoving = true
 
+      // An ambush within reach may spring on this unit, and catch it here.
+      if (ambushers.size > 0) {
+        const lying = map.neighbors(unit.position)
+          .flatMap(n => occupancy.get(positionKey(n)) ?? [])
+          .filter(a => a.side !== unit.side && ambushers.has(a.id) && !sprung.has(a.id))
+          .sort((x, y) => x.id.localeCompare(y.id))
+        const by = lying.find(a => decideAmbush(a, unit, { careful: plan.careful, fleeing: plan.fleeing }) === 'spring')
+        if (by) {
+          sprung.add(by.id)
+          plan.stopped = true
+          plan.blockedBy = by.id
+          plan.ambushedBy = by.id
+          continue
+        }
+      }
+
       // Contact stops a unit looking for a fight: it steps next to an enemy,
       // halts there and fights. Contact used to be checked only after
       // everyone had moved, so two units could slip past each other through
@@ -220,6 +242,7 @@ function resolveSimultaneousMovement(world, orders, map, options = {}) {
       movementRemaining: plan.budget,
       blockedBy: plan.blockedBy,
       ...(plan.stumbledOn ? { stumbledOn: plan.stumbledOn } : {}),
+      ...(plan.ambushedBy ? { ambushedBy: plan.ambushedBy } : {}),
       terrain: map.terrainAt(plan.unit.position)
     })
   }

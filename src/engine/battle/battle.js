@@ -173,7 +173,44 @@ function stepTurn(state, sideOrders = {}) {
   }
 
   // ── Movement (phase 3) ──────────────────────────
-  const movement = resolveSimultaneousMovement(world, orders, map, { hidden: new Set(state.hidden.keys()) })
+  // ── Ambushes ────────────────────────────────
+  // A unit under an ambush order, standing where it was told to lie in
+  // wait, decides as each enemy steps within reach whether to strike.
+  const ambushers = new Set(livingUnits(world)
+    .filter(u => !broken.has(u.id) && state.orderBook.get(u.id)?.action === 'ambush')
+    .filter(u => { const o = state.orderBook.get(u.id); return !o.target || samePosition(o.target, u.position) })
+    .map(u => u.id))
+  const sprung = new Set()
+  const heldLogged = new Set()
+  const decideAmbush = (ambusher, passer, { careful }) => {
+    const order = state.orderBook.get(ambusher.id)
+    if (!matchesKind(passer, order.against)) return null
+    const options = state.hidden.has(passer.id) ? { seenWithin: state.hidden.get(passer.id).seenWithin } : {}
+    if (!canSee(map, ambusher, passer, options)) return null
+    const held = (reason) => {
+      const key = `${ambusher.id}|${passer.id}|${reason}`
+      if (!heldLogged.has(key)) log.emit('ambushHeld', turn, { unitId: ambusher.id, on: passer.id, reason })
+      heldLogged.add(key)
+      return null
+    }
+    order.passed = order.passed ?? []
+    if (order.passed.includes(passer.id)) return null
+    // Not worth it against a unit on guard, unless told to strike anyway.
+    if (careful && !order.regardless) return held('on guard')
+    if (order.passed.length < order.letPass) {
+      order.passed.push(passer.id)
+      return held('letting it pass')
+    }
+    sprung.add(ambusher.id)
+    log.emit('ambush', turn, { unitId: ambusher.id, on: passer.id, at: { ...passer.position } })
+    return 'spring'
+  }
+
+  const movement = resolveSimultaneousMovement(world, orders, map, {
+    hidden: new Set(state.hidden.keys()), ambushers, ambush: decideAmbush
+  })
+  // A sprung ambush is spent: the unit fights, then holds its ground.
+  for (const id of sprung) state.orderBook.set(id, { action: 'hold', target: null, then: null })
 
   // Moving gives a hidden unit away, and so does being walked into.
   for (const move of movement) {
@@ -247,7 +284,7 @@ function stepTurn(state, sideOrders = {}) {
   // hidden force lets a column march by unless it chooses to strike.
   const seeking = (id) => {
     const unit = getUnit(world, id)
-    return isSeeking(state.orderBook.get(id), spec.standingOrders?.[unit.side])
+    return sprung.has(id) || isSeeking(state.orderBook.get(id), spec.standingOrders?.[unit.side])
   }
   const seenNow = sightBySide(map, world, state.hidden)
   const picksFight = (id, otherId) =>
@@ -346,7 +383,7 @@ function stepTurn(state, sideOrders = {}) {
       state.orderBook.set(unit.id, { action: 'hold', target: null, then: null })
     }
 
-    if (order.action === 'hide' && !state.hidden.has(unit.id) && !fought.has(unit.id)) {
+    if ((order.action === 'hide' || order.action === 'ambush') && !state.hidden.has(unit.id) && !fought.has(unit.id)) {
       const cover = coverFor(map, unit)
       if (cover.seenWithin === null) {
         log.emit('hideFailed', turn, { unitId: unit.id, at: { ...unit.position }, reason: 'no cover', by: null })
@@ -598,6 +635,21 @@ function nearestEnemy(world, unit, broken, hidden = new Map()) {
     }
   }
   return best
+}
+
+// ── Ambush targets ───────────────────────────────────────
+// What an ambush order may strike: anything (null), a kind of unit, or a
+// unit by name. The words a player uses are fitted to these by the order
+// reader.
+function matchesKind(unit, kind) {
+  if (!kind || kind === 'anything') return true
+  switch (kind) {
+    case 'cavalry': return Boolean(unit.mounted)
+    case 'infantry': return !unit.mounted
+    case 'archers': return unit.role === 'archers' || /bow|sling|javelin/.test(unit.primaryWeapon ?? '')
+    case 'scouts': return unit.role === 'scout' || unit.role === 'scouts'
+    default: return unit.id === kind || unit.id.includes(kind) || unit.role === kind
+  }
 }
 
 // ── Sight ────────────────────────────────────────────────
