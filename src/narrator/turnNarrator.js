@@ -38,29 +38,59 @@ function involved(event) {
   return [event.unitId, event.aId, event.bId, event.by, event.a?.unitId, event.b?.unitId].filter(Boolean)
 }
 
+// Events only the unit's own side knows of: its hiding, its search, an
+// ambush it held back, how packed its ranks are.
+const PRIVATE = new Set(['hidden', 'hideFailed', 'ambushHeld', 'checked', 'crowding'])
+
 /**
  * The events one side could know about: everything involving its own units,
  * plus events about enemies it can see at the end of the turn, plus the
- * verdict. Fog of war holds: an unseen enemy's doings are not reported.
+ * verdict and objectives. Fog of war holds: an unseen enemy's doings are not
+ * reported, and a side never hears of the other's hiding or held ambushes.
  */
 function visibleEvents(events, { ownIds, seenEnemyIds }) {
   return events.filter(e => {
     if (e.type === 'victory' || e.type === 'objective') return true
+    if (PRIVATE.has(e.type)) return ownIds.has(e.unitId)
+    if (e.type === 'revealed') {
+      return ownIds.has(e.unitId) || (e.by && ownIds.has(e.by)) || seenEnemyIds.has(e.unitId)
+    }
     const ids = involved(e)
     return ids.some(id => ownIds.has(id)) || (ids.length > 0 && ids.every(id => seenEnemyIds.has(id)))
   })
 }
 
+// The events anyone may hear of, whoever is reading: for a report shown to
+// both commanders at once (the two-player hotseat screen).
+function publicEvents(events) {
+  return events.filter(e => !PRIVATE.has(e.type))
+}
+
 // One event as a plain fact the model can retell: names and places, no
-// coordinates.
-function fact(map, event) {
+// coordinates. Names of enemies this side has not seen are hidden too.
+function fact(map, event, known = null) {
+  if (known) event = maskNames(event, known)
+  return plainFact(map, event)
+}
+
+const NAME_FIELDS = ['unitId', 'aId', 'bId', 'by', 'on', 'blockedBy']
+function maskNames(event, known) {
+  const out = { ...event }
+  for (const key of NAME_FIELDS) {
+    if (typeof out[key] === 'string' && !known(out[key])) out[key] = 'an unseen enemy'
+  }
+  return out
+}
+
+function plainFact(map, event) {
   switch (event.type) {
     case 'move': return `${event.unitId} moved ${distance(event.from, event.to) * TILE_METRES} m ${compassWord(event.from, event.to)}, now ${placeName(map, event.to)}` +
       (event.blockedBy ? ` (stopped by ${event.blockedBy})` : '')
     case 'arrived': return `${event.unitId} reached its objective ${placeName(map, event.at)}` + (event.then === 'hold' ? ' and dug in' : '')
     case 'halted': return `${event.unitId} could get no further${event.blockedBy ? `, ${event.blockedBy} in the way` : ''}`
     case 'contact': return `${event.aId} and ${event.bId} came to blows`
-    case 'surprise': return `${event.unitId} was caught on the march by ${event.by}, an enemy no one had seen`
+    case 'surprise': return `${event.unitId} was caught on the march by ` +
+      (event.by === 'an unseen enemy' ? 'an enemy no one had seen' : `${event.by}, unseen until it struck`)
     case 'exchange': return `fighting: ${describeCombatEvent(event).replace(/^r\d+ /, '').replace(/; chaos.*$/, '')} (men lost each side; morale ${Math.round(event.a.morale)} vs ${Math.round(event.b.morale)})`
     case 'standoff': return `${event.aId} and ${event.bId} were both close to breaking`
     case 'push': return `${event.by} drove ${event.unitId} back${event.lostHighGround ? ' off the high ground' : ''}`
@@ -105,8 +135,9 @@ function system(culture, side) {
  */
 async function narrateTurn(ai, turn) {
   const { map, side, culture, ownIds, seenEnemyIds, events, plain } = turn
+  const known = (id) => ownIds.has(id) || seenEnemyIds.has(id)
   const facts = visibleEvents(events, { ownIds, seenEnemyIds })
-    .map(e => fact(map, e)).filter(Boolean)
+    .map(e => fact(map, e, known)).filter(Boolean)
   if (!ai || !ai.configured || facts.length === 0) return { text: plain, source: 'plain' }
 
   const user = [
@@ -121,4 +152,4 @@ async function narrateTurn(ai, turn) {
   return { text: reply.text.trim(), source: 'ai' }
 }
 
-module.exports = { narrateTurn, visibleEvents, placeName, fact }
+module.exports = { narrateTurn, visibleEvents, publicEvents, maskNames, placeName, fact, PRIVATE }

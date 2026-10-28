@@ -18,7 +18,8 @@ const { findPlace } = require('../engine/map/places')
 const { distance } = require('../engine/map/labels')
 const { compassWord, TILE_METRES } = require('../engine/map/places')
 
-const ACTIONS = ['move', 'hold', 'defend', 'advance', 'withdraw']
+const ACTIONS = ['move', 'hold', 'defend', 'advance', 'attack', 'withdraw', 'hide', 'check', 'ambush']
+const KINDS = ['cavalry', 'infantry', 'archers', 'scouts', null]
 
 const REPLY_SCHEMA = {
   type: 'object',
@@ -36,7 +37,12 @@ const REPLY_SCHEMA = {
           units: { type: 'string', minLength: 1, maxLength: 80 },
           action: { enum: ACTIONS },
           place: { type: ['string', 'null'], maxLength: 120 },
-          then: { enum: ['hold', null] }
+          then: { enum: ['hold', null] },
+          // Stage 3, optional so older replies still read.
+          careful: { type: 'boolean' },
+          against: { enum: KINDS },
+          letPass: { type: 'integer', minimum: 0, maximum: 10 },
+          regardless: { type: 'boolean' }
         }
       }
     },
@@ -53,8 +59,12 @@ Reply with one JSON object:
 {"orders":[{"units":"...","action":"...","place":"..." or null,"then":"hold" or null}],"question":"..." or null,"surrender":false}
 
 - units: the commander's words for ONE unit (e.g. "the spears", "the archers") or "everyone". If an order names several units, write one order per unit.
-- action: one of move, hold, defend, advance, withdraw.
-  move = go somewhere. hold = stay where you are. defend = go somewhere and hold it (dig in, set up a defensive position). advance = attack or press the nearest enemy. withdraw = fall back (to a place if given, otherwise toward home).
+- action: one of move, hold, defend, advance, attack, withdraw, hide, check, ambush.
+  move = go somewhere. hold = stay where you are. defend = go somewhere and hold it (dig in, set up a defensive position). advance = press the nearest enemy. attack = go to a place looking for a fight (attack the ford). withdraw = fall back (to a place if given, otherwise toward home). hide = go to ground, take cover, hide (at a place if given). check = search or scout the ground for hidden enemies (at a place if given). ambush = hide and strike enemies that pass (lie in wait, hide and hit anything that passes).
+- careful (optional): true when they should move carefully, cautiously, on guard.
+- against (optional, ambush only): what to strike, one of cavalry, infantry, archers, scouts, or null for anything. Fit the commander's words to the closest of these (horsemen = cavalry, bowmen or slingers = archers, foot = infantry).
+- letPass (optional, ambush only): how many enemy units to let go by before striking.
+- regardless (optional, ambush only): true when they should strike whatever happens, even a careful enemy.
 - place: the commander's own words for where, e.g. "the ridge to the east", "the clearing", "Harrow Bridge", or a grid square like "C7" or "C7-NE". Copy the words; do not translate them into coordinates. null when no place is given.
 - then: "hold" if they should hold once they arrive, else null.
 - question: if an order cannot be understood at all, ask one short question instead of guessing; otherwise null.
@@ -116,9 +126,13 @@ async function readWithAi(ai, text, context) {
   if (!reply.ok || !validate(reply.json)) return null
 
   const { orders, question, surrender } = reply.json
-  const intents = orders.map(o => ({
-    kind: 'order', unitRef: o.units, action: o.action, place: o.place ?? null, then: o.then ?? null
-  }))
+  const intents = orders.map(o => {
+    const intent = { kind: 'order', unitRef: o.units, action: o.action, place: o.place ?? null, then: o.then ?? null }
+    for (const key of ['careful', 'against', 'letPass', 'regardless']) {
+      if (o[key] !== undefined && o[key] !== null && o[key] !== false) intent[key] = o[key]
+    }
+    return intent
+  })
   if (surrender) intents.push({ kind: 'surrender' })
   if (question) intents.push({ kind: 'ask', question })
   if (intents.length === 0) return null

@@ -82,3 +82,25 @@ test('the hotseat session narrates its last turn for one side', async () => {
   assert.equal(told.text, 'Report for red.')
   assert.match(transport.calls[0].system, /Roman Republic/)
 })
+
+test('secrets: a side never hears of the other\'s hiding, searching or held ambush', () => {
+  const { publicEvents } = require('../turnNarrator')
+  const secret = [
+    { type: 'hidden', turn: 4, unitId: 'blue_lurkers', at: at('F8'), cover: 'woods' },
+    { type: 'ambushHeld', turn: 4, unitId: 'blue_lurkers', on: 'red_spears', reason: 'on guard' },
+    { type: 'checked', turn: 4, unitId: 'blue_scouts', at: at('F8'), found: [] },
+    { type: 'hidden', turn: 4, unitId: 'red_archers', at: at('D9'), cover: 'woods' }
+  ]
+  const red = visibleEvents(secret, knowledge)
+  assert.deepEqual(red.map(e => e.unitId), ['red_archers'], 'only red\'s own hiding')
+  assert.deepEqual(publicEvents(secret), [], 'on a shared screen, nobody\'s')
+})
+
+test('secrets: an unseen enemy\'s name is not given away', () => {
+  const caught = { type: 'surprise', turn: 5, unitId: 'red_spears', by: 'blue_lurkers', posture: 'marching' }
+  const known = (id) => knowledge.ownIds.has(id) || knowledge.seenEnemyIds.has(id)
+  assert.ok(visibleEvents([caught], knowledge).length === 1, 'red knows it was caught')
+  const told = fact(map, caught, known)
+  assert.match(told, /an enemy no one had seen/)
+  assert.doesNotMatch(told, /blue_lurkers/)
+})

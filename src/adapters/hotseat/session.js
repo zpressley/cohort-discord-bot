@@ -103,7 +103,8 @@ function createSession(spec, options = {}) {
         status: result.status, // 'processed' | 'finished'
         understood,
         source,
-        report: renderTurnReport(game, turnEntry),
+        // Solo play: the report keeps the human side's fog of war.
+        report: renderTurnReport(game, turnEntry, autoSide ? this.sides.find(s => s !== autoSide) : null),
         outcome: game.outcome
       }
     },
@@ -114,7 +115,7 @@ function createSession(spec, options = {}) {
      */
     async narrate(side) {
       const turnEntry = game.history.at(-1)
-      const plain = turnEntry ? renderTurnReport(game, turnEntry) : 'Nothing has happened yet.'
+      const plain = turnEntry ? renderTurnReport(game, turnEntry, side) : 'Nothing has happened yet.'
       if (!turnEntry) return { text: plain, source: 'plain' }
       const events = turnEntry.ticks.flatMap(t => game.battle.log.forTurn(t.battleTurn))
       const own = [...game.battle.world.units, ...game.battle.fledUnits].filter(u => u.side === side)

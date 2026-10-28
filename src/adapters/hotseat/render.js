@@ -17,6 +17,7 @@ const { gridLabel, SQUARE_TILES } = require('../../engine/map/grid')
 const where = (position) => gridLabel(position, { quarter: true })
 const { sideView } = require('../../engine/orchestrator')
 const { describeCombatEvent } = require('../../narrator/eventText')
+const { visibleEvents, publicEvents, maskNames } = require('../../narrator/turnNarrator')
 
 const TERRAIN_GLYPHS = {
   plains: '.', road: '=', hill: '^', forest: 'F',
@@ -156,11 +157,22 @@ function clock(minutes) {
 // The typed event log, worded. This is the plain-prose stand-in for the AI
 // narrator: same input (the event log and nothing else), no voice. When the
 // narrator lands it replaces these sentences, not this plumbing.
-function renderTurnReport(game, turnEntry) {
+// viewer: the side reading, in solo play, so the report keeps that side's
+// fog of war. Without one (two commanders at one screen), each side's
+// private doings (hiding, held ambushes, searches) are left out for both.
+function renderTurnReport(game, turnEntry, viewer = null) {
   const lines = [`── the field reports (turn ${turnEntry.playerTurn}, ${turnEntry.interrupt}) ──`]
+  let filter = publicEvents
+  if (viewer) {
+    const ownIds = new Set([...game.battle.world.units, ...game.battle.fledUnits]
+      .filter(u => u.side === viewer).map(u => u.id))
+    const seenEnemyIds = new Set(sideView(game, viewer).intel.filter(e => e.status === 'visible').map(e => e.id))
+    const known = (id) => ownIds.has(id) || seenEnemyIds.has(id)
+    filter = (events) => visibleEvents(events, { ownIds, seenEnemyIds }).map(e => maskNames(e, known))
+  }
 
   for (const tick of turnEntry.ticks) {
-    const events = game.battle.log.forTurn(tick.battleTurn)
+    const events = filter(game.battle.log.forTurn(tick.battleTurn))
     for (const event of events) {
       const line = wordEvent(event)
       if (line) lines.push('  ' + line)
