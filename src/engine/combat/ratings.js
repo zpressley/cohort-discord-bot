@@ -240,11 +240,14 @@ function attackRating(unit, ctx = {}) {
     prepared = false,
     // Flat situational bonus, e.g. flanking an enemy caught in several
     // engagements at once. Zero in every duel — only the map produces it.
-    bonusAttack = 0
+    bonusAttack = 0,
+    // Crowding penalty (Stage 3): friends packed onto one tile. Zero for a
+    // unit alone on its tile.
+    crowding = 0
   } = ctx
 
   const terrainMod = terrainModifier(terrain, enemyTerrain, prepared).attack
-  const base = Math.max(0, baseAttackRating(unit) + terrainMod + bonusAttack)
+  const base = Math.max(0, baseAttackRating(unit) + terrainMod + bonusAttack - crowding)
 
   return base
     * fatigueMultiplier(stamina / staminaPool(unit))
@@ -259,11 +262,12 @@ function defenseRating(unit, ctx = {}) {
     terrain = 'plains',
     enemyTerrain = 'plains',
     chaos = 0,
-    prepared = false
+    prepared = false,
+    crowding = 0
   } = ctx
 
   const terrainMod = terrainModifier(terrain, enemyTerrain, prepared).defense
-  const base = Math.max(0, baseDefenseRating(unit) + terrainMod)
+  const base = Math.max(0, baseDefenseRating(unit) + terrainMod - crowding)
 
   // Defense does not scale with the strength snowball. A thinner line is
   // easier to kill because there are fewer men in it, which the casualty

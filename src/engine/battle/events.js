@@ -28,7 +28,8 @@
 //   exchange   roundInContact, a, b, push
 //              one combat round between a pair. a and b each carry unitId,
 //              killed, morale and stamina after the round, chaos, terrain,
-//              prepared, chargeImpact, flankBonus. push is { winnerId,
+//              prepared, chargeImpact, flankBonus, crowding (the combat
+//              penalty for friends packed on its tile). push is { winnerId,
 //              differential }; winnerId is null for an even shove
 //   standoff   aId, bId
 //              both broke in the same round with nothing to tell them apart,
@@ -40,11 +41,15 @@
 //              a shove strong enough to cost the loser a tile
 //   crush      unitId, by, reason, blocker?
 //              a shove that could not move the loser (map edge, impassable,
-//              or an occupied tile)
+//              an enemy, or a tile already full of friends)
 //   rout       unitId, by
 //              a unit broke
 //   pursuit    unitId, by, killed, remaining, trapped
 //              a fleeing unit cut down from behind
+//   crowding   unitId, at, men, tier, was
+//              a unit's crowding tier changed: friends packed onto its tile
+//              (organized, crowded, compressed, crushing, critical). See
+//              CROWDING in combat/tables.js
 //   victory    winner, reason
 //              the battle ended
 

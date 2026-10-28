@@ -116,12 +116,13 @@ test('withdraw falls back toward the home edge, then holds', () => {
 })
 
 test('an order that gets nowhere is given up, and the log says why', () => {
-  // A friend holds the destination. The mover stops beside it; on the next
-  // turn the carried-over order makes no progress and is dropped.
+  // A 300-man friend fills the destination to the cap. The mover stops
+  // beside it; on the next turn the carried-over order makes no progress and
+  // is dropped. (Since Stage 3 friends share a tile while there is room.)
   const state = createBattleState(spec({
     units: [
       unit({ id: 'mover' }),
-      unit({ id: 'squatter', position: 'L24' }),
+      unit({ id: 'squatter', position: 'L24', strength: 300, maxStrength: 300 }),
       unit({ id: 'far_enemy', side: 'blue', position: 'AC40' })
     ]
   }))

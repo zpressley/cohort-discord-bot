@@ -34,8 +34,9 @@ const { createCombatResolver, tables: T } = require('../combat')
 const { findPath } = require('../movement/pathfinding')
 const { resolveMap } = require('../map/map')
 const { toPosition, samePosition } = require('../map/labels')
-const { resolveSimultaneousMovement, expandOrders, buildOccupancy, canEnter, moveUnit } =
-  require('../movement')
+const {
+  resolveSimultaneousMovement, expandOrders, buildOccupancy, canEnter, moveUnit, crowdingByUnit
+} = require('../movement')
 const { createEventLog } = require('./events')
 const { normalizeOrder, planUnit } = require('./orders')
 
@@ -72,6 +73,9 @@ function createBattleState(spec, options = {}) {
     orderBook: new Map(),
     turn: 0,
     previousEngagementKeys: new Set(),
+    // Each unit's crowding tier at the end of the last turn, so the log can
+    // say when it changes. unitId -> tier name.
+    crowding: new Map(),
     outcome: { decided: false, winner: null, reason: 'battle still open' }
   }
 }
@@ -258,6 +262,22 @@ function stepTurn(state, sideOrders = {}) {
     applyPursuit(world, unit, turn, log, trapped)
   }
 
+  // ── Crowding ────────────────────────────────
+  // Logged when a unit's crowding tier changes, so the narrator can say the
+  // ranks are packed too tight, and when they loosen again.
+  const crowdingNow = crowdingByUnit(world)
+  for (const unit of livingUnits(world)) {
+    const tier = crowdingNow.get(unit.id)?.name ?? 'organized'
+    const before = state.crowding.get(unit.id) ?? 'organized'
+    if (tier !== before) {
+      const men = livingUnits(world)
+        .filter(u => samePosition(u.position, unit.position))
+        .reduce((sum, u) => sum + u.strength, 0)
+      log.emit('crowding', turn, { unitId: unit.id, at: { ...unit.position }, men, tier, was: before })
+    }
+    state.crowding.set(unit.id, tier)
+  }
+
   const turnRecord = {
     turn,
     movement,
@@ -323,8 +343,9 @@ function runBattle(spec, options = {}) {
 // disengage — the first fixture battles showed a beaten levy simply shoved
 // out of contact and left in peace. Because terrain comes from position, a
 // unit shoved off a hill has lost the high ground the moment they land,
-// and the winner has taken it. A shove into an occupied, impassable or
-// off-map tile does not move anyone; it is logged as `crush`. Whether crush
+// and the winner has taken it. A shove into friends with room crowds in
+// among them (Stage 3); a shove into an enemy, a full tile, impassable
+// ground or off the map does not move anyone and is logged as `crush`. Whether crush
 // should cost extra morale is an open tuning question (locked decision 3
 // hints at stacking pressure), left visible in the log rather than guessed.
 function applyPushes(map, world, pushes, turn, log) {
@@ -357,7 +378,9 @@ function applyPushes(map, world, pushes, turn, log) {
     const vacated = { ...loser.position }
     moveUnit(occupancy, loser, backTile)
 
-    if (map.passable(vacated)) {
+    // The winner follows up only into ground the loser's side has left: a
+    // friend of the loser still standing there holds it.
+    if (map.passable(vacated) && canEnter(occupancy, winner, vacated).ok) {
       moveUnit(occupancy, winner, vacated)
     }
 

@@ -197,6 +197,10 @@ function wordEvent(event) {
         (event.trapped ? ' — they are cornered' : '')
     case 'fled': return `${event.unitId} escapes the field with ${event.strength} men`
     case 'destroyed': return `${event.unitId} is wiped out`
+    case 'crowding':
+      return event.tier === 'organized'
+        ? `${event.unitId} has room to fight again at ${where(event.at)}`
+        : `${event.unitId} is ${event.tier} at ${where(event.at)} — ${event.men} men packed on one spot`
     case 'victory': return null // rendered as the banner instead
     default: return null
   }

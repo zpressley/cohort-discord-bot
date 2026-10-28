@@ -263,10 +263,11 @@ const EVENT_FIELDS = {
   crush: ['unitId', 'by', 'reason'],
   rout: ['unitId', 'by'],
   pursuit: ['unitId', 'by', 'killed', 'remaining', 'trapped'],
+  crowding: ['unitId', 'at', 'men', 'tier', 'was'],
   victory: ['winner', 'reason']
 }
 const EXCHANGE_SIDE = ['unitId', 'killed', 'morale', 'stamina', 'chaos', 'terrain',
-  'prepared', 'chargeImpact', 'flankBonus']
+  'prepared', 'chargeImpact', 'flankBonus', 'crowding']
 
 test('every event is structured data matching the documented schema', () => {
   const isPosition = (p) => p && Number.isInteger(p.x) && Number.isInteger(p.y)

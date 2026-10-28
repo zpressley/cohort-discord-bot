@@ -68,6 +68,9 @@ function fact(map, event) {
     case 'pursuit': return `${event.by} cut down ${event.killed} of the fleeing ${event.unitId}` + (event.trapped ? ', who were cornered' : '')
     case 'fled': return `${event.unitId} escaped the field with ${event.strength} men`
     case 'destroyed': return `${event.unitId} was destroyed`
+    case 'crowding': return event.tier === 'organized'
+      ? `${event.unitId} had room to fight again`
+      : `${event.unitId}'s ranks were ${event.tier}, ${event.men} men packed onto one spot ${placeName(map, event.at)}, slowing them and blunting their fighting`
     case 'victory': return event.winner === 'draw' ? `the battle ended in mutual ruin (${event.reason})` : `${event.winner} won the battle (${event.reason})`
     default: return null
   }

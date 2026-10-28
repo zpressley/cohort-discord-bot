@@ -27,6 +27,7 @@ const R = require('./ratings')
 const D = require('./damage')
 const { getUnit } = require('../world')
 const { samePosition } = require('../map/labels')
+const { crowdingByUnit } = require('../movement/occupancy')
 
 /**
  * @param {Object} [options]
@@ -138,7 +139,24 @@ function createCombatResolver(options = {}) {
       held.set(unit.id, previous !== undefined && samePosition(previous, unit.position))
     }
 
+    // Crowding (Stage 3): friends packed onto one tile fight worse, and at
+    // the worst tier lose heart each round. Read from the world, so it needs
+    // no extra input and a duel never sees it.
+    const crowding = crowdingByUnit(world)
+    const crowdingPenalty = (unit) => crowding.get(unit.id)?.combat ?? 0
+    const fighting = [...new Set(engagements.flatMap(e => [e.aId, e.bId]))].sort()
+
     for (let round = 0; round < roundsPerTurn; round++) {
+      for (const id of fighting) {
+        const unit = getUnit(world, id)
+        const loss = unit ? (crowding.get(id)?.morale ?? 0) : 0
+        if (!loss) continue
+        const state = stateFor(unit)
+        if (state.routed) continue
+        state.morale = Math.max(0, state.morale - loss)
+        state.moraleDamageTaken += loss
+      }
+
       for (const engagement of engagements) {
         const a = getUnit(world, engagement.aId)
         const b = getUnit(world, engagement.bId)
@@ -188,7 +206,8 @@ function createCombatResolver(options = {}) {
           enemyTerrain: engagement.bTerrain,
           chaos: aChaos,
           prepared: aPrepared,
-          bonusAttack: flankBonusAgainst(b.id)
+          bonusAttack: flankBonusAgainst(b.id),
+          crowding: crowdingPenalty(a)
         }
         const bCtx = {
           stamina: bState.stamina,
@@ -197,7 +216,8 @@ function createCombatResolver(options = {}) {
           enemyTerrain: engagement.aTerrain,
           chaos: bChaos,
           prepared: bPrepared,
-          bonusAttack: flankBonusAgainst(a.id)
+          bonusAttack: flankBonusAgainst(a.id),
+          crowding: crowdingPenalty(b)
         }
 
         const exchange = D.resolveExchange(a, b, aCtx, bCtx)
@@ -406,7 +426,8 @@ function exchangeEvent(a, b, exchange, aCtx, bCtx, aState, bState, roundsInConta
     // The round of impact of a cavalry charge: the unit moved into contact,
     // is mounted, and the decay curve is at its start.
     chargeImpact: Boolean(unit.mounted && ctx.roundsInContact === 0),
-    flankBonus: ctx.bonusAttack ?? 0
+    flankBonus: ctx.bonusAttack ?? 0,
+    crowding: ctx.crowding ?? 0
   })
 
   return {

@@ -6,7 +6,10 @@
 
 const { resolveSimultaneousMovement, BLOCKED_TICKS_TO_STOP } = require('./simultaneous')
 const { initiativeTier, tierName, inInitiativeOrder, TIERS } = require('./initiative')
-const { buildOccupancy, getUnitAt, isOccupied, canEnter, moveUnit } = require('./occupancy')
+const {
+  buildOccupancy, unitsAt, getUnitAt, isOccupied, canEnter, moveUnit,
+  crowdingTier, crowdingByUnit, crowdedRange
+} = require('./occupancy')
 const { resolveUnitReference, expandOrders } = require('./unitResolver')
 
 module.exports = {
@@ -21,6 +24,10 @@ module.exports = {
   isOccupied,
   canEnter,
   moveUnit,
+  unitsAt,
+  crowdingTier,
+  crowdingByUnit,
+  crowdedRange,
   resolveUnitReference,
   expandOrders
 }

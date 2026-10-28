@@ -350,6 +350,35 @@ const FLANKING = {
   CAP: 2
 }
 
+// ── Crowding (stacking) ────────────────────────────────
+//
+// Friendly units may share a tile (ruled 2026-10-21), paying for it once the
+// tile holds more men than it comfortably can. The tiers are the earlier
+// build's density table (STACK-002, archive/docs/Context/Old Context/
+// cohort_task_list.md), its thresholds quartered for 25 m tiles as the
+// roadmap's scale table (§6) planned. A standard unit is 100 men, so two
+// full units on one tile are already `compressed`; worn-down units crowd
+// together more cheaply.
+//
+// Tiers apply only to a shared tile: a lone unit is never crowded, whatever
+// its size. move is the share of movement lost, combat comes off attack and
+// defense, morale is lost per combat round (the old table's -2 was on a
+// smaller morale scale; this one runs to 100).
+
+const CROWDING = {
+  CAP: 300, // men per tile, hard limit
+  TIERS: [
+    { name: 'organized', upTo: 100, move: 0, combat: 0, morale: 0 },
+    { name: 'crowded', upTo: 150, move: 0.25, combat: 1, morale: 0 },
+    { name: 'compressed', upTo: 200, move: 0.5, combat: 2, morale: 0 },
+    { name: 'crushing', upTo: 250, move: 0.75, combat: 3, morale: 0 },
+    { name: 'critical', upTo: 300, move: 0.9, combat: 4, morale: 5 }
+  ],
+  // However packed, a unit can still shuffle one tile of open ground a
+  // turn, so a jam always unpicks.
+  MIN_MOVE: 1
+}
+
 // ── Pursuit ────────────────────────────────────────────
 //
 // [derived] A broken unit caught at the start of its flight bleeds. The old
@@ -481,6 +510,7 @@ module.exports = {
   STAMINA,
   PUSH,
   FLANKING,
+  CROWDING,
   PURSUIT,
   MORALE,
   DAMAGE,
