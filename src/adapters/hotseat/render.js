@@ -131,6 +131,13 @@ function renderRoster(game, side) {
     lines.push(line)
   }
   if (view.own.length === 0) lines.push('  no units standing')
+
+  // Objectives are known to both sides: they are the reason for the fight.
+  for (const objective of game.objectives ?? []) {
+    const hold = game.objectiveHolds[objective.id]
+    const held = hold ? `held by ${hold.side} since ${clock(hold.sinceMinute ?? 0).replace(' of battle', '')}` : 'held by nobody'
+    lines.push(`  objective: ${objective.name} (${where(objective.tiles[0])}) — ${held}`)
+  }
   return lines.join('\n')
 }
 
@@ -202,6 +209,10 @@ function wordEvent(event) {
       return event.tier === 'organized'
         ? `${event.unitId} has room to fight again at ${where(event.at)}`
         : `${event.unitId} is ${event.tier} at ${where(event.at)} — ${event.men} men packed on one spot`
+    case 'objective':
+      return event.side
+        ? `${event.side.toUpperCase()} takes ${event.name}`
+        : `${event.name} is no longer held${event.was ? ` by ${event.was}` : ''}`
     case 'ambush': return `AMBUSH! ${event.unitId} falls on ${event.on} at ${where(event.at)}`
     case 'ambushHeld':
       return event.reason === 'on guard'

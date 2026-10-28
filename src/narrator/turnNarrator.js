@@ -45,7 +45,7 @@ function involved(event) {
  */
 function visibleEvents(events, { ownIds, seenEnemyIds }) {
   return events.filter(e => {
-    if (e.type === 'victory') return true
+    if (e.type === 'victory' || e.type === 'objective') return true
     const ids = involved(e)
     return ids.some(id => ownIds.has(id)) || (ids.length > 0 && ids.every(id => seenEnemyIds.has(id)))
   })
@@ -72,6 +72,9 @@ function fact(map, event) {
     case 'crowding': return event.tier === 'organized'
       ? `${event.unitId} had room to fight again`
       : `${event.unitId}'s ranks were ${event.tier}, ${event.men} men packed onto one spot ${placeName(map, event.at)}, slowing them and blunting their fighting`
+    case 'objective': return event.side
+      ? `${event.side} took ${event.name}`
+      : `${event.name} was no longer held${event.was ? ` by ${event.was}` : ''}`
     case 'ambush': return `${event.unitId} sprang an ambush on ${event.on} ${placeName(map, event.at)}`
     case 'ambushHeld': return event.reason === 'on guard'
       ? `${event.unitId} let ${event.on} pass: it came on guard, not worth the strike`

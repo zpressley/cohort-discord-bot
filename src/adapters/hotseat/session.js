@@ -10,16 +10,25 @@ const { sides } = require('../../engine/world')
 const { interpretLines, interpretText } = require('../../interpreter/orders')
 const { narrateTurn } = require('../../narrator/turnNarrator')
 const { renderMap, renderRoster, renderTurnReport } = require('./render')
+const { isGridRef } = require('../../engine/map/grid')
 
 /**
  * @param {Object} spec     a phase 4/5 battle spec
- * @param {Object} options  { seed, auto: 'blue'|null, fullMap, ai, timeLimitMinutes }
+ * @param {Object} options  { seed, auto: 'blue'|null, fullMap, ai, timeLimitMinutes, objectives }
  *   ai: an AI client (src/llm); without one, orders use the fixed grammar
+ *   objectives: ground to hold, each a grid square ("C6") or a feature name
+ *     ("Harrow Bridge"); added to the scenario's own
  */
 function createSession(spec, options = {}) {
   // timeLimitMinutes: end the battle at this battle time, the side with the
   // larger share of losses losing (a testing aid; see victory.js).
-  const withLimit = options.timeLimitMinutes ? { ...spec, timeLimitMinutes: options.timeLimitMinutes } : spec
+  let withLimit = options.timeLimitMinutes ? { ...spec, timeLimitMinutes: options.timeLimitMinutes } : spec
+  if (options.objectives?.length) {
+    const extra = options.objectives.map((ground, i) => isGridRef(ground)
+      ? { id: `objective-${i + 1}`, square: ground }
+      : { id: `objective-${i + 1}`, feature: ground })
+    withLimit = { ...withLimit, objectives: [...(withLimit.objectives ?? []), ...extra] }
+  }
   const game = createGame(withLimit, { seed: options.seed })
   const autoSide = options.auto ?? null
   const fullMap = Boolean(options.fullMap)

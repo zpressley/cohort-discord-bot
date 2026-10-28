@@ -37,17 +37,19 @@
 const { createBattleState, stepTurn } = require('../battle/battle')
 const { unitsOnSide, sides } = require('../world')
 const { createIntel, updateIntel, sideView: fogSideView } = require('./fogOfWar')
-const { evaluateVictory, objectiveController, OBJECTIVE_TURNS_TO_WIN } = require('./victory')
-const { toPosition } = require('../map/labels')
+const { evaluateVictory, objectiveController, objectiveArea, OBJECTIVE_HOLD_MINUTES } = require('./victory')
 
 const MAX_TICKS_PER_TURN = 6   // one hour of battle time per decision
 const MINUTES_PER_TICK = 10    // locked decision 1
 
 /**
  * @param {Object} spec  a phase 4 battle spec, plus optionally:
- *   objectives:          [{ id, coord }] — named ground worth holding; coord
- *                        is a position or a map label
- *   objectiveTurnsToWin: consecutive player turns of total control to win
+ *   objectives:          [{ id, name?, coord | square | feature | tiles }] —
+ *                        named ground worth holding (see victory.js,
+ *                        objectiveArea)
+ *   objectiveHoldMinutes: battle time all objectives must be held to win
+ *                        (default 60)
+ *   objectiveTurnsToWin: if set, consecutive player turns instead
  *   timeLimitMinutes:    battle time after which the side that lost the
  *                        larger share of its men loses (a testing aid)
  * @param {Object} [options] { seed }
@@ -62,7 +64,7 @@ function createGame(spec, options = {}) {
     // Everything submitted, in order: { side, orders } or { forced: true }.
     // With spec and seed this is the whole game (see replayGame).
     orderLog: [],
-    objectives: (spec.objectives ?? []).map(o => ({ ...o, coord: toPosition(o.coord) })),
+    objectives: (spec.objectives ?? []).map(o => objectiveArea(battle.map, o)),
     playerTurn: 0,
     minutesElapsed: 0,
     submitted: {},              // side -> orders (this player turn)
@@ -194,13 +196,21 @@ function updateObjectiveHolds(game) {
     const controller = objectiveController(game.battle.world, game.battle.broken, objective)
     const hold = game.objectiveHolds[objective.id]
 
+    const was = hold?.side ?? null
     if (!controller) {
-      if (hold) { delete game.objectiveHolds[objective.id]; changed = true }
+      if (hold) {
+        delete game.objectiveHolds[objective.id]
+        changed = true
+        game.battle.log.emit('objective', game.battle.turn, { objectiveId: objective.id, name: objective.name, side: null, was })
+      }
       continue
     }
     if (!hold || hold.side !== controller) {
-      game.objectiveHolds[objective.id] = { side: controller, turns: 0, sincePlayerTurn: game.playerTurn }
+      game.objectiveHolds[objective.id] = {
+        side: controller, turns: 0, sincePlayerTurn: game.playerTurn, sinceMinute: game.minutesElapsed
+      }
       changed = true
+      game.battle.log.emit('objective', game.battle.turn, { objectiveId: objective.id, name: objective.name, side: controller, was })
     }
   }
 
@@ -224,7 +234,9 @@ function victoryContext(game) {
     surrendered: game.surrendered,
     startingStrength: game.startingStrength,
     objectiveHolds: game.objectiveHolds,
-    objectiveTurnsToWin: game.spec.objectiveTurnsToWin ?? OBJECTIVE_TURNS_TO_WIN,
+    objectiveCount: game.objectives.length,
+    objectiveTurnsToWin: game.spec.objectiveTurnsToWin ?? null,
+    objectiveHoldMinutes: game.spec.objectiveHoldMinutes ?? OBJECTIVE_HOLD_MINUTES,
     minutesElapsed: game.minutesElapsed,
     timeLimitMinutes: game.spec.timeLimitMinutes ?? null,
     fledStrength: game.battle.fledUnits.reduce((m, u) => ({ ...m, [u.side]: (m[u.side] ?? 0) + u.strength }), {})

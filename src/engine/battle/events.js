@@ -73,6 +73,10 @@
 //   hideFailed unitId, at, reason, by
 //              a unit could not hide: 'no cover' (it holds instead) or
 //              'watched' by an enemy (by) that can see it (it keeps trying)
+//   objective  objectiveId, name, side, was
+//              control of an objective changed hands: side holds it now
+//              (null: nobody, or contested); was held it before. Emitted by
+//              the orchestrator, which owns objectives
 //   victory    winner, reason
 //              the battle ended
 

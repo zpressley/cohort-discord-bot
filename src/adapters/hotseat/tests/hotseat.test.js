@@ -188,3 +188,12 @@ test('a hotseat game saves as data and replays to the same battle', () => {
   assert.equal(JSON.stringify(replayed.battle.log.all()), JSON.stringify(session.game.battle.log.all()))
   assert.deepEqual(replayed.outcome, session.game.outcome)
 })
+
+test('objectives given to the session show in each briefing, by feature or square', () => {
+  const session = createSession(loadScenario('meeting-battle'), { seed: 1, objectives: ['Harrow Bridge', 'C6'] })
+  const names = session.game.objectives.map(o => o.name)
+  assert.deepEqual(names, ['Harrow Bridge', 'C6'])
+  const briefing = session.briefing('red')
+  assert.match(briefing, /objective: Harrow Bridge .* held by nobody/)
+  assert.match(briefing, /objective: C6 /)
+})
