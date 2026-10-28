@@ -1,9 +1,6 @@
 // src/engine/orchestrator/fogOfWar.js
 //
-// What each side knows about the other. The numbers come from the roadmap's
-// scale conversion table (§6): the old docs' vision ranges were written for
-// 50m tiles and double at 25m — standard 6 tiles, scouts 10, +4 when standing
-// on high ground.
+// What each side knows about the other.
 //
 // Intel has three tiers, per the old FOG feature intent:
 //   visible   a friendly unit can see it right now — position and strength
@@ -13,27 +10,12 @@
 //             hours ago")
 //   unknown   never seen; the unit does not appear in intel at all
 //
-// Line of sight is plain range for now: a forest hides nothing it should.
-// Terrain-blocking LOS is deliberately deferred to phase 8's ranged-combat
-// work, where the old docs' LOS rules land — flagged, not forgotten.
+// Who can see whom is map/sight.js: range (6, scouts 10, +4 on high ground),
+// and since Stage 3 the ground too. Woods hide what is in them and block
+// sight through them; a hill between two units blocks the view unless one
+// of them stands on high ground.
 
-const { tileDistance } = require('../world')
-const { tables: T } = require('../combat')
-
-const VISION = {
-  STANDARD: 6,       // [§6] was 3 tiles at 50m
-  SCOUT: 10,         // [§6] was 5
-  ELEVATED_BONUS: 4  // [§6] was +2
-}
-
-function visionRange(unit, map) {
-  if (!map) throw new Error('visionRange needs the map')
-  const base = (unit.role === 'scout' || unit.role === 'scouts')
-    ? VISION.SCOUT
-    : VISION.STANDARD
-  const elevated = T.HIGH_GROUND_TERRAIN.includes(map.terrainAt(unit.position))
-  return base + (elevated ? VISION.ELEVATED_BONUS : 0)
-}
+const { VISION, visionRange, canSee } = require('../map/sight')
 
 // One side's intel ledger. Serializable — it is part of what the DB persists.
 function createIntel() {
@@ -52,8 +34,7 @@ function updateIntel(intel, world, side, turn, map) {
 
   const visibleNow = new Set()
   for (const enemy of enemies) {
-    const seen = friendlies.some(f =>
-      tileDistance(f.position, enemy.position) <= visionRange(f, map))
+    const seen = friendlies.some(f => canSee(map, f, enemy))
     if (!seen) continue
 
     visibleNow.add(enemy.id)
