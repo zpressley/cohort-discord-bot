@@ -209,8 +209,10 @@ function stepTurn(state, sideOrders = {}) {
   const movement = resolveSimultaneousMovement(world, orders, map, {
     hidden: new Set(state.hidden.keys()), ambushers, ambush: decideAmbush
   })
-  // A sprung ambush is spent: the unit fights, then holds its ground.
-  for (const id of sprung) state.orderBook.set(id, { action: 'hold', target: null, then: null })
+  // A sprung ambush is spent: the unit presses the attack on the nearest
+  // enemy (most often the one it caught) until given a new order. Holding
+  // instead let a caught column simply march on after one round.
+  for (const id of sprung) state.orderBook.set(id, { action: 'advance', target: null, then: null })
 
   // Moving gives a hidden unit away, and so does being walked into.
   for (const move of movement) {

@@ -63,7 +63,7 @@ test('a marching column is caught by the ambush, and taken by surprise', () => {
   assert.deepEqual(of(state, 'surprise').map(e => [e.unitId, e.by]), [['column', 'lurker']])
   assert.ok(of(state, 'exchange').length > 0)
   assert.deepEqual(of(state, 'revealed').map(e => [e.unitId, e.reason]), [['lurker', 'fought']])
-  assert.equal(state.orderBook.get('lurker').action, 'hold', 'a sprung ambush is spent')
+  assert.equal(state.orderBook.get('lurker').action, 'advance', 'a sprung ambush presses the attack')
 })
 
 test('a column on guard is not worth it: the ambush holds and stays hidden', () => {

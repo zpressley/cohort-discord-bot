@@ -21,7 +21,8 @@
 //             ground: hidden enemies the unit could see if they were not
 //             hiding are found. Then hold.
 //   ambush    hide (as hide), then lie in wait and strike an enemy that
-//             passes within reach (ruled: the player orders ambushes).
+//             passes within reach (ruled: the player orders ambushes). Once
+//             sprung it becomes advance: the unit presses the attack.
 //             against: what to strike (null for anything; 'cavalry',
 //             'infantry', 'archers', 'scouts', or a unit name); letPass: how
 //             many to let go by first; regardless: strike even a unit on
