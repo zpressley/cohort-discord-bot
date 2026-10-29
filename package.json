@@ -14,7 +14,8 @@
     "balance": "node src/harness/balance/run-balance.js",
     "play": "node src/adapters/hotseat/play.js",
     "replay": "node scripts/replayBattle.js",
-    "officers": "node src/harness/officer-fates.js"
+    "officers": "node src/harness/officer-fates.js",
+    "soak": "node src/harness/soak.js"
   },
   "keywords": [
     "discord",

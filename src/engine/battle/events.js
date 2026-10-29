@@ -24,11 +24,17 @@
 //   fled       unitId, side, strength
 //              a broken unit left the field over its home edge
 //   contact    aId, bId
-//              two enemy units came into engagement range
+//              two enemy units began to fight: side by side, and at least one
+//              of them looking for a fight (Stage 3)
+//   surprise   unitId, by, posture
+//              unitId was caught unawares: by attacked it unseen by its side
+//              as the turn began, while it was marching
 //   exchange   roundInContact, a, b, push
 //              one combat round between a pair. a and b each carry unitId,
 //              killed, morale and stamina after the round, chaos, terrain,
-//              prepared, chargeImpact, flankBonus. push is { winnerId,
+//              prepared, chargeImpact, flankBonus, surprise (it caught the
+//              other unawares this round), crowding (the combat penalty for
+//              friends packed on its tile). push is { winnerId,
 //              differential }; winnerId is null for an even shove
 //   standoff   aId, bId
 //              both broke in the same round with nothing to tell them apart,
@@ -40,11 +46,43 @@
 //              a shove strong enough to cost the loser a tile
 //   crush      unitId, by, reason, blocker?
 //              a shove that could not move the loser (map edge, impassable,
-//              or an occupied tile)
+//              an enemy, or a tile already full of friends)
 //   rout       unitId, by
 //              a unit broke
 //   pursuit    unitId, by, killed, remaining, trapped
 //              a fleeing unit cut down from behind
+//   crowding   unitId, at, men, tier, was
+//              a unit's crowding tier changed: friends packed onto its tile
+//              (organized, crowded, compressed, crushing, critical). See
+//              CROWDING in combat/tables.js
+//   ambush     unitId, on, at
+//              an ambush (unitId) sprang on a unit passing within reach (on),
+//              stopping it at at
+//   ambushHeld unitId, on, reason
+//              an ambush let a unit pass: it was 'on guard' (not worth it),
+//              or the ambush was 'letting it pass' as ordered
+//   revealed   unitId, reason, by
+//              a hidden unit was given away: it 'moved', 'fought', was
+//              'found' by a unit checking (by), was 'stumbled on' by an
+//              enemy walking into it (by), or was 'noticed' by an enemy
+//              lingering beside it (by)
+//   disengage  unitId, from, killed, morale, chaos, orderly
+//              a unit broke contact with the enemies in from and took a
+//              parting blow: killed men and morale lost, as heavy as the
+//              chaos roll (0-10) and lighter for drilled troops and an
+//              orderly (careful) withdrawal
+//   checked    unitId, at, found
+//              a unit spent the turn searching the ground; found lists the
+//              hidden enemies it turned up (may be empty)
+//   hidden     unitId, at, cover
+//              a unit finished hiding; cover is its row in battle/hiding.js
+//   hideFailed unitId, at, reason, by
+//              a unit could not hide: 'no cover' (it holds instead) or
+//              'watched' by an enemy (by) that can see it (it keeps trying)
+//   objective  objectiveId, name, side, was
+//              control of an objective changed hands: side holds it now
+//              (null: nobody, or contested); was held it before. Emitted by
+//              the orchestrator, which owns objectives
 //   victory    winner, reason
 //              the battle ended
 

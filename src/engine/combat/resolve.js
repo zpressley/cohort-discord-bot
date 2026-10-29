@@ -27,6 +27,7 @@ const R = require('./ratings')
 const D = require('./damage')
 const { getUnit } = require('../world')
 const { samePosition } = require('../map/labels')
+const { crowdingByUnit } = require('../movement/occupancy')
 
 /**
  * @param {Object} [options]
@@ -138,7 +139,24 @@ function createCombatResolver(options = {}) {
       held.set(unit.id, previous !== undefined && samePosition(previous, unit.position))
     }
 
+    // Crowding (Stage 3): friends packed onto one tile fight worse, and at
+    // the worst tier lose heart each round. Read from the world, so it needs
+    // no extra input and a duel never sees it.
+    const crowding = crowdingByUnit(world)
+    const crowdingPenalty = (unit) => crowding.get(unit.id)?.combat ?? 0
+    const fighting = [...new Set(engagements.flatMap(e => [e.aId, e.bId]))].sort()
+
     for (let round = 0; round < roundsPerTurn; round++) {
+      for (const id of fighting) {
+        const unit = getUnit(world, id)
+        const loss = unit ? (crowding.get(id)?.morale ?? 0) : 0
+        if (!loss) continue
+        const state = stateFor(unit)
+        if (state.routed) continue
+        state.morale = Math.max(0, state.morale - loss)
+        state.moraleDamageTaken += loss
+      }
+
       for (const engagement of engagements) {
         const a = getUnit(world, engagement.aId)
         const b = getUnit(world, engagement.bId)
@@ -167,6 +185,21 @@ function createCombatResolver(options = {}) {
         const aState = stateFor(a)
         const bState = stateFor(b)
 
+        // Surprise (Stage 3): only on the round contact is made. The battle
+        // runner decides who was caught unawares and says so on the
+        // engagement.
+        const surprised = roundsInContact === 0 ? (engagement.surprisedBy ?? []) : []
+        const aSurprises = surprised.includes(a.id)
+        const bSurprises = surprised.includes(b.id)
+        if (aSurprises && !bState.routed) {
+          bState.morale = Math.max(0, bState.morale - T.SURPRISE.MORALE)
+          bState.moraleDamageTaken += T.SURPRISE.MORALE
+        }
+        if (bSurprises && !aState.routed) {
+          aState.morale = Math.max(0, aState.morale - T.SURPRISE.MORALE)
+          aState.moraleDamageTaken += T.SURPRISE.MORALE
+        }
+
         // A routed unit is out of the fight. Pursuit casualties and flight
         // across the map are phase 4, when combat meets movement.
         if (aState.routed || bState.routed) continue
@@ -188,7 +221,9 @@ function createCombatResolver(options = {}) {
           enemyTerrain: engagement.bTerrain,
           chaos: aChaos,
           prepared: aPrepared,
-          bonusAttack: flankBonusAgainst(b.id)
+          bonusAttack: flankBonusAgainst(b.id) + (aSurprises ? T.SURPRISE.ATTACK : 0),
+          surprise: aSurprises,
+          crowding: crowdingPenalty(a)
         }
         const bCtx = {
           stamina: bState.stamina,
@@ -197,7 +232,9 @@ function createCombatResolver(options = {}) {
           enemyTerrain: engagement.aTerrain,
           chaos: bChaos,
           prepared: bPrepared,
-          bonusAttack: flankBonusAgainst(a.id)
+          bonusAttack: flankBonusAgainst(a.id) + (bSurprises ? T.SURPRISE.ATTACK : 0),
+          surprise: bSurprises,
+          crowding: crowdingPenalty(b)
         }
 
         const exchange = D.resolveExchange(a, b, aCtx, bCtx)
@@ -292,6 +329,21 @@ function createCombatResolver(options = {}) {
   resolveCombat.getState = (unitId) => {
     const state = unitState.get(unitId)
     return state ? { ...state } : null
+  }
+  // Wear a unit down outside a fight (Stage 3: hiding in a marsh). Stamina
+  // lives here, so the battle asks the resolver to spend it.
+  resolveCombat.tire = (unit, amount) => {
+    const state = stateFor(unit)
+    state.stamina = Math.max(0, state.stamina - amount)
+    return state.stamina
+  }
+  // Shake a unit's morale outside a fight (Stage 3: a parting blow as it
+  // breaks contact).
+  resolveCombat.shake = (unit, amount) => {
+    const state = stateFor(unit)
+    state.morale = Math.max(0, state.morale - amount)
+    state.moraleDamageTaken += amount
+    return state.morale
   }
   resolveCombat.snapshot = () => {
     const out = {}
@@ -406,7 +458,9 @@ function exchangeEvent(a, b, exchange, aCtx, bCtx, aState, bState, roundsInConta
     // The round of impact of a cavalry charge: the unit moved into contact,
     // is mounted, and the decay curve is at its start.
     chargeImpact: Boolean(unit.mounted && ctx.roundsInContact === 0),
-    flankBonus: ctx.bonusAttack ?? 0
+    flankBonus: (ctx.bonusAttack ?? 0) - (ctx.surprise ? T.SURPRISE.ATTACK : 0),
+    surprise: Boolean(ctx.surprise),
+    crowding: ctx.crowding ?? 0
   })
 
   return {

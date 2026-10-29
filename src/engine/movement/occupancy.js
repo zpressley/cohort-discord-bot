@@ -1,66 +1,109 @@
 // src/engine/movement/occupancy.js
 //
-// The occupancy layer the roadmap asks for: who is on which tile, queried
-// live while movement resolves.
+// Who is on which tile, queried live while movement resolves.
 //
-// The rule is one unit per tile, and it is a consequence of ruling Q6 rather
-// than a new decision: standard units are ~100 men and a 25m tile holds ~100
-// men, so a unit IS a tile's capacity. The old docs' stacking-density tiers
-// (400/500/1200 per tile) described 400-man units on 50m tiles; at this scale
-// the "crush" case cannot arise from movement at all — it arises from being
-// shoved into an occupied tile, which is phase 4's push-back handling, where
-// it costs morale instead of admitting a second unit.
+// Friendly units may share a tile (ruled 2026-10-21). A tile holds at most
+// CROWDING.CAP men; past about one unit's worth it is crowded, and the
+// crowding tiers (combat/tables.js) cost movement, fighting strength and, at
+// the worst, morale. Before Stage 3 the rule was one unit per tile, and
+// armies jammed into single file.
 //
-// Passing THROUGH is a different question from stopping. A friendly column can
-// flow through ground another friendly unit holds mid-turn (the tick model in
-// simultaneous.js makes this concrete: a tile freed earlier in the tick can be
-// entered later in it), but nobody may END a move on an occupied tile, and
-// nobody enters a tile an enemy currently holds — walking into an enemy is
-// contact, and contact is combat's business (phase 4), not movement's.
+// An enemy's tile is never entered: walking into an enemy is contact, and
+// contact is combat's business, not movement's. Passing THROUGH friends and
+// stopping among them are both allowed while the tile has room.
 
 const { livingUnits } = require('../world')
 const { positionKey } = require('../map/labels')
+const { CROWDING } = require('../combat/tables')
 
-// Build a live index: position -> unit. Only living units occupy ground; a
-// destroyed unit's tile is passable the moment it empties.
+// Build a live index: position key -> the units standing there. Only living
+// units occupy ground; a destroyed unit's tile frees the moment it empties.
 function buildOccupancy(world) {
   const index = new Map()
   for (const unit of livingUnits(world)) {
-    index.set(positionKey(unit.position), unit)
+    const key = positionKey(unit.position)
+    if (!index.has(key)) index.set(key, [])
+    index.get(key).push(unit)
   }
   return index
 }
 
+function unitsAt(occupancy, position) {
+  return occupancy.get(positionKey(position)) ?? []
+}
+
+// The first unit on a tile, or null. Kept for callers that only ask whether
+// someone is there.
 function getUnitAt(occupancy, position) {
-  return occupancy.get(positionKey(position)) ?? null
+  return unitsAt(occupancy, position)[0] ?? null
 }
 
 function isOccupied(occupancy, position) {
-  return occupancy.has(positionKey(position))
+  return unitsAt(occupancy, position).length > 0
+}
+
+function menOn(units) {
+  return units.reduce((sum, u) => sum + Math.max(0, u.strength), 0)
 }
 
 // Move a unit in the index. The index and the unit's own position field are
 // kept in step here so neither can drift from the other mid-resolution.
 function moveUnit(occupancy, unit, to) {
   const fromKey = positionKey(unit.position)
-  if (occupancy.get(fromKey) === unit) {
-    occupancy.delete(fromKey)
+  const here = occupancy.get(fromKey)
+  if (here) {
+    const i = here.indexOf(unit)
+    if (i >= 0) here.splice(i, 1)
+    if (here.length === 0) occupancy.delete(fromKey)
   }
-  occupancy.set(positionKey(to), unit)
+  const toKey = positionKey(to)
+  if (!occupancy.has(toKey)) occupancy.set(toKey, [])
+  occupancy.get(toKey).push(unit)
   unit.position = { x: to.x, y: to.y }
 }
 
-// May `unit` step onto `coord` right now?
+// May `unit` step onto `position` right now?
 //  - empty tile: yes
-//  - enemy tile: never — that is contact, not movement
-//  - friendly tile: no (may open later this tick if the friendly moves off;
-//    the tick loop in simultaneous.js retries, which is what lets columns
-//    flow through each other without ever co-occupying a tile)
+//  - enemy on it: never; that is contact, not movement
+//  - friends on it: yes while the men there plus this unit stay within the
+//    cap; otherwise no (reason 'friendly': the tile may clear later in the
+//    tick if someone moves off)
 function canEnter(occupancy, unit, position) {
-  const occupant = occupancy.get(positionKey(position))
-  if (!occupant) return { ok: true }
-  if (occupant.side !== unit.side) return { ok: false, reason: 'enemy', blocker: occupant.id }
-  return { ok: false, reason: 'friendly', blocker: occupant.id }
+  const others = unitsAt(occupancy, position).filter(u => u !== unit)
+  if (others.length === 0) return { ok: true }
+  const enemy = others.find(u => u.side !== unit.side)
+  if (enemy) return { ok: false, reason: 'enemy', blocker: enemy.id }
+  if (menOn(others) + Math.max(0, unit.strength) > CROWDING.CAP) {
+    return { ok: false, reason: 'friendly', blocker: others[0].id }
+  }
+  return { ok: true, shared: true }
 }
 
-module.exports = { buildOccupancy, getUnitAt, isOccupied, moveUnit, canEnter }
+// The crowding tier for a number of men on a SHARED tile. A lone unit is
+// never crowded, so callers pass the unit count too.
+function crowdingTier(men, unitCount = 2) {
+  if (unitCount < 2) return CROWDING.TIERS[0]
+  return CROWDING.TIERS.find(t => men <= t.upTo) ?? CROWDING.TIERS[CROWDING.TIERS.length - 1]
+}
+
+// Each living unit's crowding, read from the world: unitId -> tier.
+function crowdingByUnit(world) {
+  const result = new Map()
+  for (const units of buildOccupancy(world).values()) {
+    const tier = crowdingTier(menOn(units), units.length)
+    for (const unit of units) result.set(unit.id, tier)
+  }
+  return result
+}
+
+// A unit's movement for the turn, after crowding on the tile it starts on.
+function crowdedRange(unit, tier) {
+  if (!tier || tier.move === 0) return unit.movementRange
+  const reduced = Math.round(unit.movementRange * (1 - tier.move) * 100) / 100
+  return Math.min(unit.movementRange, Math.max(CROWDING.MIN_MOVE, reduced))
+}
+
+module.exports = {
+  buildOccupancy, unitsAt, getUnitAt, isOccupied, menOn, moveUnit, canEnter,
+  crowdingTier, crowdingByUnit, crowdedRange
+}

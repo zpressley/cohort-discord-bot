@@ -76,6 +76,9 @@ test('a unit shoved off a hill loses the high ground — positionally', () => {
         armor: 'no_armor', shield: 'no_shield', primaryWeapon: 'daggers'
       })
     ],
+    // The elite seeks the fight; since Stage 3 two units side by side fight
+    // only if one of them is looking for one.
+    standingOrders: { red: 'advance' },
     turns: [{ red: [], blue: [] }],
     maxTurns: 8
   }))
@@ -102,6 +105,7 @@ test('a broken unit flees toward its home edge and leaves the field', () => {
       unit({ id: 'anchor', side: 'red', position: 'V30' }),
       unit({ id: 'wall', side: 'blue', position: 'D7', quality: 'elite', primaryWeapon: 'great_axe' })
     ],
+    standingOrders: { blue: 'advance' },
     turns: [],
     maxTurns: 10
   }))
@@ -120,6 +124,7 @@ test('broken units stop fighting — no engagement ever includes one', () => {
       unit({ id: 'levy', side: 'red', position: 'K20', quality: 'levy', armor: 'no_armor', shield: 'no_shield', primaryWeapon: 'daggers' }),
       unit({ id: 'elite', side: 'blue', position: 'K21', quality: 'elite', primaryWeapon: 'great_axe' })
     ],
+    standingOrders: { blue: 'advance' },
     turns: [],
     maxTurns: 12
   }))
@@ -147,6 +152,7 @@ test('pursuit bleeds a caught fugitive, and a trapped one bleeds faster', () => 
       unit({ id: 'levy', side: 'red', position: 'K20', quality: 'levy', armor: 'no_armor', shield: 'no_shield', primaryWeapon: 'daggers' }),
       unit({ id: 'elite', side: 'blue', position: 'L20', quality: 'elite', primaryWeapon: 'great_axe' })
     ],
+    standingOrders: { blue: 'advance' },
     turns: [],
     maxTurns: 15
   }))
@@ -187,6 +193,7 @@ test('a unit fighting on two fronts dies faster than one fighting on one', () =>
       unit({ id: 'target', side: 'blue', position: 'K20' }),
       unit({ id: 'axe1', side: 'red', position: 'K21' })
     ],
+    standingOrders: { red: 'advance' },
     turns: [], maxTurns: 4
   }))
   const twoFronts = runBattle(spec({
@@ -195,6 +202,7 @@ test('a unit fighting on two fronts dies faster than one fighting on one', () =>
       unit({ id: 'axe1', side: 'red', position: 'K21' }),
       unit({ id: 'axe2', side: 'red', position: 'K19' })
     ],
+    standingOrders: { red: 'advance' },
     turns: [], maxTurns: 4
   }))
 
@@ -263,10 +271,20 @@ const EVENT_FIELDS = {
   crush: ['unitId', 'by', 'reason'],
   rout: ['unitId', 'by'],
   pursuit: ['unitId', 'by', 'killed', 'remaining', 'trapped'],
+  crowding: ['unitId', 'at', 'men', 'tier', 'was'],
+  surprise: ['unitId', 'by', 'posture'],
+  revealed: ['unitId', 'reason', 'by'],
+  ambush: ['unitId', 'on', 'at'],
+  ambushHeld: ['unitId', 'on', 'reason'],
+  objective: ['objectiveId', 'name', 'side', 'was'],
+  disengage: ['unitId', 'from', 'killed', 'morale', 'chaos', 'orderly'],
+  checked: ['unitId', 'at', 'found'],
+  hidden: ['unitId', 'at', 'cover'],
+  hideFailed: ['unitId', 'at', 'reason', 'by'],
   victory: ['winner', 'reason']
 }
 const EXCHANGE_SIDE = ['unitId', 'killed', 'morale', 'stamina', 'chaos', 'terrain',
-  'prepared', 'chargeImpact', 'flankBonus']
+  'prepared', 'chargeImpact', 'flankBonus', 'surprise', 'crowding']
 
 test('every event is structured data matching the documented schema', () => {
   const isPosition = (p) => p && Number.isInteger(p.x) && Number.isInteger(p.y)

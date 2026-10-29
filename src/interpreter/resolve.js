@@ -15,6 +15,31 @@
 const { resolveUnitReference } = require('../engine/movement/unitResolver')
 const { findPlace } = require('../engine/map/places')
 const { isGridRef, gridTarget, gridLabel } = require('../engine/map/grid')
+const { coverFor } = require('../engine/battle/hiding')
+
+// The extra parts of an order the engine reads (Stage 3), carried through
+// unchanged when set.
+const EXTRAS = ['careful', 'against', 'letPass', 'regardless']
+
+// How well a unit will hide there, in words for the read-back: the engine's
+// own table (battle/hiding.js), so the player hears what the engine will do.
+function coverWords(map, unit, position) {
+  const cover = coverFor(map, { ...unit, position })
+  if (cover.seenWithin === null) return `${cover.words}; it cannot hide there`
+  const seen = cover.seenWithin === 0
+    ? 'hidden from anyone who does not search'
+    : `seen only within ${cover.seenWithin * 25} m`
+  const cost = cover.cost?.staminaPerTurn ? ', but tiring' : ''
+  return `${cover.words}: ${seen}${cost}`
+}
+
+// The read-back for an ambush's terms.
+function ambushTerms(intent) {
+  const parts = [intent.against ? `striking ${intent.against}` : 'striking anything that passes']
+  if (intent.letPass) parts.push(`letting ${intent.letPass} pass first`)
+  parts.push(intent.regardless ? 'whatever happens' : 'only if they come marching')
+  return parts.join(', ')
+}
 
 // Where a group stands, for "the ridge to the east" said to several units:
 // the unit nearest the group's middle, so the reference is read from a real
@@ -82,20 +107,29 @@ function resolveIntents(intents, context) {
       continue
     }
 
+    const extras = {}
+    for (const key of EXTRAS) if (intent[key] !== undefined && intent[key] !== null && intent[key] !== false) extras[key] = intent[key]
+
     for (const unit of match.units) {
       orders.push({
         unitRef: unit.id,
         action: intent.action,
         ...(target ? { target: { ...target } } : {}),
-        ...(intent.then ? { then: intent.then } : {})
+        ...(intent.then ? { then: intent.then } : {}),
+        ...extras
       })
     }
     const who = match.units.map(u => u.id).join(', ')
     const what = intent.action === 'move' && intent.then === 'hold' ? 'defend' : intent.action
-    understood.push(`${who}: ${what}${where}${target ? ` (${gridLabel(target, { quarter: true })})` : ''}`)
+    let line = `${who}: ${what}${extras.careful ? ' carefully' : ''}${where}${target ? ` (${gridLabel(target, { quarter: true })})` : ''}`
+    if (intent.action === 'hide' || intent.action === 'ambush') {
+      line += ` — ${coverWords(map, match.units[0], target ?? match.units[0].position)}`
+    }
+    if (intent.action === 'ambush') line += `; ${ambushTerms(intent)}`
+    understood.push(line)
   }
 
   return { orders, questions, surrender, understood }
 }
 
-module.exports = { resolveIntents, resolvePlace, groupOrigin }
+module.exports = { resolveIntents, resolvePlace, groupOrigin, coverWords }

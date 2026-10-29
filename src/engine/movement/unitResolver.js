@@ -109,13 +109,11 @@ function expandOrders(sideOrders, sideUnits) {
       unresolved.push({ ...order, reason: match.reason })
       continue
     }
+    // Everything else the order says (action, then, careful, and what later
+    // orders add) goes through to each unit unchanged.
+    const { unitRef, unitId, ...rest } = order
     for (const unit of match.units) {
-      byUnit.set(unit.id, {
-        unitId: unit.id,
-        target: order.target,
-        ...(order.action ? { action: order.action } : {}),
-        ...(order.then ? { then: order.then } : {})
-      })
+      byUnit.set(unit.id, { unitId: unit.id, target: order.target, ...rest })
     }
   }
 

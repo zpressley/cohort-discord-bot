@@ -11,11 +11,12 @@ const { createWorld, livingUnits } = require('../../world')
 const {
   resolveSimultaneousMovement: resolveOn,
   initiativeTier, inInitiativeOrder,
-  buildOccupancy, canEnter,
+  buildOccupancy, canEnter, crowdingTier, crowdingByUnit, crowdedRange,
   resolveUnitReference, expandOrders
 } = require('../index')
 const { resolveMap } = require('../../map/map')
 const { toLabel, toPosition } = require('../../map/labels')
+const { CROWDING } = require('../../combat/tables')
 
 // These rules were written on Crownhill. Positions are compared as labels so
 // the expected values stay readable.
@@ -38,14 +39,22 @@ function unit(overrides = {}) {
   }
 }
 
-// The invariant every movement test closes with: no two living units share a
-// tile. This is the "zero collision anomalies" the exit criterion names.
+// The invariant every movement test closes with: enemies never share a tile,
+// and no tile holds more men than the crowding cap. This is the "zero
+// collision anomalies" the exit criterion names. (Before Stage 3 the rule was
+// one unit per tile; friends may now share.)
 function assertNoCoOccupancy(world, label = '') {
-  const seen = new Map()
+  const tiles = new Map()
   for (const u of livingUnits(world)) {
-    const holder = seen.get(toLabel(u.position))
-    assert.ok(!holder, `${label} ${holder} and ${u.id} both stand on ${toLabel(u.position)}`)
-    seen.set(toLabel(u.position), u.id)
+    const key = toLabel(u.position)
+    if (!tiles.has(key)) tiles.set(key, [])
+    tiles.get(key).push(u)
+  }
+  for (const [tile, units] of tiles) {
+    const sidesHere = new Set(units.map(u => u.side))
+    assert.equal(sidesHere.size, 1, `${label} enemies share ${tile}: ${units.map(u => u.id).join(', ')}`)
+    const men = units.reduce((sum, u) => sum + u.strength, 0)
+    assert.ok(men <= CROWDING.CAP, `${label} ${tile} holds ${men} men, over the cap`)
   }
 }
 
@@ -77,7 +86,7 @@ test('ties inside a tier break by unit id, not roster order', () => {
 
 // ── Occupancy ──────────────────────────────────────────
 
-test('one unit per tile: the occupancy index refuses nobody but tells the truth', () => {
+test('the occupancy index: enemies refused, friends admitted while there is room', () => {
   const world = createWorld({
     units: [unit({ id: 'a', position: 'D4' }), unit({ id: 'b', side: 'blue', position: 'D5' })]
   })
@@ -87,6 +96,11 @@ test('one unit per tile: the occupancy index refuses nobody but tells the truth'
   const enemy = canEnter(occ, world.units[0], toPosition('D5'))
   assert.equal(enemy.ok, false)
   assert.equal(enemy.reason, 'enemy')
+
+  const friend = createWorld({ units: [unit({ id: 'a', position: 'D4' }), unit({ id: 'f', position: 'D5' })] })
+  const shared = canEnter(buildOccupancy(friend), friend.units[0], toPosition('D5'))
+  assert.equal(shared.ok, true, 'friends share while there is room')
+  assert.equal(shared.shared, true)
 })
 
 test('a destroyed unit does not hold ground', () => {
@@ -99,26 +113,66 @@ test('a destroyed unit does not hold ground', () => {
 
 // ── Simultaneous resolution ────────────────────────────
 
-test('two units racing for one tile: the faster one takes it', () => {
-  // scout (tier 0) and heavy infantry (tier 4), equidistant from F4.
+test('two friends racing for one tile both get there and share it', () => {
+  // scout (tier 0) and heavy infantry (tier 4), equidistant from F4. Before
+  // Stage 3 the scout took the tile and the heavy was shut out.
   const world = createWorld({
     units: [
       unit({ id: 'zz_scout', role: 'scout', armor: 'no_armor', position: 'F2', side: 'red' }),
       unit({ id: 'aa_heavy', armor: 'heavy_armor', position: 'F6', side: 'red' })
     ]
   })
-  const results = resolveSimultaneousMovement(world, [
+  resolveSimultaneousMovement(world, [
     { unitId: 'zz_scout', target: 'F4' },
     { unitId: 'aa_heavy', target: 'F4' }
   ])
-
-  const scout = results.find(r => r.unitId === 'zz_scout')
-  const heavy = results.find(r => r.unitId === 'aa_heavy')
-
-  assert.equal(toLabel(scout.to), 'F4', 'the scout claims the tile despite sorting later by id')
-  assert.notEqual(toLabel(heavy.to), 'F4')
-  assert.equal(heavy.blockedBy, 'zz_scout')
+  const at = (id) => toLabel(world.units.find(u => u.id === id).position)
+  assert.equal(at('zz_scout'), 'F4')
+  assert.equal(at('aa_heavy'), 'F4')
+  assert.equal(crowdingByUnit(world).get('aa_heavy').name, 'compressed', '200 men on one tile')
   assertNoCoOccupancy(world)
+})
+
+test('a full tile: the fastest fill it, the next is shut out', () => {
+  // Three 100-man units already make 300, the cap. A fourth cannot join.
+  const world = createWorld({
+    units: [
+      unit({ id: 'a', position: 'F4' }), unit({ id: 'b', position: 'F4' }), unit({ id: 'c', position: 'F4' }),
+      unit({ id: 'late', position: 'F6' })
+    ]
+  })
+  resolveSimultaneousMovement(world, [
+    { unitId: 'a', target: 'hold' }, { unitId: 'b', target: 'hold' }, { unitId: 'c', target: 'hold' },
+    { unitId: 'late', target: 'F4' }
+  ])
+  assert.notEqual(toLabel(world.units.find(u => u.id === 'late').position), 'F4')
+  assertNoCoOccupancy(world)
+})
+
+test('crowding: tiers by men on a shared tile, never for a unit alone', () => {
+  assert.equal(crowdingTier(100, 1).name, 'organized')
+  assert.equal(crowdingTier(300, 1).name, 'organized', 'a lone unit is never crowded')
+  assert.equal(crowdingTier(140, 2).name, 'crowded', 'two worn units crowd cheaply')
+  assert.equal(crowdingTier(200, 2).name, 'compressed')
+  assert.equal(crowdingTier(240, 3).name, 'crushing')
+  assert.equal(crowdingTier(300, 3).name, 'critical')
+})
+
+test('crowding slows a unit a little, never below one tile of open ground', () => {
+  // Ruled 2026-10-29: crowding punishes fighting packed together more than
+  // moving. Movement losses are 0/10/25/50%.
+  const unit3 = { movementRange: 3 }
+  assert.equal(crowdedRange(unit3, crowdingTier(100, 1)), 3)
+  assert.equal(crowdedRange(unit3, crowdingTier(140, 2)), 3, 'crowded: no slower')
+  assert.equal(crowdedRange(unit3, crowdingTier(200, 2)), 2.7)
+  assert.equal(crowdedRange(unit3, crowdingTier(300, 3)), 1.5)
+  assert.equal(crowdedRange({ movementRange: 1.5 }, crowdingTier(300, 3)), 1, 'the floor is 1')
+
+  // On the map: two units share H4 and are compressed, so each moves 2.7,
+  // two tiles of open field, where alone it would move three.
+  const world = createWorld({ units: [unit({ id: 'a', position: 'H4' }), unit({ id: 'b', position: 'H4' })] })
+  const results = resolveSimultaneousMovement(world, [{ unitId: 'a', target: 'H10' }])
+  assert.equal(results.find(r => r.unitId === 'a').tilesMoved, 2)
 })
 
 test('a column follows its own vanguard through the same ground', () => {
@@ -177,6 +231,36 @@ test('an enemy in the path stops the move at once — walking into an enemy is c
   assert.equal(a.blockedBy, 'wall')
 })
 
+test('an enemy that comes up beside a unit stops it: it turns to fight, not walk on', () => {
+  // The horse (faster, moves first) steps next to the infantry. The
+  // infantry, ordered to where the horse stood, must not walk away out of
+  // contact. Before this rule the two could circle each other for ever.
+  const world = createWorld({
+    units: [
+      unit({ id: 'horse', mounted: true, armor: 'light_armor', position: 'J7', side: 'red', movementRange: 5 }),
+      // One step a turn, as if packed in a crowd: it can step away but not round.
+      unit({ id: 'foot', position: 'K8', side: 'blue', movementRange: 1 })
+    ]
+  })
+  // Diagonal neighbours, each ordered onto the other's tile: the meeting
+  // battle that once ran 20 turns without a blow, reduced to two units.
+  resolveSimultaneousMovement(world, [
+    { unitId: 'horse', target: 'K8' },
+    { unitId: 'foot', target: 'J7' }
+  ])
+  const at = (id) => world.units.find(u => u.id === id).position
+  const { tileDistance } = require('../../world')
+  assert.equal(tileDistance(at('horse'), at('foot')), 1, 'they end in contact')
+})
+
+test('a unit already in contact may still step away (a withdrawal)', () => {
+  const world = createWorld({
+    units: [unit({ id: 'a', position: 'D4', side: 'red' }), unit({ id: 'b', position: 'D5', side: 'blue' })]
+  })
+  resolveSimultaneousMovement(world, [{ unitId: 'a', target: 'D1' }])
+  assert.equal(toLabel(world.units.find(u => u.id === 'a').position), 'D1')
+})
+
 test('a unit walks around a friend who holds its path', () => {
   // Paths are planned over an empty field; a friend standing in the way is
   // stepped around rather than waited on forever.
@@ -196,9 +280,10 @@ test('a unit walks around a friend who holds its path', () => {
   assertNoCoOccupancy(world)
 })
 
-test('with no way around a holding friend, the mover gives up after one tick', () => {
-  // A 5x3 field split by a river with a single ford, and a friend holding
-  // the ford.
+test('with no way around a full tile of friends, the mover gives up after one tick', () => {
+  // A 5x3 field split by a river with a single ford, and the ford packed to
+  // the cap by a 300-man friend. (Before Stage 3, any friend on the ford
+  // blocked it.)
   const { createMap } = require('../../map/map')
   const ford = createMap({
     name: 'one-ford', width: 5, height: 3,
@@ -206,7 +291,7 @@ test('with no way around a holding friend, the mover gives up after one tick', (
     terrain: { river: ['C1', 'C3'] }
   })
   const world = createWorld({
-    units: [unit({ id: 'mover', position: 'A2' }), unit({ id: 'still', position: 'C2' })]
+    units: [unit({ id: 'mover', position: 'A2' }), unit({ id: 'still', position: 'C2', strength: 300, maxStrength: 300 })]
   })
   const results = resolveOn(world, [
     { unitId: 'mover', target: 'E2' },
@@ -348,8 +433,8 @@ test('exit: six units a side, five turns, zero collision anomalies', () => {
     }
   }
 
-  // After five turns of converging through a shared corridor, everybody is
-  // still exactly one-per-tile and every unit still exists.
+  // After five turns of converging through a shared corridor, no enemies
+  // share a tile, no tile is over the cap, and every unit still exists.
   assert.equal(livingUnits(world).length, 12)
   assertNoCoOccupancy(world, 'final:')
 })

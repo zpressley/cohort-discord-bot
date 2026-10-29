@@ -34,10 +34,13 @@ const { createCombatResolver, tables: T } = require('../combat')
 const { findPath } = require('../movement/pathfinding')
 const { resolveMap } = require('../map/map')
 const { toPosition, samePosition } = require('../map/labels')
-const { resolveSimultaneousMovement, expandOrders, buildOccupancy, canEnter, moveUnit } =
-  require('../movement')
+const {
+  resolveSimultaneousMovement, expandOrders, buildOccupancy, canEnter, moveUnit, crowdingByUnit
+} = require('../movement')
 const { createEventLog } = require('./events')
-const { normalizeOrder, planUnit } = require('./orders')
+const { normalizeOrder, planUnit, isSeeking } = require('./orders')
+const { canSee } = require('../map/sight')
+const { coverFor } = require('./hiding')
 
 const DEFAULT_MAX_TURNS = 20
 
@@ -72,6 +75,15 @@ function createBattleState(spec, options = {}) {
     orderBook: new Map(),
     turn: 0,
     previousEngagementKeys: new Set(),
+    // Each unit's crowding tier at the end of the last turn, so the log can
+    // say when it changes. unitId -> tier name.
+    crowding: new Map(),
+    // Units hiding (Stage 3), and how well: unitId -> the row of hiding.js
+    // they hide by. Moving or fighting gives a unit away.
+    hidden: new Map(),
+    // Turns in a row a hidden unit has had an enemy right beside it: the
+    // chance it is noticed grows with each (EXPOSURE).
+    exposure: new Map(),
     outcome: { decided: false, winner: null, reason: 'battle still open' }
   }
 }
@@ -94,6 +106,28 @@ function stepTurn(state, sideOrders = {}) {
   const turn = state.turn
   world.turn = turn
 
+  // ── What each side can see as the turn opens ────
+  // Surprise is judged against this: an enemy no one on a side could see
+  // when the turn began, and who then attacks a marching unit, catches it
+  // unawares.
+  const seenAtStart = sightBySide(map, world, state.hidden)
+  const reveal = (unitId, reason, by = null) => {
+    state.exposure.delete(unitId)
+    if (!state.hidden.delete(unitId)) return
+    log.emit('revealed', turn, { unitId, reason, by })
+  }
+
+  // Who was fighting whom as the turn opens: leaving a fight costs (below).
+  const engagedAtStart = new Map()
+  for (const key of state.previousEngagementKeys) {
+    const [a, b] = key.split('|')
+    for (const [id, foe] of [[a, b], [b, a]]) {
+      if (broken.has(id)) continue
+      if (!engagedAtStart.has(id)) engagedAtStart.set(id, new Set())
+      engagedAtStart.get(id).add(foe)
+    }
+  }
+
   // ── Orders ──────────────────────────────────────
   const orders = []
   const freshThisTurn = new Set()
@@ -113,7 +147,7 @@ function stepTurn(state, sideOrders = {}) {
     const edge = spec.sides?.[side]?.homeEdge ?? 'west'
     const context = (unit) => ({
       fresh: fresh.has(unit.id),
-      nearestEnemy: (u) => nearestEnemy(world, u, broken),
+      nearestEnemy: (u) => nearestEnemy(world, u, broken, state.hidden),
       homeTarget: (u) => edgeTarget(map, u.position, edge)
     })
 
@@ -121,7 +155,15 @@ function stepTurn(state, sideOrders = {}) {
       const { move, order } = planUnit(unit, state.orderBook.get(unit.id), context(unit))
       if (order) state.orderBook.set(unit.id, order)
       else state.orderBook.delete(unit.id)
-      if (move) { orders.push(move); continue }
+      if (move) {
+        const held = state.orderBook.get(unit.id)
+        orders.push({
+          ...move,
+          seeking: isSeeking(held, spec.standingOrders?.[side]),
+          careful: Boolean(held?.careful)
+        })
+        continue
+      }
 
       // Standing orders. A side declared as `advance` presses the nearest
       // enemy whenever a unit has no order of its own — the simplest
@@ -130,8 +172,8 @@ function stepTurn(state, sideOrders = {}) {
       // staring at each other. (A side without standing orders holds, which
       // is also a choice: a unit is allowed to stand.)
       if (spec.standingOrders?.[side] === 'advance') {
-        const enemy = nearestEnemy(world, unit, broken)
-        if (enemy) orders.push({ unitId: unit.id, target: enemy.position })
+        const enemy = nearestEnemy(world, unit, broken, state.hidden)
+        if (enemy) orders.push({ unitId: unit.id, target: enemy.position, seeking: true })
       }
     }
   }
@@ -146,7 +188,84 @@ function stepTurn(state, sideOrders = {}) {
   }
 
   // ── Movement (phase 3) ──────────────────────────
-  const movement = resolveSimultaneousMovement(world, orders, map)
+  // ── Ambushes ────────────────────────────────
+  // A unit under an ambush order, standing where it was told to lie in
+  // wait, decides as each enemy steps within reach whether to strike.
+  const ambushers = new Set(livingUnits(world)
+    .filter(u => !broken.has(u.id) && state.orderBook.get(u.id)?.action === 'ambush')
+    .filter(u => { const o = state.orderBook.get(u.id); return !o.target || samePosition(o.target, u.position) })
+    .map(u => u.id))
+  const sprung = new Set()
+  const heldLogged = new Set()
+  const decideAmbush = (ambusher, passer, { careful }) => {
+    const order = state.orderBook.get(ambusher.id)
+    if (!matchesKind(passer, order.against)) return null
+    const options = state.hidden.has(passer.id) ? { seenWithin: state.hidden.get(passer.id).seenWithin } : {}
+    if (!canSee(map, ambusher, passer, options)) return null
+    const held = (reason) => {
+      const key = `${ambusher.id}|${passer.id}|${reason}`
+      if (!heldLogged.has(key)) log.emit('ambushHeld', turn, { unitId: ambusher.id, on: passer.id, reason })
+      heldLogged.add(key)
+      return null
+    }
+    order.passed = order.passed ?? []
+    if (order.passed.includes(passer.id)) return null
+    // Not worth it against a unit on guard, unless told to strike anyway.
+    if (careful && !order.regardless) return held('on guard')
+    if (order.passed.length < order.letPass) {
+      order.passed.push(passer.id)
+      return held('letting it pass')
+    }
+    sprung.add(ambusher.id)
+    log.emit('ambush', turn, { unitId: ambusher.id, on: passer.id, at: { ...passer.position } })
+    return 'spring'
+  }
+
+  const movement = resolveSimultaneousMovement(world, orders, map, {
+    hidden: new Set(state.hidden.keys()), ambushers, ambush: decideAmbush,
+    engaged: new Set(engagedAtStart.keys()), glue: T.DISENGAGE.MOVE_COST
+  })
+
+  // A sprung ambush is spent: the unit presses the attack on the nearest
+  // enemy (most often the one it caught) until given a new order. Holding
+  // instead let a caught column simply march on after one round.
+  for (const id of sprung) state.orderBook.set(id, { action: 'advance', target: null, then: null })
+
+  // Moving gives a hidden unit away, and so does being walked into.
+  for (const move of movement) {
+    if (move.tilesMoved > 0) reveal(move.unitId, 'moved')
+    if (move.stumbledOn) reveal(move.stumbledOn, 'stumbled on', move.unitId)
+  }
+
+  // ── Leaving a fight ─────────────────────────────
+  // A unit that was fighting and has stepped clear of every enemy it fought
+  // takes a parting blow: how hard is a chaos roll, softened by drill and by
+  // withdrawing carefully (DISENGAGE). Broken units are pursued instead.
+  const moves = new Map(movement.map(m => [m.unitId, m]))
+  for (const [id, foes] of [...engagedAtStart].sort(([x], [y]) => x.localeCompare(y))) {
+    const unit = getUnit(world, id)
+    const move = moves.get(id)
+    if (!unit || unit.strength <= 0 || broken.has(id) || !move || !(move.tilesMoved > 0)) continue
+    const standing = [...foes].map(f => getUnit(world, f))
+      .filter(f => f && f.strength > 0 && !broken.has(f.id))
+    if (standing.length === 0) continue
+    if (standing.some(f => tileDistance(f.position, unit.position) <= 1)) continue
+
+    const roll = random()
+    const drill = T.DISENGAGE.DRILL[unit.quality] ?? T.DISENGAGE.DRILL.tribal_warriors
+    const orderly = move.careful ? T.DISENGAGE.ORDERLY : 1
+    const weight = roll * drill * orderly
+    const killed = Math.min(unit.strength,
+      Math.round(unit.strength * T.DISENGAGE.CASUALTY_FRACTION * weight * Math.min(standing.length, 2)))
+    const morale = Math.round(T.DISENGAGE.MORALE * weight * 10) / 10
+    unit.strength -= killed
+    if (morale > 0) resolver.shake(unit, morale)
+    log.emit('disengage', turn, {
+      unitId: id, from: standing.map(f => f.id).sort(), killed, morale,
+      chaos: Math.round(roll * T.CHAOS.MAX * 10) / 10, orderly: Boolean(move.careful)
+    })
+    if (unit.strength === 0) log.emit('destroyed', turn, { unitId: id })
+  }
   for (const move of movement) {
     if (move.skipped || move.held || move.failed) continue
     log.emit('move', turn, {
@@ -206,14 +325,50 @@ function stepTurn(state, sideOrders = {}) {
   // Broken units do not fight — they are handled by pursuit, not by the
   // resolver. Filtered here rather than removed from the world, because
   // they still hold ground (a fleeing column blocks a tile like anyone).
+  //
+  // Two units side by side fight only if one of them is looking for a fight,
+  // or they were already fighting (Stage 3). A unit that is not can stand
+  // beside an enemy, or walk past it, and no blow is struck.
+  // A unit cannot pick a fight with an enemy its side cannot see, so a
+  // hidden force lets a column march by unless it chooses to strike.
+  const seeking = (id) => {
+    const unit = getUnit(world, id)
+    return sprung.has(id) || isSeeking(state.orderBook.get(id), spec.standingOrders?.[unit.side])
+  }
+  const seenNow = sightBySide(map, world, state.hidden)
+  const picksFight = (id, otherId) =>
+    seeking(id) && seenNow.get(getUnit(world, id).side)?.has(otherId)
   const engagements = detectEngagements(world, engagementRange, map)
     .filter(e => !broken.has(e.aId) && !broken.has(e.bId))
+    .filter(e => picksFight(e.aId, e.bId) || picksFight(e.bId, e.aId) ||
+      state.previousEngagementKeys.has(`${e.aId}|${e.bId}`))
+  for (const e of engagements) {
+    reveal(e.aId, 'fought')
+    reveal(e.bId, 'fought')
+  }
+
+  // How each unit spent the turn: marching (moved at full pace) or on guard
+  // (moved carefully, or stood).
+  const marching = new Set(movement
+    .filter(m => !m.skipped && !m.held && !m.failed && m.tilesMoved > 0 && !m.careful)
+    .map(m => m.unitId))
 
   for (const engagement of engagements) {
     const key = `${engagement.aId}|${engagement.bId}`
-    if (!state.previousEngagementKeys.has(key)) {
-      log.emit('contact', turn, { aId: engagement.aId, bId: engagement.bId })
+    if (state.previousEngagementKeys.has(key)) continue
+    log.emit('contact', turn, { aId: engagement.aId, bId: engagement.bId })
+
+    // Surprise: the one who sought the fight was unseen by the other side
+    // when the turn began, and caught the other on the march.
+    const surprises = []
+    for (const [by, target] of [[engagement.aId, engagement.bId], [engagement.bId, engagement.aId]]) {
+      const victim = getUnit(world, target)
+      if (!seeking(by) || !marching.has(target)) continue
+      if (seenAtStart.get(victim.side)?.has(by)) continue
+      surprises.push(by)
+      log.emit('surprise', turn, { unitId: target, by, posture: 'marching' })
     }
+    if (surprises.length > 0) engagement.surprisedBy = surprises
   }
   state.previousEngagementKeys = new Set(engagements.map(e => `${e.aId}|${e.bId}`))
 
@@ -256,6 +411,84 @@ function stepTurn(state, sideOrders = {}) {
     if (log.forTurn(turn).some(e => e.type === 'rout' && e.unitId === unit.id)) continue
     const trapped = samePosition(positionsAtTurnStart.get(unit.id), unit.position)
     applyPursuit(world, unit, turn, log, trapped)
+  }
+
+  // ── Searching and hiding ────────────────────
+  // Both take the turn, standing still, and settle at its end.
+  const moved = new Set(movement.filter(m => m.tilesMoved > 0).map(m => m.unitId))
+  const fought = new Set(engagements.flatMap(e => [e.aId, e.bId]))
+  for (const unit of livingUnits(world)) {
+    const order = state.orderBook.get(unit.id)
+    if (!order || broken.has(unit.id) || moved.has(unit.id)) continue
+
+    if (order.action === 'check') {
+      // What it would see if no one were hiding: in a wood, 1 tile.
+      const found = livingUnits(world)
+        .filter(e => e.side !== unit.side && state.hidden.has(e.id) && canSee(map, unit, e))
+        .map(e => e.id)
+        .sort()
+      for (const id of found) reveal(id, 'found', unit.id)
+      log.emit('checked', turn, { unitId: unit.id, at: { ...unit.position }, found })
+      state.orderBook.set(unit.id, { action: 'hold', target: null, then: null })
+    }
+
+    if ((order.action === 'hide' || order.action === 'ambush') && !state.hidden.has(unit.id) && !fought.has(unit.id)) {
+      const cover = coverFor(map, unit)
+      if (cover.seenWithin === null) {
+        log.emit('hideFailed', turn, { unitId: unit.id, at: { ...unit.position }, reason: 'no cover', by: null })
+        state.orderBook.set(unit.id, { action: 'hold', target: null, then: null })
+        continue
+      }
+      // A unit cannot hide from an enemy watching it do so. It keeps
+      // trying, turn by turn, until it is out of sight.
+      const watcher = livingUnits(world)
+        .filter(e => e.side !== unit.side && canSee(map, e, unit))
+        .sort((x, y) => x.id.localeCompare(y.id))[0]
+      if (watcher) {
+        log.emit('hideFailed', turn, { unitId: unit.id, at: { ...unit.position }, reason: 'watched', by: watcher.id })
+        continue
+      }
+      state.hidden.set(unit.id, cover)
+      log.emit('hidden', turn, { unitId: unit.id, at: { ...unit.position }, cover: cover.name })
+    }
+  }
+
+  // An enemy lingering right beside a hidden unit grows ever likelier to
+  // notice it: 25% the first turn, 50% the next, and so on (EXPOSURE).
+  for (const id of [...state.hidden.keys()].sort()) {
+    const unit = getUnit(world, id)
+    if (!unit || unit.strength <= 0) continue
+    const beside = livingUnits(world)
+      .filter(e => e.side !== unit.side && tileDistance(e.position, unit.position) <= 1)
+      .sort((x, y) => x.id.localeCompare(y.id))
+    if (beside.length === 0) { state.exposure.delete(id); continue }
+    const turns = (state.exposure.get(id) ?? 0) + 1
+    state.exposure.set(id, turns)
+    if (random() < Math.min(1, T.EXPOSURE.PER_TURN * turns)) reveal(id, 'noticed', beside[0].id)
+  }
+
+  // The cost of hiding where it hurts, such as a marsh; and the dead hide
+  // from no one.
+  for (const [id, cover] of [...state.hidden]) {
+    const unit = getUnit(world, id)
+    if (!unit || unit.strength <= 0) { state.hidden.delete(id); continue }
+    if (cover.cost?.staminaPerTurn) resolver.tire(unit, cover.cost.staminaPerTurn)
+  }
+
+  // ── Crowding ────────────────────────────────
+  // Logged when a unit's crowding tier changes, so the narrator can say the
+  // ranks are packed too tight, and when they loosen again.
+  const crowdingNow = crowdingByUnit(world)
+  for (const unit of livingUnits(world)) {
+    const tier = crowdingNow.get(unit.id)?.name ?? 'organized'
+    const before = state.crowding.get(unit.id) ?? 'organized'
+    if (tier !== before) {
+      const men = livingUnits(world)
+        .filter(u => samePosition(u.position, unit.position))
+        .reduce((sum, u) => sum + u.strength, 0)
+      log.emit('crowding', turn, { unitId: unit.id, at: { ...unit.position }, men, tier, was: before })
+    }
+    state.crowding.set(unit.id, tier)
   }
 
   const turnRecord = {
@@ -323,8 +556,9 @@ function runBattle(spec, options = {}) {
 // disengage — the first fixture battles showed a beaten levy simply shoved
 // out of contact and left in peace. Because terrain comes from position, a
 // unit shoved off a hill has lost the high ground the moment they land,
-// and the winner has taken it. A shove into an occupied, impassable or
-// off-map tile does not move anyone; it is logged as `crush`. Whether crush
+// and the winner has taken it. A shove into friends with room crowds in
+// among them (Stage 3); a shove into an enemy, a full tile, impassable
+// ground or off the map does not move anyone and is logged as `crush`. Whether crush
 // should cost extra morale is an open tuning question (locked decision 3
 // hints at stacking pressure), left visible in the log rather than guessed.
 function applyPushes(map, world, pushes, turn, log) {
@@ -357,7 +591,9 @@ function applyPushes(map, world, pushes, turn, log) {
     const vacated = { ...loser.position }
     moveUnit(occupancy, loser, backTile)
 
-    if (map.passable(vacated)) {
+    // The winner follows up only into ground the loser's side has left: a
+    // friend of the loser still standing there holds it.
+    if (map.passable(vacated) && canEnter(occupancy, winner, vacated).ok) {
       moveUnit(occupancy, winner, vacated)
     }
 
@@ -449,11 +685,11 @@ function offsetEdgeTarget(map, pos, edge, offset) {
 
 // Nearest fighting enemy by tile distance, unit-id tiebreak. Broken units are
 // not targets — chasing them is pursuit's job, not the battle line's.
-function nearestEnemy(world, unit, broken) {
+function nearestEnemy(world, unit, broken, hidden = new Map()) {
   let best = null
   let bestDistance = Infinity
   for (const other of livingUnits(world)) {
-    if (other.side === unit.side || broken.has(other.id)) continue
+    if (other.side === unit.side || broken.has(other.id) || hidden.has(other.id)) continue
     const distance = tileDistance(unit.position, other.position)
     if (distance < bestDistance ||
         (distance === bestDistance && other.id.localeCompare(best.id) < 0)) {
@@ -462,6 +698,40 @@ function nearestEnemy(world, unit, broken) {
     }
   }
   return best
+}
+
+// ── Ambush targets ───────────────────────────────────────
+// What an ambush order may strike: anything (null), a kind of unit, or a
+// unit by name. The words a player uses are fitted to these by the order
+// reader.
+function matchesKind(unit, kind) {
+  if (!kind || kind === 'anything') return true
+  switch (kind) {
+    case 'cavalry': return Boolean(unit.mounted)
+    case 'infantry': return !unit.mounted
+    case 'archers': return unit.role === 'archers' || /bow|sling|javelin/.test(unit.primaryWeapon ?? '')
+    case 'scouts': return unit.role === 'scout' || unit.role === 'scouts'
+    default: return unit.id === kind || unit.id.includes(kind) || unit.role === kind
+  }
+}
+
+// ── Sight ────────────────────────────────────────────────
+// side -> the set of enemy unit ids any of its units can see (map/sight.js),
+// hidden units only as closely as their cover allows.
+function sightBySide(map, world, hidden = new Map()) {
+  const living = livingUnits(world)
+  const result = new Map()
+  for (const side of sides(world)) {
+    const watchers = living.filter(u => u.side === side)
+    const seen = new Set()
+    for (const enemy of living) {
+      if (enemy.side === side) continue
+      const options = hidden.has(enemy.id) ? { seenWithin: hidden.get(enemy.id).seenWithin } : {}
+      if (watchers.some(w => canSee(map, w, enemy, options))) seen.add(enemy.id)
+    }
+    result.set(side, seen)
+  }
+  return result
 }
 
 // ── Victory ──────────────────────────────────────────────

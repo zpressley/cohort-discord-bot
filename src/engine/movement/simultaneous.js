@@ -15,19 +15,15 @@
 // initiative order (scouts -> siege, see initiative.js). Occupancy is queried
 // live at each step, so:
 //
-//   - Two units racing for one tile: the higher-initiative unit takes it on
-//     its step; the other finds it occupied and waits.
-//   - A column: the lead unit vacates a tile early in the tick, the follower
-//     enters it later in the same tick. Friendly pass-through falls out of the
-//     model with no special rule.
-//   - Head-on units trying to swap tiles: each finds the other's tile occupied
-//     and neither moves. They stand facing each other, which is what two
-//     hundred-man bodies meeting head-on do — resolving it is combat (phase 4).
-//   - No path replanning around a blocker. A blocked unit waits, and if it is
-//     still blocked next tick it stops for the turn. Flowing around a friend
-//     mid-order is a command the player did not give; the report says who
-//     blocked whom, and the player can reroute next turn. (Flagged as a
-//     possible later refinement — autonomy AI territory, Phase 8.)
+//   - Friends share ground (Stage 3): a unit may step onto a friend's tile
+//     while the tile stays under the crowding cap, and pays for the crowding
+//     (occupancy.js). Two units racing for one tile can both end there.
+//   - A full tile: the higher-initiative units fill it; the next finds it
+//     full, looks once for a way around, and otherwise waits a tick and then
+//     stops for the turn.
+//   - An enemy's tile is never entered: that is contact.
+//   - Crowding slows a unit: its range for the turn is cut by the crowding
+//     on the tile it starts on.
 //
 // The resolver mutates unit positions (like the phase 2 movement phase) but
 // draws no randomness — movement is fully deterministic, chaos stays combat's
@@ -36,7 +32,7 @@
 const { findPath } = require('./pathfinding')
 const { toPosition, samePosition, positionKey } = require('../map/labels')
 const { inInitiativeOrder, tierName } = require('./initiative')
-const { buildOccupancy, canEnter, moveUnit } = require('./occupancy')
+const { buildOccupancy, canEnter, moveUnit, crowdingByUnit, crowdedRange } = require('./occupancy')
 const { getUnit, isAlive } = require('../world')
 
 // A unit blocked this many ticks in a row gives up for the turn.
@@ -51,9 +47,26 @@ const BLOCKED_TICKS_TO_STOP = 2
  * @param {Object} map     the battlefield (src/engine/map/map.js)
  * @returns {Array} per-unit movement results, sorted by unit id
  */
-function resolveSimultaneousMovement(world, orders, map) {
+function resolveSimultaneousMovement(world, orders, map, options = {}) {
+  // Enemies hidden from everyone (Stage 3): a unit looking for a fight does
+  // not stop for one it cannot see, and one that walks into its tile has
+  // stumbled on it.
+  const hidden = options.hidden ?? new Set()
+  // Ambushes lying in wait (Stage 3): unitId set, and the battle's decision,
+  // asked each time an enemy steps within reach of one. 'spring' stops the
+  // passing unit where it stands: it has been caught.
+  const ambushers = options.ambushers ?? new Set()
+  const decideAmbush = options.ambush ?? (() => null)
+  const sprung = new Set()
+  // Units in a fight as the turn opens (Stage 3): breaking contact costs
+  // movement.
+  const engaged = options.engaged ?? new Set()
+  const glue = options.glue ?? 0
+  const withGlue = (unit, budget) =>
+    engaged.has(unit.id) && glue > 0 ? Math.max(Math.min(1, budget), budget - glue) : budget
   if (!map) throw new Error('resolveSimultaneousMovement needs the map')
   const occupancy = buildOccupancy(world)
+  const crowding = crowdingByUnit(world)
   const plans = new Map()
   const results = new Map()
 
@@ -91,12 +104,24 @@ function resolveSimultaneousMovement(world, orders, map) {
       fleeing: Boolean(order.fleeing),
       steps: path.slice(1),            // path[0] is where the unit stands
       stepIndex: 0,
-      budget: unit.movementRange,
+      // Careful (on guard) marches at half speed, after crowding.
+      budget: withGlue(unit, order.careful
+        ? Math.round(crowdedRange(unit, crowding.get(unit.id)) / 2 * 100) / 100
+        : crowdedRange(unit, crowding.get(unit.id))),
+      careful: Boolean(order.careful),
+      // Looking for a fight (Stage 3): only such a unit stops when it meets
+      // an enemy. Others walk on past, if the way is open. Callers that do
+      // not say are treated as seeking, the rule before Stage 3.
+      seeking: order.seeking ?? true,
       from: { ...unit.position },
       tilesTraversed: [],
       blockedTicks: 0,
       blockedBy: null,
-      stopped: false
+      stopped: false,
+      // In contact before anyone moved: such a unit may step away (a
+      // withdrawal), so only contact made during the turn stops it below.
+      startedInContact: Boolean(adjacentEnemy(occupancy, unit, map, hidden)),
+      stumbledOn: null
     })
   }
 
@@ -114,6 +139,19 @@ function resolveSimultaneousMovement(world, orders, map) {
       if (!plan || plan.stopped) continue
       if (plan.stepIndex >= plan.steps.length) continue
 
+      // An enemy came up beside this unit earlier in the turn: it is in
+      // contact now, and turns to fight instead of walking on. Without this,
+      // a unit chasing an enemy could step out of the contact the enemy had
+      // just made, and the two could circle each other for ever.
+      if (plan.seeking && !plan.fleeing && !plan.startedInContact) {
+        const enemy = adjacentEnemy(occupancy, unit, map, hidden)
+        if (enemy) {
+          plan.stopped = true
+          plan.blockedBy = enemy.id
+          continue
+        }
+      }
+
       const nextCoord = plan.steps[plan.stepIndex]
       const terrain = map.terrainAt(nextCoord)
       const cost = map.moveCost(nextCoord)
@@ -124,14 +162,16 @@ function resolveSimultaneousMovement(world, orders, map) {
       }
 
       const entry = canEnter(occupancy, unit, nextCoord)
-      // A friend in the way: once per turn, look for a way around the tiles
-      // other units stand on. Paths are planned over an empty field, so
-      // without this, units sharing a destination file up behind one another
-      // and a broken unit wedged in the line can block both armies for good.
-      // An enemy in the way is contact, and stops the move (below).
+      // A full tile of friends in the way: once per turn, look for a way
+      // around the tiles this unit cannot enter. Paths are planned over an
+      // empty field, so without this a broken unit wedged in a packed line
+      // can block both armies for good. An enemy in the way is contact, and
+      // stops the move (below).
       if (!entry.ok && entry.reason === 'friendly' && !plan.detoured) {
         plan.detoured = true
-        const avoid = new Set([...occupancy.keys()].filter(k => occupancy.get(k) !== unit))
+        const avoid = new Set([...occupancy.entries()]
+          .filter(([, units]) => units.length > 0 && !canEnter(occupancy, unit, units[0].position).ok)
+          .map(([key]) => key))
         const detour = findPath(map, unit.position, plan.target, { avoid })
         if (detour && detour.length > 1) {
           plan.steps = detour.slice(1)
@@ -143,6 +183,7 @@ function resolveSimultaneousMovement(world, orders, map) {
       if (!entry.ok) {
         plan.blockedTicks += 1
         plan.blockedBy = entry.blocker
+        if (entry.reason === 'enemy' && hidden.has(entry.blocker)) plan.stumbledOn = entry.blocker
         if (entry.reason === 'enemy' || plan.blockedTicks >= BLOCKED_TICKS_TO_STOP) {
           // An enemy never moves aside for you; a friend gets one tick to.
           plan.stopped = true
@@ -160,13 +201,30 @@ function resolveSimultaneousMovement(world, orders, map) {
       plan.blockedBy = null
       anyoneMoving = true
 
-      // Contact stops movement: a unit that steps next to an enemy halts
-      // there and fights. Contact used to be checked only after everyone had
-      // moved, so two units could slip past each other through the
-      // diagonals, swap places, and repeat for ever without a blow. Fleeing
-      // units are exempt: they keep running, and pursuit deals with them.
-      if (!plan.fleeing) {
-        const enemy = adjacentEnemy(occupancy, unit, map)
+      // An ambush within reach may spring on this unit, and catch it here.
+      if (ambushers.size > 0) {
+        const lying = map.neighbors(unit.position)
+          .flatMap(n => occupancy.get(positionKey(n)) ?? [])
+          .filter(a => a.side !== unit.side && ambushers.has(a.id) && !sprung.has(a.id))
+          .sort((x, y) => x.id.localeCompare(y.id))
+        const by = lying.find(a => decideAmbush(a, unit, { careful: plan.careful, fleeing: plan.fleeing }) === 'spring')
+        if (by) {
+          sprung.add(by.id)
+          plan.stopped = true
+          plan.blockedBy = by.id
+          plan.ambushedBy = by.id
+          continue
+        }
+      }
+
+      // Contact stops a unit looking for a fight: it steps next to an enemy,
+      // halts there and fights. Contact used to be checked only after
+      // everyone had moved, so two units could slip past each other through
+      // the diagonals, swap places, and repeat for ever without a blow.
+      // Fleeing units are exempt: they keep running, and pursuit deals with
+      // them. A unit not looking for a fight walks on (Stage 3).
+      if (plan.seeking && !plan.fleeing) {
+        const enemy = adjacentEnemy(occupancy, unit, map, hidden)
         if (enemy) {
           plan.stopped = true
           plan.blockedBy = enemy.id
@@ -185,9 +243,12 @@ function resolveSimultaneousMovement(world, orders, map) {
       target: plan.target,
       reachedTarget: samePosition(plan.unit.position, plan.target),
       tilesMoved: plan.tilesTraversed.length,
+      careful: plan.careful,
       tilesTraversed: plan.tilesTraversed,
       movementRemaining: plan.budget,
       blockedBy: plan.blockedBy,
+      ...(plan.stumbledOn ? { stumbledOn: plan.stumbledOn } : {}),
+      ...(plan.ambushedBy ? { ambushedBy: plan.ambushedBy } : {}),
       terrain: map.terrainAt(plan.unit.position)
     })
   }
@@ -195,10 +256,10 @@ function resolveSimultaneousMovement(world, orders, map) {
   return [...results.values()].sort((a, b) => a.unitId.localeCompare(b.unitId))
 }
 
-function adjacentEnemy(occupancy, unit, map) {
+function adjacentEnemy(occupancy, unit, map, hidden = new Set()) {
   for (const next of map.neighbors(unit.position)) {
-    const other = occupancy.get(positionKey(next))
-    if (other && other.side !== unit.side) return other
+    const other = (occupancy.get(positionKey(next)) ?? []).find(u => u.side !== unit.side && !hidden.has(u.id))
+    if (other) return other
   }
   return null
 }

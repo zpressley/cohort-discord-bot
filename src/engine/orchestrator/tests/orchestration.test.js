@@ -53,44 +53,46 @@ test('vision: 6 standard, 10 for scouts, +4 on high ground', () => {
   assert.equal(visionRange(createUnit(unit({ role: 'scout', position: 'F21' })), map), 14)
 })
 
+// On the open plain south of the river: column H at rows 10-14, used before
+// Stage 3, looks through the woods at H11-H12, which now block sight.
 test('an enemy out of range is unknown, in range is visible, and after moving away is a ghost', () => {
   const world = createWorld({
     units: [
-      unit({ id: 'mine', side: 'red', position: 'H10' }),
-      unit({ id: 'theirs', side: 'blue', position: 'H30' })
+      unit({ id: 'mine', side: 'red', position: 'J24' }),
+      unit({ id: 'theirs', side: 'blue', position: 'J33' })
     ]
   })
   const intel = createIntel()
 
   updateIntel(intel, world, 'red', 1, map)
-  assert.equal(intel.known['theirs'], undefined, '20 tiles away is over the horizon')
+  assert.equal(intel.known['theirs'], undefined, '9 tiles away is out of sight')
 
-  world.units[1].position = toPosition('H14')
+  world.units[1].position = toPosition('J28')
   const sightings = updateIntel(intel, world, 'red', 2, map)
   assert.deepEqual(sightings, ['theirs'], 'coming into range is a sighting')
   assert.equal(intel.known['theirs'].status, 'visible')
   assert.equal(intel.known['theirs'].strength, 100)
 
-  world.units[1].position = toPosition('H30')
+  world.units[1].position = toPosition('J33')
   updateIntel(intel, world, 'red', 3, map)
   const ghost = intel.known['theirs']
   assert.equal(ghost.status, 'ghost', 'gone from sight, not from memory')
-  assert.equal(toLabel(ghost.position), 'H14', 'the ghost keeps the LAST seen position')
+  assert.equal(toLabel(ghost.position), 'J28', 'the ghost keeps the LAST seen position')
   assert.equal(ghost.seenOnTurn, 2, 'and says how stale it is')
 })
 
 test('a re-sighted ghost counts as a fresh sighting', () => {
   const world = createWorld({
     units: [
-      unit({ id: 'mine', side: 'red', position: 'H10' }),
-      unit({ id: 'theirs', side: 'blue', position: 'H14' })
+      unit({ id: 'mine', side: 'red', position: 'J24' }),
+      unit({ id: 'theirs', side: 'blue', position: 'J28' })
     ]
   })
   const intel = createIntel()
   updateIntel(intel, world, 'red', 1, map)     // visible
-  world.units[1].position = toPosition('H30')
+  world.units[1].position = toPosition('J33')
   updateIntel(intel, world, 'red', 2, map)     // ghost
-  world.units[1].position = toPosition('H13')
+  world.units[1].position = toPosition('J27')
   const sightings = updateIntel(intel, world, 'red', 3, map)
   assert.deepEqual(sightings, ['theirs'])
 })
@@ -98,8 +100,8 @@ test('a re-sighted ghost counts as a fresh sighting', () => {
 test('sideView shows own units in full and the enemy only through intel', () => {
   const game = createGame(gameSpec({
     units: [
-      unit({ id: 'mine', side: 'red', position: 'H10' }),
-      unit({ id: 'near', side: 'blue', position: 'H13' }),
+      unit({ id: 'mine', side: 'red', position: 'J24' }),
+      unit({ id: 'near', side: 'blue', position: 'J27' }),
       unit({ id: 'far', side: 'blue', position: 'AA35' })
     ]
   }))
@@ -281,7 +283,8 @@ test('a turn in contact resolves one tick — the commanders decide every round'
     ]
   }))
 
-  submitOrders(game, 'red', [])
+  // Since Stage 3 side-by-side units fight only if one seeks it.
+  submitOrders(game, 'red', [{ unitRef: 'a', action: 'advance' }])
   submitOrders(game, 'blue', [])
 
   const turn = game.history[0]

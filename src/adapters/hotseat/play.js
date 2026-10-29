@@ -10,6 +10,9 @@
 //   npm run play -- meeting-battle --seed 7       a different battle
 //   npm run play -- meeting-battle --full-map     the whole 40x40
 //   npm run play -- meeting-battle --time-limit 120  end after 2 hours of battle
+//   npm run play -- meeting-battle --objective "Harrow Bridge" --objective C6
+//                                                 ground to hold: a feature
+//                                                 or grid square (repeatable)
 //                                                 (default 240; 0 = no limit)
 //
 // At the prompt, one order per line:
@@ -27,13 +30,14 @@ const { renderHandoff } = require('./render')
 const { aiClientFromEnv } = require('../../llm')
 
 function parseArgs(argv) {
-  const args = { scenario: 'meeting-battle', seed: undefined, auto: null, fullMap: false, timeLimit: 240 }
+  const args = { scenario: 'meeting-battle', seed: undefined, auto: null, fullMap: false, timeLimit: 240, objectives: [] }
   for (let i = 0; i < argv.length; i++) {
     const arg = argv[i]
     if (arg === '--seed') args.seed = Number(argv[++i])
     else if (arg === '--auto') args.auto = argv[++i]
     else if (arg === '--full-map') args.fullMap = true
     else if (arg === '--time-limit') args.timeLimit = Number(argv[++i])
+    else if (arg === '--objective') args.objectives.push(argv[++i])
     else if (!arg.startsWith('--')) args.scenario = arg
   }
   return args
@@ -55,7 +59,9 @@ async function main() {
     seed: args.seed, auto: args.auto, fullMap: args.fullMap, ai,
     // A battle ends after this much battle time (default 4 hours), the side
     // with the larger share of losses losing. --time-limit 0 turns it off.
-    timeLimitMinutes: args.timeLimit || null
+    timeLimitMinutes: args.timeLimit || null,
+    // Ground worth holding: an hour of holding all of it wins.
+    objectives: args.objectives
   })
 
   // Not rl.question: with piped input (the smoke tests, or a scripted game)

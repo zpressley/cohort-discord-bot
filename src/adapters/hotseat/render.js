@@ -17,6 +17,7 @@ const { gridLabel, SQUARE_TILES } = require('../../engine/map/grid')
 const where = (position) => gridLabel(position, { quarter: true })
 const { sideView } = require('../../engine/orchestrator')
 const { describeCombatEvent } = require('../../narrator/eventText')
+const { visibleEvents, publicEvents, maskNames } = require('../../narrator/turnNarrator')
 
 const TERRAIN_GLYPHS = {
   plains: '.', road: '=', hill: '^', forest: 'F',
@@ -131,6 +132,13 @@ function renderRoster(game, side) {
     lines.push(line)
   }
   if (view.own.length === 0) lines.push('  no units standing')
+
+  // Objectives are known to both sides: they are the reason for the fight.
+  for (const objective of game.objectives ?? []) {
+    const hold = game.objectiveHolds[objective.id]
+    const held = hold ? `held by ${hold.side} since ${clock(hold.sinceMinute ?? 0).replace(' of battle', '')}` : 'held by nobody'
+    lines.push(`  objective: ${objective.name} (${where(objective.tiles[0])}) — ${held}`)
+  }
   return lines.join('\n')
 }
 
@@ -149,11 +157,22 @@ function clock(minutes) {
 // The typed event log, worded. This is the plain-prose stand-in for the AI
 // narrator: same input (the event log and nothing else), no voice. When the
 // narrator lands it replaces these sentences, not this plumbing.
-function renderTurnReport(game, turnEntry) {
+// viewer: the side reading, in solo play, so the report keeps that side's
+// fog of war. Without one (two commanders at one screen), each side's
+// private doings (hiding, held ambushes, searches) are left out for both.
+function renderTurnReport(game, turnEntry, viewer = null) {
   const lines = [`── the field reports (turn ${turnEntry.playerTurn}, ${turnEntry.interrupt}) ──`]
+  let filter = publicEvents
+  if (viewer) {
+    const ownIds = new Set([...game.battle.world.units, ...game.battle.fledUnits]
+      .filter(u => u.side === viewer).map(u => u.id))
+    const seenEnemyIds = new Set(sideView(game, viewer).intel.filter(e => e.status === 'visible').map(e => e.id))
+    const known = (id) => ownIds.has(id) || seenEnemyIds.has(id)
+    filter = (events) => visibleEvents(events, { ownIds, seenEnemyIds }).map(e => maskNames(e, known))
+  }
 
   for (const tick of turnEntry.ticks) {
-    const events = game.battle.log.forTurn(tick.battleTurn)
+    const events = filter(game.battle.log.forTurn(tick.battleTurn))
     for (const event of events) {
       const line = wordEvent(event)
       if (line) lines.push('  ' + line)
@@ -185,6 +204,7 @@ function wordEvent(event) {
         (event.blockedBy ? ` — ${event.blockedBy} is in the way` : ' — there is no way through') +
         (event.then === 'hold' ? '; it holds where it stands' : '; it rejoins the line')
     case 'contact': return `CONTACT: ${event.aId} meets ${event.bId}`
+    case 'surprise': return `SURPRISE: ${event.by} falls on ${event.unitId} while it marches`
     case 'exchange': return describeCombatEvent(event)
     case 'standoff': return describeCombatEvent(event)
     case 'push':
@@ -197,6 +217,39 @@ function wordEvent(event) {
         (event.trapped ? ' — they are cornered' : '')
     case 'fled': return `${event.unitId} escapes the field with ${event.strength} men`
     case 'destroyed': return `${event.unitId} is wiped out`
+    case 'crowding':
+      return event.tier === 'organized'
+        ? `${event.unitId} has room to fight again at ${where(event.at)}`
+        : `${event.unitId} is ${event.tier} at ${where(event.at)} — ${event.men} men packed on one spot`
+    case 'objective':
+      return event.side
+        ? `${event.side.toUpperCase()} takes ${event.name}`
+        : `${event.name} is no longer held${event.was ? ` by ${event.was}` : ''}`
+    case 'disengage':
+      return `${event.unitId} breaks off from ${event.from.join(', ')}` +
+        (event.orderly ? ' in good order' : '') +
+        (event.killed ? `, losing ${event.killed} men as it goes` : ', cleanly')
+    case 'ambush': return `AMBUSH! ${event.unitId} falls on ${event.on} at ${where(event.at)}`
+    case 'ambushHeld':
+      return event.reason === 'on guard'
+        ? `${event.unitId} lets ${event.on} pass: it comes on guard, not worth the strike`
+        : `${event.unitId} lets ${event.on} pass, as ordered`
+    case 'hidden': return `${event.unitId} goes to ground at ${where(event.at)} (${event.cover})`
+    case 'hideFailed':
+      return event.reason === 'watched'
+        ? `${event.unitId} cannot hide — ${event.by} is watching`
+        : `${event.unitId} finds no cover to hide in at ${where(event.at)}`
+    case 'checked':
+      return `${event.unitId} searches the ground at ${where(event.at)}` +
+        (event.found.length ? ` — and finds ${event.found.join(', ')}!` : ' — nothing')
+    case 'revealed':
+      return {
+        moved: `${event.unitId} breaks cover`,
+        fought: `${event.unitId} is out of hiding, fighting`,
+        found: `${event.unitId} is discovered by ${event.by}`,
+        'stumbled on': `${event.by} stumbles onto ${event.unitId}, hidden there`,
+        noticed: `${event.by} notices ${event.unitId} hidden close by`
+      }[event.reason] ?? `${event.unitId} is seen`
     case 'victory': return null // rendered as the banner instead
     default: return null
   }

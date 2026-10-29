@@ -10,8 +10,35 @@
 //   defend    go to target if one is given, then hold there. "Set up a
 //             defensive position."
 //   advance   press the nearest enemy, every tick, until told otherwise.
+//   attack    go to target looking for a fight (Stage 3); without a target
+//             it is advance.
 //   withdraw  fall back toward your own home edge, or to target if given,
 //             then hold.
+//   hide      go to target if one is given, then hide there. Hiding takes a
+//             turn standing still; how well it works is the ground's and the
+//             unit's (hiding.js). Moving or fighting gives the unit away.
+//   check     go to target if one is given, then spend a turn searching the
+//             ground: hidden enemies the unit could see if they were not
+//             hiding are found. Then hold.
+//   ambush    hide (as hide), then lie in wait and strike an enemy that
+//             passes within reach (ruled: the player orders ambushes). Once
+//             sprung it becomes advance: the unit presses the attack.
+//             against: what to strike (null for anything; 'cavalry',
+//             'infantry', 'archers', 'scouts', or a unit name); letPass: how
+//             many to let go by first; regardless: strike even a unit on
+//             guard (by default an ambush springs only on a unit marching,
+//             since one on guard is not worth it). An enemy that stops
+//             beside the ambush is not struck: the player springs the
+//             trap, with any order to attack (ruled 2026-10-29).
+//
+// Any order that moves may be careful (Stage 3): the unit marches on guard,
+// at half speed, and cannot be caught by surprise. Otherwise a moving unit is
+// marching.
+//
+// Seeking a fight (Stage 3, ruled direction): only advance and attack, or a
+// unit with no order on a side whose standing order is to advance, look for
+// a fight. Two enemy units side by side fight only if one of them is
+// seeking one (or they were already fighting).
 //
 // The older shape still works: { unitRef, target } is a move, and
 // { unitRef, target: 'hold' } is a hold.
@@ -28,7 +55,8 @@
 
 const { toPosition, samePosition } = require('../map/labels')
 
-const ACTIONS = ['move', 'hold', 'defend', 'advance', 'withdraw']
+const ACTIONS = ['move', 'hold', 'defend', 'advance', 'attack', 'withdraw', 'hide', 'check', 'ambush']
+const SEEKING = ['advance', 'attack']
 
 /**
  * Bring any accepted order shape to { action, target, then }.
@@ -43,10 +71,11 @@ function normalizeOrder(order) {
     const then = order.then ?? (holdsAfter ? 'hold' : null)
     if (order.action === 'defend' && !target) return { action: 'hold', target: null, then: null }
     if (order.action === 'move' && !target) throw new Error('a move order needs a target')
-    return { action: order.action, target, then }
+    if (order.action === 'attack' && !target) return withCareful({ action: 'advance', target: null, then: null }, order)
+    return withCareful({ action: order.action, target, then }, order)
   }
   if (!order.target || order.target === 'hold') return { action: 'hold', target: null, then: null }
-  return { action: 'move', target: toPosition(order.target), then: null }
+  return withCareful({ action: 'move', target: toPosition(order.target), then: null }, order)
 }
 
 /**
@@ -72,7 +101,19 @@ function planUnit(unit, order, context) {
       return { move: enemy ? { unitId: unit.id, target: enemy.position } : { unitId: unit.id, target: 'hold' }, order }
     }
 
+    case 'hide':
+    case 'ambush':
+    case 'check': {
+      // Go there first, if told where; then stand still for the turn the
+      // hiding or the search takes. The battle settles both at turn's end.
+      if (order.target && !samePosition(order.target, unit.position)) {
+        return { move: { unitId: unit.id, target: order.target }, order }
+      }
+      return { move: { unitId: unit.id, target: 'hold' }, order }
+    }
+
     case 'move':
+    case 'attack':
     case 'defend':
     case 'withdraw': {
       const target = order.target ?? context.homeTarget(unit)
@@ -95,4 +136,24 @@ function planUnit(unit, order, context) {
   }
 }
 
-module.exports = { normalizeOrder, planUnit, ACTIONS }
+// The optional parts of an order are carried only when set, so plain orders
+// keep their old shape.
+function withCareful(normalized, order) {
+  const out = { ...normalized }
+  if (order.careful) out.careful = true
+  if (normalized.action === 'ambush') {
+    out.against = order.against ?? null
+    out.letPass = Math.max(0, Math.floor(order.letPass ?? 0))
+    out.regardless = Boolean(order.regardless)
+  }
+  return out
+}
+
+// Is this unit looking for a fight? Its own order decides; a unit with none
+// follows its side's standing order.
+function isSeeking(order, standingOrder) {
+  if (order) return SEEKING.includes(order.action)
+  return standingOrder === 'advance'
+}
+
+module.exports = { normalizeOrder, planUnit, isSeeking, ACTIONS, SEEKING }

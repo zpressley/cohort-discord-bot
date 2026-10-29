@@ -151,7 +151,7 @@ test('AI briefing: own units and the ground in words, seen enemies only, no coor
   assert.ok(!/blue_archers|blue_horse/.test(text), 'enemies the side has not seen are not mentioned')
 })
 
-test('the reply schema allows exactly the five actions', () => {
-  assert.deepEqual(REPLY_SCHEMA.properties.orders.items.properties.action.enum,
-    ['move', 'hold', 'defend', 'advance', 'withdraw'])
+test('the reply schema allows exactly the actions the engine knows', () => {
+  const { ACTIONS } = require('../../engine/battle/orders')
+  assert.deepEqual([...REPLY_SCHEMA.properties.orders.items.properties.action.enum].sort(), [...ACTIONS].sort())
 })

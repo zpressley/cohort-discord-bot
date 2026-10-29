@@ -350,6 +350,94 @@ const FLANKING = {
   CAP: 2
 }
 
+// ── Crowding (stacking) ────────────────────────────────
+//
+// Friendly units may share a tile (ruled 2026-10-21), paying for it once the
+// tile holds more men than it comfortably can. The tiers are the earlier
+// build's density table (STACK-002, archive/docs/Context/Old Context/
+// cohort_task_list.md), its thresholds quartered for 25 m tiles as the
+// roadmap's scale table (§6) planned. A standard unit is 100 men, so two
+// full units on one tile are already `compressed`; worn-down units crowd
+// together more cheaply.
+//
+// Tiers apply only to a shared tile: a lone unit is never crowded, whatever
+// its size. move is the share of movement lost, combat comes off attack and
+// defense, morale is lost per combat round (the old table's -2 was on a
+// smaller morale scale; this one runs to 100).
+//
+// Ruled 2026-10-29: crowding is meant to punish fighting packed together,
+// not moving. The old table's movement losses (25/50/75/90%) are cut to
+// 0/10/25/50%; the combat penalties stand.
+
+const CROWDING = {
+  CAP: 300, // men per tile, hard limit
+  TIERS: [
+    { name: 'organized', upTo: 100, move: 0, combat: 0, morale: 0 },
+    { name: 'crowded', upTo: 150, move: 0, combat: 1, morale: 0 },
+    { name: 'compressed', upTo: 200, move: 0.1, combat: 2, morale: 0 },
+    { name: 'crushing', upTo: 250, move: 0.25, combat: 3, morale: 0 },
+    { name: 'critical', upTo: 300, move: 0.5, combat: 4, morale: 5 }
+  ],
+  // However packed, a unit can still shuffle one tile of open ground a
+  // turn, so a jam always unpicks.
+  MIN_MOVE: 1
+}
+
+// ── Leaving a fight ────────────────────────────────────
+//
+// Ruled 2026-10-29: a fight holds on. Breaking contact costs movement, and
+// the enemy gets a parting blow whose weight is chance (a chaos roll): even
+// an orderly withdrawal can go wrong. Drilled troops do it far better (the
+// Macedonian phalanx could wheel and withdraw in the face of the enemy);
+// moving carefully halves the harm. Broken units are not this rule: they
+// are pursued.
+//
+//   MOVE_COST          movement points spent breaking contact
+//   CASUALTY_FRACTION  share of the unit lost at the worst roll, for levy,
+//                      in a rapid withdrawal
+//   MORALE             morale lost at the worst roll, likewise
+//   ORDERLY            multiplier for a careful withdrawal
+//   DRILL              multiplier by quality: how well the unit does it
+
+const DISENGAGE = {
+  MOVE_COST: 1,
+  CASUALTY_FRACTION: 0.08,
+  MORALE: 8,
+  ORDERLY: 0.5,
+  DRILL: {
+    levy: 1.0,
+    militia: 0.85,
+    tribal_warriors: 0.75,
+    professional: 0.55,
+    veteran_mercenary: 0.5,
+    elite: 0.3
+  }
+}
+
+// ── Exposure ───────────────────────────────────────────
+//
+// Ruled 2026-10-29: a hidden unit with an enemy standing right beside it is
+// ever more likely to be noticed. Each turn in a row an enemy stands within
+// one tile, the chance of being found rises by PER_TURN (25%, 50%, 75%,
+// then certain). Moving away, or the enemy leaving, resets it.
+
+const EXPOSURE = {
+  PER_TURN: 0.25
+}
+
+// ── Surprise ───────────────────────────────────────────
+//
+// Stage 3 plan, C4: a unit its target's side did not see as the turn
+// began, falling on a unit that was marching, gets an edge in the first
+// round of the fight, and the shock costs the target morale. Nothing
+// against a unit moving carefully or standing. This stands in for "hitting
+// the rear" until units have facing. Starting values, to be tuned.
+
+const SURPRISE = {
+  ATTACK: 2,
+  MORALE: 10
+}
+
 // ── Pursuit ────────────────────────────────────────────
 //
 // [derived] A broken unit caught at the start of its flight bleeds. The old
@@ -481,6 +569,10 @@ module.exports = {
   STAMINA,
   PUSH,
   FLANKING,
+  CROWDING,
+  DISENGAGE,
+  EXPOSURE,
+  SURPRISE,
   PURSUIT,
   MORALE,
   DAMAGE,

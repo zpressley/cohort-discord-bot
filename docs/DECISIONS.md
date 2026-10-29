@@ -148,3 +148,22 @@ Hiding and seeing, details (Oct 22):
 **Objective control.** *Direction, for testing:* holding objectives as a
 way to win or score, giving units a reason to move and fight. How it fits
 the story is still open.
+
+## Rulings, October 29, 2026 (Stage 3 review)
+
+From Zach's review of PR #9.
+
+1. **A fight holds on.** Disengaging takes effort: a unit breaking contact
+   loses a tile of movement, and the enemy gets a parting blow. How hard is
+   chance (a chaos roll), so even an orderly withdrawal can go wrong. Drilled
+   troops do it far better; the Macedonians under Alexander were so well
+   drilled that their manoeuvres alone could intimidate a foe. A careful
+   withdrawal halves the harm. Broken units are pursued, as before. (Built:
+   `DISENGAGE` in `combat/tables.js`.) *Later:* drill as intimidation.
+2. **The player springs the trap, and lingering gives it away.** An ambush
+   does not strike an enemy that stops beside it; the player springs it
+   ("spears spring the trap", or any order to attack). A hidden unit with an
+   enemy right beside it is ever likelier to be noticed: 25% the first turn,
+   50% the next, and so on. (Built: `EXPOSURE` in `combat/tables.js`.)
+3. **Crowding punishes fighting, not moving.** The density table's movement
+   losses drop to 0/10/25/50%; its combat penalties stand.
