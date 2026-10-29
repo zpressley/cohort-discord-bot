@@ -364,19 +364,65 @@ const FLANKING = {
 // its size. move is the share of movement lost, combat comes off attack and
 // defense, morale is lost per combat round (the old table's -2 was on a
 // smaller morale scale; this one runs to 100).
+//
+// Ruled 2026-10-29: crowding is meant to punish fighting packed together,
+// not moving. The old table's movement losses (25/50/75/90%) are cut to
+// 0/10/25/50%; the combat penalties stand.
 
 const CROWDING = {
   CAP: 300, // men per tile, hard limit
   TIERS: [
     { name: 'organized', upTo: 100, move: 0, combat: 0, morale: 0 },
-    { name: 'crowded', upTo: 150, move: 0.25, combat: 1, morale: 0 },
-    { name: 'compressed', upTo: 200, move: 0.5, combat: 2, morale: 0 },
-    { name: 'crushing', upTo: 250, move: 0.75, combat: 3, morale: 0 },
-    { name: 'critical', upTo: 300, move: 0.9, combat: 4, morale: 5 }
+    { name: 'crowded', upTo: 150, move: 0, combat: 1, morale: 0 },
+    { name: 'compressed', upTo: 200, move: 0.1, combat: 2, morale: 0 },
+    { name: 'crushing', upTo: 250, move: 0.25, combat: 3, morale: 0 },
+    { name: 'critical', upTo: 300, move: 0.5, combat: 4, morale: 5 }
   ],
   // However packed, a unit can still shuffle one tile of open ground a
   // turn, so a jam always unpicks.
   MIN_MOVE: 1
+}
+
+// ── Leaving a fight ────────────────────────────────────
+//
+// Ruled 2026-10-29: a fight holds on. Breaking contact costs movement, and
+// the enemy gets a parting blow whose weight is chance (a chaos roll): even
+// an orderly withdrawal can go wrong. Drilled troops do it far better (the
+// Macedonian phalanx could wheel and withdraw in the face of the enemy);
+// moving carefully halves the harm. Broken units are not this rule: they
+// are pursued.
+//
+//   MOVE_COST          movement points spent breaking contact
+//   CASUALTY_FRACTION  share of the unit lost at the worst roll, for levy,
+//                      in a rapid withdrawal
+//   MORALE             morale lost at the worst roll, likewise
+//   ORDERLY            multiplier for a careful withdrawal
+//   DRILL              multiplier by quality: how well the unit does it
+
+const DISENGAGE = {
+  MOVE_COST: 1,
+  CASUALTY_FRACTION: 0.08,
+  MORALE: 8,
+  ORDERLY: 0.5,
+  DRILL: {
+    levy: 1.0,
+    militia: 0.85,
+    tribal_warriors: 0.75,
+    professional: 0.55,
+    veteran_mercenary: 0.5,
+    elite: 0.3
+  }
+}
+
+// ── Exposure ───────────────────────────────────────────
+//
+// Ruled 2026-10-29: a hidden unit with an enemy standing right beside it is
+// ever more likely to be noticed. Each turn in a row an enemy stands within
+// one tile, the chance of being found rises by PER_TURN (25%, 50%, 75%,
+// then certain). Moving away, or the enemy leaving, resets it.
+
+const EXPOSURE = {
+  PER_TURN: 0.25
 }
 
 // ── Surprise ───────────────────────────────────────────
@@ -524,6 +570,8 @@ module.exports = {
   PUSH,
   FLANKING,
   CROWDING,
+  DISENGAGE,
+  EXPOSURE,
   SURPRISE,
   PURSUIT,
   MORALE,

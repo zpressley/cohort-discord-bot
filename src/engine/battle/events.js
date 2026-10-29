@@ -63,8 +63,14 @@
 //              or the ambush was 'letting it pass' as ordered
 //   revealed   unitId, reason, by
 //              a hidden unit was given away: it 'moved', 'fought', was
-//              'found' by a unit checking (by), or was 'stumbled on' by an
-//              enemy walking into it (by)
+//              'found' by a unit checking (by), was 'stumbled on' by an
+//              enemy walking into it (by), or was 'noticed' by an enemy
+//              lingering beside it (by)
+//   disengage  unitId, from, killed, morale, chaos, orderly
+//              a unit broke contact with the enemies in from and took a
+//              parting blow: killed men and morale lost, as heavy as the
+//              chaos roll (0-10) and lighter for drilled troops and an
+//              orderly (careful) withdrawal
 //   checked    unitId, at, found
 //              a unit spent the turn searching the ground; found lists the
 //              hidden enemies it turned up (may be empty)

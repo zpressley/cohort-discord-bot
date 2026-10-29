@@ -31,7 +31,7 @@ How an army is deployed now matters.
 - **Words in, words out.** The order reader understands all of it, without
   the AI too. The read-back quotes the engine's own hiding table ("in the
   woods: hidden from anyone who does not search"). Reports keep secrets.
-- **Tests:** 389 pass (332 before), plus `test:core`, and the new
+- **Tests:** 394 pass (332 before), plus `test:core`, and the new
   `npm run soak`.
 
 ## Steps
@@ -70,7 +70,7 @@ In the hotseat CLI (`npm run play`):
 ## Rule changes (intended; listed so they can be reviewed)
 
 - **Stacking** replaces one unit per tile. Two full 100-man units on a tile
-  are already `compressed` (−50% move, −2 attack and defense): the table,
+  are already `compressed` (−2 attack and defense, −10% move): the table,
   quartered from 50 m to 25 m tiles, puts the threshold at about one unit.
   A tile holds at most 300 men. A lone unit is never crowded. Movement never
   drops below one tile of open ground, so a jam always unpicks.
@@ -90,16 +90,30 @@ In the hotseat CLI (`npm run play`):
   holding all.
 - **A sprung ambush** presses the attack (it becomes advance).
 
+Added after review (rulings of October 29):
+
+- **Leaving a fight costs.** A unit breaking contact moves one tile less,
+  and takes a parting blow: up to 8% of its men and 8 morale for levy at
+  the worst chaos roll, scaled by the roll, by drill (elite 0.3 of that,
+  professional 0.55) and halved for a careful withdrawal. New event
+  `disengage`.
+- **Lingering gives a hidden unit away:** with an enemy right beside it,
+  the chance it is noticed is 25% the first turn, 50% the next, and so on.
+- **The trap:** an ambush ordered to strike whatever happens also falls on
+  an enemy that stands beside it.
+- **Crowding** costs less movement: 0/10/25/50% (was 25/50/75/90%); the
+  combat penalties stand.
+
 ## Effect on existing games
 
 - `npm run soak` (300 hotseat games with silent commanders, six openings,
   both scenarios): all 300 end. On `main`, 26 never ended (fall back against
-  advance). Average 6.9 player turns, against 8.2 on `main`.
+  advance). Average 6.8 player turns, against 8.2 on `main`.
 - The closed-loop meeting battle reaches a verdict in 50 of 50 seeds, in
   5.2 battle turns on average (8.6 on `main`). Battles are shorter mostly
   because of stacking: more units reach the fight at once, and units caught
   between several enemies take the flanking penalty.
-- Officer fates are still on target: 9.2% of wins and 20.4% of losses cost
+- Officer fates are still on target: 9.2% of wins and 20.0% of losses cost
   an officer killed (`npm run officers`, 200 battles).
 
 ## Test changes
@@ -118,24 +132,25 @@ In the hotseat CLI (`npm run play`):
 - **Replaced:** "the reply schema allows exactly the five actions" now
   checks the schema against the engine's own list of actions.
 - **New:** crowding (3), contact and surprise (7), sight (9), hiding (10),
-  ambush (6), objectives (5), Stage 3 orders in words (7), narrator secrets
+  ambush (6), leaving a fight, lingering and the trap (5), objectives (5), Stage 3 orders in words (7), narrator secrets
   (2), hotseat objectives (1), the road ambush on Crownhill (2), movement
   (5).
 
 ## Not done, or for later
 
-- **All Stage 3 numbers are starting values:** the crowding table, surprise
+- **All Stage 3 numbers are starting values:** the crowding table, the
+  parting blow, the 25% a turn of lingering, surprise
   (+2, −10), the hiding table (seen within 50 m at a field's edge, 100 m in
   the open), the marsh's 5 stamina a turn, ambush reach of 1 tile, the hour
   to hold objectives, half speed for a careful march.
 - **Ranged fire** does not exist, so bows hidden in a marsh are not yet
   weakened (the table records it).
 - **Facing:** surprise stands in for a rear attack.
-- **Leaving a fight is free.** A unit fighting can walk away next turn if
-  its order takes it elsewhere; only broken units suffer pursuit. That may
-  want a cost.
-- **An ambush only springs on a unit moving past.** It does not strike an
-  enemy that stops beside it unless the ambush is told to attack.
+- **A pursuer does not keep up within the turn.** An advancing enemy that
+  was fighting a unit which breaks off does not follow it in the same
+  turn; it re-targets on the next. So a withdrawal usually gets clear, at
+  the price of the parting blow.
+- **Drill as intimidation** (Zach's Macedonian example) is noted for later.
 - **Hiding "behind the ridge"** reads as "the ridge" (its crest). The
   reverse slope works through sight, but the order reader does not yet
   place a unit behind a hill.

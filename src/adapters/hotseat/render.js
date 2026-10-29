@@ -225,6 +225,10 @@ function wordEvent(event) {
       return event.side
         ? `${event.side.toUpperCase()} takes ${event.name}`
         : `${event.name} is no longer held${event.was ? ` by ${event.was}` : ''}`
+    case 'disengage':
+      return `${event.unitId} breaks off from ${event.from.join(', ')}` +
+        (event.orderly ? ' in good order' : '') +
+        (event.killed ? `, losing ${event.killed} men as it goes` : ', cleanly')
     case 'ambush': return `AMBUSH! ${event.unitId} falls on ${event.on} at ${where(event.at)}`
     case 'ambushHeld':
       return event.reason === 'on guard'
@@ -243,7 +247,8 @@ function wordEvent(event) {
         moved: `${event.unitId} breaks cover`,
         fought: `${event.unitId} is out of hiding, fighting`,
         found: `${event.unitId} is discovered by ${event.by}`,
-        'stumbled on': `${event.by} stumbles onto ${event.unitId}, hidden there`
+        'stumbled on': `${event.by} stumbles onto ${event.unitId}, hidden there`,
+        noticed: `${event.by} notices ${event.unitId} hidden close by`
       }[event.reason] ?? `${event.unitId} is seen`
     case 'victory': return null // rendered as the banner instead
     default: return null

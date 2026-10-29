@@ -58,6 +58,12 @@ function resolveSimultaneousMovement(world, orders, map, options = {}) {
   const ambushers = options.ambushers ?? new Set()
   const decideAmbush = options.ambush ?? (() => null)
   const sprung = new Set()
+  // Units in a fight as the turn opens (Stage 3): breaking contact costs
+  // movement.
+  const engaged = options.engaged ?? new Set()
+  const glue = options.glue ?? 0
+  const withGlue = (unit, budget) =>
+    engaged.has(unit.id) && glue > 0 ? Math.max(Math.min(1, budget), budget - glue) : budget
   if (!map) throw new Error('resolveSimultaneousMovement needs the map')
   const occupancy = buildOccupancy(world)
   const crowding = crowdingByUnit(world)
@@ -99,9 +105,9 @@ function resolveSimultaneousMovement(world, orders, map, options = {}) {
       steps: path.slice(1),            // path[0] is where the unit stands
       stepIndex: 0,
       // Careful (on guard) marches at half speed, after crowding.
-      budget: order.careful
+      budget: withGlue(unit, order.careful
         ? Math.round(crowdedRange(unit, crowding.get(unit.id)) / 2 * 100) / 100
-        : crowdedRange(unit, crowding.get(unit.id)),
+        : crowdedRange(unit, crowding.get(unit.id))),
       careful: Boolean(order.careful),
       // Looking for a fight (Stage 3): only such a unit stops when it meets
       // an enemy. Others walk on past, if the way is open. Callers that do

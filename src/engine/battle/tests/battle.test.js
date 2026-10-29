@@ -277,6 +277,7 @@ const EVENT_FIELDS = {
   ambush: ['unitId', 'on', 'at'],
   ambushHeld: ['unitId', 'on', 'reason'],
   objective: ['objectiveId', 'name', 'side', 'was'],
+  disengage: ['unitId', 'from', 'killed', 'morale', 'chaos', 'orderly'],
   checked: ['unitId', 'at', 'found'],
   hidden: ['unitId', 'at', 'cover'],
   hideFailed: ['unitId', 'at', 'reason', 'by'],

@@ -81,6 +81,9 @@ function createBattleState(spec, options = {}) {
     // Units hiding (Stage 3), and how well: unitId -> the row of hiding.js
     // they hide by. Moving or fighting gives a unit away.
     hidden: new Map(),
+    // Turns in a row a hidden unit has had an enemy right beside it: the
+    // chance it is noticed grows with each (EXPOSURE).
+    exposure: new Map(),
     outcome: { decided: false, winner: null, reason: 'battle still open' }
   }
 }
@@ -109,8 +112,20 @@ function stepTurn(state, sideOrders = {}) {
   // unawares.
   const seenAtStart = sightBySide(map, world, state.hidden)
   const reveal = (unitId, reason, by = null) => {
+    state.exposure.delete(unitId)
     if (!state.hidden.delete(unitId)) return
     log.emit('revealed', turn, { unitId, reason, by })
+  }
+
+  // Who was fighting whom as the turn opens: leaving a fight costs (below).
+  const engagedAtStart = new Map()
+  for (const key of state.previousEngagementKeys) {
+    const [a, b] = key.split('|')
+    for (const [id, foe] of [[a, b], [b, a]]) {
+      if (broken.has(id)) continue
+      if (!engagedAtStart.has(id)) engagedAtStart.set(id, new Set())
+      engagedAtStart.get(id).add(foe)
+    }
   }
 
   // ── Orders ──────────────────────────────────────
@@ -207,8 +222,26 @@ function stepTurn(state, sideOrders = {}) {
   }
 
   const movement = resolveSimultaneousMovement(world, orders, map, {
-    hidden: new Set(state.hidden.keys()), ambushers, ambush: decideAmbush
+    hidden: new Set(state.hidden.keys()), ambushers, ambush: decideAmbush,
+    engaged: new Set(engagedAtStart.keys()), glue: T.DISENGAGE.MOVE_COST
   })
+
+  // An ambush told to strike whatever happens also falls on an enemy that
+  // stands beside it: the trap is shut on whoever lingers.
+  for (const id of ambushers) {
+    if (sprung.has(id)) continue
+    const ambusher = getUnit(world, id)
+    const order = state.orderBook.get(id)
+    if (!order?.regardless) continue
+    const lingering = livingUnits(world)
+      .filter(e => e.side !== ambusher.side && !broken.has(e.id) && tileDistance(e.position, ambusher.position) <= 1)
+      .sort((x, y) => x.id.localeCompare(y.id))
+      .find(e => matchesKind(e, order.against) && !(order.passed ?? []).includes(e.id) &&
+        canSee(map, ambusher, e, state.hidden.has(e.id) ? { seenWithin: state.hidden.get(e.id).seenWithin } : {}))
+    if (!lingering) continue
+    sprung.add(id)
+    log.emit('ambush', turn, { unitId: id, on: lingering.id, at: { ...lingering.position } })
+  }
   // A sprung ambush is spent: the unit presses the attack on the nearest
   // enemy (most often the one it caught) until given a new order. Holding
   // instead let a caught column simply march on after one round.
@@ -218,6 +251,36 @@ function stepTurn(state, sideOrders = {}) {
   for (const move of movement) {
     if (move.tilesMoved > 0) reveal(move.unitId, 'moved')
     if (move.stumbledOn) reveal(move.stumbledOn, 'stumbled on', move.unitId)
+  }
+
+  // ── Leaving a fight ─────────────────────────────
+  // A unit that was fighting and has stepped clear of every enemy it fought
+  // takes a parting blow: how hard is a chaos roll, softened by drill and by
+  // withdrawing carefully (DISENGAGE). Broken units are pursued instead.
+  const moves = new Map(movement.map(m => [m.unitId, m]))
+  for (const [id, foes] of [...engagedAtStart].sort(([x], [y]) => x.localeCompare(y))) {
+    const unit = getUnit(world, id)
+    const move = moves.get(id)
+    if (!unit || unit.strength <= 0 || broken.has(id) || !move || !(move.tilesMoved > 0)) continue
+    const standing = [...foes].map(f => getUnit(world, f))
+      .filter(f => f && f.strength > 0 && !broken.has(f.id))
+    if (standing.length === 0) continue
+    if (standing.some(f => tileDistance(f.position, unit.position) <= 1)) continue
+
+    const roll = random()
+    const drill = T.DISENGAGE.DRILL[unit.quality] ?? T.DISENGAGE.DRILL.tribal_warriors
+    const orderly = move.careful ? T.DISENGAGE.ORDERLY : 1
+    const weight = roll * drill * orderly
+    const killed = Math.min(unit.strength,
+      Math.round(unit.strength * T.DISENGAGE.CASUALTY_FRACTION * weight * Math.min(standing.length, 2)))
+    const morale = Math.round(T.DISENGAGE.MORALE * weight * 10) / 10
+    unit.strength -= killed
+    if (morale > 0) resolver.shake(unit, morale)
+    log.emit('disengage', turn, {
+      unitId: id, from: standing.map(f => f.id).sort(), killed, morale,
+      chaos: Math.round(roll * T.CHAOS.MAX * 10) / 10, orderly: Boolean(move.careful)
+    })
+    if (unit.strength === 0) log.emit('destroyed', turn, { unitId: id })
   }
   for (const move of movement) {
     if (move.skipped || move.held || move.failed) continue
@@ -404,6 +467,20 @@ function stepTurn(state, sideOrders = {}) {
       state.hidden.set(unit.id, cover)
       log.emit('hidden', turn, { unitId: unit.id, at: { ...unit.position }, cover: cover.name })
     }
+  }
+
+  // An enemy lingering right beside a hidden unit grows ever likelier to
+  // notice it: 25% the first turn, 50% the next, and so on (EXPOSURE).
+  for (const id of [...state.hidden.keys()].sort()) {
+    const unit = getUnit(world, id)
+    if (!unit || unit.strength <= 0) continue
+    const beside = livingUnits(world)
+      .filter(e => e.side !== unit.side && tileDistance(e.position, unit.position) <= 1)
+      .sort((x, y) => x.id.localeCompare(y.id))
+    if (beside.length === 0) { state.exposure.delete(id); continue }
+    const turns = (state.exposure.get(id) ?? 0) + 1
+    state.exposure.set(id, turns)
+    if (random() < Math.min(1, T.EXPOSURE.PER_TURN * turns)) reveal(id, 'noticed', beside[0].id)
   }
 
   // The cost of hiding where it hurts, such as a marsh; and the dead hide

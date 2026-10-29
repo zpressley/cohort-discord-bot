@@ -337,6 +337,14 @@ function createCombatResolver(options = {}) {
     state.stamina = Math.max(0, state.stamina - amount)
     return state.stamina
   }
+  // Shake a unit's morale outside a fight (Stage 3: a parting blow as it
+  // breaks contact).
+  resolveCombat.shake = (unit, amount) => {
+    const state = stateFor(unit)
+    state.morale = Math.max(0, state.morale - amount)
+    state.moraleDamageTaken += amount
+    return state.morale
+  }
   resolveCombat.snapshot = () => {
     const out = {}
     for (const [id, state] of unitState) out[id] = { ...state }

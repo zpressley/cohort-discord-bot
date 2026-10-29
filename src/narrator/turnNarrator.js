@@ -105,6 +105,9 @@ function plainFact(map, event) {
     case 'objective': return event.side
       ? `${event.side} took ${event.name}`
       : `${event.name} was no longer held${event.was ? ` by ${event.was}` : ''}`
+    case 'disengage': return `${event.unitId} broke off the fight` +
+      (event.orderly ? ' in good order' : '') +
+      (event.killed ? `, losing ${event.killed} men to the parting blows` : ' cleanly')
     case 'ambush': return `${event.unitId} sprang an ambush on ${event.on} ${placeName(map, event.at)}`
     case 'ambushHeld': return event.reason === 'on guard'
       ? `${event.unitId} let ${event.on} pass: it came on guard, not worth the strike`
@@ -117,6 +120,7 @@ function plainFact(map, event) {
       (event.found.length ? ` and found ${event.found.join(', ')} hidden there` : ' and found nothing')
     case 'revealed': return event.reason === 'found' ? `${event.unitId} was discovered`
       : event.reason === 'stumbled on' ? `${event.unitId} was stumbled upon`
+      : event.reason === 'noticed' ? `${event.unitId} was noticed, hidden close by`
       : `${event.unitId} came out of hiding`
     case 'victory': return event.winner === 'draw' ? `the battle ended in mutual ruin (${event.reason})` : `${event.winner} won the battle (${event.reason})`
     default: return null

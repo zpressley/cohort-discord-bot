@@ -158,18 +158,21 @@ test('crowding: tiers by men on a shared tile, never for a unit alone', () => {
   assert.equal(crowdingTier(300, 3).name, 'critical')
 })
 
-test('crowding slows a unit, but never below one tile of open ground', () => {
+test('crowding slows a unit a little, never below one tile of open ground', () => {
+  // Ruled 2026-10-29: crowding punishes fighting packed together more than
+  // moving. Movement losses are 0/10/25/50%.
   const unit3 = { movementRange: 3 }
   assert.equal(crowdedRange(unit3, crowdingTier(100, 1)), 3)
-  assert.equal(crowdedRange(unit3, crowdingTier(140, 2)), 2.25)
-  assert.equal(crowdedRange(unit3, crowdingTier(200, 2)), 1.5)
-  assert.equal(crowdedRange(unit3, crowdingTier(300, 3)), 1, 'critical would be 0.3; the floor is 1')
+  assert.equal(crowdedRange(unit3, crowdingTier(140, 2)), 3, 'crowded: no slower')
+  assert.equal(crowdedRange(unit3, crowdingTier(200, 2)), 2.7)
+  assert.equal(crowdedRange(unit3, crowdingTier(300, 3)), 1.5)
+  assert.equal(crowdedRange({ movementRange: 1.5 }, crowdingTier(300, 3)), 1, 'the floor is 1')
 
-  // On the map: two units share F4 and are compressed, so each moves 1.5,
-  // one tile of plains, where alone it would move three.
-  const world = createWorld({ units: [unit({ id: 'a', position: 'F4' }), unit({ id: 'b', position: 'F4' })] })
-  const results = resolveSimultaneousMovement(world, [{ unitId: 'a', target: 'F10' }])
-  assert.equal(results.find(r => r.unitId === 'a').tilesMoved, 1)
+  // On the map: two units share H4 and are compressed, so each moves 2.7,
+  // two tiles of open field, where alone it would move three.
+  const world = createWorld({ units: [unit({ id: 'a', position: 'H4' }), unit({ id: 'b', position: 'H4' })] })
+  const results = resolveSimultaneousMovement(world, [{ unitId: 'a', target: 'H10' }])
+  assert.equal(results.find(r => r.unitId === 'a').tilesMoved, 2)
 })
 
 test('a column follows its own vanguard through the same ground', () => {
