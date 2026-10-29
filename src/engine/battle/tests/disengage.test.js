@@ -6,8 +6,8 @@
 //     and for a careful (orderly) withdrawal;
 //   - a hidden unit with an enemy lingering beside it is ever likelier to be
 //     noticed;
-//   - an ambush told to strike whatever happens shuts the trap on an enemy
-//     that stands beside it.
+//   - an ambush does not strike an enemy that stops beside it: the player
+//     springs the trap.
 // Fixtures on an open 20x20 plain, with a wood in columns 5-9 of rows 5-9
 // for the hiding tests.
 
@@ -96,7 +96,7 @@ test('a hidden unit with an enemy lingering beside it is noticed, sooner or late
   }
 })
 
-test('an ambush told to strike whatever happens shuts the trap on a unit standing beside it', () => {
+test('an enemy that stops beside an ambush is not struck: the player springs the trap', () => {
   const state = battle([
     unit({ id: 'lurker', side: 'blue', position: at(7, 7) }),
     unit({ id: 'idler', position: at(14, 14) })
@@ -105,6 +105,12 @@ test('an ambush told to strike whatever happens shuts the trap on a unit standin
   assert.equal(state.hidden.has('lurker'), true)
   state.world.units.find(u => u.id === 'idler').position = at(7, 8)
   stepTurn(state, {})
-  assert.deepEqual(of(state, 'ambush').map(e => [e.unitId, e.on]), [['lurker', 'idler']])
-  assert.ok(of(state, 'exchange').length > 0)
+  assert.equal(of(state, 'ambush').length, 0, 'the ambush waits on its commander')
+  assert.equal(of(state, 'exchange').length, 0)
+
+  // Still hidden (or noticed by now, if the idler's luck held). Either way,
+  // the commander gives the word.
+  stepTurn(state, { blue: [{ unitRef: 'lurker', action: 'advance' }] })
+  assert.ok(of(state, 'exchange').length > 0, 'sprung')
+  assert.equal(state.hidden.has('lurker'), false)
 })

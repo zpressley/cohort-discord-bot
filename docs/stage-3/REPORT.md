@@ -99,8 +99,9 @@ Added after review (rulings of October 29):
   `disengage`.
 - **Lingering gives a hidden unit away:** with an enemy right beside it,
   the chance it is noticed is 25% the first turn, 50% the next, and so on.
-- **The trap:** an ambush ordered to strike whatever happens also falls on
-  an enemy that stands beside it.
+- **The trap is the player's to spring.** An ambush does not strike an
+  enemy that stops beside it; "spears spring the trap" (or any attack
+  order) does.
 - **Crowding** costs less movement: 0/10/25/50% (was 25/50/75/90%); the
   combat penalties stand.
 

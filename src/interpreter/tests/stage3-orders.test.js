@@ -38,6 +38,8 @@ test('grammar: hide, check, ambush, attack a place, carefully', () => {
   assert.deepEqual(read('search C2'), { kind: 'order', unitRef: 'everyone', action: 'check', place: 'C2' })
   assert.deepEqual(read('spears attack the ford'), { kind: 'order', unitRef: 'spears', action: 'attack', place: 'the ford' })
   assert.equal(read('spears attack the enemy').action, 'advance', 'the enemy is not a place')
+  assert.deepEqual(read('spears spring the trap'), { kind: 'order', unitRef: 'spears', action: 'advance', place: null })
+  assert.equal(read('spring the ambush').action, 'advance')
   assert.deepEqual(read('swords march carefully to the clearing'),
     { kind: 'order', unitRef: 'swords', action: 'move', place: 'the clearing', careful: true })
   assert.deepEqual(read('everyone advance on guard'),

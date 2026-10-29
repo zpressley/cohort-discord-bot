@@ -226,22 +226,6 @@ function stepTurn(state, sideOrders = {}) {
     engaged: new Set(engagedAtStart.keys()), glue: T.DISENGAGE.MOVE_COST
   })
 
-  // An ambush told to strike whatever happens also falls on an enemy that
-  // stands beside it: the trap is shut on whoever lingers.
-  for (const id of ambushers) {
-    if (sprung.has(id)) continue
-    const ambusher = getUnit(world, id)
-    const order = state.orderBook.get(id)
-    if (!order?.regardless) continue
-    const lingering = livingUnits(world)
-      .filter(e => e.side !== ambusher.side && !broken.has(e.id) && tileDistance(e.position, ambusher.position) <= 1)
-      .sort((x, y) => x.id.localeCompare(y.id))
-      .find(e => matchesKind(e, order.against) && !(order.passed ?? []).includes(e.id) &&
-        canSee(map, ambusher, e, state.hidden.has(e.id) ? { seenWithin: state.hidden.get(e.id).seenWithin } : {}))
-    if (!lingering) continue
-    sprung.add(id)
-    log.emit('ambush', turn, { unitId: id, on: lingering.id, at: { ...lingering.position } })
-  }
   // A sprung ambush is spent: the unit presses the attack on the nearest
   // enemy (most often the one it caught) until given a new order. Holding
   // instead let a caught column simply march on after one round.

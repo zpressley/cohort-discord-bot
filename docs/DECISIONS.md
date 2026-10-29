@@ -160,10 +160,10 @@ From Zach's review of PR #9.
    drilled that their manoeuvres alone could intimidate a foe. A careful
    withdrawal halves the harm. Broken units are pursued, as before. (Built:
    `DISENGAGE` in `combat/tables.js`.) *Later:* drill as intimidation.
-2. **The trap needs standing orders, and lingering gives it away.** An
-   ambush strikes a unit standing beside it only when ordered to strike
-   whatever happens. A hidden unit with an enemy right beside it is ever
-   likelier to be noticed: 25% the first turn, 50% the next, and so on.
-   (Built: `EXPOSURE` in `combat/tables.js`.)
+2. **The player springs the trap, and lingering gives it away.** An ambush
+   does not strike an enemy that stops beside it; the player springs it
+   ("spears spring the trap", or any order to attack). A hidden unit with an
+   enemy right beside it is ever likelier to be noticed: 25% the first turn,
+   50% the next, and so on. (Built: `EXPOSURE` in `combat/tables.js`.)
 3. **Crowding punishes fighting, not moving.** The density table's movement
    losses drop to 0/10/25/50%; its combat penalties stand.

@@ -18,6 +18,7 @@
 //   archers hide in the woods               hide (go there, then hide)
 //   scouts check the woods / search C7      check (go there, then search)
 //   spears ambush in the woods              ambush (hide, then strike)
+//   spears spring the trap                  advance: strike now, from hiding
 //   spears hide in the woods and hit anything that passes        ambush
 //
 // Modifiers anywhere in the line:
@@ -48,7 +49,8 @@ const VERBS = [
   { action: 'move', pattern: /^(?:(.+?)\s+)?(?:stop at|halt at|march to|march on|move to|go to|head for|make for|approach|towards|toward|to)\s+(.+)$/i }
 ]
 
-const ADVANCE = /^(?:(.+?)\s+)?(?:advance|attack|charge|engage|press (?:the|on|the attack)|go forward)(?:\s+.*)?$/i
+// "spring the trap": the player springs an ambush by ordering it to attack.
+const ADVANCE = /^(?:(.+?)\s+)?(?:advance|attack|charge|engage|press (?:the|on|the attack)|go forward|spring (?:the )?(?:trap|ambush)|strike now)(?:\s+.*)?$/i
 
 // Stage 3 verbs: ambush, hide, check, and attacking a place.
 const PREP = '(?:in|at|on|by|from|behind|among|inside|into|near)'
@@ -154,7 +156,11 @@ function order(unitRef, action, place, then, extra = {}) {
 }
 
 // Ambush, hide, check and attack-a-place, or null for the older verbs.
+const SPRING = /^(?:(.+?)\s+)?(?:spring (?:the )?(?:trap|ambush)|strike now)$/i
+
 function readStage3(text, extra) {
+  const spring = text.match(SPRING)
+  if (spring) return order(spring[1], 'advance', null, null, extra)
   const ambushExtra = () => {
     const against = ambushKind(text)
     return { ...extra, ...(against ? { against } : {}) }

@@ -60,7 +60,7 @@ Reply with one JSON object:
 
 - units: the commander's words for ONE unit (e.g. "the spears", "the archers") or "everyone". If an order names several units, write one order per unit.
 - action: one of move, hold, defend, advance, attack, withdraw, hide, check, ambush.
-  move = go somewhere. hold = stay where you are. defend = go somewhere and hold it (dig in, set up a defensive position). advance = press the nearest enemy. attack = go to a place looking for a fight (attack the ford). withdraw = fall back (to a place if given, otherwise toward home). hide = go to ground, take cover, hide (at a place if given). check = search or scout the ground for hidden enemies (at a place if given). ambush = hide and strike enemies that pass (lie in wait, hide and hit anything that passes).
+  move = go somewhere. hold = stay where you are. defend = go somewhere and hold it (dig in, set up a defensive position). advance = press the nearest enemy (also: spring the trap, strike now, from an ambush). attack = go to a place looking for a fight (attack the ford). withdraw = fall back (to a place if given, otherwise toward home). hide = go to ground, take cover, hide (at a place if given). check = search or scout the ground for hidden enemies (at a place if given). ambush = hide and strike enemies that pass (lie in wait, hide and hit anything that passes).
 - careful (optional): true when they should move carefully, cautiously, on guard.
 - against (optional, ambush only): what to strike, one of cavalry, infantry, archers, scouts, or null for anything. Fit the commander's words to the closest of these (horsemen = cavalry, bowmen or slingers = archers, foot = infantry).
 - letPass (optional, ambush only): how many enemy units to let go by before striking.

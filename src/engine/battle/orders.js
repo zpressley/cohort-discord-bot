@@ -27,7 +27,9 @@
 //             'infantry', 'archers', 'scouts', or a unit name); letPass: how
 //             many to let go by first; regardless: strike even a unit on
 //             guard (by default an ambush springs only on a unit marching,
-//             since one on guard is not worth it).
+//             since one on guard is not worth it). An enemy that stops
+//             beside the ambush is not struck: the player springs the
+//             trap, with any order to attack (ruled 2026-10-29).
 //
 // Any order that moves may be careful (Stage 3): the unit marches on guard,
 // at half speed, and cannot be caught by surprise. Otherwise a moving unit is
