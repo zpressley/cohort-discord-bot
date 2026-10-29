@@ -167,3 +167,22 @@ From Zach's review of PR #9.
    50% the next, and so on. (Built: `EXPOSURE` in `combat/tables.js`.)
 3. **Crowding punishes fighting, not moving.** The density table's movement
    losses drop to 0/10/25/50%; its combat penalties stand.
+
+## Rulings, October 29, 2026 (the web app)
+
+From Zach's answers to the Stage 4 plan.
+
+1. **No "Command Tent Interface Design" doc exists.** The Stage 4 plan and
+   its wireframes are the design.
+2. **Pace: hours and days.** Battles are played by link over hours or days,
+   low stress, with plenty of time to go back and forth. Nothing depends on
+   both players being online; no timers.
+3. **Look: an old parchment battle map,** in the manner of the HistoryMarche
+   channel: units as squares with clear markings, a flat detailed map at the
+   centre, a minimal interface, readouts on off-white backgrounds.
+   *Direction:* each faction later gets its own interface theme, as Age of
+   Empires II dressed its interface in the look of the civilisation being
+   played. Everything is designed for themes now; the themes wait for
+   assets.
+4. **Solo first:** Zach tests alone against the standing orders first, then
+   with friends.
