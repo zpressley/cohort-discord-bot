@@ -162,8 +162,9 @@ noted. A separate commit, and only with Zach's go-ahead on the day.
 
 1. Plan and rulings (this file, `docs/DECISIONS.md`).
 2. Screen flow and wireframes (`docs/stage-4/UX.md`); Zach reviews.
-3. The theme system and the parchment placeholder theme; one mock-up of the
-   Command Tent in it; Zach reacts.
+3. The theme system and the parchment placeholder theme, built straight
+   into the screens of steps 5 and 6 (ruled 2026-10-30: no separate
+   mock-up; the first working tent is the one to react to).
 4. The server: games, seats by link, views, orders, reports, saved games.
 5. The Command Tent, read-only: map, roster, dispatches from a saved game.
 6. Solo play from the browser: order pad, read-back, questions, turns

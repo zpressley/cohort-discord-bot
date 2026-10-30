@@ -119,10 +119,15 @@ the map.
 - **Names of units are the army's own** ("the spears"). Real names, and an
   officer's name on each unit, wait for the commanders work.
 
-## Questions for Zach
+## Answered October 30
 
-1. Is free-text orders right as the main way to command, with the map as a
-   help? Or should the map do more (drag a unit to give a move order)?
-2. Should "Your battles" be the home page, or should the app open straight
-   into the battle waiting on you?
-3. Anything missing from the unit card or the verdict?
+1. **Typed orders, with the map as a shortcut.** Mostly typed orders; a
+   gesture on the map writes a preset sentence into the order box. Tap a
+   unit, then tap (or drag to) a place, and "archers to D7-NE" is added as a
+   line, to send as it is or edit.
+2. **Open to the battle waiting on you.** The app opens straight into the
+   battle that is waiting on you (a phone may keep it open in the
+   background); "Your battles" is one tap away.
+3. **Enough design.** The screens stand as drawn; no deeper UI/UX pass. The
+   parchment look is built straight into the first working screens, which
+   serve as the mock-up to react to.
