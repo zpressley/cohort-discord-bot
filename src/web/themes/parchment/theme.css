@@ -1,0 +1,56 @@
+/* src/web/themes/parchment/theme.css
+ *
+ * The neutral parchment theme: an old battle map on paper, readouts on
+ * off-white (ruled 2026-10-29). Every colour, typeface and texture the app
+ * uses comes from here; the screens only ever name these variables. A
+ * faction theme (later) is a copy of this file with its own values and its
+ * own assets beside it (see ASSETS.md).
+ */
+
+:root {
+  /* Type */
+  --font-display: "Iowan Old Style", "Palatino Linotype", Palatino, "Book Antiqua", Georgia, serif;
+  --font-body: "Iowan Old Style", "Palatino Linotype", Palatino, Georgia, serif;
+  --font-ui: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+
+  /* The tent: panels and controls */
+  --ground: #EDE6D6;          /* behind everything */
+  --panel: #FAF7F0;           /* off-white readouts */
+  --panel-raised: #FFFDF8;
+  --ink: #2B2722;             /* text and the main buttons */
+  --ink-soft: #5E554B;        /* secondary text (4.5:1 on panel) */
+  --rule: #CFC6B4;            /* hairlines */
+  --accent: #6E3B1F;          /* links, focus */
+  --on-ink: #FAF7F0;          /* text on dark buttons */
+  --focus: #9A5B2E;
+
+  /* The map */
+  --paper: #E8DCC0;
+  --paper-edge: #CDBB95;
+  --paper-texture-opacity: 0.18;
+  --grid-line: rgba(92, 72, 44, 0.28);
+  --grid-label: #6A5638;
+  --terrain-plains: transparent;
+  --terrain-forest: #B9B48C;
+  --terrain-forest-mark: #6F6A43;
+  --terrain-hill: #D9C49A;
+  --terrain-hill-mark: #9C7F52;
+  --terrain-marsh: #CDCDA9;
+  --terrain-marsh-mark: #7C8460;
+  --terrain-river: #9DB0AE;
+  --terrain-ford: #B9C3B5;
+  --terrain-road: #C9AE80;
+  --terrain-bridge: #8A6E4B;
+  --landmark-ink: #5A4426;
+
+  /* Armies: two sides that differ in lightness as well as hue, so they
+   * read for colour-blind players. "Own" and "enemy" are the viewer's. */
+  --side-red: #8E2F22;
+  --side-red-on: #F6EBDD;
+  --side-blue: #24405E;
+  --side-blue-on: #E9EEF3;
+  --ghost: rgba(43, 39, 34, 0.55);
+  --order-arrow: #2B2722;
+  --objective: #6E3B1F;
+  --clash: #8E2F22;
+}
