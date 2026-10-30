@@ -72,11 +72,26 @@ const WHY = {
   surrender: 'a commander yielded'
 }
 const sideName = (side) => side.charAt(0).toUpperCase() + side.slice(1)
+// The engine gives its reason from the winner's side ("enemy army
+// broken"); a commander reads it from their own.
+const REASONS = {
+  'enemy army broken': ['The enemy army broke', 'Your army broke'],
+  'enemy army collapsed': ['The enemy army collapsed', 'Your army collapsed'],
+  'enemy surrendered': ['The enemy yielded', 'You yielded'],
+  'objectives held': ['You held the field', 'The enemy held the field'],
+  'time ran out: fewer losses': ['The day ended, and the enemy lost more', 'The day ended, and you lost more'],
+  'time ran out: held more objectives': ['The day ended with more ground in your hands', 'The day ended with more ground in the enemy\'s hands']
+}
 function verdictWords(battle) {
   const o = battle.outcome
   if (!o) return null
-  if (o.winner === 'draw') return { title: 'A draw', reason: o.reason }
-  return { title: o.winner === battle.side ? 'Victory' : 'Defeat', reason: o.reason }
+  if (o.winner === 'draw') {
+    const why = { 'mutual collapse': 'Both armies broke', 'mutual ruin': 'Both armies were ruined', 'time ran out: equal losses': 'The day ended with losses even' }
+    return { title: 'A draw', reason: why[o.reason] ?? o.reason }
+  }
+  const won = o.winner === battle.side
+  const words = REASONS[o.reason]
+  return { title: won ? 'Victory' : 'Defeat', reason: words ? words[won ? 0 : 1] : o.reason }
 }
 
 // ── Routing ────────────────────────────────────────────
@@ -235,7 +250,7 @@ async function tent(token) {
     const b = state.view.battle
     saveSeat({ token, title: b.title, side: b.side })
     document.title = `${b.title} · Cohort`
-    if (b.status === 'finished') state.tab = 'orders'
+    if (b.status === 'finished') { state.tab = 'orders'; state.picked = null; state.place = null; state.flash = null }
   }
   await load()
 
