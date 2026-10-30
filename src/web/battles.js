@@ -23,6 +23,8 @@ const { gridLabel } = require('../engine/map/grid')
 const { detectFeatures } = require('../engine/map/features')
 const { isGridRef } = require('../engine/map/grid')
 const { staminaPool } = require('../engine/combat/ratings')
+const { fateChances, perOfficer, woundReason, exposureFromEvents } = require('../engine/veterans')
+const { createRng } = require('../engine/rng')
 const { interpretText } = require('../interpreter/orders')
 const { narrateTurn, visibleEvents, maskNames, fact } = require('../narrator/turnNarrator')
 const { loadScenario, SCENARIOS, mapChoices } = require('../adapters/hotseat/scenarios')
@@ -103,6 +105,38 @@ function tally(game) {
     out[side] = { standing, fled, fallen: Math.max(0, start - standing - fled) }
   }
   return { sides: out }
+}
+
+// What became of each unit's captain, once the battle is over (ruled
+// 2026-10-21: killed about 1 battle in 10 won and 1 in 5 lost; captured
+// when caught in a rout; wounded by a near miss or poor choices). Each
+// captain's chances come from their own unit's losses and what befell it,
+// spread over the army as engine/veterans/officers.js does. Seeded from the
+// battle, so the same battle always tells the same story.
+function officerFates(game, side) {
+  const events = game.battle.log.all()
+  const result = game.outcome.winner === 'draw' ? 'draw' : game.outcome.winner === side ? 'victory' : 'defeat'
+  const units = [...game.spec.units].filter(u => u.side === side)
+  const random = createRng((game.seed * 31 + (side === 'red' ? 7 : 13)) >>> 0)
+  const now = (id) => game.battle.world.units.find(u => u.id === id) ?? game.battle.fledUnits.find(u => u.id === id)
+  return units.map(spec => {
+    const unit = now(spec.id)
+    const losses = 1 - Math.max(0, unit?.strength ?? 0) / (spec.strength || 1)
+    const exposure = exposureFromEvents(events, spec.id)
+    const chances = fateChances({ result, losses, exposure })
+    const roll = random()
+    const pKill = perOfficer(chances.kill, units.length)
+    const pCapture = perOfficer(chances.capture, units.length)
+    const pWound = perOfficer(chances.wound, units.length)
+    const fate = roll < pKill ? 'killed'
+      : roll < pKill + pCapture ? 'captured'
+        : roll < pKill + pCapture + pWound ? 'wounded' : 'unhurt'
+    return {
+      unit: unitName(spec),
+      fate,
+      ...(fate === 'wounded' ? { how: woundReason(exposure) } : {})
+    }
+  })
 }
 
 function newToken() {
@@ -335,7 +369,7 @@ function createBattleStore({ dir = null, ai = null, now = () => Date.now() } = {
       objectives,
       pending: entry.pending[side] ?? null,
       dispatches: [...entry.dispatches[side]].reverse(),
-      verdict: game.outcome.decided ? tally(game) : null
+      verdict: game.outcome.decided && !atGame ? { ...tally(game), officers: officerFates(game, side) } : null
     }
   }
 
@@ -367,7 +401,10 @@ function createBattleStore({ dir = null, ai = null, now = () => Date.now() } = {
     if (!seat) return null
     const read = await interpretText(String(text ?? ''), context(seat.entry, seat.side), { ai })
     const name = namer(seat.entry.game, seat.side)
-    return { understood: read.understood.map(name), questions: read.questions.map(name), source: read.source, surrender: read.surrender }
+    return {
+      understood: read.understood.map(name), questions: read.questions.map(name),
+      choices: (read.choices ?? []).map(c => ({ ...c, question: name(c.question) })), source: read.source, surrender: read.surrender
+    }
   }
 
   /**
@@ -385,7 +422,7 @@ function createBattleStore({ dir = null, ai = null, now = () => Date.now() } = {
     const name = namer(game, side)
     const understood = read.understood.map(name)
     if (read.questions.length > 0) {
-      return { status: 'clarify', questions: read.questions.map(name), understood }
+      return { status: 'clarify', questions: read.questions.map(name), choices: (read.choices ?? []).map(c => ({ ...c, question: name(c.question) })), understood }
     }
 
     entry.pending[side] = { text: String(text ?? ''), understood, at: now() }

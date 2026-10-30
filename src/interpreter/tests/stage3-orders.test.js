@@ -126,3 +126,16 @@ test('an AI reply that invents a kind of target is refused, and the grammar take
   assert.equal(read.orders[0].action, 'ambush')
   assert.equal(read.orders[0].against, undefined)
 })
+
+test('a question about a place comes with choices: what to write instead', () => {
+  const read = interpretLines(['spears to the ridge'], { ...context, units: [{ ...context.units[0], position: { x: 3, y: 3 } }] })
+  assert.equal(read.orders.length, 0)
+  assert.equal(read.choices.length, 1)
+  const [choice] = read.choices
+  assert.equal(choice.place, 'the ridge')
+  assert.deepEqual(choice.options.map(o => o.text).sort(), ['Shepherd\'s Ridge', 'The Crownhill'])
+  // Writing a choice in makes the order clear.
+  const again = interpretLines([`spears to ${choice.options[0].text}`], { ...context, units: [{ ...context.units[0], position: { x: 3, y: 3 } }] })
+  assert.equal(again.questions.length, 0)
+  assert.equal(again.orders.length, 1)
+})

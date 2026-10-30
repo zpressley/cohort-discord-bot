@@ -73,6 +73,14 @@ test('alone, on a phone: muster, an order written on the map, turns to a verdict
     // Read back, then send; alone, each turn runs at once.
     await p.click('#read-back')
     await p.waitForSelector('.readback')
+
+    // An unclear place comes with choices; picking one rewrites the order.
+    await p.fill('#orders', 'spears to the ridge')
+    await p.click('#read-back')
+    await p.waitForSelector('[data-choice]')
+    await p.click('[data-choice] >> nth=0')
+    await p.waitForSelector('.readback')
+    assert.doesNotMatch(await p.inputValue('#orders'), /the ridge/)
     await p.fill('#orders', 'everyone advance')
     await p.click('#send')
     await p.waitForSelector('.dispatch')
@@ -88,6 +96,7 @@ test('alone, on a phone: muster, an order written on the map, turns to a verdict
     await p.waitForSelector('.verdict h2')
     assert.match(await p.textContent('.verdict h2'), /Victory|Defeat|A draw/)
     assert.equal(await p.locator('table.losses tbody tr').count(), 2)
+    assert.match(await p.textContent('#panel-body'), /captain|came through/)
 
     await p.fill('#replay', '0')
     await p.dispatchEvent('#replay', 'change')

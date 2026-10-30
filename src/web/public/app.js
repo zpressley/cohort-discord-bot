@@ -473,7 +473,13 @@ async function tent(token) {
       </div>
       ${rb ? `
         ${rb.understood.length ? `<p class="label-caps">Your officers understood</p>${rb.understood.map(l => `<p class="readback">${esc(l)}</p>`).join('')}` : ''}
-        ${rb.questions.map(q => `<p class="question">${esc(q)}</p>`).join('')}
+        ${rb.questions.map(q => {
+          const choice = (rb.choices ?? []).find(c => c.question === q)
+          if (!choice) return `<p class="question">${esc(q)}</p>`
+          return `<div class="question"><p style="margin: 0 0 8px">${esc(q)}</p><div style="display: flex; gap: 8px; flex-wrap: wrap">${
+            choice.options.map((o, i) => `<button class="btn" type="button" data-choice="${esc(rb.choices.indexOf(choice))}" data-option="${i}">${esc(o.text)}</button>`).join('')
+          }</div></div>`
+        }).join('')}
         ${rb.error ? `<p class="error">${esc(rb.error)}</p>` : ''}` : ''}`
     foot.innerHTML = `
       <button class="btn btn-main btn-wide" type="button" id="send"${state.sending ? ' disabled' : ''}>${state.sending ? 'Sending…' : 'Send the orders'}</button>
@@ -482,12 +488,23 @@ async function tent(token) {
     const box = document.getElementById('orders')
     box.addEventListener('input', () => { state.draft = box.value; state.readback = null; saveDraft(token, state.draft) })
     document.getElementById('clear')?.addEventListener('click', () => { state.draft = ''; state.readback = null; saveDraft(token, ''); renderPanel() })
-    document.getElementById('read-back').addEventListener('click', async () => {
+    const readBack = async () => {
       try {
         state.readback = await api('POST', `/api/seat/${token}/read`, { text: state.draft })
       } catch (error) { state.readback = { understood: [], questions: [], error: error.message } }
       renderPanel()
-    })
+    }
+    document.getElementById('read-back').addEventListener('click', readBack)
+    // A choice answers a question: its words take the place of the unclear
+    // ones, and the orders are read back again.
+    body.querySelectorAll('[data-choice]').forEach(b => b.addEventListener('click', () => {
+      const choice = state.readback.choices[Number(b.dataset.choice)]
+      const option = choice.options[Number(b.dataset.option)]
+      const at = state.draft.toLowerCase().indexOf(String(choice.place).toLowerCase())
+      if (at >= 0) state.draft = state.draft.slice(0, at) + option.text + state.draft.slice(at + choice.place.length)
+      saveDraft(token, state.draft)
+      readBack()
+    }))
     document.getElementById('send').addEventListener('click', async () => {
       state.sending = true
       renderPanel()
@@ -495,7 +512,7 @@ async function tent(token) {
         const result = await api('POST', `/api/seat/${token}/orders`, { text: state.draft })
         state.sending = false
         if (result.status === 'clarify') {
-          state.readback = { understood: result.understood, questions: result.questions }
+          state.readback = { understood: result.understood, questions: result.questions, choices: result.choices }
           return renderPanel()
         }
         state.draft = ''
@@ -525,6 +542,7 @@ async function tent(token) {
       ${v ? `<table class="losses"><thead><tr><th scope="col">Side</th><th scope="col">Standing</th><th scope="col">Fled</th><th scope="col">Fallen</th></tr></thead><tbody>
         ${Object.entries(v.sides).map(([s, n]) => `<tr><td>${esc(sideName(s))}${s === state.view.battle.side ? ' (you)' : ''}</td><td>${n.standing}</td><td>${n.fled}</td><td>${n.fallen}</td></tr>`).join('')}
       </tbody></table>` : ''}
+      ${v?.officers ? `<p class="label-caps">Your officers</p>${officerLines(v.officers)}` : ''}
       <label class="field" for="replay">Replay the battle, turn by turn
         <input id="replay" type="range" min="0" max="${state.view.battle.turn - 1}" value="${state.shown ? state.shown.turn : state.view.battle.turn - 1}" style="min-height: 44px">
       </label>
@@ -538,6 +556,14 @@ async function tent(token) {
       document.getElementById('replay-note').textContent = state.shown ? replayWords(state.shown) : 'The field as the battle ended.'
       renderMap()
     })
+  }
+
+  function officerLines(officers) {
+    const hurt = officers.filter(o => o.fate !== 'unhurt')
+    const lines = hurt.map(o => `<p class="note">The captain of the ${esc(o.unit.toLowerCase())}: ${
+      o.fate === 'killed' ? 'killed' : o.fate === 'captured' ? 'taken by the enemy' : `wounded (${esc(o.how)}), back after the next battle`}.</p>`)
+    lines.push(`<p class="note">${hurt.length ? 'All others came through.' : 'Every captain came through.'}</p>`)
+    return lines.join('')
   }
 
   function replayWords(shown) {

@@ -224,5 +224,6 @@ module.exports = {
   officerRank,
   createRoster,
   livingOfficers,
-  resolveOfficerFates
+  resolveOfficerFates,
+  woundReason
 }

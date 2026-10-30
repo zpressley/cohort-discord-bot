@@ -65,14 +65,28 @@ function resolvePlace(map, origin, words) {
   }
   const found = findPlace(map, origin, text)
   if (found.position) return { position: found.position, description: found.description }
-  if (found.question) return { question: found.question }
+  if (found.question) {
+    // Each choice says what to write instead, so the player can pick one
+    // rather than retype the order: a named place by its name, any other by
+    // its grid square.
+    return {
+      question: found.question,
+      options: found.options.map(o => ({
+        label: o.description,
+        text: o.feature?.name ?? gridLabel(o.position, { quarter: true })
+      }))
+    }
+  }
   return { question: `I can't place "${text}": ${found.none}. Try the ground (the ridge to the east, the clearing) or a grid square like C7.` }
 }
 
 /**
  * @param {Array} intents   from grammar.parseLine or the AI reader
  * @param {Object} context  { map, units }
- * @returns {{ orders: Array, questions: Array<string>, surrender: boolean, understood: Array<string> }}
+ * @returns {{ orders: Array, questions: Array<string>, choices: Array, surrender: boolean, understood: Array<string> }}
+ *   choices: for a question with answers to pick from, { question, place,
+ *   options: [{ label, text }] }: write option.text in place of the words
+ *   `place` and read the order again.
  *   orders are engine orders: { unitRef: unitId, action, target?, then? };
  *   understood is a plain read-back for the player ("spears: defend the
  *   clearing 75 m south").
@@ -81,6 +95,7 @@ function resolveIntents(intents, context) {
   const { map, units } = context
   const orders = []
   const questions = []
+  const choices = []
   const understood = []
   let surrender = false
 
@@ -99,7 +114,11 @@ function resolveIntents(intents, context) {
     let where = ''
     if (intent.place) {
       const place = resolvePlace(map, groupOrigin(match.units), intent.place)
-      if (place.question) { questions.push(place.question); continue }
+      if (place.question) {
+        questions.push(place.question)
+        if (place.options) choices.push({ question: place.question, place: intent.place, options: place.options })
+        continue
+      }
       target = place.position
       where = ` ${place.description}`
     } else if (intent.action === 'move') {
@@ -129,7 +148,7 @@ function resolveIntents(intents, context) {
     understood.push(line)
   }
 
-  return { orders, questions, surrender, understood }
+  return { orders, questions, choices, surrender, understood }
 }
 
 module.exports = { resolveIntents, resolvePlace, groupOrigin, coverWords }
