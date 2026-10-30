@@ -24,8 +24,7 @@ const { detectFeatures } = require('../engine/map/features')
 const { isGridRef } = require('../engine/map/grid')
 const { staminaPool } = require('../engine/combat/ratings')
 const { interpretText } = require('../interpreter/orders')
-const { narrateTurn } = require('../narrator/turnNarrator')
-const { renderTurnReport } = require('../adapters/hotseat/render')
+const { narrateTurn, visibleEvents, maskNames, fact } = require('../narrator/turnNarrator')
 const { loadScenario, SCENARIOS } = require('../adapters/hotseat/scenarios')
 
 const TERRAIN_CODES = {
@@ -77,6 +76,32 @@ function namer(game, side) {
   const names = all.map(u => [u.id, u.side === side ? unitName(u) : `enemy ${unitName(u).toLowerCase()}`])
     .sort((a, b) => b[0].length - a[0].length)
   return (text) => names.reduce((out, [id, name]) => out.replace(new RegExp(`\\b${id}\\b`, 'g'), name), String(text))
+}
+
+// One event as a sentence for the plain account. A round of fighting is told
+// as men lost, not as the combat engine's numbers.
+function plainLine(game, event) {
+  if (event.type === 'exchange') {
+    return `${event.a.unitId} and ${event.b.unitId} fought: ${event.a.unitId} lost ${event.a.killed} men, ${event.b.unitId} ${event.b.killed}`
+  }
+  if (event.type === 'objective') {
+    const words = (s) => s ? s.charAt(0).toUpperCase() + s.slice(1) : null
+    return fact(game.battle.map, { ...event, side: words(event.side), was: words(event.was) })
+  }
+  return fact(game.battle.map, event)
+}
+
+// Men standing, fled and fallen for each side: shown once the battle is
+// over, when nothing is hidden any more.
+function tally(game) {
+  const out = {}
+  for (const side of Object.keys(game.spec.sides)) {
+    const start = game.startingStrength[side] ?? 0
+    const standing = game.battle.world.units.filter(u => u.side === side).reduce((n, u) => n + Math.max(0, u.strength), 0)
+    const fled = game.battle.fledUnits.filter(u => u.side === side).reduce((n, u) => n + u.strength, 0)
+    out[side] = { standing, fled, fallen: Math.max(0, start - standing - fled) }
+  }
+  return { sides: out }
 }
 
 function newToken() {
@@ -300,7 +325,8 @@ function createBattleStore({ dir = null, ai = null, now = () => Date.now() } = {
       enemies,
       objectives,
       pending: entry.pending[side] ?? null,
-      dispatches: [...entry.dispatches[side]].reverse()
+      dispatches: [...entry.dispatches[side]].reverse(),
+      verdict: game.outcome.decided ? tally(game) : null
     }
   }
 
@@ -356,15 +382,21 @@ function createBattleStore({ dir = null, ai = null, now = () => Date.now() } = {
     const turnEntry = game.history.at(-1)
     for (const side of Object.keys(entry.seats)) {
       if (!entry.seats[side]) continue
-      const plain = renderTurnReport(game, turnEntry, side)
       const name = namer(game, side)
-      const lines = plain.split('\n').slice(1).map(l => name(l.trim())).filter(l => l && !/^──/.test(l))
       const events = turnEntry.ticks.flatMap(t => game.battle.log.forTurn(t.battleTurn))
       const own = [...game.battle.world.units, ...game.battle.fledUnits].filter(u => u.side === side)
       const seen = sideView(game, side).intel.filter(e => e.status === 'visible').map(e => e.id)
+      const ownIds = new Set(own.map(u => u.id))
+      const known = (id) => ownIds.has(id) || seen.includes(id)
+      // The plain account: what this side could know, one sentence each.
+      const lines = visibleEvents(events, { ownIds, seenEnemyIds: new Set(seen) })
+        .map(e => plainLine(game, maskNames(e, known)))
+        .filter(Boolean)
+        .map(l => name(l))
+        .map(l => l.charAt(0).toUpperCase() + l.slice(1))
       const told = await narrateTurn(ai, {
         map: game.battle.map, side, culture: own[0]?.culture ?? 'unknown',
-        ownIds: new Set(own.map(u => u.id)), seenEnemyIds: new Set(seen), events,
+        ownIds, seenEnemyIds: new Set(seen), events,
         plain: lines.join('\n')
       })
       entry.dispatches[side].push({
