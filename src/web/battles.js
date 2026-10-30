@@ -25,15 +25,16 @@ const { isGridRef } = require('../engine/map/grid')
 const { staminaPool } = require('../engine/combat/ratings')
 const { interpretText } = require('../interpreter/orders')
 const { narrateTurn, visibleEvents, maskNames, fact } = require('../narrator/turnNarrator')
-const { loadScenario, SCENARIOS } = require('../adapters/hotseat/scenarios')
+const { loadScenario, SCENARIOS, mapChoices } = require('../adapters/hotseat/scenarios')
+const { MAPS } = require('../data/maps')
 
 const TERRAIN_CODES = {
   plains: 'p', road: 'r', hill: 'h', forest: 'f', marsh: 'm', river: 'w', ford: 'd', bridge: 'b'
 }
 
 const SCENARIO_TITLES = {
-  'meeting-battle': 'Crownhill: the meeting battle',
-  'legions-vs-celts': 'Crownhill: Legions and Celts'
+  'meeting-battle': 'the meeting battle',
+  'legions-vs-celts': 'Legions and Celts'
 }
 
 const where = (position) => gridLabel(position, { quarter: true })
@@ -164,6 +165,7 @@ function createBattleStore({ dir = null, ai = null, now = () => Date.now() } = {
   /**
    * @param {Object} m
    *   scenario    'meeting-battle' | 'legions-vs-celts'
+ *   map         'crownhill' (default) | 'ashford' | 'thornwood' | 'ravenridge'
    *   opponent    'standing' (play alone) | 'friend' (a second link)
    *   side        the side the mustering player takes
    *   timeLimitMinutes  null or minutes of battle
@@ -173,7 +175,8 @@ function createBattleStore({ dir = null, ai = null, now = () => Date.now() } = {
    */
   function muster(m = {}) {
     const scenario = SCENARIOS[m.scenario] ? m.scenario : 'meeting-battle'
-    let spec = loadScenario(scenario)
+    const mapName = MAPS[m.map] ? m.map : 'crownhill'
+    let spec = loadScenario(scenario, { map: mapName })
     const allSides = Object.keys(spec.sides)
     const side = allSides.includes(m.side) ? m.side : allSides[0]
     const other = allSides.find(s => s !== side)
@@ -188,7 +191,7 @@ function createBattleStore({ dir = null, ai = null, now = () => Date.now() } = {
     const entry = {
       id: crypto.randomBytes(6).toString('hex'),
       scenario,
-      title: SCENARIO_TITLES[scenario] ?? scenario,
+      title: `${MAPS[mapName].title ?? mapName}: ${SCENARIO_TITLES[scenario] ?? scenario}`,
       createdAt: now(),
       updatedAt: now(),
       seats: { [side]: newToken(), [other]: solo ? null : newToken() },
@@ -446,7 +449,8 @@ function createBattleStore({ dir = null, ai = null, now = () => Date.now() } = {
     readBack,
     submit,
     seatOf,
-    scenarios: () => Object.keys(SCENARIOS).map(id => ({ id, title: SCENARIO_TITLES[id] ?? id }))
+    scenarios: () => Object.keys(SCENARIOS).map(id => ({ id, title: SCENARIO_TITLES[id] ?? id })),
+    maps: () => mapChoices()
   }
 }
 

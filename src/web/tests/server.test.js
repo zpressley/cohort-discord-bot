@@ -162,3 +162,18 @@ test('a finished battle shows the verdict and replays turn by turn, as this side
     assert.equal(JSON.stringify(start0).includes('"side":"blue"'), false)
   } finally { await app.close() }
 })
+
+test('a battle can be mustered on any map', async () => {
+  const app = await start()
+  try {
+    const maps = (await app.api('GET', '/api/maps')).body
+    assert.deepEqual(maps.map(m => m.id).sort(), ['ashford', 'crownhill', 'ravenridge', 'thornwood'])
+    const token = (await app.api('POST', '/api/battles', { map: 'thornwood', scenario: 'legions-vs-celts', opponent: 'standing', side: 'red' })).body.seats.red
+    const tent = (await app.api('GET', `/api/seat/${token}`)).body
+    assert.equal(tent.map.name, 'thornwood')
+    assert.match(tent.battle.title, /^Thornwood: Legions and Celts$/)
+    assert.ok(tent.map.landmarks.some(l => l.name === "Hermit's Glade"))
+    const sent = (await app.api('POST', `/api/seat/${token}/orders`, { text: 'everyone advance' })).body
+    assert.equal(sent.status, 'turn-ran')
+  } finally { await app.close() }
+})

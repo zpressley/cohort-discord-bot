@@ -11,7 +11,8 @@
 //
 // The API, all JSON:
 //   GET  /api/scenarios                     what can be mustered
-//   POST /api/battles                       muster: { scenario, opponent, side,
+//   GET  /api/maps                          where it can be fought
+//   POST /api/battles                       muster: { scenario, map, opponent, side,
 //                                           timeLimitMinutes, objectives }
 //                                           -> { id, seats: { side: token } }
 //   GET  /api/seats?tokens=a,b              one line per battle, for "your battles"
@@ -95,10 +96,13 @@ function createServer(store) {
         if (req.method === 'GET' && parts[1] === 'scenarios' && parts.length === 2) {
           return send(res, 200, store.scenarios())
         }
+        if (req.method === 'GET' && parts[1] === 'maps' && parts.length === 2) {
+          return send(res, 200, store.maps())
+        }
         if (req.method === 'POST' && parts[1] === 'battles' && parts.length === 2) {
           const body = await readBody(req)
           return send(res, 201, store.muster({
-            scenario: body.scenario, opponent: body.opponent, side: body.side,
+            scenario: body.scenario, map: body.map, opponent: body.opponent, side: body.side,
             timeLimitMinutes: body.timeLimitMinutes, objectives: Array.isArray(body.objectives) ? body.objectives.map(String) : [],
             seed: Number.isInteger(body.seed) ? body.seed : undefined
           }))

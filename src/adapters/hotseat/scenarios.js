@@ -13,6 +13,9 @@
 // is allowed to stand, but only on purpose.
 
 const { buildArmy, toBattleUnits } = require('../../engine/army/builder')
+const { resolveMap } = require('../../engine/map/map')
+const { deployArmies } = require('../../engine/map/deploy')
+const { MAPS } = require('../../data/maps')
 
 function meetingBattle() {
   return require('../../harness/scenarios/meeting-battle')
@@ -60,10 +63,23 @@ const SCENARIOS = {
   'legions-vs-celts': legionsVsCelts
 }
 
-function loadScenario(name) {
+/**
+ * A scenario, optionally fought on another map: its armies keep their
+ * formations and form up on that map's deployment ground (deploy.js).
+ * Crownhill, where both scenarios were drawn, keeps their own positions.
+ */
+function loadScenario(name, { map = null } = {}) {
   const factory = SCENARIOS[name]
   if (!factory) return null
-  return factory()
+  const spec = factory()
+  if (!map || map === 'crownhill') return spec
+  if (!MAPS[map]) return null
+  return { ...spec, map, units: deployArmies(resolveMap(map), spec.units, spec.sides) }
 }
 
-module.exports = { SCENARIOS, loadScenario }
+// The maps a battle can be fought on, for choosing.
+function mapChoices() {
+  return Object.values(MAPS).map(m => ({ id: m.name, title: m.title ?? m.name }))
+}
+
+module.exports = { SCENARIOS, loadScenario, mapChoices }

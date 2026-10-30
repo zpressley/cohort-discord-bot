@@ -162,13 +162,16 @@ async function battles() {
 
 // ── Muster ─────────────────────────────────────────────
 async function muster() {
-  const scenarios = await api('GET', '/api/scenarios')
+  const [scenarios, maps] = await Promise.all([api('GET', '/api/scenarios'), api('GET', '/api/maps')])
   app.innerHTML = `
     <header class="bar"><a href="/battles" data-link>Your battles</a><strong style="font-family: var(--font-display); font-size: 18px">Muster a battle</strong><span></span></header>
     <main class="page">
       <form id="muster" class="page" style="padding: 0">
         <label class="field">The field
-          <select name="scenario">${scenarios.map(s => `<option value="${esc(s.id)}">${esc(s.title)}</option>`).join('')}</select>
+          <select name="map">${maps.map(m => `<option value="${esc(m.id)}">${esc(m.title)}</option>`).join('')}</select>
+        </label>
+        <label class="field">The armies
+          <select name="scenario">${scenarios.map(s => `<option value="${esc(s.id)}">${esc(s.title.charAt(0).toUpperCase() + s.title.slice(1))}</option>`).join('')}</select>
         </label>
         <fieldset>
           <legend>Your opponent</legend>
@@ -198,12 +201,12 @@ async function muster() {
       const side = form.get('side')
       const opponent = form.get('opponent')
       const result = await api('POST', '/api/battles', {
-        scenario: form.get('scenario'), opponent, side,
+        scenario: form.get('scenario'), map: form.get('map'), opponent, side,
         timeLimitMinutes: form.get('timeLimit') ? Number(form.get('timeLimit')) : null,
         objectives: String(form.get('objectives') ?? '').split(',').map(s => s.trim()).filter(Boolean)
       })
       const mine = result.seats[side]
-      const title = scenarios.find(s => s.id === form.get('scenario'))?.title ?? 'Battle'
+      const title = `${maps.find(m => m.id === form.get('map'))?.title ?? 'Battle'}: ${scenarios.find(s => s.id === form.get('scenario'))?.title ?? ''}`
       saveSeat({ token: mine, title, side })
       const friendSide = Object.keys(result.seats).find(s => s !== side)
       if (opponent !== 'friend' || !friendSide) return go(`/b/${mine}`)
