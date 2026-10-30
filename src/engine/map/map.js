@@ -86,12 +86,15 @@ function createMap(definition) {
     passable,
     neighbors,
     landmarks: () => landmarks.map(l => ({ ...l, position: { ...l.position } })),
-    label: toLabel
+    label: toLabel,
+    // Where armies form up when a scenario is fought here (deploy.js), if
+    // the map says.
+    deploy: definition.deploy ? JSON.parse(JSON.stringify(definition.deploy)) : null
   }
 }
 
 // Turn whatever a spec carries into a map: a built map, a definition, or the
-// name of an authored map. No map at all means Crownhill, the only one so far.
+// name of an authored map. No map at all means Crownhill.
 const built = new Map()
 function resolveMap(spec = DEFAULT_MAP) {
   if (spec && typeof spec.cell === 'function') return spec

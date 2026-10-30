@@ -7,12 +7,14 @@
 // reach a verdict on every seed. No time limit is set, so a game ends only
 // by the fighting.
 //
-//   npm run soak                 6 openings x 2 scenarios x 25 seeds, plus
-//                                50 meeting battles
+//   npm run soak                 6 openings x 2 scenarios x 25 seeds on
+//                                Crownhill, 6 openings x 2 scenarios x 5
+//                                seeds on each other map, plus 50 meeting
+//                                battles
 //   npm run soak -- --seeds 50
 
 const { createSession } = require('../adapters/hotseat/session')
-const { loadScenario, SCENARIOS } = require('../adapters/hotseat/scenarios')
+const { loadScenario, SCENARIOS, mapChoices } = require('../adapters/hotseat/scenarios')
 const { runBattle } = require('../engine/battle/battle')
 const meeting = require('./scenarios/meeting-battle')
 
@@ -31,10 +33,12 @@ const OPENINGS = [
 ]
 
 const result = { games: 0, finished: 0, playerTurns: 0, stuck: [], unread: 0 }
-for (const name of Object.keys(SCENARIOS)) {
+const fields = mapChoices().map(m => m.id)
+for (const field of fields) for (const name of Object.keys(SCENARIOS)) {
   OPENINGS.forEach((opening, o) => {
-    for (let seed = 1; seed <= seeds; seed++) {
-      const session = createSession(loadScenario(name), { seed })
+    const perMap = field === 'crownhill' ? seeds : Math.max(1, Math.round(seeds / 5))
+    for (let seed = 1; seed <= perMap; seed++) {
+      const session = createSession(loadScenario(name, { map: field }), { seed })
       const [red, blue] = session.sides
       let turns = 0
       while (!session.finished() && turns < MAX_PLAYER_TURNS) {
@@ -45,7 +49,7 @@ for (const name of Object.keys(SCENARIOS)) {
         turns++
       }
       result.games++
-      if (session.finished()) { result.finished++; result.playerTurns += turns } else result.stuck.push(`${name} opening ${o} seed ${seed}`)
+      if (session.finished()) { result.finished++; result.playerTurns += turns } else result.stuck.push(`${field} ${name} opening ${o} seed ${seed}`)
     }
   })
 }

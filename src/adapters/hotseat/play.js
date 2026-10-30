@@ -10,6 +10,7 @@
 //   npm run play -- meeting-battle --seed 7       a different battle
 //   npm run play -- meeting-battle --full-map     the whole 40x40
 //   npm run play -- meeting-battle --time-limit 120  end after 2 hours of battle
+//   npm run play -- meeting-battle --map thornwood   fight it on another map
 //   npm run play -- meeting-battle --objective "Harrow Bridge" --objective C6
 //                                                 ground to hold: a feature
 //                                                 or grid square (repeatable)
@@ -30,7 +31,7 @@ const { renderHandoff } = require('./render')
 const { aiClientFromEnv } = require('../../llm')
 
 function parseArgs(argv) {
-  const args = { scenario: 'meeting-battle', seed: undefined, auto: null, fullMap: false, timeLimit: 240, objectives: [] }
+  const args = { scenario: 'meeting-battle', seed: undefined, auto: null, fullMap: false, timeLimit: 240, objectives: [], map: null }
   for (let i = 0; i < argv.length; i++) {
     const arg = argv[i]
     if (arg === '--seed') args.seed = Number(argv[++i])
@@ -38,6 +39,7 @@ function parseArgs(argv) {
     else if (arg === '--full-map') args.fullMap = true
     else if (arg === '--time-limit') args.timeLimit = Number(argv[++i])
     else if (arg === '--objective') args.objectives.push(argv[++i])
+    else if (arg === '--map') args.map = argv[++i]
     else if (!arg.startsWith('--')) args.scenario = arg
   }
   return args
@@ -45,9 +47,9 @@ function parseArgs(argv) {
 
 async function main() {
   const args = parseArgs(process.argv.slice(2))
-  const spec = loadScenario(args.scenario)
+  const spec = loadScenario(args.scenario, { map: args.map })
   if (!spec) {
-    console.log(`Unknown scenario "${args.scenario}". Available: ${Object.keys(SCENARIOS).join(', ')}`)
+    console.log(`Unknown scenario or map "${args.scenario}"${args.map ? ` on "${args.map}"` : ''}. Scenarios: ${Object.keys(SCENARIOS).join(', ')}. Maps: ${require('./scenarios').mapChoices().map(m => m.id).join(', ')}`)
     process.exitCode = 1
     return
   }

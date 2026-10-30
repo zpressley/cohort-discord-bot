@@ -3,7 +3,10 @@
 // map definition of its own.
 
 const crownhill = require('./crownhill')
+const ashford = require('./ashford')
+const thornwood = require('./thornwood')
+const ravenridge = require('./ravenridge')
 
-const MAPS = { crownhill }
+const MAPS = { crownhill, ashford, thornwood, ravenridge }
 
 module.exports = { MAPS }
