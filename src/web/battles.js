@@ -17,7 +17,7 @@ const fs = require('fs')
 const path = require('path')
 const crypto = require('crypto')
 
-const { createGame, submitOrders, sideView, gameRecord, replayGame } = require('../engine/orchestrator')
+const { createGame, submitOrders, forceProcess, sideView, gameRecord, replayGame } = require('../engine/orchestrator')
 const { sides } = require('../engine/world')
 const { gridLabel } = require('../engine/map/grid')
 const { detectFeatures } = require('../engine/map/features')
@@ -250,12 +250,15 @@ function createBattleStore({ dir = null, ai = null, now = () => Date.now() } = {
     }
   }
 
-  /** Everything one side may see, for the Command Tent. */
-  function view(token) {
+  /**
+   * Everything one side may see, for the Command Tent. With `atGame`, the
+   * same view of an earlier state of the battle (the replay).
+   */
+  function view(token, atGame = null) {
     const seat = seatOf(token)
     if (!seat) return null
     const { entry, side } = seat
-    const game = entry.game
+    const game = atGame ?? entry.game
     const battle = game.battle
     const map = battle.map
     const sv = sideView(game, side)
@@ -317,8 +320,11 @@ function createBattleStore({ dir = null, ai = null, now = () => Date.now() } = {
 
     const landmarks = detectFeatures(map).filter(f => f.name).map(f => ({ name: f.name, kind: f.kind, centre: f.centre }))
 
+    const line = summary(token)
     return {
-      battle: { ...summary(token), sides: sides(battle.world), timeLimitMinutes: game.spec.timeLimitMinutes ?? null },
+      battle: atGame
+        ? { ...line, turn: game.playerTurn + 1, minutes: game.minutesElapsed, sides: sides(battle.world), timeLimitMinutes: game.spec.timeLimitMinutes ?? null }
+        : { ...line, sides: sides(battle.world), timeLimitMinutes: game.spec.timeLimitMinutes ?? null },
       map: { name: map.name, width: map.width, height: map.height, squareTiles: 4, terrain, landmarks },
       own,
       fallen,
@@ -328,6 +334,26 @@ function createBattleStore({ dir = null, ai = null, now = () => Date.now() } = {
       dispatches: [...entry.dispatches[side]].reverse(),
       verdict: game.outcome.decided ? tally(game) : null
     }
+  }
+
+  /**
+   * A finished battle, as this side saw it after a given turn (0: before the
+   * first). Only once the battle is over: replaying is for looking back.
+   */
+  function replay(token, turn) {
+    const seat = seatOf(token)
+    if (!seat || !seat.entry.game.outcome.decided) return null
+    const record = gameRecord(seat.entry.game)
+    const target = Math.max(0, Math.min(Number(turn) || 0, seat.entry.game.playerTurn))
+    // Play the log forward one submission at a time until that turn has run.
+    const game = createGame(record.spec, { seed: record.seed })
+    for (const logged of record.orderLog) {
+      if (game.playerTurn >= target) break
+      if (logged.forced) forceProcess(game)
+      else submitOrders(game, logged.side, logged.orders)
+    }
+    const seen = view(token, game)
+    return { turn: target, lastTurn: seat.entry.game.playerTurn, map: seen.map, own: seen.own, enemies: seen.enemies, objectives: seen.objectives, battle: seen.battle }
   }
 
   // ── Orders ────────────────────────────────────────
@@ -416,6 +442,7 @@ function createBattleStore({ dir = null, ai = null, now = () => Date.now() } = {
     muster,
     summary,
     view,
+    replay,
     readBack,
     submit,
     seatOf,

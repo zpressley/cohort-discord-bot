@@ -225,7 +225,9 @@ async function tent(token) {
     readback: null,
     editing: false,
     sending: false,
-    zoom: null
+    zoom: null,
+    // The verdict's replay: the battle as you saw it after an earlier turn.
+    shown: null
   }
 
   async function load() {
@@ -268,12 +270,14 @@ async function tent(token) {
   function renderMap({ keepScroll = true } = {}) {
     const left = scroll.scrollLeft
     const top = scroll.scrollTop
-    scroll.innerHTML = drawMap(state.view, { selectedId: state.picked })
+    const showing = state.shown ?? state.view
+    scroll.innerHTML = drawMap(showing, { selectedId: state.picked })
     const svg = scroll.querySelector('svg')
     const W = Number(svg.getAttribute('width'))
     if (state.zoom === null) state.zoom = Math.max(scroll.clientWidth / W, 15 / TILE)
     svg.style.width = `${Math.round(W * state.zoom)}px`
     svg.style.height = 'auto'
+    if (state.shown) { if (keepScroll) { scroll.scrollLeft = left; scroll.scrollTop = top } return }
     attachGestures(svg, state.view, () => state.picked, {
       onPick: (id) => { state.picked = id; state.place = null; state.flash = null; renderMap(); renderHint(); if (state.tab === 'army') renderPanel() },
       onOrder: (unit, x, y) => addLine(`${unit.name} to ${gridRef(x, y)}`),
@@ -503,7 +507,23 @@ async function tent(token) {
       ${v ? `<table class="losses"><thead><tr><th scope="col">Side</th><th scope="col">Standing</th><th scope="col">Fled</th><th scope="col">Fallen</th></tr></thead><tbody>
         ${Object.entries(v.sides).map(([s, n]) => `<tr><td>${esc(sideName(s))}${s === state.view.battle.side ? ' (you)' : ''}</td><td>${n.standing}</td><td>${n.fled}</td><td>${n.fallen}</td></tr>`).join('')}
       </tbody></table>` : ''}
+      <label class="field" for="replay">Replay the battle, turn by turn
+        <input id="replay" type="range" min="0" max="${state.view.battle.turn - 1}" value="${state.shown ? state.shown.turn : state.view.battle.turn - 1}" style="min-height: 44px">
+      </label>
+      <p class="note" id="replay-note">${state.shown ? replayWords(state.shown) : 'The field as the battle ended.'}</p>
       <a class="btn btn-wide" href="/battles" data-link>Your battles</a>`
+    const slider = document.getElementById('replay')
+    slider.addEventListener('change', async () => {
+      const turn = Number(slider.value)
+      const last = state.view.battle.turn - 1
+      state.shown = turn >= last ? null : await api('GET', `/api/seat/${token}/replay?turn=${turn}`)
+      document.getElementById('replay-note').textContent = state.shown ? replayWords(state.shown) : 'The field as the battle ended.'
+      renderMap()
+    })
+  }
+
+  function replayWords(shown) {
+    return shown.turn === 0 ? 'The field before the first orders.' : `The field after turn ${shown.turn}, ${clock(shown.battle.minutes)}.`
   }
 
   function renderAll() {

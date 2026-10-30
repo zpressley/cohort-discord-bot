@@ -17,6 +17,8 @@
 //   GET  /api/seats?tokens=a,b              one line per battle, for "your battles"
 //   GET  /api/seat/:token                   the Command Tent: this side's view
 //   GET  /api/seat/:token/summary           just the status line (to poll)
+//   GET  /api/seat/:token/replay?turn=n     a finished battle as this side saw it
+//                                           after turn n
 //   POST /api/seat/:token/read   { text }   read orders back, send nothing
 //   POST /api/seat/:token/orders { text }   send orders
 //
@@ -110,6 +112,10 @@ function createServer(store) {
           if (!store.seatOf(token)) return send(res, 404, { error: 'no such battle' })
           if (req.method === 'GET' && parts.length === 3) return send(res, 200, store.view(token))
           if (req.method === 'GET' && parts[3] === 'summary') return send(res, 200, store.summary(token))
+          if (req.method === 'GET' && parts[3] === 'replay') {
+            const shown = store.replay(token, url.searchParams.get('turn'))
+            return shown ? send(res, 200, shown) : send(res, 409, { error: 'the battle is not over yet' })
+          }
           if (req.method === 'POST' && parts[3] === 'read') {
             const body = await readBody(req)
             return send(res, 200, await store.readBack(token, String(body.text ?? '').slice(0, 4000)))

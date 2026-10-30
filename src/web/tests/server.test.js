@@ -130,3 +130,35 @@ test('unknown links, bad requests and paths outside the app are refused', async 
     assert.match(page.body, /<title>Cohort/)
   } finally { await app.close() }
 })
+
+test('a finished battle shows the verdict and replays turn by turn, as this side saw it', async () => {
+  const app = await start()
+  try {
+    const token = (await app.api('POST', '/api/battles', { opponent: 'standing', side: 'red', seed: 3 })).body.seats.red
+    assert.equal((await app.api('GET', `/api/seat/${token}/replay?turn=1`)).status, 409, 'no replay while the battle is on')
+
+    let tent
+    for (let i = 0; i < 40; i++) {
+      await app.api('POST', `/api/seat/${token}/orders`, { text: i === 0 ? 'everyone advance' : '' })
+      tent = (await app.api('GET', `/api/seat/${token}`)).body
+      if (tent.battle.status === 'finished') break
+    }
+    assert.equal(tent.battle.status, 'finished')
+    assert.ok(tent.battle.outcome.winner)
+    const sides = Object.keys(tent.verdict.sides).sort()
+    assert.deepEqual(sides, ['blue', 'red'])
+    for (const s of sides) {
+      const n = tent.verdict.sides[s]
+      assert.ok(n.standing >= 0 && n.fled >= 0 && n.fallen >= 0)
+    }
+
+    const start0 = (await app.api('GET', `/api/seat/${token}/replay?turn=0`)).body
+    assert.equal(start0.turn, 0)
+    assert.equal(start0.battle.minutes, 0)
+    assert.deepEqual(start0.enemies, [], 'before the first orders nothing was seen')
+    const one = (await app.api('GET', `/api/seat/${token}/replay?turn=1`)).body
+    assert.equal(one.turn, 1)
+    assert.ok(one.battle.minutes > 0)
+    assert.equal(JSON.stringify(start0).includes('"side":"blue"'), false)
+  } finally { await app.close() }
+})
