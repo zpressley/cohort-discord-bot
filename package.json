@@ -5,7 +5,7 @@
   "scripts": {
     "start": "node src/index.js",
     "dev": "nodemon src/index.js",
-    "test": "node --test \"src/engine/**/*.test.js\" \"src/harness/**/*.test.js\" \"src/adapters/**/*.test.js\" \"src/llm/**/*.test.js\" \"src/interpreter/**/*.test.js\" \"src/narrator/**/*.test.js\"",
+    "test": "node --test \"src/engine/**/*.test.js\" \"src/harness/**/*.test.js\" \"src/adapters/**/*.test.js\" \"src/llm/**/*.test.js\" \"src/interpreter/**/*.test.js\" \"src/narrator/**/*.test.js\" \"src/web/**/*.test.js\"",
     "test:engine": "node --test \"src/engine/**/*.test.js\"",
     "test:harness": "node --test \"src/harness/**/*.test.js\"",
     "test:core": "node src/tests/core/coreEngine.test.js",
@@ -15,7 +15,8 @@
     "play": "node src/adapters/hotseat/play.js",
     "replay": "node scripts/replayBattle.js",
     "officers": "node src/harness/officer-fates.js",
-    "soak": "node src/harness/soak.js"
+    "soak": "node src/harness/soak.js",
+    "web": "node src/web/server.js"
   },
   "keywords": [
     "discord",
