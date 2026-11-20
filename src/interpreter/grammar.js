@@ -12,6 +12,8 @@
 //   archers defend the ford                 defend
 //   horse dig in at the clearing            defend
 //   archers hold        / hold              hold (bare "hold" = everyone)
+//   archers go north / horse move 200 m east   move, by compass from where
+//                                              the unit stands
 //   everyone advance    / advance           advance on the enemy
 //   swords withdraw     / fall back to C7   withdraw (to a place, or home)
 //   spears attack the ford / storm C7       attack (go there looking for a fight)
@@ -82,7 +84,12 @@ function ambushKind(text) {
   for (const [kind, words] of KINDS) if (words.test(after)) return kind
   return null
 }
-const HOLD = /^(?:(.+?)\s+)?(?:holds?|stand fast|stay put|halt|stop)$/i
+const HOLD = /^(?:(.+?)\s+)?(?:holds?(?:\s+(?:position|positions|the line|your ground|their ground|its ground|fast|firm|here|there))?|stand (?:fast|firm)|stay(?:\s+(?:put|here|there))?|wait(?:\s+(?:here|there))?|halt|stop)$/i
+
+// "archers go north", "horse move 200 m east": a compass direction from where
+// the unit stands (200 m when no distance is given).
+const COMPASS_WORDS = '(north[- ]?east|north[- ]?west|south[- ]?east|south[- ]?west|north|south|east|west)'
+const GO_DIRECTION = new RegExp(`^(?:(.+?)\\s+)?(?:go|move|march|head|shift|step|ride|walk)\\s+(?:(\\d{1,4})\\s*(?:m|metres?|meters?|paces|yards?)\\s+)?(?:to the\\s+|due\\s+)?${COMPASS_WORDS}$`, 'i')
 
 /**
  * @returns one of
@@ -130,6 +137,9 @@ function readOlder(text, line) {
   if (!then) {
     const hold = text.match(HOLD)
     if (hold) return order(hold[1], 'hold', null, null)
+
+    const go = text.match(GO_DIRECTION)
+    if (go) return order(go[1], 'move', `${go[2] ?? 200} m ${go[3].toLowerCase()}`, null)
 
     const advance = text.match(ADVANCE)
     if (advance && !/\s(?:to|towards|toward)\s/i.test(text)) return order(advance[1], 'advance', null, null)

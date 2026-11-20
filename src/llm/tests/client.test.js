@@ -25,7 +25,7 @@ test('no key, no AI: the client says so instead of throwing', async () => {
 test('a plain reply comes back as text, and the call is logged with tokens and cost', async () => {
   const log = []
   const ai = createAiClient({
-    transport: scriptedTransport(() => reply('The legion advances.'), { model: 'llama-3.1-8b-instant' }),
+    transport: scriptedTransport(() => reply('The legion advances.'), { model: 'openai/gpt-oss-20b' }),
     costSink: (r) => log.push(r)
   })
   const result = await ai.complete({ purpose: 'narrate', user: 'events' })
@@ -111,5 +111,5 @@ test('the Groq transport needs a key, and building it calls nothing', () => {
   const transport = groqTransport({ apiKey: 'test-key-not-used' })
   assert.equal(transport.name, 'groq')
   assert.equal(transport.model, DEFAULT_MODEL)
-  assert.equal(groqTransport({ apiKey: 'k', model: 'llama-3.3-70b-versatile' }).model, 'llama-3.3-70b-versatile')
+  assert.equal(groqTransport({ apiKey: 'k', model: 'openai/gpt-oss-120b' }).model, 'openai/gpt-oss-120b')
 })

@@ -13,7 +13,7 @@
 // ridge to the east"), resolved from where the ordered units stand.
 
 const { resolveUnitReference } = require('../engine/movement/unitResolver')
-const { findPlace } = require('../engine/map/places')
+const { findPlace, DIRECTIONS, TILE_METRES } = require('../engine/map/places')
 const { isGridRef, gridTarget, gridLabel } = require('../engine/map/grid')
 const { coverFor } = require('../engine/battle/hiding')
 
@@ -56,8 +56,43 @@ function groupOrigin(units) {
   return best.position
 }
 
+// "200 m north", "100 metres to the south-east": a distance and a compass
+// direction from where the unit stands.
+const RELATIVE = /^(?:about\s+|some\s+)?(\d{1,4})\s*(?:m|metres?|meters?|paces|yards?)\s+(?:to the\s+|due\s+)?(north[- ]?east|north[- ]?west|south[- ]?east|south[- ]?west|north|south|east|west)(?:\s+of (?:here|there|their position|its position))?$/i
+
+function parseRelative(words) {
+  const match = String(words).trim().match(RELATIVE)
+  if (!match) return null
+  const direction = match[2].toLowerCase().replace(/\s+/, '-').replace(/^(north|south)(east|west)$/, '$1-$2')
+  const degrees = DIRECTIONS[direction]
+  const tiles = Math.max(1, Math.round(Number(match[1]) / TILE_METRES))
+  const rad = degrees * Math.PI / 180
+  // Map rows run south as y grows, so north is -y.
+  return { dx: Math.round(Math.cos(rad) * tiles), dy: -Math.round(Math.sin(rad) * tiles), words: `${tiles * TILE_METRES} m ${direction}` }
+}
+
+// The passable tile nearest a point (the point itself if it will do), kept
+// on the map.
+function nearestPassable(map, point) {
+  const clamp = { x: Math.max(0, Math.min(map.width - 1, point.x)), y: Math.max(0, Math.min(map.height - 1, point.y)) }
+  for (let r = 0; r <= 6; r++) {
+    for (let dy = -r; dy <= r; dy++) for (let dx = -r; dx <= r; dx++) {
+      if (Math.max(Math.abs(dx), Math.abs(dy)) !== r) continue
+      const p = { x: clamp.x + dx, y: clamp.y + dy }
+      if (map.inBounds(p) && map.passable(p)) return p
+    }
+  }
+  return null
+}
+
 function resolvePlace(map, origin, words) {
   const text = String(words).trim()
+  const relative = parseRelative(text)
+  if (relative) {
+    const position = nearestPassable(map, { x: origin.x + relative.dx, y: origin.y + relative.dy })
+    if (!position) return { question: `There is no ground to stand on ${relative.words} of there.` }
+    return { position, description: relative.words, relative }
+  }
   if (isGridRef(text)) {
     const square = gridTarget(map, text)
     if (square.none) return { question: `${square.none}.` }
@@ -83,7 +118,9 @@ function resolvePlace(map, origin, words) {
 /**
  * @param {Array} intents   from grammar.parseLine or the AI reader
  * @param {Object} context  { map, units }
- * @returns {{ orders: Array, questions: Array<string>, choices: Array, surrender: boolean, understood: Array<string> }}
+ * @returns {{ orders: Array, questions: Array<string>, notes: Array<string>, choices: Array, surrender: boolean, understood: Array<string> }}
+ *   notes: things the reader wants the player to know that do not stop the
+ *   orders (for example a second step it could not record).
  *   choices: for a question with answers to pick from, { question, place,
  *   options: [{ label, text }] }: write option.text in place of the words
  *   `place` and read the order again.
@@ -95,6 +132,7 @@ function resolveIntents(intents, context) {
   const { map, units } = context
   const orders = []
   const questions = []
+  const notes = []
   const choices = []
   const understood = []
   let surrender = false
@@ -102,18 +140,27 @@ function resolveIntents(intents, context) {
   for (const intent of intents) {
     if (intent.kind === 'surrender') { surrender = true; continue }
     if (intent.kind === 'ask') { questions.push(intent.question); continue }
+    if (intent.kind === 'note') { notes.push(intent.note); continue }
     if (intent.kind !== 'order') continue
 
-    const match = resolveUnitReference(intent.unitRef, units)
+    const match = intent.unitIds
+      ? { units: units.filter(u => intent.unitIds.includes(u.id)) }
+      : resolveUnits(intent.unitRef, units)
     if (match.units.length === 0) {
-      questions.push(`Who do you mean by "${intent.unitRef}"? Your units: ${units.map(u => u.id).join(', ')}.`)
+      questions.push(`Who do you mean by "${match.unknown ?? intent.unitRef}"? Your units: ${units.map(u => u.id).join(', ')}.`)
       continue
     }
 
     let target = null
     let where = ''
+    // "everyone 200 m north": each unit goes that way from where it stands.
+    let perUnit = null
     if (intent.place) {
       const place = resolvePlace(map, groupOrigin(match.units), intent.place)
+      if (place.relative && match.units.length > 1) {
+        perUnit = new Map(match.units.map(u => [u.id,
+          nearestPassable(map, { x: u.position.x + place.relative.dx, y: u.position.y + place.relative.dy }) ?? u.position]))
+      }
       if (place.question) {
         questions.push(place.question)
         if (place.options) choices.push({ question: place.question, place: intent.place, options: place.options })
@@ -133,14 +180,15 @@ function resolveIntents(intents, context) {
       orders.push({
         unitRef: unit.id,
         action: intent.action,
-        ...(target ? { target: { ...target } } : {}),
+        ...(target ? { target: { ...(perUnit?.get(unit.id) ?? target) } } : {}),
         ...(intent.then ? { then: intent.then } : {}),
         ...extras
       })
     }
     const who = match.units.map(u => u.id).join(', ')
     const what = intent.action === 'move' && intent.then === 'hold' ? 'defend' : intent.action
-    let line = `${who}: ${what}${extras.careful ? ' carefully' : ''}${where}${target ? ` (${gridLabel(target, { quarter: true })})` : ''}`
+    const at = !target ? '' : perUnit ? '' : ` (${gridLabel(target, { quarter: true })})`
+    let line = `${who}: ${what}${extras.careful ? ' carefully' : ''}${where}${at}`
     if (intent.action === 'hide' || intent.action === 'ambush') {
       line += ` — ${coverWords(map, match.units[0], target ?? match.units[0].position)}`
     }
@@ -148,7 +196,25 @@ function resolveIntents(intents, context) {
     understood.push(line)
   }
 
-  return { orders, questions, choices, surrender, understood }
+  return { orders, questions, notes, choices, surrender, understood }
 }
 
-module.exports = { resolveIntents, resolvePlace, groupOrigin, coverWords }
+// "spears and swords", "the archers, the horse": several units named at once.
+// Every name must be known; one unknown name is a question, not a guess.
+function resolveUnits(reference, units) {
+  const whole = resolveUnitReference(reference, units)
+  if (whole.units.length > 0) return whole
+  const parts = String(reference).split(/\s*(?:,|&|\band\b)\s*/i).map(p => p.trim()).filter(Boolean)
+  if (parts.length < 2) return { units: [] }
+  const found = []
+  for (const part of parts) {
+    // A name is a word or three; anything longer is not a unit's name.
+    if (part.split(/\s+/).length > 3) return { units: [], unknown: part }
+    const match = resolveUnitReference(part, units)
+    if (match.units.length === 0) return { units: [], unknown: part }
+    for (const u of match.units) if (!found.includes(u)) found.push(u)
+  }
+  return { units: found }
+}
+
+module.exports = { resolveIntents, resolvePlace, resolveUnits, parseRelative, groupOrigin, coverWords }

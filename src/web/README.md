@@ -8,7 +8,8 @@ npm run web                    http://localhost:3000
 PORT=8080 npm run web
 COHORT_DATA_DIR=/some/dir      where battles are saved (default data/web)
 GROQ_API_KEY=...               orders read and turns narrated by the AI
-                               (without it: the fixed grammar, plain reports)
+                               (without it: the fixed grammar, plain reports;
+                               model and costs in docs/ai/MODELS.md)
 npm run test:browser           a full battle in Chromium (needs Playwright)
 ```
 
