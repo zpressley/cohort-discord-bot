@@ -8,6 +8,7 @@
 //   GROQ_API_KEY=... npm run ai:bench                       the default model
 //   GROQ_API_KEY=... npm run ai:bench -- openai/gpt-oss-120b qwen/qwen3.8-27b
 //   ... npm run ai:bench -- --verbose                       show every miss
+//   ... npm run ai:bench -- --only "bridge|ambush"          only orders with these words
 //
 // Behind a proxy, also set NODE_USE_ENV_PROXY=1. Costs a fraction of a cent
 // per run. Not part of npm test: CI never calls the network.
@@ -132,7 +133,9 @@ const CASES = [
 
 function matches(order, want) {
   const actions = Array.isArray(want.action) ? want.action : [want.action]
-  if (!actions.includes(order.action)) return false
+  // To the engine, "go there, then hold" is defend.
+  const did = order.action === 'move' && order.then === 'hold' ? 'defend' : order.action
+  if (!actions.includes(order.action) && !actions.includes(did)) return false
   if (want.where !== undefined) {
     const squares = Array.isArray(want.where) ? want.where : [want.where]
     if (!squares.includes(sq(order.target))) return false
@@ -210,7 +213,9 @@ async function benchModel(model, verbose) {
   let passed = 0
   let grammarOnly = 0
   const misses = []
-  for (const testCase of CASES) {
+  const only = process.argv.includes('--only') ? process.argv[process.argv.indexOf('--only') + 1].toLowerCase() : null
+  const cases = only ? CASES.filter(c => only.split('|').some(part => c.say.toLowerCase().includes(part))) : CASES
+  for (const testCase of cases) {
     const before = log.length
     const read = await interpretText(testCase.say, context, { ai })
     const usedAi = log.length > before
@@ -229,7 +234,7 @@ async function benchModel(model, verbose) {
   const perRead = sum(reads, 'estimatedUsd') / Math.max(1, reads.length)
   console.log(`\n${model}`)
   const failed = log.filter(r => !r.ok)
-  console.log(`  orders read right: ${passed} of ${CASES.length}  (${grammarOnly} by the grammar alone, ${reads.length} AI calls, ` +
+  console.log(`  orders read right: ${passed} of ${cases.length}  (${grammarOnly} by the grammar alone, ${reads.length} AI calls, ` +
     `${failed.filter(r => /^429/.test(r.error)).length} rate-limit waits, ${failed.filter(r => !/^429/.test(r.error)).length} failed calls)`)
   console.log(`  per AI read: ${Math.round(sum(reads, 'inputTokens') / Math.max(1, reads.length))} tokens in, ${Math.round(sum(reads, 'outputTokens') / Math.max(1, reads.length))} out, ` +
     `median ${sorted[Math.floor(sorted.length / 2)] ?? '-'} ms, slowest ${sorted.at(-1) ?? '-'} ms, about $${perRead.toFixed(6)} each ($${(perRead * 1000).toFixed(2)} per 1,000)`)
@@ -243,7 +248,8 @@ async function benchModel(model, verbose) {
 async function main() {
   const args = process.argv.slice(2)
   const verbose = args.includes('--verbose')
-  const models = args.filter(a => !a.startsWith('--'))
+  const skip = args.includes('--only') ? args[args.indexOf('--only') + 1] : null
+  const models = args.filter(a => !a.startsWith('--') && a !== skip)
   if (!process.env.GROQ_API_KEY) {
     console.log('Set GROQ_API_KEY to run the benchmark (and NODE_USE_ENV_PROXY=1 behind a proxy).')
     process.exitCode = 1

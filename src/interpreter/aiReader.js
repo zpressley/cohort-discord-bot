@@ -18,6 +18,7 @@ const { findPlace, compassWord, TILE_METRES } = require('../engine/map/places')
 const { distance } = require('../engine/map/labels')
 const { gridLabel } = require('../engine/map/grid')
 const { detectFeatures } = require('../engine/map/features')
+const { resolveUnitReference } = require('../engine/movement/unitResolver')
 
 const ACTIONS = ['move', 'hold', 'defend', 'advance', 'attack', 'withdraw', 'hide', 'check', 'ambush']
 const KINDS = ['cavalry', 'infantry', 'archers', 'scouts', null]
@@ -81,7 +82,7 @@ Each order:
   5. to attack or approach a specific enemy unit, the grid square given for it under "Enemy seen"
   When the words give a route and a destination ("up the road toward the mill bridge"), the place is the destination. To join or stand with another of the commander's units, use that unit's grid square from "Your units".
   Never write a unit name, "the enemy", "forward" or "ahead" as a place. "Forward", "toward the enemy" or "whoever is nearest" is the action advance with place null.
-- then_hold: true if they should hold once they arrive ("and hold", "and dig in"). defend always holds; set true for it.
+- then_hold: true if they should hold once they arrive ("and hold", "and hold it", "make them hold it", "and stay there", "and dig in"). defend always holds; set true for it.
 - careful: true if they should move carefully, cautiously, slowly, on guard, in good order.
 - against: for ambush only, what to strike: "cavalry", "infantry", "archers" or "scouts" (horsemen = cavalry, bowmen or slingers = archers, foot = infantry). null for anything, and for every other action.
 - let_pass: for ambush only, how many enemy units to let go by before striking. 0 otherwise.
@@ -89,7 +90,7 @@ Each order:
 
 Rules:
 - question stops the orders from being sent, so use it only when you could not record an order: it is too unclear, it names a unit that is not in "Your units", or it could mean two units. Ask one short question a commander can answer. Never guess between two units.
-- note does not stop anything. Use it, in one short plain sentence addressed to the commander, when you recorded the orders but left something out: a second step to order next turn (the only sequence you can record is "go there and then hold"), or something the game has no action for when the rest of the order still stands.
+- note does not stop anything. Use it, in one short plain sentence addressed to the commander, whenever you recorded the orders but left something out: a second step to order next turn (the only sequence you can record is "go there and then hold"), or something the game has no action for when the rest of the order still stands. For "spears to C4, then on to the bridge", record the move to C4 and set note to "I recorded the march to C4. Order the bridge once they arrive." 
 - If the whole of an order is something the game has no action for (shoot arrows, build, form a wedge), record nothing for it and say so in question.
 - Record every clear order even when another is unclear.
 - surrender is true only if the commander yields the whole battle.
@@ -155,16 +156,35 @@ async function readWithAi(ai, text, context) {
   if (!reply.ok || !validate(reply.json)) return null
 
   const ids = new Set(context.units.map(u => u.id))
+  // The model is asked for ids, and sometimes writes the name a unit is
+  // called by instead ("spears"). A name that picks out exactly one unit is
+  // as good as its id; anything else is not a unit.
+  const idFor = (said) => {
+    if (ids.has(said)) return said
+    const match = resolveUnitReference(said, context.units)
+    return match.units.length === 1 ? match.units[0].id : null
+  }
   const { orders, question, note, surrender } = reply.json
   const intents = []
+  // A unit can carry one order a turn. If the model records two for the same
+  // unit ("to C4, then on to the bridge"), the first stands and the player
+  // is told, whatever the model did about it.
+  const ordered = new Set()
+  const secondStep = new Set()
   for (const o of orders) {
     const everyone = o.units.some(u => /^(all|everyone)$/i.test(u))
-    const units = everyone ? null : o.units.filter(u => ids.has(u))
+    let units = everyone ? null : [...new Set(o.units.map(idFor).filter(Boolean))]
     // A unit that is not on the field is not an order: the model made it up
     // or misread a name, and guessing is worse than asking.
-    if (!everyone && units.length !== o.units.length) {
-      intents.push({ kind: 'ask', question: `I could not tell which of your units you meant by "${o.units.filter(u => !ids.has(u)).join(', ')}".` })
+    const unknown = everyone ? [] : o.units.filter(u => !idFor(u))
+    if (unknown.length > 0) {
+      intents.push({ kind: 'ask', question: `I could not tell which of your units you meant by "${unknown.join(', ')}".` })
       continue
+    }
+    if (!everyone) {
+      for (const id of units.filter(u => ordered.has(u))) secondStep.add(id)
+      units = units.filter(u => !ordered.has(u))
+      for (const id of units) ordered.add(id)
     }
     if (!everyone && units.length === 0) continue
     const intent = {
@@ -186,6 +206,9 @@ async function readWithAi(ai, text, context) {
   if (surrender) intents.push({ kind: 'surrender' })
   if (question && question.trim()) intents.push({ kind: 'ask', question: question.trim() })
   if (note && note.trim()) intents.push({ kind: 'note', note: note.trim() })
+  else if (secondStep.size > 0) {
+    intents.push({ kind: 'note', note: `${[...secondStep].join(', ')}: I recorded the first order only. Give the next once it is carried out.` })
+  }
   if (intents.length === 0) return null
   return { intents }
 }

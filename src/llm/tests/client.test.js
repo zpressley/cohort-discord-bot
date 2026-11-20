@@ -113,3 +113,44 @@ test('the Groq transport needs a key, and building it calls nothing', () => {
   assert.equal(transport.model, DEFAULT_MODEL)
   assert.equal(groqTransport({ apiKey: 'k', model: 'openai/gpt-oss-120b' }).model, 'openai/gpt-oss-120b')
 })
+
+test('a short rate limit is waited out, once; a long one is a failure', async () => {
+  const waits = []
+  const limited = (ms) => Object.assign(new Error('429 slow down'), { retryAfterMs: ms })
+  const short = scriptedTransport((req, n) => { if (n === 1) throw limited(3000); return { text: 'ok' } })
+  const ai = createAiClient({ transport: short, retries: 0, sleep: async (ms) => { waits.push(ms) } })
+  const result = await ai.complete({ user: 'x' })
+  assert.equal(result.ok, true)
+  assert.equal(short.calls.length, 2, 'asked again after the wait, without spending a retry')
+  assert.ok(waits[0] >= 3000)
+
+  const long = scriptedTransport(() => { throw limited(60000) })
+  const impatient = createAiClient({ transport: long, retries: 0, sleep: async () => { throw new Error('should not wait') } })
+  assert.equal((await impatient.complete({ user: 'x' })).ok, false)
+  assert.equal(long.calls.length, 1)
+})
+
+test('the Groq transport asks for a strict schema, the least thinking, and reports what it used', async () => {
+  const { groqTransport } = require('../groq')
+  let sent = null
+  const fetchImpl = async (url, init) => {
+    sent = { url, headers: init.headers, body: JSON.parse(init.body) }
+    return {
+      ok: true, status: 200, headers: new Map(),
+      json: async () => ({ choices: [{ message: { content: '{"a":1}' } }], usage: { prompt_tokens: 900, completion_tokens: 40, prompt_tokens_details: { cached_tokens: 512 } } })
+    }
+  }
+  const transport = groqTransport({ apiKey: 'k', fetchImpl })
+  const reply = await transport.send({ system: 'S', user: 'U', schema: { type: 'object' }, schemaName: 'orders', maxTokens: 500, temperature: 0 })
+  assert.match(sent.url, /api\.groq\.com/)
+  assert.equal(sent.headers.Authorization, 'Bearer k')
+  assert.equal(sent.body.model, 'openai/gpt-oss-20b')
+  assert.equal(sent.body.reasoning_effort, 'low')
+  assert.equal(sent.body.include_reasoning, false)
+  assert.deepEqual(sent.body.response_format, { type: 'json_schema', json_schema: { name: 'orders', strict: true, schema: { type: 'object' } } })
+  assert.deepEqual(reply, { text: '{"a":1}', usage: { inputTokens: 900, outputTokens: 40, cachedTokens: 512 } })
+
+  const refuse = async () => ({ ok: false, status: 429, statusText: 'Too Many', headers: new Map([['retry-after', '6']]), json: async () => ({ error: { message: 'Rate limit reached' } }) })
+  await assert.rejects(groqTransport({ apiKey: 'k', fetchImpl: refuse }).send({ user: 'U', maxTokens: 10, temperature: 0 }),
+    (error) => /^429 Rate limit/.test(error.message) && error.retryAfterMs === 6000)
+})

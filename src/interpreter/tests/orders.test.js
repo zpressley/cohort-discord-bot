@@ -137,6 +137,17 @@ test('AI: a unit that is not on the field is a question, never a guess', async (
   assert.match(read.questions[0], /red_elephants/)
 })
 
+test('AI: a name for an id is accepted when it means one unit, and a second order to a unit becomes a note', async () => {
+  const step = (place) => ({ units: ['spears'], action: 'move', place, then_hold: false, careful: false, against: null, let_pass: 0, regardless: false })
+  const ai = aiReplying({ orders: [step('C2'), step('Harrow Bridge')], question: null, note: null, surrender: false })
+  const read = await interpretText('get the spears over to C2 and after that on to the bridge', context, { ai })
+  assert.equal(read.questions.length, 0)
+  assert.equal(read.orders.length, 1, 'one order a unit')
+  assert.equal(read.orders[0].unitRef, 'red_spears')
+  assert.equal(gridLabel(read.orders[0].target), 'C2', 'the first step stands')
+  assert.match(read.notes[0], /red_spears: I recorded the first order only/)
+})
+
 test('plain orders never reach the AI; only what the grammar cannot read does', async () => {
   const transport = scriptedTransport(() => ({
     text: JSON.stringify({ orders: [{ units: ['red_horse'], action: 'hold', place: null, then_hold: false, careful: false, against: null, let_pass: 0, regardless: false }], question: null, note: null, surrender: false }),
