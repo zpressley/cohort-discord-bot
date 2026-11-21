@@ -20,6 +20,7 @@ const { gridLabel } = require('../engine/map/grid')
 const { detectFeatures } = require('../engine/map/features')
 const { resolveUnitReference } = require('../engine/movement/unitResolver')
 const { missileRangeMetres } = require('../engine/combat/ranged')
+const { MAX_STEPS } = require('../engine/command/officers')
 
 const ACTIONS = ['move', 'hold', 'defend', 'advance', 'attack', 'withdraw', 'hide', 'check', 'ambush']
 // What the model may answer: the engine's actions, and two of its own for
@@ -28,6 +29,8 @@ const ACTIONS = ['move', 'hold', 'defend', 'advance', 'attack', 'withdraw', 'hid
 // surely as its own choice than as an exception to "hold".
 const REPLY_ACTIONS = [...ACTIONS, 'shoot', 'hold_fire']
 const KINDS = ['cavalry', 'infantry', 'archers', 'scouts', null]
+// The conditions an order may carry (battle/orders.js, `when`).
+const IF_EVENTS = ['none', 'sees_enemy', 'sees_cavalry', 'sees_infantry', 'sees_archers', 'attacked', 'unit_breaks']
 
 // Every field is required and nothing else is allowed: that is what lets
 // the provider enforce the schema strictly.
@@ -41,7 +44,7 @@ const REPLY_SCHEMA = {
       items: {
         type: 'object',
         additionalProperties: false,
-        required: ['units', 'action', 'place', 'then_hold', 'careful', 'against', 'let_pass', 'regardless'],
+        required: ['units', 'action', 'place', 'then_hold', 'careful', 'against', 'let_pass', 'regardless', 'if_event', 'if_there', 'if_unit', 'if_action', 'if_place'],
         properties: {
           units: { type: 'array', items: { type: 'string' } },
           action: { type: 'string', enum: REPLY_ACTIONS },
@@ -50,7 +53,13 @@ const REPLY_SCHEMA = {
           careful: { type: 'boolean' },
           against: { type: ['string', 'null'], enum: KINDS },
           let_pass: { type: 'integer' },
-          regardless: { type: 'boolean' }
+          regardless: { type: 'boolean' },
+          // One condition on the order, and what to do instead.
+          if_event: { type: 'string', enum: IF_EVENTS },
+          if_there: { type: 'boolean' },
+          if_unit: { type: ['string', 'null'] },
+          if_action: { type: ['string', 'null'], enum: [...ACTIONS, null] },
+          if_place: { type: ['string', 'null'] }
         }
       }
     },
@@ -95,10 +104,15 @@ Each order:
 - against: for ambush, what to strike; for shoot, what to shoot first: "cavalry", "infantry", "archers" or "scouts" (horsemen = cavalry, bowmen or slingers = archers, foot = infantry). null for anything, and for every other action.
 - let_pass: for ambush only, how many enemy units to let go by before striking. 0 otherwise.
 - regardless: for ambush only, and only when the commander says so in words like "whatever happens", "no matter what", "at all costs": true. In every other case false.
+- if_event: one condition on this order, when the commander gives one ("if ...", "should ...", "unless ..."); otherwise "none". sees_enemy / sees_cavalry / sees_infantry / sees_archers: the unit sees the enemy, or that kind of enemy. attacked: it is attacked, charged or shot at. unit_breaks: another of the commander's own units breaks or runs.
+- if_there: true when the condition is about the place this order goes to ("if their horse is at the ford", "if the bridge is held"). false otherwise, and always false with "none".
+- if_unit: for unit_breaks, the id of the commander's unit that breaks. null otherwise.
+- if_action, if_place: what the unit does instead when the condition comes true ("hold", "withdraw", "attack", "move" with a place). if_place is written like place, or null. Both null with "none".
 
 Rules:
 - question stops the orders from being sent, so use it only when you could not record an order: it is too unclear, it names a unit that is not in "Your units", or it could mean two units. Ask one short question a commander can answer. Never guess between two units.
-- note does not stop anything. Use it, in one short plain sentence addressed to the commander, whenever you recorded the orders but left something out: a second step to order next turn (the only sequence you can record is "go there and then hold"), or something the game has no action for when the rest of the order still stands. For "spears to C4, then on to the bridge", record the move to C4 and set note to "I recorded the march to C4. Order the bridge once they arrive." 
+- A unit may be given several things to do one after another ("spears to C4, then on to the bridge, then dig in"): write one order for each step, for the same unit, in the order they are to be done, at most four. "And hold" at the end is then_hold on the last step, not a step of its own.
+- note does not stop anything. Use it, in one short plain sentence addressed to the commander, whenever you recorded the orders but left something out: a second condition on the same order, or something the game has no action for when the rest of the order still stands.
 - If the whole of an order is something the game has no action for (shoot arrows, build, form a wedge), record nothing for it and say so in question.
 - Record every clear order even when another is unclear.
 - surrender is true only if the commander yields the whole battle.
@@ -163,6 +177,13 @@ async function readWithAi(ai, text, context) {
     purpose: 'read-orders', system: SYSTEM, user: briefing(context, text),
     schema: REPLY_SCHEMA, schemaName: 'orders', maxTokens: 500, temperature: 0
   })
+  // A reply from before orders could carry a condition (a recorded fixture,
+  // say) simply has none.
+  if (reply.ok && Array.isArray(reply.json?.orders)) {
+    reply.json.orders = reply.json.orders.map(o => (o && typeof o === 'object'
+      ? { if_event: 'none', if_there: false, if_unit: null, if_action: null, if_place: null, ...o }
+      : o))
+  }
   if (!reply.ok || !validate(reply.json)) return null
 
   const ids = new Set(context.units.map(u => u.id))
@@ -176,14 +197,39 @@ async function readWithAi(ai, text, context) {
   }
   const { orders, question, note, surrender } = reply.json
   const intents = []
-  // A unit can carry one order a turn. If the model records two for the same
-  // unit ("to C4, then on to the bridge"), the first stands and the player
-  // is told, whatever the model did about it.
-  const ordered = new Set()
+  // Orders for the same unit, one after another, are the steps of a chain
+  // ("to C4, then on to the bridge"): the later ones are hung on the first.
+  // A step for units only some of which have an order already cannot be
+  // hung anywhere, and is dropped with a note.
+  // The condition a reply puts on an order, hung on the intent. Returns a
+  // question when it names a unit that is not there.
+  const KIND_OF = { sees_cavalry: 'cavalry', sees_infantry: 'infantry', sees_archers: 'archers' }
+  const addCondition = (intent, o) => {
+    if (!o.if_event || o.if_event === 'none') return null
+    const instead = { kind: 'order', action: o.if_action ?? 'hold', place: o.if_place && o.if_place.trim() ? o.if_place.trim() : null, then: null }
+    if (instead.action === 'move' && !instead.place) instead.action = 'hold'
+    if (o.if_event === 'attacked') intent.when = { type: 'attacked', do: instead }
+    else if (o.if_event === 'unit_breaks') {
+      const id = o.if_unit ? idFor(o.if_unit) : null
+      if (!id) return `Which of your units did you mean by "if ${o.if_unit ?? 'they'} break"?`
+      intent.when = { type: 'breaks', unitId: id, do: instead }
+    } else {
+      intent.when = { type: 'sees', kind: KIND_OF[o.if_event] ?? null, near: o.if_there ? 'target' : null, do: instead }
+    }
+    return null
+  }
+  const chains = new Map()
   const secondStep = new Set()
+  const stepOf = (o) => ({
+    kind: 'order',
+    action: o.action === 'shoot' || o.action === 'hold_fire' ? 'hold' : o.action,
+    place: o.place && o.place.trim() ? o.place.trim() : null,
+    then: o.then_hold && o.action !== 'hold' ? 'hold' : null,
+    ...(o.careful ? { careful: true } : {})
+  })
   for (const o of orders) {
     const everyone = o.units.some(u => /^(all|everyone)$/i.test(u))
-    let units = everyone ? null : [...new Set(o.units.map(idFor).filter(Boolean))]
+    const units = everyone ? null : [...new Set(o.units.map(idFor).filter(Boolean))]
     // A unit that is not on the field is not an order: the model made it up
     // or misread a name, and guessing is worse than asking.
     const unknown = everyone ? [] : o.units.filter(u => !idFor(u))
@@ -191,12 +237,19 @@ async function readWithAi(ai, text, context) {
       intents.push({ kind: 'ask', question: `I could not tell which of your units you meant by "${unknown.join(', ')}".` })
       continue
     }
-    if (!everyone) {
-      for (const id of units.filter(u => ordered.has(u))) secondStep.add(id)
-      units = units.filter(u => !ordered.has(u))
-      for (const id of units) ordered.add(id)
-    }
     if (!everyone && units.length === 0) continue
+    const key = everyone ? 'everyone' : [...units].sort().join(',')
+    const earlier = chains.get(key)
+    if (earlier) {
+      if ((earlier.steps?.length ?? 0) < MAX_STEPS) earlier.steps = [...(earlier.steps ?? []), stepOf(o)]
+      else for (const id of units ?? ['everyone']) secondStep.add(id)
+      if (!earlier.when) addCondition(earlier, o)
+      continue
+    }
+    if (!everyone && units.some(u => [...chains.keys()].some(k => k.split(',').includes(u)))) {
+      for (const id of units) secondStep.add(id)
+      continue
+    }
     const intent = {
       kind: 'order',
       unitRef: everyone ? 'everyone' : units.join(', '),
@@ -221,16 +274,19 @@ async function readWithAi(ai, text, context) {
       if (o.let_pass > 0) intent.letPass = Math.min(10, o.let_pass)
       if (o.regardless) intent.regardless = true
     }
+    const asked = addCondition(intent, o)
+    if (asked) { intents.push({ kind: 'ask', question: asked }); continue }
+    chains.set(key, intent)
     intents.push(intent)
   }
   if (surrender) intents.push({ kind: 'surrender' })
   if (question && question.trim()) intents.push({ kind: 'ask', question: question.trim() })
   if (note && note.trim()) intents.push({ kind: 'note', note: note.trim() })
   else if (secondStep.size > 0) {
-    intents.push({ kind: 'note', note: `${[...secondStep].join(', ')}: I recorded the first order only. Give the next once it is carried out.` })
+    intents.push({ kind: 'note', note: `${[...secondStep].join(', ')}: I could not fit every step into one order. Give the rest once the first are carried out.` })
   }
   if (intents.length === 0) return null
   return { intents }
 }
 
-module.exports = { readWithAi, briefing, surroundings, REPLY_SCHEMA, SYSTEM, ACTIONS, REPLY_ACTIONS }
+module.exports = { readWithAi, briefing, surroundings, REPLY_SCHEMA, SYSTEM, ACTIONS, REPLY_ACTIONS, IF_EVENTS }

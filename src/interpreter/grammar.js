@@ -117,11 +117,115 @@ function parseLine(line) {
     text = clean(text.replace(LET_PASS, ''))
   }
 
+  // An order with depth: steps ("..., then ...") or a condition ("if ...").
+  if (DEEP.test(text)) {
+    const deep = readDeep(text, extra)
+    if (deep) return deep
+  }
+
   const stage3 = readStage3(text, extra)
   if (stage3) return stage3
 
   const read = readOlder(text, line)
   return read.kind === 'order' ? { ...read, ...extra } : read
+}
+
+// ── Orders with depth ──────────────────────────────────
+//
+//   swords to C4, then on to the bridge, then dig in          a chain
+//   spears to the ford; if their horse is there, hold         one condition
+//   archers hold. If you are attacked, fall back to the hill
+//   horse hold, if the spears break fall back
+//
+// The pieces are plain orders, read by the same rules as any line. If a
+// piece cannot be read, the whole line is left for the AI.
+
+const DEEP = /\b(?:then|if|after that)\b/i
+const STEP_SPLIT = /\s*(?:[,;.]\s*|\s+)(?:and\s+)?(?:then|after that|afterwards)[,]?\s+(?:on\s+(?=to\b))?/i
+const HOLD_PIECE = /^(?:hold(?: it| there| the position| fast)?|dig in|stand(?: fast)?|defend it|make a stand|stay(?: there)?)$/i
+const IF_SPLIT = /\s*[,;.]?\s*\b(?:but\s+|and\s+)?if\s+/i
+
+// What comes after "if", up to the comma or "then" that starts what to do.
+const SEES = /^(?:you|they|he|the men)?\s*(?:see|sees|spot|spots|sight|sights|meet|meets|find|finds|run into|runs into)\s+(.+)$/i
+const IS_THERE = /^(?:the\s+|their\s+|enemy\s+|the enemy'?s?\s+)*(.+?)\s+(?:is|are)\s+(?:there|here|waiting|waiting there|holding it|on it|(?:at|on|in|by|near)\s+(.+))$/i
+const HELD = /^(?:it|the place|that)\s+is\s+(?:held|taken|occupied|defended|guarded)|^(?:the enemy|they)\s+(?:hold|holds|have|has taken)\s+it$/i
+const ATTACKED = /^(?:you are|you're|they are|he is|you get|they get)?\s*(?:attacked|charged|engaged|shot at|fired on|hit|under attack|under fire)$|^(?:the enemy|they|anyone)\s+(?:attack|attacks|charge|charges|come at you|comes at you|come on|engage|engages)(?:\s+you)?$/i
+const BREAKS = /^(?:the\s+)?(.+?)\s+(?:break|breaks|rout|routs|run|runs|flee|flees|give way|gives way|are broken|is broken)$/i
+
+function readCondition(words) {
+  const text = clean(words)
+  if (ATTACKED.test(text)) return { type: 'attacked' }
+  if (HELD.test(text)) return { type: 'sees', kind: null, near: 'target' }
+  let m = text.match(SEES)
+  if (m) return { type: 'sees', kind: shootFirst(m[1]), near: null }
+  m = text.match(IS_THERE)
+  if (m) return { type: 'sees', kind: shootFirst(m[1]), near: m[2] ? clean(m[2]) : 'target' }
+  m = text.match(BREAKS)
+  // "their horse breaks" is the enemy's doing, which an order cannot wait on.
+  if (m && !/\b(?:their|enemy)\b/i.test(text)) return { type: 'breaks', unitRef: clean(m[1]) }
+  return null
+}
+
+// One piece of a deep order, read as a plain line. A piece that names no
+// one ("on to the bridge", "fall back") is for the unit the line began with.
+function readPiece(piece, who) {
+  const text = clean(piece).replace(/^(?:then\s+)?(?:they\s+|he\s+|you\s+)?(?:should\s+|must\s+|can\s+)?/i, '')
+  if (!text) return null
+  // Read with the unit's name put back in front. A piece that names some
+  // other unit is not a step of this order, and comes out with the wrong
+  // name, which the caller refuses.
+  const forThem = parseLine(who === 'everyone' ? text : `${who} ${text}`)
+  return forThem.kind === 'order' && !forThem.steps && !forThem.when ? forThem : null
+}
+
+function readDeep(text, extra) {
+  // The condition, if there is one, follows the order: "..., if X, Y".
+  let main = text
+  let when = null
+  const split = text.split(IF_SPLIT)
+  if (split.length > 2) return null
+  if (split.length === 2) {
+    if (!clean(split[0])) return null   // "if ..., ...; otherwise ..." is for the AI
+    main = split[0]
+    // What to do is set off by a comma or "then", or simply begins with a
+    // verb: "if the spears break fall back".
+    const parts = split[1].match(/^(.+?)(?:\s*,\s*(?:then\s+)?|\s+then\s+)(.+)$/i) ??
+      split[1].match(/^(.+?)\s+((?:hold|fall back|withdraw|retreat|pull back|advance|charge|dig in|hide|(?:go|move|march|run) to)\b.*)$/i)
+    if (!parts) return null
+    const condition = readCondition(parts[1])
+    if (!condition) return null
+    when = { condition, words: parts[2] }
+  }
+
+  const pieces = main.split(STEP_SPLIT).map(clean).filter(Boolean)
+  if (pieces.length === 0) return null
+  // "..., then dig in": the step before it ends by holding.
+  let lastHolds = false
+  if (pieces.length > 1 && HOLD_PIECE.test(pieces.at(-1))) { pieces.pop(); lastHolds = true }
+
+  const first = parseLine(pieces[0])
+  if (first.kind !== 'order' || first.steps || first.when) return null
+  const who = first.unitRef
+  const steps = []
+  for (const piece of pieces.slice(1)) {
+    const step = readPiece(piece, who)
+    if (!step || step.unitRef !== who) return null
+    steps.push(step)
+  }
+  if (lastHolds) {
+    const last = steps.at(-1) ?? first
+    if (last.action === 'move') last.then = 'hold'
+  }
+  if (steps.length === 0 && !when) return null
+
+  const out = { ...first, ...extra, deep: true }
+  if (steps.length > 0) out.steps = steps
+  if (when) {
+    const then = readPiece(when.words, who)
+    if (!then || then.unitRef !== who) return null
+    out.when = { ...when.condition, do: then }
+  }
+  return out
 }
 
 // The Stage 2 verbs: move, defend, hold, advance, withdraw.
