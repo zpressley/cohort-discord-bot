@@ -480,6 +480,7 @@ async function tent(token) {
             choice.options.map((o, i) => `<button class="btn" type="button" data-choice="${esc(rb.choices.indexOf(choice))}" data-option="${i}">${esc(o.text)}</button>`).join('')
           }</div></div>`
         }).join('')}
+        ${(rb.notes ?? []).map(n => `<p class="note">Note: ${esc(n)}</p>`).join('')}
         ${rb.error ? `<p class="error">${esc(rb.error)}</p>` : ''}` : ''}`
     foot.innerHTML = `
       <button class="btn btn-main btn-wide" type="button" id="send"${state.sending ? ' disabled' : ''}>${state.sending ? 'Sending…' : 'Send the orders'}</button>

@@ -6,7 +6,7 @@
 const { test } = require('node:test')
 const assert = require('node:assert/strict')
 
-const { narrateTurn, visibleEvents, fact, placeName } = require('../turnNarrator')
+const { narrateTurn, report, visibleEvents, summarise, fact, placeName } = require('../turnNarrator')
 const { createAiClient } = require('../../llm/client')
 const { scriptedTransport } = require('../../llm/fixtures')
 const { resolveMap } = require('../../engine/map/map')
@@ -37,15 +37,57 @@ test('fog of war: own units, seen enemies and the verdict; never an unseen enemy
   assert.ok(!ids.includes('blue_scouts'), "an unseen enemy's movement stays hidden")
 })
 
-test('facts are words: places by name or feature, no coordinates', () => {
+test('facts are words: places by name or feature, with the grid square the player orders by', () => {
   assert.equal(placeName(map, at('T2')), 'on The Crownhill')
   assert.equal(placeName(map, at('W6')), 'at North Ford')
   assert.equal(placeName(map, at('K18')), 'in a clearing')
-  for (const e of events) {
-    const text = fact(map, e)
-    if (text) assert.ok(!/\b[A-Z]{1,2}\d{1,2}\b/.test(text), `coordinate in: ${text}`)
+  assert.equal(placeName(map, at('F9')), 'on the road')
+  assert.match(fact(map, events[0]), /^red_spears moved 75 m east, now in open ground .* \(B2-SE\)$/)
+})
+
+test('a turn of several ticks is boiled down: one move per unit, one fight per pair, no noise', () => {
+  const side = (unitId, killed, morale) => ({ unitId, killed, morale, stamina: 50, chaos: 1, terrain: 'plains', prepared: false, chargeImpact: false, flankBonus: 0, surprise: false, crowding: 0 })
+  const raw = [
+    { type: 'move', turn: 1, unitId: 'red_spears', from: at('E7'), to: at('H7'), blockedBy: null },
+    { type: 'move', turn: 1, unitId: 'red_horse', from: at('E9'), to: at('E9'), blockedBy: 'blue_horse' },
+    { type: 'move', turn: 2, unitId: 'red_spears', from: at('H7'), to: at('K7'), blockedBy: 'blue_swords' },
+    { type: 'contact', turn: 2, aId: 'blue_swords', bId: 'red_spears' },
+    { type: 'exchange', turn: 2, roundInContact: 1, a: side('blue_swords', 9, 80), b: side('red_spears', 11, 70), push: { winnerId: null, differential: 0 } },
+    { type: 'exchange', turn: 3, roundInContact: 2, a: side('red_spears', 8, 45), b: side('blue_swords', 7, 60), push: { winnerId: null, differential: 0 } },
+    { type: 'crowding', turn: 2, unitId: 'red_swords', at: at('E8'), men: 200, tier: 'compressed', was: 'organized' },
+    { type: 'crowding', turn: 3, unitId: 'red_swords', at: at('E8'), men: 100, tier: 'organized', was: 'compressed' }
+  ]
+  const told = summarise(raw).map(e => fact(map, e))
+  assert.equal(told.length, 2)
+  assert.match(told[0], /^red_spears moved 150 m east, .*halted by blue_swords$/)
+  assert.match(told[1], /^blue_swords and red_spears fought for 20 minutes: blue_swords lost 16 men, red_spears lost 19; red_spears is wavering$/)
+})
+
+test('the fighting is told unit by unit: who it fought, the cost, who broke, most important first', () => {
+  const side = (unitId, killed, morale) => ({ unitId, killed, morale, stamina: 50, chaos: 1, terrain: 'plains', prepared: false, chargeImpact: false, flankBonus: 0, surprise: false, crowding: 0 })
+  const fight = (a, b) => ({ type: 'exchange', turn: 4, roundInContact: 1, a, b, push: { winnerId: null, differential: 0 } })
+  const turn = {
+    map,
+    ownIds: new Set(['red_spears', 'red_archers']),
+    seenEnemyIds: new Set(['blue_swords', 'blue_horse']),
+    whereIs: (id) => (id === 'red_spears' ? at('H7') : at('D8')),
+    events: [
+      { type: 'move', turn: 4, unitId: 'red_spears', from: at('E7'), to: at('H7'), blockedBy: 'blue_swords' },
+      { type: 'contact', turn: 4, aId: 'blue_swords', bId: 'red_spears' },
+      fight(side('blue_swords', 14, 40), side('red_spears', 6, 70)),
+      fight(side('red_archers', 19, 20), side('blue_horse', 2, 90)),
+      { type: 'push', turn: 4, unitId: 'blue_swords', by: 'red_spears', fromTerrain: 'plains', to: at('J7'), toTerrain: 'plains', winnerAdvancedTo: at('I7'), lostHighGround: false },
+      { type: 'rout', turn: 4, unitId: 'blue_swords', by: 'red_spears' },
+      { type: 'pursuit', turn: 4, unitId: 'blue_swords', by: 'red_spears', killed: 7, remaining: 60, trapped: false },
+      { type: 'rout', turn: 4, unitId: 'red_archers', by: 'blue_horse' },
+      { type: 'pursuit', turn: 4, unitId: 'red_archers', by: 'blue_horse', killed: 8, remaining: 73, trapped: false }
+    ]
   }
-  assert.match(fact(map, events[0]), /red_spears moved 75 m east/)
+  const lines = report(turn)
+  assert.deepEqual(lines, [
+    'red_archers: fought blue_horse in open ground 25 m north-east of the woods (A2-SE); lost 19 men and killed 2, then BROKE and fled from blue_horse, losing 8 more in flight',
+    'red_spears: fought blue_swords in open ground 100 m south-west of the woods (B2-SE); lost 6 men and killed 14; drove blue_swords back; broke blue_swords, cutting down 7 as they ran, and holds firm'
+  ])
 })
 
 test("with the AI: the facts go in, the prose comes out, in the side's voice", async () => {
@@ -56,10 +98,17 @@ test("with the AI: the facts go in, the prose comes out, in the side's voice", a
   assert.match(told.text, /spears pushed east/)
 
   const sent = transport.calls[0]
-  assert.match(sent.system, /Roman Republic/)
-  assert.match(sent.user, /red_spears moved/)
+  assert.match(sent.system, /Roman tribune/)
+  assert.match(sent.user, /red_spears: met blue_swords/)
+  assert.doesNotMatch(sent.user, /moved/, 'when there was fighting, the marching is left out')
   assert.ok(!sent.user.includes('blue_scouts'), 'the model never hears what fog hides')
-  assert.ok(!/\b[A-Z]{1,2}\d{1,2}\b/.test(sent.user), 'no coordinates for the model')
+  assert.doesNotMatch(sent.system, /red_|blue_/, 'the standing instructions hold nothing about this turn')
+
+  // Names the player knows the units by, when the caller gives them.
+  await narrateTurn(ai, { map, side: 'red', culture: 'somewhere else', ...knowledge, events, plain: 'PLAIN', nameOf: t => t.replace(/red_spears/g, 'Spears').replace(/blue_swords/g, 'enemy swords') })
+  assert.match(transport.calls[1].user, /Spears: met enemy swords/)
+  assert.match(transport.calls[1].user, /enemy swords/)
+  assert.match(transport.calls[1].system, /seasoned professional soldier/, 'an unknown culture gets the plain voice')
 })
 
 test('without the AI, or when it fails, the plain report stands in', async () => {
@@ -73,14 +122,13 @@ test('without the AI, or when it fails, the plain report stands in', async () =>
 })
 
 test('the hotseat session narrates its last turn for one side', async () => {
-  const transport = scriptedTransport((req) => ({ text: `Report for ${/the (\w+) side/.exec(req.system)[1]}.` }))
+  const transport = scriptedTransport((req) => ({ text: `Report on ${/Your units: (\w+)/.exec(req.user)[1]}.` }))
   const ai = createAiClient({ transport, retries: 0 })
   const session = createSession(loadScenario('meeting-battle'), { seed: 1, auto: 'blue', ai })
   session.submitLines('red', ['everyone to C2-SE'])
   const told = await session.narrate('red')
   assert.equal(told.source, 'ai')
-  assert.equal(told.text, 'Report for red.')
-  assert.match(transport.calls[0].system, /Roman Republic/)
+  assert.match(told.text, /^Report on red_\w+\.$/)
 })
 
 test('secrets: a side never hears of the other\'s hiding, searching or held ambush', () => {

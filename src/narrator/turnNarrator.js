@@ -11,11 +11,12 @@
 const { featuresAt, detectFeatures } = require('../engine/map/features')
 const { distance } = require('../engine/map/labels')
 const { compassWord, TILE_METRES } = require('../engine/map/places')
-const { describeCombatEvent } = require('./eventText')
+const { gridLabel } = require('../engine/map/grid')
 
 // Where a tile is, in words: the feature it is part of, or the nearest
 // feature with a name, or open ground near the nearest feature.
 function placeName(map, position) {
+  if (map.terrainAt(position) === 'road') return 'on the road'
   const here = featuresAt(map, position).filter(f => f.kind !== 'road')
   if (here.length > 0) {
     const f = here[0]
@@ -60,17 +61,91 @@ function visibleEvents(events, { ownIds, seenEnemyIds }) {
   })
 }
 
+/**
+ * A turn's events boiled down to what a report needs: a turn can run several
+ * ten-minute ticks, and the raw log repeats itself across them.
+ *   - a unit's moves become one move, from where it started to where it
+ *     ended; a unit that got nowhere is not said to have moved
+ *   - the rounds two units fought become one fight with the losses summed,
+ *     and "came to blows" is dropped when the fight itself is reported
+ *   - crowding is reported once per unit, as it stood at the end, and not at
+ *     all if the ranks had room again by then
+ * Order is kept: each merged event stands where its first part stood.
+ */
+function summarise(events) {
+  const out = []
+  const moves = new Map()
+  const fights = new Map()
+  const crowds = new Map()
+  const pair = (a, b) => [a, b].sort().join('|')
+
+  for (const e of events) {
+    if (e.type === 'move') {
+      const seen = moves.get(e.unitId)
+      if (seen) { seen.to = e.to; seen.blockedBy = e.blockedBy; seen.reachedTarget = e.reachedTarget; continue }
+      const merged = { ...e }
+      moves.set(e.unitId, merged)
+      out.push(merged)
+    } else if (e.type === 'exchange') {
+      const key = pair(e.a.unitId, e.b.unitId)
+      const seen = fights.get(key)
+      if (seen) {
+        const [mine, theirs] = seen.a.unitId === e.a.unitId ? [e.a, e.b] : [e.b, e.a]
+        seen.a = { ...seen.a, killed: seen.a.killed + mine.killed, morale: mine.morale, surprise: seen.a.surprise || mine.surprise }
+        seen.b = { ...seen.b, killed: seen.b.killed + theirs.killed, morale: theirs.morale, surprise: seen.b.surprise || theirs.surprise }
+        seen.rounds += 1
+        continue
+      }
+      const merged = { ...e, a: { ...e.a }, b: { ...e.b }, rounds: 1 }
+      fights.set(key, merged)
+      out.push(merged)
+    } else if (e.type === 'crowding') {
+      const seen = crowds.get(e.unitId)
+      if (seen) { Object.assign(seen, e); continue }
+      const merged = { ...e }
+      crowds.set(e.unitId, merged)
+      out.push(merged)
+    } else {
+      out.push(e)
+    }
+  }
+
+  const same = (p, q) => p && q && p.x === q.x && p.y === q.y
+  return out.filter(e => {
+    if (e.type === 'move') return !same(e.from, e.to)
+    if (e.type === 'contact') return !fights.has(pair(e.aId, e.bId))
+    if (e.type === 'crowding') return e.tier !== 'organized'
+    return true
+  })
+}
+
 // The events anyone may hear of, whoever is reading: for a report shown to
 // both commanders at once (the two-player hotseat screen).
 function publicEvents(events) {
   return events.filter(e => !PRIVATE.has(e.type))
 }
 
-// One event as a plain fact the model can retell: names and places, no
-// coordinates. Names of enemies this side has not seen are hidden too.
+// One event as a plain fact the model can retell: names and places. Names
+// of enemies this side has not seen are hidden too.
 function fact(map, event, known = null) {
   if (known) event = maskNames(event, known)
   return plainFact(map, event)
+}
+
+// Where, for a report: the ground in words and the grid square the player
+// gives orders by.
+function whereAt(map, position) {
+  return `${placeName(map, position)} (${gridLabel(position, { quarter: true })})`
+}
+
+const possessive = (name) => (/s$/i.test(name) ? `${name}'` : `${name}'s`)
+const capital = (word) => String(word).charAt(0).toUpperCase() + String(word).slice(1)
+
+// How a unit stands after a fight, when it is worth saying.
+function shaken(side) {
+  if (side.morale <= 25) return `${side.unitId} is at breaking point; `
+  if (side.morale <= 50) return `${side.unitId} is wavering; `
+  return ''
 }
 
 const NAME_FIELDS = ['unitId', 'aId', 'bId', 'by', 'on', 'blockedBy']
@@ -84,14 +159,17 @@ function maskNames(event, known) {
 
 function plainFact(map, event) {
   switch (event.type) {
-    case 'move': return `${event.unitId} moved ${distance(event.from, event.to) * TILE_METRES} m ${compassWord(event.from, event.to)}, now ${placeName(map, event.to)}` +
-      (event.blockedBy ? ` (stopped by ${event.blockedBy})` : '')
-    case 'arrived': return `${event.unitId} reached its objective ${placeName(map, event.at)}` + (event.then === 'hold' ? ' and dug in' : '')
+    case 'move': return `${event.unitId} moved ${distance(event.from, event.to) * TILE_METRES} m ${compassWord(event.from, event.to)}, now ${whereAt(map, event.to)}` +
+      (event.blockedBy ? `, halted by ${event.blockedBy}` : '')
+    case 'arrived': return `${event.unitId} reached its objective ${whereAt(map, event.at)}` + (event.then === 'hold' ? ' and dug in' : '')
     case 'halted': return `${event.unitId} could get no further${event.blockedBy ? `, ${event.blockedBy} in the way` : ''}`
     case 'contact': return `${event.aId} and ${event.bId} came to blows`
     case 'surprise': return `${event.unitId} was caught on the march by ` +
       (event.by === 'an unseen enemy' ? 'an enemy no one had seen' : `${event.by}, unseen until it struck`)
-    case 'exchange': return `fighting: ${describeCombatEvent(event).replace(/^r\d+ /, '').replace(/; chaos.*$/, '')} (men lost each side; morale ${Math.round(event.a.morale)} vs ${Math.round(event.b.morale)})`
+    case 'exchange': return `${event.a.unitId} and ${event.b.unitId} fought` +
+      (event.rounds > 1 ? ` for ${event.rounds * 10} minutes` : '') +
+      `: ${event.a.unitId} lost ${event.a.killed} men, ${event.b.unitId} lost ${event.b.killed}` +
+      `; ${shaken(event.a)}${shaken(event.b)}`.replace(/; $/, '')
     case 'standoff': return `${event.aId} and ${event.bId} were both close to breaking`
     case 'push': return `${event.by} drove ${event.unitId} back${event.lostHighGround ? ' off the high ground' : ''}`
     case 'crush': return `${event.unitId} was pinned with nowhere to give way`
@@ -101,59 +179,228 @@ function plainFact(map, event) {
     case 'destroyed': return `${event.unitId} was destroyed`
     case 'crowding': return event.tier === 'organized'
       ? `${event.unitId} had room to fight again`
-      : `${event.unitId}'s ranks were ${event.tier}, ${event.men} men packed onto one spot ${placeName(map, event.at)}, slowing them and blunting their fighting`
+      : `${possessive(event.unitId)} ranks were ${event.tier}: ${event.men} men packed onto one spot ${whereAt(map, event.at)}, which blunts their fighting`
     case 'objective': return event.side
-      ? `${event.side} took ${event.name}`
-      : `${event.name} was no longer held${event.was ? ` by ${event.was}` : ''}`
+      ? `${capital(event.side)} took ${event.name}`
+      : `${event.name} was no longer held${event.was ? ` by ${capital(event.was)}` : ''}`
     case 'disengage': return `${event.unitId} broke off the fight` +
       (event.orderly ? ' in good order' : '') +
       (event.killed ? `, losing ${event.killed} men to the parting blows` : ' cleanly')
-    case 'ambush': return `${event.unitId} sprang an ambush on ${event.on} ${placeName(map, event.at)}`
+    case 'ambush': return `${event.unitId} sprang an ambush on ${event.on} ${whereAt(map, event.at)}`
     case 'ambushHeld': return event.reason === 'on guard'
       ? `${event.unitId} let ${event.on} pass: it came on guard, not worth the strike`
       : `${event.unitId} let ${event.on} pass, as ordered`
-    case 'hidden': return `${event.unitId} went to ground ${placeName(map, event.at)}`
+    case 'hidden': return `${event.unitId} went to ground ${whereAt(map, event.at)} and is hidden`
     case 'hideFailed': return event.reason === 'watched'
       ? `${event.unitId} tried to hide but the enemy was watching`
       : `${event.unitId} found no cover to hide in`
-    case 'checked': return `${event.unitId} searched the ground ${placeName(map, event.at)}` +
+    case 'checked': return `${event.unitId} searched the ground ${whereAt(map, event.at)}` +
       (event.found.length ? ` and found ${event.found.join(', ')} hidden there` : ' and found nothing')
     case 'revealed': return event.reason === 'found' ? `${event.unitId} was discovered`
       : event.reason === 'stumbled on' ? `${event.unitId} was stumbled upon`
       : event.reason === 'noticed' ? `${event.unitId} was noticed, hidden close by`
       : `${event.unitId} came out of hiding`
-    case 'victory': return event.winner === 'draw' ? `the battle ended in mutual ruin (${event.reason})` : `${event.winner} won the battle (${event.reason})`
+    case 'victory': return event.winner === 'draw' ? `the battle ended with neither side the victor (${event.reason})` : `the battle is over: ${capital(event.winner)} won (${event.reason})`
     default: return null
   }
 }
 
-function system(culture, side) {
-  return `You are a field officer of the ${culture} army (the ${side} side) in an ancient battle, reporting to your commander after ten minutes or an hour of fighting. Retell ONLY the facts given, in 3 to 6 short sentences, in a voice fitting your culture. Use the unit names and places exactly as given. Never invent units, places, casualties or events, never add advice, and never mention numbers or coordinates that are not in the facts. Your own units are listed; everyone else is the enemy.`
+// How much a commander needs to hear of each kind of event: lower is sooner.
+const WEIGHT = {
+  victory: 0, destroyed: 1, rout: 1, fled: 1, pursuit: 2, ambush: 1, surprise: 2, objective: 2,
+  revealed: 3, exchange: 3, standoff: 3, push: 4, crush: 4, disengage: 4, contact: 4,
+  hidden: 5, hideFailed: 5, checked: 5, ambushHeld: 5, crowding: 6, arrived: 6, halted: 6, move: 7
+}
+const weight = (event) => WEIGHT[event.type] ?? 5
+// The most a dispatch is asked to carry.
+const MAX_FACTS = 14
+
+// The kinds of event that together tell how a unit's fighting went. They are
+// reported per unit (digest, below), not one by one.
+const FIGHTING = new Set(['contact', 'exchange', 'rout', 'pursuit', 'push', 'destroyed', 'fled'])
+
+/**
+ * How the fighting went for each of the side's own units, one line a unit:
+ * who it fought and where, what it lost and what it cost the enemy, which
+ * enemies it broke, and how it stands now. A turn's fighting is a dozen or
+ * more events; told unit by unit it is two or three lines that cannot be
+ * muddled (who lost what, who ran from whom).
+ *
+ * @param {Array} events   already cut to what the side knows, summarised,
+ *                         and with unseen enemies' names masked
+ * @param {Object} about   { map, ownIds, whereIs(id) -> position | null }
+ * @returns {Array<{ weight, text }>}
+ */
+function digest(events, { map, ownIds, whereIs = () => null }) {
+  const units = new Map()
+  const of = (id) => {
+    if (!units.has(id)) {
+      units.set(id, { id, foes: [], lost: 0, killed: 0, morale: null, broke: null, lostInFlight: 0, left: null, destroyed: false, brokeEnemies: [], cutDown: 0, drove: [], drivenBy: [], met: [] })
+    }
+    return units.get(id)
+  }
+  const add = (list, value) => { if (!list.includes(value)) list.push(value) }
+
+  for (const e of events) {
+    if (e.type === 'exchange') {
+      for (const [mine, theirs] of [[e.a, e.b], [e.b, e.a]]) {
+        if (!ownIds.has(mine.unitId)) continue
+        const u = of(mine.unitId)
+        add(u.foes, theirs.unitId)
+        u.lost += mine.killed
+        u.killed += theirs.killed
+        u.morale = mine.morale
+      }
+    } else if (e.type === 'contact') {
+      for (const [mine, theirs] of [[e.aId, e.bId], [e.bId, e.aId]]) if (ownIds.has(mine)) add(of(mine).met, theirs)
+    } else if (e.type === 'rout') {
+      if (ownIds.has(e.unitId)) of(e.unitId).broke = e.by
+      else if (ownIds.has(e.by)) add(of(e.by).brokeEnemies, e.unitId)
+    } else if (e.type === 'pursuit') {
+      if (ownIds.has(e.unitId)) of(e.unitId).lostInFlight += e.killed
+      else if (ownIds.has(e.by)) of(e.by).cutDown += e.killed
+    } else if (e.type === 'push') {
+      if (ownIds.has(e.unitId)) add(of(e.unitId).drivenBy, e.by)
+      else if (ownIds.has(e.by)) add(of(e.by).drove, e.unitId)
+    } else if (e.type === 'destroyed') {
+      if (ownIds.has(e.unitId)) of(e.unitId).destroyed = true
+    } else if (e.type === 'fled') {
+      if (ownIds.has(e.unitId)) of(e.unitId).left = e.strength
+    }
+  }
+
+  const list = (ids) => ids.length <= 1 ? ids.join('') : `${ids.slice(0, -1).join(', ')} and ${ids.at(-1)}`
+  const lines = []
+  for (const u of units.values()) {
+    const parts = []
+    const where = whereIs(u.id)
+    const foes = u.foes.length ? u.foes : u.met
+    if (foes.length) {
+      parts.push(`${u.foes.length ? 'fought' : 'met'} ${list(foes)}${where ? ` ${whereAt(map, where)}` : ''}`)
+    }
+    if (u.foes.length) parts.push(`lost ${u.lost} men and killed ${u.killed}`)
+    if (u.drove.length) parts.push(`drove ${list(u.drove)} back`)
+    if (u.brokeEnemies.length) parts.push(`broke ${list(u.brokeEnemies)}` + (u.cutDown ? `, cutting down ${u.cutDown} as they ran` : ''))
+    else if (u.cutDown) parts.push(`cut down ${u.cutDown} of the fleeing enemy`)
+    if (u.drivenBy.length && !u.broke) parts.push(`was driven back by ${list(u.drivenBy)}`)
+
+    let end
+    if (u.destroyed) end = 'was destroyed'
+    else if (u.broke) {
+      end = `then BROKE and fled from ${u.broke}` + (u.lostInFlight ? `, losing ${u.lostInFlight} more in flight` : '') +
+        (u.left !== null ? `, and left the field with ${u.left} men` : '')
+    } else if (u.left !== null) end = `left the field with ${u.left} men`
+    else if (u.lostInFlight) end = `lost ${u.lostInFlight} men while fleeing`
+    else if (u.morale !== null && u.morale <= 25) end = 'and is at breaking point'
+    else if (u.morale !== null && u.morale <= 50) end = 'and is wavering'
+    else if (u.foes.length) end = 'and holds firm'
+    if (end) parts.push(end)
+    if (parts.length === 0) continue
+
+    // A unit with only an ending ("broke and fled") needs no "then".
+    if (parts.length === 1) parts[0] = parts[0].replace(/^(?:then|and) /, '').replace(/^BROKE/, 'broke')
+    const text = `${u.id}: ${parts.join('; ')}`.replace(/; (then|and) /g, ', $1 ')
+    lines.push({ weight: u.destroyed || u.broke ? 1 : (u.brokeEnemies.length ? 2 : 3), text })
+  }
+  return lines
+}
+
+/**
+ * A turn as a commander needs to hear it: the facts one side knows, most
+ * important first. Fighting is told per unit (digest); everything else one
+ * fact each. When there was fighting, the marching is left out: the map
+ * shows where everyone stands.
+ *
+ * @param {Object} turn  { map, ownIds, seenEnemyIds, events, whereIs?, nameOf? }
+ * @returns {Array<string>}
+ */
+function report(turn) {
+  const { map, ownIds, seenEnemyIds, events } = turn
+  const nameOf = turn.nameOf ?? ((text) => text)
+  const known = (id) => ownIds.has(id) || seenEnemyIds.has(id)
+  const told = summarise(visibleEvents(events, { ownIds, seenEnemyIds })).map(e => maskNames(e, known))
+
+  const fights = digest(told, { map, ownIds, whereIs: turn.whereIs })
+  const rest = told.filter(e => !FIGHTING.has(e.type))
+  const busy = fights.length > 0 || rest.some(e => weight(e) <= 4)
+  const others = rest
+    .filter(e => !busy || weight(e) < 6)
+    .map(e => ({ weight: weight(e), text: plainFact(map, e) }))
+    .filter(f => f.text)
+
+  return [...fights, ...others]
+    .map((f, i) => ({ ...f, i }))
+    .sort((x, y) => x.weight - y.weight || x.i - y.i)
+    .slice(0, MAX_FACTS)
+    .map(f => nameOf(f.text))
+}
+
+// How an officer of each culture writes. A culture not listed here gets the
+// plain soldier's voice. Flavour only: the facts never change with it.
+const VOICES = {
+  'Roman Republic': 'You write as a Roman tribune: clipped, orderly, matter-of-fact, with the occasional word of duty or discipline.',
+  'Celtic Tribes': 'You write as a Celtic war-leader\'s bard: vivid and proud, quick to honour courage, still brief.',
+  'Germanic Tribes': 'You write as a Germanic war-band\'s spokesman: blunt, grim, sparing with words.',
+  'Macedonian Kingdoms': 'You write as a Macedonian staff officer: precise, professional, confident.',
+  'Parthian Empire': 'You write as a Parthian noble\'s scribe: courtly and measured, with an eye for horsemen.',
+  'Sarmatian Confederations': 'You write as a Sarmatian rider: plain-spoken and proud of the horse.',
+  'Berber Confederations': 'You write as a Berber chieftain\'s messenger: wary, practical, attentive to ground.',
+  'Thracian Odrysians': 'You write as a Thracian chieftain\'s herald: fierce and direct.'
+}
+const PLAIN_VOICE = 'You write as a seasoned professional soldier: brief, exact, unadorned.'
+
+// The standing instructions: everything about how to write, nothing about
+// this turn, so the provider can cache it.
+function system(culture) {
+  return `You are an officer on a commander's staff in an ancient battle, writing the dispatch for the stretch of fighting just ended. ${VOICES[culture] ?? PLAIN_VOICE}
+
+You are given the facts as notes, the most important first. Turn them into a dispatch a person would say aloud to the commander.
+
+- Keep the order: open with the first note. A note that starts with a unit's name and a colon is the whole story of that unit's fighting. "lost 12 men and killed 20" means that unit lost 12 and its enemies lost 20: keep every number with the unit it belongs to.
+- Write prose, not notes: full sentences in the past tense, no colons after names, no semicolons, no lists, no headings, no greeting or sign-off. Vary the wording; do not copy the notes word for word.
+- One short paragraph: 2 to 4 sentences for a quiet stretch, at most 6 for a hard one.
+- Use only what the notes say. Never add a unit, place, number, cause or outcome, and never guess what the enemy intends. Every number you write must be in the notes.
+- Write unit names exactly as given ("Spears", "enemy horse"). "An unseen enemy" stays exactly that.
+- The commander gives orders by grid square, so keep the place and the grid square from the notes whenever a note has one, for example "at the ford (D4-SW)". Never work out or invent a square.
+- No advice, no questions, no mention of turns, rules or dice.
+
+Example notes:
+- Guards: fought enemy axes at North Ford (D4-SW); lost 9 men and killed 21; broke enemy axes, cutting down 5 as they ran, and holds firm
+- Levy: fought enemy horse in open ground 50 m south of the woods (C5-NE); lost 17 men and killed 3, then BROKE and fled from enemy horse, losing 6 more in flight
+- Slingers went to ground in the woods (B3-NE) and is hidden
+Example dispatch, in a plain soldier's voice:
+The Levy is broken. Enemy horse caught them in the open south of the woods (C5-NE), where they lost 17 men for 3 of the enemy, and 6 more were cut down as they ran. At North Ford (D4-SW) the Guards did better: they broke the enemy axes, killing 21 for 9 of our own and cutting down 5 more in the pursuit, and they hold firm. The Slingers have gone to ground in the woods (B3-NE), unseen.`
 }
 
 /**
  * @param {Object} ai        AI client (src/llm), or null
- * @param {Object} turn      { map, side, culture, ownIds, seenEnemyIds, events, plain }
+ * @param {Object} turn      { map, side, culture, ownIds, seenEnemyIds, events, plain, nameOf }
  *   plain: the plain-text report to fall back on
+ *   nameOf: optional, text -> text with unit ids swapped for the names the
+ *     player knows them by ("Spears", "enemy horse")
  * @returns {Promise<{ text, source: 'ai'|'plain' }>}
  */
 async function narrateTurn(ai, turn) {
-  const { map, side, culture, ownIds, seenEnemyIds, events, plain } = turn
-  const known = (id) => ownIds.has(id) || seenEnemyIds.has(id)
-  const facts = visibleEvents(events, { ownIds, seenEnemyIds })
-    .map(e => fact(map, e, known)).filter(Boolean)
+  const { culture, ownIds, plain } = turn
+  const nameOf = turn.nameOf ?? ((text) => text)
+  // Most important first, and already worked out unit by unit, so a small
+  // model retells the news without having to judge or add anything up.
+  const facts = report(turn)
   if (!ai || !ai.configured || facts.length === 0) return { text: plain, source: 'plain' }
 
+  const own = nameOf([...ownIds].join(', '))
   const user = [
-    `Your units: ${[...ownIds].join(', ')}.`,
-    'What happened:',
+    `Your units: ${own}. Everyone else is the enemy.`,
+    'What happened, most important first (each line that starts with a unit\'s name is how its fighting went):',
     ...facts.map(f => `- ${f}`)
   ].join('\n')
   const reply = await ai.complete({
-    purpose: 'narrate-turn', system: system(culture, side), user, maxTokens: 300, temperature: 0.7
+    purpose: 'narrate-turn', system: system(culture), user, maxTokens: 320, temperature: 0.5,
+    ...(turn.effort ? { effort: turn.effort } : {})
   })
   if (!reply.ok || !reply.text || !reply.text.trim()) return { text: plain, source: 'plain' }
-  return { text: reply.text.trim(), source: 'ai' }
+  // One paragraph, plain hyphens.
+  return { text: reply.text.trim().replace(/\s*\n+\s*/g, ' ').replace(/[\u2010\u2011]/g, '-'), source: 'ai' }
 }
 
-module.exports = { narrateTurn, visibleEvents, publicEvents, maskNames, placeName, fact, PRIVATE }
+module.exports = { narrateTurn, report, digest, visibleEvents, publicEvents, summarise, maskNames, placeName, fact, system, VOICES, PRIVATE }

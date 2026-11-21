@@ -95,15 +95,14 @@ test('the AI fits the player\'s words to the engine\'s ambush terms', async () =
   const ai = createAiClient({
     transport: scriptedTransport(() => ({
       text: JSON.stringify({
-        orders: [{ units: 'the spears', action: 'ambush', place: 'the reeds by the woods', then: null, against: 'cavalry', letPass: 1, regardless: false }],
-        question: null, surrender: false
+        orders: [{ units: ['red_spears'], action: 'ambush', place: 'the woods', then_hold: false, careful: false, against: 'cavalry', let_pass: 1, regardless: false }],
+        question: null, note: null, surrender: false
       }),
       usage: { inputTokens: 300, outputTokens: 40 }
     })),
     retries: 0
   })
   const read = await interpretText('have the spears lurk among the trees and jump the first horsemen after one has gone by', { ...context }, { ai })
-  // "the reeds by the woods" is still ground words; the resolver finds the woods.
   assert.equal(read.source, 'ai')
   assert.equal(read.orders[0].action, 'ambush')
   assert.equal(read.orders[0].against, 'cavalry')
@@ -114,17 +113,16 @@ test('an AI reply that invents a kind of target is refused, and the grammar take
   const ai = createAiClient({
     transport: scriptedTransport(() => ({
       text: JSON.stringify({
-        orders: [{ units: 'spears', action: 'ambush', place: 'the woods', then: null, against: 'elephants' }],
-        question: null, surrender: false
+        orders: [{ units: ['red_spears'], action: 'ambush', place: 'the woods', then_hold: false, careful: false, against: 'elephants', let_pass: 0, regardless: false }],
+        question: null, note: null, surrender: false
       }),
       usage: { inputTokens: 300, outputTokens: 40 }
     })),
     retries: 0
   })
-  const read = await interpretText('spears ambush in the woods', context, { ai })
+  const read = await interpretText('have the spears lurk in the woods for their elephants', context, { ai })
   assert.equal(read.source, 'grammar')
-  assert.equal(read.orders[0].action, 'ambush')
-  assert.equal(read.orders[0].against, undefined)
+  assert.equal(read.orders.length, 0, 'nothing is ordered on the strength of a reply that broke the rules')
 })
 
 test('a question about a place comes with choices: what to write instead', () => {

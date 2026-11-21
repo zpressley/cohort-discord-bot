@@ -9,7 +9,7 @@ const assert = require('node:assert/strict')
 
 const { parseLine } = require('../grammar')
 const { interpretLines, interpretText } = require('../orders')
-const { briefing, REPLY_SCHEMA } = require('../aiReader')
+const { briefing, REPLY_SCHEMA, SYSTEM } = require('../aiReader')
 const { createAiClient } = require('../../llm/client')
 const { scriptedTransport } = require('../../llm/fixtures')
 const { resolveMap } = require('../../engine/map/map')
@@ -102,10 +102,10 @@ test('a move with nowhere to go asks where', () => {
 test('AI: free text is read into orders, then resolved exactly like the grammar', async () => {
   const ai = aiReplying({
     orders: [
-      { units: 'the spears', action: 'defend', place: 'the ridge to the east', then: 'hold' },
-      { units: 'archers', action: 'hold', place: null, then: null }
+      { units: ['red_spears'], action: 'defend', place: 'the ridge to the east', then_hold: true, careful: false, against: null, let_pass: 0, regardless: false },
+      { units: ['red_archers'], action: 'hold', place: null, then_hold: false, careful: false, against: null, let_pass: 0, regardless: false }
     ],
-    question: null,
+    question: null, note: null,
     surrender: false
   })
   const read = await interpretText('Spears, take the eastern heights and dig in. Archers stay where you are.', context, { ai })
@@ -116,17 +116,69 @@ test('AI: free text is read into orders, then resolved exactly like the grammar'
 })
 
 test('AI: a question from the model goes to the player, and nothing is submitted', async () => {
-  const ai = aiReplying({ orders: [], question: 'Which unit should cross the river?', surrender: false })
+  const ai = aiReplying({ orders: [], question: 'Which unit should cross the river?', note: null, surrender: false })
   const read = await interpretText('cross the river', context, { ai })
   assert.equal(read.source, 'ai')
   assert.deepEqual(read.questions, ['Which unit should cross the river?'])
 })
 
 test('AI: a reply that breaks the schema falls back to the grammar', async () => {
-  const ai = aiReplying({ orders: [{ units: 'spears', action: 'teleport', place: 'C2', then: null }], question: null, surrender: false })
-  const read = await interpretText('spears to C2', context, { ai })
-  assert.equal(read.source, 'grammar', 'unknown action rejected, grammar used instead')
-  assert.equal(gridLabel(read.orders[0].target), 'C2')
+  const ai = aiReplying({ orders: [{ units: ['red_spears'], action: 'teleport', place: 'C2', then_hold: false, careful: false, against: null, let_pass: 0, regardless: false }], question: null, note: null, surrender: false })
+  const read = await interpretText('kindly get the spears over to C2', context, { ai })
+  assert.equal(read.source, 'grammar', 'unknown action rejected, the grammar\'s own answer stands')
+  assert.equal(read.orders.length, 0)
+  assert.equal(read.questions.length, 1)
+})
+
+test('AI: a unit that is not on the field is a question, never a guess', async () => {
+  const ai = aiReplying({ orders: [{ units: ['red_elephants'], action: 'advance', place: null, then_hold: false, careful: false, against: null, let_pass: 0, regardless: false }], question: null, note: null, surrender: false })
+  const read = await interpretText('send in the big grey ones, please', context, { ai })
+  assert.equal(read.orders.length, 0)
+  assert.match(read.questions[0], /red_elephants/)
+})
+
+test('AI: a name for an id is accepted when it means one unit, and a second order to a unit becomes a note', async () => {
+  const step = (place) => ({ units: ['spears'], action: 'move', place, then_hold: false, careful: false, against: null, let_pass: 0, regardless: false })
+  const ai = aiReplying({ orders: [step('C2'), step('Harrow Bridge')], question: null, note: null, surrender: false })
+  const read = await interpretText('get the spears over to C2 and after that on to the bridge', context, { ai })
+  assert.equal(read.questions.length, 0)
+  assert.equal(read.orders.length, 1, 'one order a unit')
+  assert.equal(read.orders[0].unitRef, 'red_spears')
+  assert.equal(gridLabel(read.orders[0].target), 'C2', 'the first step stands')
+  assert.match(read.notes[0], /red_spears: I recorded the first order only/)
+})
+
+test('plain orders never reach the AI; only what the grammar cannot read does', async () => {
+  const transport = scriptedTransport(() => ({
+    text: JSON.stringify({ orders: [{ units: ['red_horse'], action: 'hold', place: null, then_hold: false, careful: false, against: null, let_pass: 0, regardless: false }], question: null, note: null, surrender: false }),
+    usage: { inputTokens: 900, outputTokens: 40 }
+  }))
+  const ai = createAiClient({ transport, retries: 0 })
+
+  const plain = await interpretText('spears to C2\narchers hold\neveryone advance carefully', context, { ai })
+  assert.equal(plain.source, 'grammar')
+  assert.equal(transport.calls.length, 0, 'three plain orders, no AI call')
+
+  const mixed = await interpretText('spears to C2\nthe horse will wait behind in reserve', context, { ai })
+  assert.equal(mixed.source, 'grammar+ai')
+  assert.equal(transport.calls.length, 1)
+  assert.match(transport.calls[0].user, /wait behind in reserve/)
+  assert.doesNotMatch(transport.calls[0].user, /spears to C2/, 'only the hard line is sent')
+  assert.deepEqual(mixed.orders.map(o => [o.unitRef, o.action]), [['red_spears', 'move'], ['red_horse', 'hold']])
+})
+
+test('a line that says two things goes to the AI even though the grammar could read half of it', async () => {
+  const transport = scriptedTransport(() => ({
+    text: JSON.stringify({ orders: [
+      { units: ['red_spears'], action: 'move', place: 'Harrow Bridge', then_hold: false, careful: false, against: null, let_pass: 0, regardless: false },
+      { units: ['red_archers'], action: 'hide', place: 'the woods', then_hold: false, careful: false, against: null, let_pass: 0, regardless: false }
+    ], question: null, note: null, surrender: false }),
+    usage: { inputTokens: 900, outputTokens: 60 }
+  }))
+  const ai = createAiClient({ transport, retries: 0 })
+  const read = await interpretText('spears to the bridge and archers hide in the woods', context, { ai })
+  assert.equal(transport.calls.length, 1)
+  assert.deepEqual(read.orders.map(o => [o.unitRef, o.action]), [['red_spears', 'move'], ['red_archers', 'hide']])
 })
 
 test('AI: down, missing or slow, the grammar takes over', async () => {
@@ -140,15 +192,24 @@ test('AI: down, missing or slow, the grammar takes over', async () => {
   const read = await interpretText('spears hold', context, { ai: slow })
   assert.equal(read.source, 'grammar')
   assert.deepEqual(read.orders, [{ unitRef: 'red_spears', action: 'hold' }])
+  // A line only the AI could read, with the AI down: the grammar's question.
+  const lost = await interpretText('the horse will wait behind in reserve', context, { ai: down })
+  assert.equal(lost.source, 'grammar')
+  assert.equal(lost.questions.length, 1)
 })
 
-test('AI briefing: own units and the ground in words, seen enemies only, no coordinates', () => {
+test('AI briefing: own units by id, named places, seen enemies only, all by grid square', () => {
   const text = briefing(context, 'hold')
-  assert.match(text, /red_spears \(spearmen\)/)
-  assert.match(text, /the woods \d+ m (west|south|north|east)/)
-  assert.match(text, /blue_swords, \d+ m east \(in sight\)/)
-  assert.ok(!/\b[A-Z]{1,2}\d{1,2}\b/.test(text.replace(/Orders: .*/, '')), 'no map labels for the model to echo')
+  assert.match(text, /- red_spears \(called: spearmen\), at B2-SW/)
+  assert.match(text, /- red_horse \(called: cavalry\), mounted, at B3-NW/)
+  assert.match(text, /- Harrow Bridge \(bridge, B4-SE\)/)
+  assert.match(text, /- blue_swords at D2-SW, \d+ m east \(in sight\)/)
   assert.ok(!/blue_archers|blue_horse/.test(text), 'enemies the side has not seen are not mentioned')
+  assert.match(text, /The commander says:\nhold$/)
+})
+
+test('the standing instructions say nothing about this battle, so they can be cached', () => {
+  assert.doesNotMatch(SYSTEM, /red_|blue_|Crownhill|Harrow/)
 })
 
 test('the reply schema allows exactly the actions the engine knows', () => {

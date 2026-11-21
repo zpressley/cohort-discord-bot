@@ -1,0 +1,107 @@
+# The AI: which model, what it costs, how to check it
+
+Date: 2026-11-20. Provider: Groq (ruled 2026-10-21). Brief from Zach: cheap
+and good enough over amazing and expensive.
+
+## What the AI does
+
+Two jobs, and neither decides anything in the game:
+
+1. **Reads orders** the fixed grammar cannot read, into the same order form
+   the grammar produces (`src/interpreter/aiReader.js`).
+2. **Tells the turn back** as a short dispatch in the side's voice
+   (`src/narrator/turnNarrator.js`).
+
+Without a key, or when Groq is down or rate-limited, the game runs on the
+grammar and the plain report.
+
+## The model: `openai/gpt-oss-20b`
+
+Set in `src/llm/groq.js`; override with `GROQ_MODEL`.
+
+The three chat models Groq offered on 2026-11-20, on the order benchmark
+(38 orders at the time, written the way people type; 10 of them are read by
+the grammar alone and never reach a model):
+
+| Model | Orders read right | Median time | Cost per 1,000 AI reads | List price per million tokens (in / out) |
+|---|---|---|---|---|
+| `openai/gpt-oss-20b` | 37 of 38 | 0.4 s | $0.14 | $0.075 / $0.30 |
+| `openai/gpt-oss-120b` | 35 of 38 | 0.7 s | $0.27 | $0.15 / $0.60 |
+| `qwen/qwen3.8-27b` (preview) | 38 of 38 | 0.6 s | $1.22 | $0.80 / $4.00 |
+
+The smallest model is the cheapest, the fastest, and within one order of the
+best. After the prompt was tuned against its misses, and four harder orders
+were added, it read all 42 (see "Latest run" below).
+
+Prices are from third-party listings of Groq's price page (the page itself
+could not be reached from the build machine); the token counts in the cost
+log are exact, the dollar figures are estimates.
+
+For dispatches the same model is used. The larger model writes slightly
+better prose at about two and a half times the cost; set `GROQ_MODEL` to try
+it.
+
+## What a turn costs
+
+- An order read: about 1,650 tokens in, 160 out: **$0.00015**.
+- A dispatch: about 750 tokens in, 100 out: **$0.00008**.
+- A player turn with both: about **$0.0002**, so 20 cents per thousand
+  turns. A turn whose orders the grammar reads costs the dispatch only.
+
+**The free tier** costs nothing and allows this model 8,000 tokens a minute
+(about three AI turns a minute across everyone playing; the limit is in
+Groq's own error message) and, by third-party listings, 1,000 requests a
+day. Over the limit, the client waits out a short limit (up to 12 seconds)
+and otherwise falls back to the grammar and the plain report. The paid
+"Dev" tier removes the squeeze at the prices above.
+
+## How it is kept cheap and correct
+
+- **Grammar first.** `interpretText` tries the fixed grammar on each line.
+  A line goes to the model only if the grammar cannot read it or it says
+  more than one thing. Orders written by tapping the map never cost a call.
+- **The provider enforces the reply's shape** (structured outputs with a
+  strict JSON schema), and the reply is checked again here. A unit that is
+  not on the field becomes a question, never a guess.
+- **Least thinking.** The model is asked for the lowest reasoning effort and
+  the reasoning is not sent back; thinking is billed as output.
+- **A fixed opening.** The standing instructions hold nothing about the
+  battle, so Groq caches them (cached input is half price).
+- **The dispatch is worked out in code.** The turn's events are cut to what
+  the side knows, merged across ticks, and the fighting is summed up per
+  unit, most important first (`report` in `turnNarrator.js`). The model only
+  turns a few notes into prose, which is why a small model is enough.
+
+## Checking it
+
+```
+GROQ_API_KEY=... npm run ai:bench                  the default model
+GROQ_API_KEY=... npm run ai:bench -- --verbose     show every miss
+GROQ_API_KEY=... npm run ai:bench -- openai/gpt-oss-120b qwen/qwen3.8-27b
+AI_COST_LOG=ai-cost.jsonl npm run web              one line per call: tokens, time, cost
+```
+
+Behind a proxy, add `NODE_USE_ENV_PROXY=1`. On the free tier a run takes
+about seven minutes (it waits out the rate limit) and costs nothing.
+
+Run the benchmark after any change to the prompts, and when Groq changes
+its models: a model being retired is how the AI silently stopped working
+before (the old default, `llama-3.1-8b-instant`, no longer exists).
+
+## Latest run
+
+2026-11-20, `openai/gpt-oss-20b`, free tier, after the prompts were tuned:
+
+```
+orders read right: 42 of 42  (11 by the grammar alone, 31 AI calls, 0 failed calls)
+per AI read: 1656 tokens in, 156 out, median 619 ms, slowest 985 ms, about $0.000145 each ($0.14 per 1,000)
+narration: clean (561 ms, about $0.000079)
+  "The Archers broke and fled from enemy swords. The Swords were caught on
+   the march by an unseen enemy. The Spears met enemy swords. The Horse went
+   to ground in the woods (A1-SW) and is hidden."
+```
+
+Model replies vary a little from run to run even at temperature 0; earlier
+runs of the same set scored 39 to 42. The three misses were fixed in code
+where code could fix them (a name given for an id, two orders to one unit).
+
