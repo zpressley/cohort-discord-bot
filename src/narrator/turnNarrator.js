@@ -11,6 +11,7 @@
 const { featuresAt, detectFeatures } = require('../engine/map/features')
 const { distance } = require('../engine/map/labels')
 const { compassWord, TILE_METRES } = require('../engine/map/places')
+const { orderWords, moraleWords } = require('./words')
 const { gridLabel } = require('../engine/map/grid')
 
 // Where a tile is, in words: the feature it is part of, or the nearest
@@ -160,17 +161,14 @@ function whereAt(map, position) {
 
 // What an order's condition was, and what the unit then did, in words.
 const REACTED_TO = { sees: 'saw the enemy it was warned of', attacked: 'was attacked', breaks: 'saw its friends break' }
+// (It has only just turned to the other thing, so "began to" where the plain
+// past would say it was already done.)
 function didWords(map, event) {
-  switch (event.action) {
-    case 'hold': return 'held'
-    case 'withdraw': return 'fell back'
-    case 'advance': return 'went at the enemy'
-    case 'attack': return event.target ? `attacked ${whereAt(map, event.target)}` : 'went at the enemy'
-    case 'defend': return event.target ? `made for ${whereAt(map, event.target)} to hold it` : 'dug in'
-    case 'move': return event.target ? `made for ${whereAt(map, event.target)}` : 'moved off'
-    case 'hide': return 'went to ground'
-    default: return `turned to its other order (${event.action})`
-  }
+  const place = event.target ? whereAt(map, event.target) : null
+  if (event.action === 'hold' || (!place && event.action === 'defend')) return 'held'
+  if (event.action === 'withdraw' && !place) return 'fell back'
+  if (event.action === 'advance' || (event.action === 'attack' && !place)) return 'advanced on the enemy'
+  return `began to ${orderWords('say', event, place)}`
 }
 
 const possessive = (name) => (/s$/i.test(name) ? `${name}'` : `${name}'s`)
@@ -180,9 +178,8 @@ const capital = (word) => String(word).charAt(0).toUpperCase() + String(word).sl
 
 // How a unit stands after a fight, when it is worth saying.
 function shaken(side) {
-  if (side.morale <= 25) return `${side.unitId} is at breaking point; `
-  if (side.morale <= 50) return `${side.unitId} is wavering; `
-  return ''
+  const state = moraleWords(side.morale)
+  return state === 'firm' ? '' : `${side.unitId} is ${state}; `
 }
 
 const NAME_FIELDS = ['unitId', 'aId', 'bId', 'by', 'on', 'blockedBy']
@@ -196,9 +193,9 @@ function maskNames(event, known) {
 
 function plainFact(map, event) {
   switch (event.type) {
-    case 'move': return `${event.unitId} moved ${distance(event.from, event.to) * TILE_METRES} m ${compassWord(event.from, event.to)}, now ${whereAt(map, event.to)}` +
+    case 'move': return `${event.unitId} marched ${distance(event.from, event.to) * TILE_METRES} m ${compassWord(event.from, event.to)}, now ${whereAt(map, event.to)}` +
       (event.blockedBy ? `, halted by ${event.blockedBy}` : '')
-    case 'arrived': return `${event.unitId} reached its objective ${whereAt(map, event.at)}` + (event.then === 'hold' ? ' and dug in' : '')
+    case 'arrived': return `${event.unitId} arrived ${whereAt(map, event.at)}` + (event.then === 'hold' ? ' and holds it' : '')
     case 'halted': return `${event.unitId} could get no further${event.blockedBy ? `, ${event.blockedBy} in the way` : ''}`
     case 'contact': return `${event.aId} and ${event.bId} came to blows`
     case 'surprise': return `${event.unitId} was caught on the march by ` +
@@ -213,13 +210,13 @@ function plainFact(map, event) {
     case 'reacted': return `${event.unitId} ${REACTED_TO[event.when] ?? 'saw the moment come'}${event.when === 'sees' && event.kind ? ` (${event.kind})` : ''} and, as ordered, ${didWords(map, event)}`
     case 'lostThread': return `${event.officer ? `${event.officer} of ${event.unitId}` : `the officer of ${event.unitId}`} lost the thread of his orders` +
       (event.lost === 'condition' ? ' when the moment came' : ' once the first part was done') +
-      (event.did === 'advance' ? ' and went at the enemy' : event.did === 'hold' ? ' and held where he stood' : ' and carried on as he was')
+      (event.did === 'advance' ? ' and advanced on the enemy' : event.did === 'hold' ? ' and held where he stood' : ' and carried on as he was')
     case 'volley': return `${event.by} shot at ${event.unitId}` + (event.killed ? `, felling ${men(event.killed)}` : ', to little effect')
     case 'rout': return `${event.unitId} broke and fled from ${event.by}`
     case 'pursuit': return `${event.by} cut down ${event.killed} of the fleeing ${event.unitId}` + (event.trapped ? ', who were cornered' : '')
-    case 'fled': return `${event.unitId} escaped the field with ${event.strength} men`
+    case 'fled': return `${event.unitId} left the field with ${men(event.strength)}`
     case 'rallied': return `${event.unitId} rallied ${whereAt(map, event.at)} with ${event.strength} men` +
-      (event.morale <= 25 ? ', badly shaken: it will not stand long without a success near it' : '')
+      (moraleWords(event.morale) === 'at breaking point' ? ', at breaking point: it will not stand long without a success near it' : '')
     case 'heartened': return `${listOf(event.units ?? [event.unitId])} took heart at the breaking of ${event.by}`
     case 'destroyed': return `${event.unitId} was destroyed`
     case 'crowding': return event.tier === 'organized'
@@ -235,7 +232,7 @@ function plainFact(map, event) {
     case 'ambushHeld': return event.reason === 'on guard'
       ? `${event.unitId} let ${event.on} pass: it came on guard, not worth the strike`
       : `${event.unitId} let ${event.on} pass, as ordered`
-    case 'hidden': return `${event.unitId} went to ground ${whereAt(map, event.at)} and is hidden`
+    case 'hidden': return `${event.unitId} went into hiding ${whereAt(map, event.at)} and is hidden`
     case 'hideFailed': return event.reason === 'watched'
       ? `${event.unitId} tried to hide but the enemy was watching`
       : `${event.unitId} found no cover to hide in`
@@ -343,8 +340,7 @@ function digest(events, { map, ownIds, whereIs = () => null }) {
         (u.left !== null ? `, and left the field with ${u.left} men` : '')
     } else if (u.left !== null) end = `left the field with ${u.left} men`
     else if (u.lostInFlight) end = `lost ${u.lostInFlight} men while fleeing`
-    else if (u.morale !== null && u.morale <= 25) end = 'and is at breaking point'
-    else if (u.morale !== null && u.morale <= 50) end = 'and is wavering'
+    else if (u.morale !== null && moraleWords(u.morale) !== 'firm') end = `and is ${moraleWords(u.morale)}`
     else if (u.foes.length) end = 'and holds firm'
     if (end) parts.push(end)
     if (parts.length === 0) continue
@@ -419,7 +415,7 @@ You are given the facts as notes, the most important first. Turn them into a dis
 Example notes:
 - Guards: fought enemy axes at North Ford (D4-SW); lost 9 men and killed 21; broke enemy axes, cutting down 5 as they ran, and holds firm
 - Levy: fought enemy horse in open ground 50 m south of the woods (C5-NE); lost 17 men and killed 3, then BROKE and fled from enemy horse, losing 6 more in flight
-- Slingers went to ground in the woods (B3-NE) and is hidden
+- Slingers went into hiding in the woods (B3-NE) and is hidden
 Example dispatch, in a plain soldier's voice:
 The Levy is broken. Enemy horse caught them in the open south of the woods (C5-NE), where they lost 17 men for 3 of the enemy, and 6 more were cut down as they ran. At North Ford (D4-SW) the Guards did better: they broke the enemy axes, killing 21 for 9 of our own and cutting down 5 more in the pursuit, and they hold firm. The Slingers have gone to ground in the woods (B3-NE), unseen.`
 }

@@ -261,7 +261,9 @@ function readOlder(text, line) {
     kind: 'ask',
     question: `I don't follow "${clean(line)}". Orders read like: spears to the ridge to the east · ` +
       'archers defend the ford · everyone advance · swords fall back · hold · ' +
-      'archers hide in the woods · scouts check the woods · spears ambush in the woods · done'
+      'archers hide in the woods · scouts search the woods · spears ambush in the woods · ' +
+      'archers shoot the horse · swords to C4, then on to the bridge · ' +
+      'spears to the ford, if their horse is there, hold'
   }
 }
 

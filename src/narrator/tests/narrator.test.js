@@ -42,7 +42,7 @@ test('facts are words: places by name or feature, with the grid square the playe
   assert.equal(placeName(map, at('W6')), 'at North Ford')
   assert.equal(placeName(map, at('K18')), 'in a clearing')
   assert.equal(placeName(map, at('F9')), 'on the road')
-  assert.match(fact(map, events[0]), /^red_spears moved 75 m east, now in open ground .* \(B2-SE\)$/)
+  assert.match(fact(map, events[0]), /^red_spears marched 75 m east, now in open ground .* \(B2-SE\)$/)
 })
 
 test('a turn of several ticks is boiled down: one move per unit, one fight per pair, no noise', () => {
@@ -59,7 +59,7 @@ test('a turn of several ticks is boiled down: one move per unit, one fight per p
   ]
   const told = summarise(raw).map(e => fact(map, e))
   assert.equal(told.length, 2)
-  assert.match(told[0], /^red_spears moved 150 m east, .*halted by blue_swords$/)
+  assert.match(told[0], /^red_spears marched 150 m east, .*halted by blue_swords$/)
   assert.match(told[1], /^blue_swords and red_spears fought for 20 minutes: blue_swords lost 16 men, red_spears lost 19; red_spears is wavering$/)
 })
 
@@ -100,7 +100,7 @@ test("with the AI: the facts go in, the prose comes out, in the side's voice", a
   const sent = transport.calls[0]
   assert.match(sent.system, /Roman tribune/)
   assert.match(sent.user, /red_spears: met blue_swords/)
-  assert.doesNotMatch(sent.user, /moved/, 'when there was fighting, the marching is left out')
+  assert.doesNotMatch(sent.user, /marched/, 'when there was fighting, the marching is left out')
   assert.ok(!sent.user.includes('blue_scouts'), 'the model never hears what fog hides')
   assert.doesNotMatch(sent.system, /red_|blue_/, 'the standing instructions hold nothing about this turn')
 
@@ -155,7 +155,7 @@ test('secrets: an unseen enemy\'s name is not given away', () => {
 
 test('a rally is told, with how shaken the unit is; taking heart is the side\'s own business', () => {
   const rallied = { type: 'rallied', turn: 4, unitId: 'red_spears', at: at('E7'), strength: 61, morale: 18 }
-  assert.match(fact(map, rallied), /^red_spears rallied .*\(B2-SW\) with 61 men, badly shaken/)
+  assert.match(fact(map, rallied), /^red_spears rallied .*\(B2-SW\) with 61 men, at breaking point/)
   assert.doesNotMatch(fact(map, { ...rallied, morale: 60 }), /shaken/)
 
   const heart = { type: 'heartened', turn: 4, unitId: 'blue_swords', by: 'red_spears', morale: 55 }
@@ -185,7 +185,7 @@ test('an officer reacting as ordered, or losing the thread, is told to his own s
   const lost = { type: 'lostThread', turn: 4, unitId: 'red_archers', officer: 'Marcus', lost: 'steps', did: 'advance' }
   const roll = { type: 'grasp', turn: 1, unitId: 'red_spears', officer: 'Marcus', clauses: 2, kept: 1 }
   assert.equal(fact(map, reacted), 'red_spears saw the enemy it was warned of (cavalry) and, as ordered, held')
-  assert.equal(fact(map, lost), 'Marcus of red_archers lost the thread of his orders once the first part was done and went at the enemy')
+  assert.equal(fact(map, lost), 'Marcus of red_archers lost the thread of his orders once the first part was done and advanced on the enemy')
   assert.deepEqual(visibleEvents([reacted, lost, roll], knowledge), [reacted, lost])
   const theirs = { ownIds: new Set(['blue_swords']), seenEnemyIds: new Set(['red_spears', 'red_archers']) }
   assert.deepEqual(visibleEvents([reacted, lost, roll], theirs), [], 'the enemy learns nothing of your orders')

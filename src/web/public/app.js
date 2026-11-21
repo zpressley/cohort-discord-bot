@@ -68,7 +68,7 @@ function ago(at) {
 const STATUS = { 'your-orders': 'Your orders', waiting: 'Waiting on the enemy', finished: 'Finished' }
 const WHY = {
   contact: 'blows were struck', sighting: 'the enemy was sighted', time: 'an hour passed',
-  stalled: 'all was quiet', ready: 'your orders were carried out', fire: 'missiles flew', rallied: 'a broken unit rallied', objective: 'ground changed hands', decided: 'the battle was decided',
+  stalled: 'all was quiet', ready: 'your orders were carried out', fire: 'there was shooting', rallied: 'a broken unit rallied', objective: 'ground changed hands', decided: 'the battle was decided',
   surrender: 'a commander yielded'
 }
 const sideName = (side) => side.charAt(0).toUpperCase() + side.slice(1)
@@ -82,7 +82,7 @@ const optionWords = (o) => {
 // broken"); a commander reads it from their own.
 const REASONS = {
   'enemy army broken': ['The enemy army broke', 'Your army broke'],
-  'enemy army collapsed': ['The enemy army collapsed', 'Your army collapsed'],
+  'enemy army collapsed': ['The enemy army was destroyed', 'Your army was destroyed'],
   'enemy surrendered': ['The enemy yielded', 'You yielded'],
   'objectives held': ['You held the field', 'The enemy held the field'],
   'time ran out: fewer losses': ['The day ended, and the enemy lost more', 'The day ended, and you lost more'],
@@ -146,7 +146,7 @@ async function battles() {
   const group = (status) => lines.filter(l => l.status === status)
   const card = (l) => {
     const verdict = verdictWords(l)
-    const opponent = l.opponent === 'standing' ? 'against the standing orders' : 'against a friend'
+    const opponent = l.opponent === 'standing' ? 'against the computer' : 'against a friend'
     const when = l.status === 'waiting' ? `your orders went ${ago(l.sentAt)}` : `turn ${l.turn} · ${clock(l.minutes)}`
     return `<a class="battle-link${l.status === 'your-orders' ? ' mine' : ''}" href="/b/${esc(l.token)}" data-link>
       <strong>${esc(l.title)}</strong>
@@ -181,7 +181,7 @@ async function muster() {
         </label>
         <fieldset>
           <legend>Your opponent</legend>
-          <label class="choice"><input type="radio" name="opponent" value="standing" checked> The standing orders (play alone)</label>
+          <label class="choice"><input type="radio" name="opponent" value="standing" checked> The computer (play alone)</label>
           <label class="choice"><input type="radio" name="opponent" value="friend"> A friend, by link</label>
         </fieldset>
         <label class="field">You command

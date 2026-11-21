@@ -51,7 +51,7 @@ test('read back, then send: alone, the turn runs at once and a dispatch arrives'
     const token = (await app.api('POST', '/api/battles', { opponent: 'standing', side: 'red' })).body.seats.red
     const read = (await app.api('POST', `/api/seat/${token}/read`, { text: 'spears to the ridge to the west' })).body
     assert.equal(read.questions.length, 0)
-    assert.match(read.understood[0], /^Spears: move Shepherd's Ridge/)
+    assert.match(read.understood[0], /^Spears: march to Shepherd's Ridge/)
 
     const asked = (await app.api('POST', `/api/seat/${token}/orders`, { text: 'spears to the ford' })).body
     assert.equal(asked.status, 'clarify', 'a question sends nothing')
@@ -238,7 +238,7 @@ test('one unclear order does not throw away the others: the clear ones can be se
     assert.equal(sent.status, 'turn-ran')
     assert.match(sent.notes[0], /^Not sent: Which ford/)
     const tent = (await app.api('GET', `/api/seat/${token}`)).body
-    assert.match(tent.own.find(u => u.name === 'Swords').order, /^moving to/)
+    assert.match(tent.own.find(u => u.name === 'Swords').order, /^marching to/)
     assert.equal(tent.own.find(u => u.name === 'Spears').order, 'holding (no orders yet)')
 
     // Nothing understood at all: there is no "rest" to send.
@@ -283,7 +283,7 @@ test('officers: named on the Army tab, counsel before a deep order, and the chai
     const sage = tent.own.find(u => u.officer.grade !== 'green')
     const text = `${green.name} to D6, then on to E6, then dig in`
     const read = (await app.api('POST', `/api/seat/${token}/read`, { text })).body
-    assert.match(read.understood[0], new RegExp(`^${green.name}: move D6 \\(D6-NW\\); then defend E6 \\(E6-NW\\)$`))
+    assert.match(read.understood[0], new RegExp(`^${green.name}: march to D6 \\(D6-NW\\); then march to E6 \\(E6-NW\\) and hold it$`))
     assert.match(read.counsel[0], new RegExp(`^${sage.officer.name} of ${sage.name} warns: ${green.officer.name} of ${green.name} is green\\.`))
     assert.deepEqual((await app.api('POST', `/api/seat/${token}/read`, { text: `${green.name} to D6` })).body.counsel, [])
 

@@ -54,7 +54,7 @@ test('a chain reaches the engine whole, each step placed from where the one befo
   assert.equal(gridLabel(order.target), 'C4')
   assert.equal(map.terrainAt(order.steps[0].target), 'bridge')
   assert.equal(order.steps[0].then, 'hold')
-  assert.match(result.understood[0], /^red_swords: move C4 \(C4-NW\); then defend Harrow Bridge 75 m south-west \(B4-SE\)$/)
+  assert.match(result.understood[0], /^red_swords: march to C4 \(C4-NW\); then march to Harrow Bridge 75 m south-west \(B4-SE\) and hold it$/)
   assert.doesNotThrow(() => normalizeOrder(order), 'and the engine takes it as given')
 })
 
@@ -119,7 +119,7 @@ test('the AI: a condition on an order, and steps as orders for the same unit', a
 test('counsel: an experienced officer warns that a green one will not hold a deep order', () => {
   const result = read('spears to C4, then on to the bridge')
   assert.equal(result.counsel.length, 1)
-  assert.match(result.counsel[0], /^Quintus of red_swords warns: Marcus of red_spears is green\. Expect him to keep "move C4" and lose the rest; if he loses the thread, he will go at the enemy\.$/)
+  assert.match(result.counsel[0], /^Quintus of red_swords warns: Marcus of red_spears is green\. Expect him to keep "march to C4 \(C4-NW\)" and lose the rest; if he loses the thread, he will advance on the enemy\.$/)
 })
 
 test('counsel says nothing of a plain order, or of a veteran, and speaks for itself when it must', () => {
@@ -136,6 +136,6 @@ test('counsel needs an experienced officer to give it, and warns of shaken men s
   assert.deepEqual(read('spears to C4, then on to the bridge', greens).counsel, [], 'no one on the field knows better')
 
   const shaken = { ...context, shaken: ['red_spears'] }
-  assert.match(read('spears advance', shaken).counsel[0], /red_spears are badly shaken\. Sent at the enemy now, they will break at the first blow\.$/)
+  assert.match(read('spears advance', shaken).counsel[0], /red_spears are at breaking point\. Sent at the enemy now, they will break at the first blow\.$/)
   assert.deepEqual(read('spears hold', shaken).counsel, [])
 })

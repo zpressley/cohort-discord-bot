@@ -14,6 +14,7 @@
 
 const { resolveUnitReference } = require('../engine/movement/unitResolver')
 const ranged = require('../engine/combat/ranged')
+const { orderWords } = require('../narrator/words')
 const { gradeOf, MAX_STEPS } = require('../engine/command/officers')
 const { findPlace, DIRECTIONS, TILE_METRES } = require('../engine/map/places')
 const { isGridRef, gridTarget, gridLabel } = require('../engine/map/grid')
@@ -193,6 +194,7 @@ function resolveIntents(intents, context) {
 
     let target = null
     let where = ''
+    let relative = false
     // "everyone 200 m north": each unit goes that way from where it stands.
     let perUnit = null
     if (intent.place) {
@@ -207,7 +209,8 @@ function resolveIntents(intents, context) {
         continue
       }
       target = place.position
-      where = ` ${place.description}`
+      where = place.description
+      relative = Boolean(place.relative)
     } else if (intent.action === 'move') {
       questions.push(`Where should ${intent.unitRef} go?`)
       continue
@@ -237,16 +240,18 @@ function resolveIntents(intents, context) {
       })
     }
     const who = match.units.map(u => u.id).join(', ')
-    const what = intent.action === 'move' && intent.then === 'hold' ? 'defend' : intent.action
-    const at = !target ? '' : perUnit ? '' : ` (${gridLabel(target, { quarter: true })})`
-    let line = `${who}: ${what}${extras.careful ? ' carefully' : ''}${where}${at}`
+    // The order in the app's one vocabulary (narrator/words.js): "march to
+    // Miller's Crossing 250 m east (F6-NW)", "fall back", "search the woods".
+    const place = !target ? null : perUnit ? where : `${where} (${gridLabel(target, { quarter: true })})`
+    const plain = orderWords('say', { ...intent, careful: extras.careful }, place, { relative })
+    let line = `${who}: ${plain}`
     if (intent.action === 'hide' || intent.action === 'ambush') {
       line += ` — ${coverWords(map, match.units[0], target ?? match.units[0].position)}`
     }
     if (intent.action === 'ambush') line += `; ${ambushTerms(intent)}`
     line += deep.words
     understood.push(line)
-    counsel.push(...counselFor(match.units, units, { clauses: deep.clauses, action: intent.action, plain: `${what}${where}`, shaken: context.shaken ?? [] }))
+    counsel.push(...counselFor(match.units, units, { clauses: deep.clauses, action: intent.action, plain, shaken: context.shaken ?? [] }))
   }
 
   return { orders, questions, notes, choices, surrender, understood, counsel }
@@ -257,18 +262,19 @@ function resolveIntents(intents, context) {
 // One further step, or the thing to do when a condition comes true.
 function resolveStep(map, origin, step) {
   let target = null
-  let where = ''
+  let where = null
+  let relative = false
   if (step.place) {
     const place = resolvePlace(map, origin, step.place)
     if (place.question) {
       return { question: place.question, choice: place.options ? { question: place.question, place: step.place, options: place.options } : null }
     }
     target = place.position
-    where = ` ${place.description} (${gridLabel(target, { quarter: true })})`
+    where = `${place.description} (${gridLabel(target, { quarter: true })})`
+    relative = Boolean(place.relative)
   } else if (step.action === 'move') {
     return { question: 'Where should they go next?' }
   }
-  const what = step.action === 'move' && step.then === 'hold' ? 'defend' : step.action
   return {
     order: {
       action: step.action,
@@ -276,7 +282,7 @@ function resolveStep(map, origin, step) {
       ...(step.then ? { then: step.then } : {}),
       ...(step.careful ? { careful: true } : {})
     },
-    words: `${what}${where}`
+    words: orderWords('say', step, where, { relative })
   }
 }
 
@@ -351,7 +357,7 @@ function counselFor(ordered, all, { clauses, action, plain, shaken }) {
       const grade = gradeOf(unit.officer)
       const self = unit.id === sage.id
       if (grade === 'green') {
-        says(unit, `${unit.officer.name} of ${unit.id} is green. Expect him to keep "${plain.trim()}" and lose the rest; ${losesTo(unit.officer)}.`)
+        says(unit, `${unit.officer.name} of ${unit.id} is green. Expect him to keep "${plain}" and lose the rest; ${losesTo(unit.officer)}.`)
       } else if (grade === 'seasoned' && clauses > 1) {
         says(unit, self
           ? `I can hold the first part of that. The rest I may lose; ${losesTo(unit.officer, true)}.`
@@ -359,7 +365,7 @@ function counselFor(ordered, all, { clauses, action, plain, shaken }) {
       }
     }
     if (shaken.includes(unit.id) && (action === 'advance' || action === 'attack')) {
-      says(unit, `${unit.id} are badly shaken. Sent at the enemy now, they will break at the first blow.`)
+      says(unit, `${unit.id} are at breaking point. Sent at the enemy now, they will break at the first blow.`)
     }
   }
   return out
@@ -369,7 +375,7 @@ function counselFor(ordered, all, { clauses, action, plain, shaken }) {
 function losesTo(officer, self = false) {
   const he = self ? 'I' : 'he'
   switch (officer.personality) {
-    case 'bold': return `if ${he} lose${self ? '' : 's'} the thread, ${he} will go at the enemy`
+    case 'bold': return `if ${he} lose${self ? '' : 's'} the thread, ${he} will advance on the enemy`
     case 'cautious': return `if ${he} lose${self ? '' : 's'} the thread, ${he} will stop and hold`
     default: return `if ${he} lose${self ? '' : 's'} the thread, ${he} will carry on with what ${he} remember${self ? '' : 's'}`
   }

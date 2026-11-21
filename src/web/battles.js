@@ -31,6 +31,7 @@ const { lyingInWait } = require('../interpreter/resolve')
 const { assignOfficers } = require('../engine/command/roster')
 const { gradeOf } = require('../engine/command/officers')
 const { narrateTurn, report } = require('../narrator/turnNarrator')
+const { orderWords } = require('../narrator/words')
 const { loadScenario, SCENARIOS, mapChoices } = require('../adapters/hotseat/scenarios')
 const { MAPS } = require('../data/maps')
 
@@ -57,22 +58,15 @@ function unitName(unit) {
 // side's standing order: to advance (the computer's side), or to hold.
 function describeOrder(order, standing = null) {
   if (!order) return standing === 'advance' ? 'advancing on the enemy (standing orders)' : 'holding (no orders yet)'
-  const at = order.target ? ` ${where(order.target)}` : ''
-  const careful = order.careful ? ', carefully' : ''
+  // The same words the read-back and the dispatches use (narrator/words.js).
+  const doing = orderWords('doing', order, order.target ? where(order.target) : null)
+  const more = order.steps?.length ? `, then ${order.steps.length} more ${order.steps.length === 1 ? 'step' : 'steps'}` : ''
   switch (order.action) {
-    case 'hold': return 'holding'
-    case 'move': return `moving to${at}${careful}` + (order.then === 'hold' ? ', then holding' : '')
-    case 'defend': return `defending${at}${careful}`
-    case 'advance': return `advancing on the enemy${careful}`
-    case 'attack': return `attacking${at}${careful}`
-    case 'withdraw': return `falling back${at}${careful}`
-    case 'hide': return `hiding${at}`
-    case 'check': return `searching the ground${at}`
-    case 'ambush': return `lying in ambush${at}` +
+    case 'ambush': return doing +
       (order.against ? `, for ${order.against}` : '') +
       (order.letPass ? `, letting ${order.letPass} pass` : '') +
-      (order.regardless ? ', whatever happens' : '')
-    default: return order.action
+      (order.regardless ? ', whatever happens' : '') + more
+    default: return doing + more
   }
 }
 
@@ -337,7 +331,7 @@ function createBattleStore({ dir = null, ai = null, now = () => Date.now() } = {
         order: battle.broken.has(u.id)
           ? 'broken and fleeing'
           : describeOrder(battle.orderBook.get(u.id), game.spec.standingOrders?.[side]) +
-            (battle.rallied?.has(u.id) ? (state && state.morale <= 25 ? ' (rallied, badly shaken)' : ' (rallied)') : ''),
+            (battle.rallied?.has(u.id) ? (state && state.morale <= 25 ? ' (rallied, at breaking point)' : ' (rallied)') : ''),
         target: battle.orderBook.get(u.id)?.target ?? null
       }
     })

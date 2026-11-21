@@ -77,7 +77,7 @@ test('places resolve from where the units stand, and the player gets a read-back
   const read = interpretLines(['spears to the ridge to the east'], context)
   assert.equal(read.questions.length, 0)
   assert.equal(toLabel(read.orders[0].target), 'T2', 'The Crownhill')
-  assert.match(read.understood[0], /red_spears: move The Crownhill \d+ m east \(E1-NE\)/,
+  assert.match(read.understood[0], /red_spears: march to The Crownhill \d+ m east \(E1-NE\)/,
     'the read-back gives the grid quarter')
 
   const defend = interpretLines(['archers defend the woods'], context)
@@ -147,7 +147,7 @@ test('AI: a name for an id is accepted when it means one unit, and a second orde
   assert.equal(gridLabel(read.orders[0].target), 'C2')
   assert.equal(read.orders[0].steps.length, 1)
   assert.equal(map.terrainAt(read.orders[0].steps[0].target), 'bridge')
-  assert.match(read.understood[0], /^red_spears: move C2 \(C2-NW\); then move Harrow Bridge/)
+  assert.match(read.understood[0], /^red_spears: march to C2 \(C2-NW\); then march to Harrow Bridge/)
 })
 
 test('plain orders never reach the AI; only what the grammar cannot read does', async () => {

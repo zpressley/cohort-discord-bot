@@ -352,3 +352,29 @@ are the particulars it left open, as first built.
   Names come from the unit's culture (placeholder lists).
 - **Orders are given once per player turn.** The turn loop used to hand
   the same orders in again every ten-minute tick.
+
+### One vocabulary (asked by Zach, 2026-11-21: "make sure language is consistent throughout the app")
+
+The words the app uses to the Commander are in one place,
+`src/narrator/words.js`, and the read-back, the Army tab, counsel and the
+dispatches all take them from there.
+
+| The thing | The word |
+|---|---|
+| The player | the Commander |
+| The man who carries his orders to a unit | an officer (green, seasoned or veteran; bold, steady or cautious) |
+| The other side's player | your opponent; its forces are the enemy |
+| The side with no player | the computer |
+| The engine's move, hold, advance, attack, withdraw, hide, check, ambush | march, hold, advance on the enemy, attack, fall back, hide, search, lie in ambush |
+| Go somewhere and hold it (the engine's defend) | march to ... and hold it |
+| Missile troops | shoot, hold fire |
+| Morale above 50, 50 or under, 25 or under | firm, wavering, at breaking point |
+| What becomes of a unit | broke, rallied, left the field, destroyed |
+
+Changed to fit: the read-back said "move Miller's Crossing", the Army tab
+"moving to", a dispatch "made for"; a unit at 25 morale was "at breaking
+point" in one place and "badly shaken" in another; a unit "escaped the
+field" or "left the field"; an army that lost four men in five had
+"collapsed" (now "was destroyed", as a unit is); the computer opponent was
+"the standing orders". "Steady" is kept for an officer's nature, so morale
+uses "firm".
