@@ -14,7 +14,6 @@ const assert = require('node:assert/strict')
 const { MAPS } = require('../../../data/maps')
 const { resolveMap, createMap } = require('../map')
 const { toLabel, fromLabel, toPosition } = require('../labels')
-const legacy = require('../../../game/maps/mapUtils')
 
 function everyTile(map) {
   const tiles = []
@@ -70,16 +69,5 @@ test('labels are read case-blind; anything else is refused, not guessed', () => 
   assert.deepEqual(toPosition({ x: 3, y: 4 }), { x: 3, y: 4 })
   for (const bad of ['', 'A0', '12', 'A-1', 'A1B', null, { x: 1.5, y: 0 }]) {
     assert.throws(() => toPosition(bad), `${JSON.stringify(bad)} must be refused`)
-  }
-})
-
-test('the live bot\'s mapUtils labels agree with the engine on Crownhill', () => {
-  // The legacy Discord bot still parses coordinates itself. Until it runs on
-  // the engine, the two must name every tile the same way.
-  const map = resolveMap('crownhill')
-  for (const { x, y } of everyTile(map)) {
-    const label = legacy.coordToString({ row: y, col: x })
-    assert.equal(label, toLabel({ x, y }))
-    assert.deepEqual(legacy.parseCoord(label), { row: y, col: x })
   }
 })

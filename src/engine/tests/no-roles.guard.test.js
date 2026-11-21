@@ -10,9 +10,8 @@
 // Scanned: the engine and everything built on it since the restart
 // (src/engine, src/harness, src/adapters, src/interpreter, src/narrator;
 // source and tests) and the three combat design docs Stage 0 cleaned.
-// Not scanned: archive/, docs/DECISIONS.md, the legacy live bot (src/game,
-// src/bot and friends, slated for archive/), and this file, which has to name
-// the words to ban them.
+// Not scanned: archive/ (where the legacy Discord bot now lives),
+// docs/DECISIONS.md, and this file, which has to name the words to ban them.
 
 const { test } = require('node:test')
 const assert = require('node:assert/strict')

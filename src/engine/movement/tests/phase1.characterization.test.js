@@ -12,7 +12,23 @@ const { MOVEMENT_COSTS } = require('../../map/terrain')
 const { resolveMap } = require('../../map/map')
 const { fromLabel, toLabel, distance } = require('../../map/labels')
 const { resolve: resolveOn, listLandmarks: listOn } = require('../../map/landmarkResolver')
-const { createUnit } = require('../../../adapters/discord/movement-demo/unitState')
+
+// The one unit these tests march about: the movement demo's (the demo itself
+// went to archive/ with the Discord bot).
+function createUnit(overrides = {}) {
+  return {
+    id: 'roman_infantry_1',
+    culture: 'Roman Republic',
+    role: 'heavy_infantry',
+    position: { x: 3, y: 3 },
+    strength: 340,
+    maxStrength: 400,
+    movementRange: 3,
+    mounted: false,
+    aliases: ['the infantry', 'heavy infantry', 'the legionaries', 'the romans', 'the men', 'the troops'],
+    ...overrides
+  }
+}
 
 // Phase 1 was Crownhill and string coordinates. Stage 1 made the map a value
 // and positions numeric; these helpers keep the pins readable in labels.

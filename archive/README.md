@@ -39,11 +39,25 @@ fixed order grammar ("spears to K7", landmarks by name only). Replaced in
 Stage 2 by `src/interpreter/` (the grammar, the AI reader and place
 resolution shared by every interface). Archived 2026-10-21.
 
-## What is not here, and why
+**The Discord bot (`src/`, `scripts/`, and four files at the top).** The
+whole pre-restart game: the bot and its commands (`src/bot`, `src/index.js`,
+`deploy-commands.js`), the legacy battle engine and turn loop (`src/game`,
+including `battleEngine.js`), its AI calls (`src/ai`,
+`src/interpreter/intentParser.js`, `src/narrator/narrator.js`), the SQLite
+models (`src/database`), commander names (`src/commanderName`), the movement
+demo (`src/adapters/discord`), its tests (`src/tests`, the `test_*.js`
+files) and its scripts. Retired by the ruling of 2026-11-21
+(`docs/DECISIONS.md`): the game is the pure engine in `src/engine` with the
+web app and the hotseat on top, and nothing in them used this code.
+Archived 2026-11-21.
 
-`src/game/battleEngine.js` (the legacy combat engine) was scheduled to move
-here but did not. The live Discord bot still imports it from
-`src/game/turnOrchestrator.js`, `src/game/movement.js` and
-`src/game/orders.js`, and CI's `test:core` imports it too. Moving it would
-break the bot. See the Stage 0 entries in the contradiction log in
-`docs/design/architecture-roadmap.md` §8.
+It will not run from here: its packages (discord.js, sequelize, sqlite3 and
+the AI SDKs) were removed from `package.json` with it, which is what took
+`npm audit` from 24 known vulnerabilities to none. To run it, check out
+the commit before this move and `npm ci` there.
+
+Three things went with it: CI's `test:core` step (it tested the legacy
+engine; CI now runs `npm test` and `npm run soak`), the guard test for the
+bot's army builder (`src/adapters/discord/tests`), and the check that the
+bot's map labels agreed with the engine's (the last test of
+`src/engine/map/tests/every-tile.test.js`, removed there).
