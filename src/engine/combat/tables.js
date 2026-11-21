@@ -459,10 +459,64 @@ const PURSUIT = {
   MAX_PURSUERS: 2           // more than two cannot reach a fleeing column
 }
 
+// ── Pace ───────────────────────────────────────────────
+//
+// How much of a combat round is fought in one ten-minute tick of a battle.
+// The tables are tuned in rounds, and a tick is one round: PER_TICK is 1.
+//
+// It was tried at 0.4 (2026-11-21) to make battles longer, and ruled back
+// the same day: "the design direction was for the ability to go longer,
+// not for the whole experience to change". The length comes from rallying,
+// split effort and a verdict that waits for units that may yet rally:
+// measured over 32 battles in the web app, about 140 minutes of battle
+// time at 1, against 50 before those rules. Lowering this slows every fight
+// (at 0.8, about 170 minutes; at 0.4, about 200) and is kept as a knob, and
+// as `combatPace` on a battle's spec, for a scenario that wants it.
+
+const PACE = {
+  PER_TICK: 1
+}
+
+// ── Rallying, and taking heart ─────────────────────────
+//
+// Ruled 2026-11-21, in place of "morale only goes down": "Broken unit can
+// rally at a safe distance and if not pursued. Morale only recovers with
+// nearby success or a commander's presence."
+//
+// A broken unit with no formed enemy within SAFE_TILES stops running and
+// forms up. Its morale is what it was: shaken, and likely to break again at
+// the first blow unless friends succeed near it.
+//
+// It may rally any number of times. What stops it is how worn it is (ruled
+// the same day: "the combat fatigue threshold is the right limiter, but
+// have it impact the overall morale formula so that it's not always 30% and
+// some veteran units rally because they are more experienced"). A unit's
+// condition is the share of its men still standing times its fatigue (the
+// one fatigue curve, 1 when fresh down to 0.5 when spent). It can rally
+// while its condition is at least CONDITION divided by its morale
+// resistance, the same divisor the morale formula uses: the quality tier,
+// plus what a veteran unit has earned. So fresh troops need:
+//   levy 64% of their men, militia 46%, professionals and tribal warriors
+//   30%, elite 22%; and more than that when they are tired.
+//
+// When an enemy unit breaks or is destroyed, every unit of the other side
+// within RANGE of it takes heart: MORALE points, never above the starting
+// morale. (A commander's presence waits for commanders on the field.)
+
+const RALLY = {
+  SAFE_TILES: 6,
+  CONDITION: 0.64
+}
+
+const HEART = {
+  RANGE: 6,
+  MORALE: 8
+}
+
 // ── Morale ─────────────────────────────────────────────
 //
-// [locked decision 5] Monotonic down. No recovery inside an engagement —
-// reinforcements and visible victory elsewhere are a phase 8 feature.
+// [locked decision 5, replaced 2026-11-21] Morale falls in a fight and rises
+// only with success nearby (HEART above); a broken unit may rally (RALLY).
 //
 // Morale is a 0-100 pool on every unit (the harness already carries the field).
 // The tier's `morale` stat is not the pool size; it is RESISTANCE, a divisor on
@@ -574,6 +628,9 @@ module.exports = {
   EXPOSURE,
   SURPRISE,
   PURSUIT,
+  PACE,
+  RALLY,
+  HEART,
   MORALE,
   DAMAGE,
   CHARGE,

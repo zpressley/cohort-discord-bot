@@ -36,6 +36,9 @@ const { crowdingByUnit } = require('../movement/occupancy')
  *   scenario runner drives one turn at a time, so this is where the two clocks
  *   meet. Default 1 — one call, one round — which is what the three tactical
  *   scenarios were scripted against.
+ * @param {number} [options.pace]  the share of a round fought per call
+ *   (tables.PACE). Default 1, a whole round: the duel harness and the
+ *   balance matrix. A battle passes PACE.PER_TICK.
  * @param {string} [options.situation]  key into SITUATION_CHAOS
  * @param {Object} [options.prepared]  unitId -> boolean, overriding the
  *   movement inference below.
@@ -53,6 +56,7 @@ const { crowdingByUnit } = require('../movement/occupancy')
  */
 function createCombatResolver(options = {}) {
   const roundsPerTurn = options.roundsPerTurn ?? 1
+  const pace = options.pace ?? 1
   const situation = options.situation ?? 'meeting_engagement'
   const preparedOverride = options.prepared ?? null
   const chargingOverride = options.charging ?? null
@@ -239,20 +243,32 @@ function createCombatResolver(options = {}) {
 
         const exchange = D.resolveExchange(a, b, aCtx, bCtx)
 
-        const aKilled = takeCasualties(aState, exchange.a.detail.raw, a.strength)
-        const bKilled = takeCasualties(bState, exchange.b.detail.raw, b.strength)
+        // Split effort: a unit fighting several enemies at once divides its
+        // men among them. What it deals in each fight, and what the fighting
+        // costs it in wind and nerve, is its share; what it suffers in each
+        // is the enemy's share. So three units on one each land a third of
+        // the one's blows and all of their own. Before, the one dealt its
+        // full weight to each of the three. In a duel both shares are 1.
+        const aShare = 1 / (engagementCounts.get(a.id) ?? 1)
+        const bShare = 1 / (engagementCounts.get(b.id) ?? 1)
+        const aMorale = moraleShare(exchange.a.moraleDamage, bShare, aShare) * pace
+        const bMorale = moraleShare(exchange.b.moraleDamage, aShare, bShare) * pace
+
+        const aKilled = takeCasualties(aState, exchange.a.detail.raw * bShare * pace, a.strength)
+        const bKilled = takeCasualties(bState, exchange.b.detail.raw * aShare * pace, b.strength)
 
         addCasualty(casualties, a.id, aKilled)
         addCasualty(casualties, b.id, bKilled)
 
-        // [locked decision 5] Morale is monotonic down and floors at zero.
-        aState.morale = Math.max(0, aState.morale - exchange.a.moraleDamage.total)
-        bState.morale = Math.max(0, bState.morale - exchange.b.moraleDamage.total)
-        aState.moraleDamageTaken += exchange.a.moraleDamage.total
-        bState.moraleDamageTaken += exchange.b.moraleDamage.total
+        // Morale falls in a fight and floors at zero. (It rises only with
+        // success nearby: hearten, below.)
+        aState.morale = Math.max(0, aState.morale - aMorale)
+        bState.morale = Math.max(0, bState.morale - bMorale)
+        aState.moraleDamageTaken += aMorale
+        bState.moraleDamageTaken += bMorale
 
-        aState.stamina = Math.max(0, aState.stamina - exchange.a.staminaDrain)
-        bState.stamina = Math.max(0, bState.stamina - exchange.b.staminaDrain)
+        aState.stamina = Math.max(0, aState.stamina - exchange.a.staminaDrain * aShare * pace)
+        bState.stamina = Math.max(0, bState.stamina - exchange.b.staminaDrain * bShare * pace)
 
         contactRounds.set(key, roundsInContact + 1)
 
@@ -345,6 +361,28 @@ function createCombatResolver(options = {}) {
     state.moraleDamageTaken += amount
     return state.morale
   }
+  // Is this unit in a state to form up again? Men standing and fatigue,
+  // against a bar its experience lowers (tables.RALLY).
+  resolveCombat.canRally = (unit) => {
+    if (!(unit.strength > 0)) return false
+    const men = unit.strength / (unit.maxStrength || unit.strength)
+    const fatigue = R.fatigueMultiplier(stateFor(unit).stamina / R.staminaPool(unit))
+    return men * fatigue >= T.RALLY.CONDITION / R.moraleResistance(unit)
+  }
+  // A broken unit forms up again (ruled 2026-11-21). Its morale is what it
+  // was: rallying brings back order, not heart.
+  resolveCombat.rally = (unit) => {
+    const state = stateFor(unit)
+    state.routed = false
+    state.routedOnTurn = null
+    return state.morale
+  }
+  // Success nearby lifts a unit's morale, never above where it began.
+  resolveCombat.hearten = (unit, amount) => {
+    const state = stateFor(unit)
+    state.morale = Math.min(T.MORALE.START, state.morale + amount)
+    return state.morale
+  }
   resolveCombat.snapshot = () => {
     const out = {}
     for (const [id, state] of unitState) out[id] = { ...state }
@@ -413,6 +451,17 @@ function breakingLoser(aState, bState, a, b) {
     return aState.moraleDamageTaken > bState.moraleDamageTaken ? 'a' : 'b'
   }
   return null
+}
+
+// A unit's morale loss in one fight, when effort is split. The blows it
+// takes (casualties, being shoved) come at the enemy's share; the wear of
+// its own fighting (chaos, exhaustion) at its own share, so that a unit in
+// three fights is not three times as tired as one in a single fight.
+function moraleShare(damage, enemyShare, ownShare) {
+  const sum = damage.fromCasualties + damage.fromPush + damage.fromChaos + damage.fromExhaustion
+  if (!(sum > 0)) return 0
+  const resisted = damage.total / sum
+  return resisted * ((damage.fromCasualties + damage.fromPush) * enemyShare + (damage.fromChaos + damage.fromExhaustion) * ownShare)
 }
 
 function rout(state, unit, victor, turn, events, routed) {

@@ -319,7 +319,10 @@ function createBattleStore({ dir = null, ai = null, now = () => Date.now() } = {
         broken: battle.broken.has(u.id),
         hidden: battle.hidden.has(u.id),
         crowding: battle.crowding.get(u.id) ?? 'organized',
-        order: battle.broken.has(u.id) ? 'broken and fleeing' : describeOrder(battle.orderBook.get(u.id), game.spec.standingOrders?.[side]),
+        order: battle.broken.has(u.id)
+          ? 'broken and fleeing'
+          : describeOrder(battle.orderBook.get(u.id), game.spec.standingOrders?.[side]) +
+            (battle.rallied?.has(u.id) ? (state && state.morale <= 25 ? ' (rallied, badly shaken)' : ' (rallied)') : ''),
         target: battle.orderBook.get(u.id)?.target ?? null
       }
     })

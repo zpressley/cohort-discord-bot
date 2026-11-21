@@ -16,7 +16,9 @@ const HOLD = { red: [], blue: [] }
 module.exports = {
   name: 'meeting-battle',
   seed: 1,
-  maxTurns: 20,
+  // Twenty until 2026-11-21. Broken units may rally now, so a battle runs
+  // longer (18 to 24 turns over 200 seeds); the cap leaves room.
+  maxTurns: 40,
   engagementRange: 1,
 
   // Both armies are attacking: any unit the script leaves idle presses the

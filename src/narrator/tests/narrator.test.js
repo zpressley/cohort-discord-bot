@@ -152,3 +152,20 @@ test('secrets: an unseen enemy\'s name is not given away', () => {
   assert.match(told, /an enemy no one had seen/)
   assert.doesNotMatch(told, /blue_lurkers/)
 })
+
+test('a rally is told, with how shaken the unit is; taking heart is the side\'s own business', () => {
+  const rallied = { type: 'rallied', turn: 4, unitId: 'red_spears', at: at('E7'), strength: 61, morale: 18 }
+  assert.match(fact(map, rallied), /^red_spears rallied .*\(B2-SW\) with 61 men, badly shaken/)
+  assert.doesNotMatch(fact(map, { ...rallied, morale: 60 }), /shaken/)
+
+  const heart = { type: 'heartened', turn: 4, unitId: 'blue_swords', by: 'red_spears', morale: 55 }
+  assert.deepEqual(visibleEvents([heart, rallied], knowledge), [rallied], "the enemy's morale is not ours to read")
+  assert.match(fact(map, { ...heart, unitId: 'red_archers', by: 'blue_swords' }), /red_archers took heart at the breaking of blue_swords/)
+})
+
+test('everyone who took heart at one enemy\'s breaking is told in one line', () => {
+  const heart = (unitId) => ({ type: 'heartened', turn: 4, unitId, by: 'blue_swords', morale: 60 })
+  const told = summarise([heart('red_spears'), heart('red_archers')])
+  assert.equal(told.length, 1)
+  assert.equal(fact(map, told[0]), 'red_spears and red_archers took heart at the breaking of blue_swords')
+})

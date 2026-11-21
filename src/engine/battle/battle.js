@@ -62,13 +62,16 @@ function createBattleState(spec, options = {}) {
     map: resolveMap(spec.map),
     world: createWorld({ units: spec.units }),
     random: createRng(seed),
-    resolver: createCombatResolver(),
+    // A tick of a battle is a share of a combat round (tables.PACE).
+    resolver: createCombatResolver({ pace: spec.combatPace ?? T.PACE.PER_TICK }),
     log: createEventLog(),
     // Phase 4 owns these two flags. They deliberately do NOT live in the
     // harness world model — phase 2's scenarios and the balance matrix have no
     // concept of a unit that is broken but alive, and adding the field there
     // would make every existing snapshot lie about it.
     broken: new Set(),
+    // How many times each unit has rallied.
+    rallied: new Map(),
     fledUnits: [],
     // Each unit's standing order (see orders.js): unitId -> normalized order.
     // Orders persist until replaced or done.
@@ -105,6 +108,22 @@ function stepTurn(state, sideOrders = {}) {
   state.turn += 1
   const turn = state.turn
   world.turn = turn
+
+  // A side's standing order, for one unit. A unit that has rallied and not
+  // taken heart since (its morale still at or under the rout line) keeps
+  // out of a standing advance: it would only break again at the first
+  // blow. It holds where it formed up, behind the units still steady, and
+  // still does as it is ordered. When no steady unit is left on its side
+  // there is nothing to stand behind, and it goes forward with the rest.
+  const shaken = (unit) => state.rallied.has(unit.id) &&
+    (resolver.getState(unit.id)?.morale ?? T.MORALE.START) <= T.MORALE.ROUT_THRESHOLD
+  const steadySides = new Set(livingUnits(world)
+    .filter(u => !broken.has(u.id) && !shaken(u))
+    .map(u => u.side))
+  const standingFor = (unit) => {
+    const standing = spec.standingOrders?.[unit.side]
+    return shaken(unit) && steadySides.has(unit.side) ? null : standing
+  }
 
   // ── What each side can see as the turn opens ────
   // Surprise is judged against this: an enemy no one on a side could see
@@ -159,7 +178,7 @@ function stepTurn(state, sideOrders = {}) {
         const held = state.orderBook.get(unit.id)
         orders.push({
           ...move,
-          seeking: isSeeking(held, spec.standingOrders?.[side]),
+          seeking: isSeeking(held, standingFor(unit)),
           careful: Boolean(held?.careful)
         })
         continue
@@ -171,7 +190,7 @@ function stepTurn(state, sideOrders = {}) {
       // two willing armies cannot stall into two lines standing out of range
       // staring at each other. (A side without standing orders holds, which
       // is also a choice: a unit is allowed to stand.)
-      if (spec.standingOrders?.[side] === 'advance') {
+      if (standingFor(unit) === 'advance') {
         const enemy = nearestEnemy(world, unit, broken, state.hidden)
         if (enemy) orders.push({ unitId: unit.id, target: enemy.position, seeking: true })
       }
@@ -333,7 +352,7 @@ function stepTurn(state, sideOrders = {}) {
   // hidden force lets a column march by unless it chooses to strike.
   const seeking = (id) => {
     const unit = getUnit(world, id)
-    return sprung.has(id) || isSeeking(state.orderBook.get(id), spec.standingOrders?.[unit.side])
+    return sprung.has(id) || isSeeking(state.orderBook.get(id), standingFor(unit))
   }
   const seenNow = sightBySide(map, world, state.hidden)
   const picksFight = (id, otherId) =>
@@ -375,6 +394,8 @@ function stepTurn(state, sideOrders = {}) {
       if (!seeking(by) || !marching.has(target)) continue
       if (seenAtStart.get(victim.side)?.has(by)) continue
       if (setOut.has(by) && !seenAtStart.get(getUnit(world, by).side)?.has(target)) continue
+      // A rallied unit still shaken is in no state to spring anything.
+      if (shaken(getUnit(world, by))) continue
       surprises.push(by)
       log.emit('surprise', turn, { unitId: target, by, posture: 'marching' })
     }
@@ -409,6 +430,28 @@ function stepTurn(state, sideOrders = {}) {
       log.emit('rout', turn, { unitId: rout.unitId, by: rout.by })
       applyPursuit(world, getUnit(world, rout.unitId), turn, log, broken)
     }
+
+    // ── Taking heart ──────────────────────────────
+    // An enemy breaking, or cut down to the last man, lifts everyone of the
+    // other side who is near enough to see it (ruled 2026-11-21: morale
+    // comes back only with success nearby). One event a unit, however many
+    // enemies went at once.
+    const beaten = [
+      ...combat.routed.map(r => r.unitId),
+      ...casualties.filter(c => c.destroyed).map(c => c.unitId)
+    ]
+    const lifted = new Map()
+    for (const id of [...new Set(beaten)].sort()) {
+      const loser = getUnit(world, id)
+      if (!loser) continue
+      for (const friend of livingUnits(world)) {
+        if (friend.side === loser.side) continue
+        if (tileDistance(friend.position, loser.position) > T.HEART.RANGE) continue
+        const morale = resolver.hearten(friend, T.HEART.MORALE)
+        lifted.set(friend.id, { unitId: friend.id, by: lifted.get(friend.id)?.by ?? id, morale })
+      }
+    }
+    for (const id of [...lifted.keys()].sort()) log.emit('heartened', turn, lifted.get(id))
   }
 
   // ── Pursuit of units already in flight ──────────
@@ -421,6 +464,26 @@ function stepTurn(state, sideOrders = {}) {
     if (log.forTurn(turn).some(e => e.type === 'rout' && e.unitId === unit.id)) continue
     const trapped = samePosition(positionsAtTurnStart.get(unit.id), unit.position)
     applyPursuit(world, unit, turn, log, broken, trapped)
+  }
+
+  // ── Rallying ────────────────────────────────
+  // A broken unit that has got clear (no formed enemy within SAFE_TILES,
+  // so no one is chasing it) stops running and forms up (ruled 2026-11-21).
+  // Not in the turn it broke; not a unit too worn to re-form (how worn
+  // depends on its men, its fatigue and its experience: RALLY). It comes
+  // back with the morale it had, and under no order: its side's standing
+  // order, which for a commander's own units is to hold.
+  const brokeThisTurn = new Set(log.forTurn(turn).filter(e => e.type === 'rout').map(e => e.unitId))
+  for (const unit of livingUnits(world)) {
+    if (!broken.has(unit.id) || brokeThisTurn.has(unit.id) || !resolver.canRally(unit)) continue
+    const chased = livingUnits(world).some(e =>
+      e.side !== unit.side && !broken.has(e.id) && tileDistance(e.position, unit.position) <= T.RALLY.SAFE_TILES)
+    if (chased) continue
+    broken.delete(unit.id)
+    state.rallied.set(unit.id, (state.rallied.get(unit.id) ?? 0) + 1)
+    state.orderBook.delete(unit.id)
+    const morale = resolver.rally(unit)
+    log.emit('rallied', turn, { unitId: unit.id, at: { ...unit.position }, strength: unit.strength, morale })
   }
 
   // ── Searching and hiding ────────────────────
@@ -511,7 +574,7 @@ function stepTurn(state, sideOrders = {}) {
   }
 
   // ── Victory ─────────────────────────────────────
-  const outcome = checkBattleOutcome(world, broken)
+  const outcome = checkBattleOutcome(world, broken, resolver.canRally)
   if (outcome.decided) {
     state.outcome = outcome
     log.emit('victory', turn, { winner: outcome.winner, reason: outcome.reason })
@@ -749,8 +812,13 @@ function sightBySide(map, world, hidden = new Map()) {
 // A side is beaten when it has no effective units left: alive, unbroken, and
 // still on the field. Broken units still fleeing count for nothing — they are
 // running, not fighting.
-function checkBattleOutcome(world, broken) {
-  const effective = (side) => unitsOnSide(world, side).filter(u => !broken.has(u.id))
+// A side is still in the battle while it has a formed unit, or a broken one
+// that could yet rally: the field is not won the instant the last enemy
+// unit turns to run, only once the enemy has left it or cannot re-form.
+// `canRally` is the battle's own test (the resolver's, which knows how
+// tired each unit is); without one, a broken unit counts as lost.
+function checkBattleOutcome(world, broken, canRally = () => false) {
+  const effective = (side) => unitsOnSide(world, side).filter(u => u.strength > 0 && (!broken.has(u.id) || canRally(u)))
   const remaining = sides(world).filter(side => effective(side).length > 0)
 
   // sides() reads the roster, so a side whose last unit fled the field
