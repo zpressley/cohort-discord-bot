@@ -38,7 +38,7 @@ test('grammar: hide, check, ambush, attack a place, carefully', () => {
   assert.deepEqual(read('search C2'), { kind: 'order', unitRef: 'everyone', action: 'check', place: 'C2' })
   assert.deepEqual(read('spears attack the ford'), { kind: 'order', unitRef: 'spears', action: 'attack', place: 'the ford' })
   assert.equal(read('spears attack the enemy').action, 'advance', 'the enemy is not a place')
-  assert.deepEqual(read('spears spring the trap'), { kind: 'order', unitRef: 'spears', action: 'advance', place: null })
+  assert.deepEqual(read('spears spring the trap'), { kind: 'order', unitRef: 'spears', action: 'advance', place: null, spring: true })
   assert.equal(read('spring the ambush').action, 'advance')
   assert.deepEqual(read('swords march carefully to the clearing'),
     { kind: 'order', unitRef: 'swords', action: 'move', place: 'the clearing', careful: true })
@@ -136,4 +136,31 @@ test('a question about a place comes with choices: what to write instead', () =>
   const again = interpretLines([`spears to ${choice.options[0].text}`], { ...context, units: [{ ...context.units[0], position: { x: 3, y: 3 } }] })
   assert.equal(again.questions.length, 0)
   assert.equal(again.orders.length, 1)
+})
+
+// ── Review, November 2026 ──────────────────────────────
+
+test('"spring the trap" is for the units lying in wait, not the whole army', () => {
+  const waiting = { ...context, lyingInWait: ['red_spears'] }
+  const read = interpretLines(['spring the trap'], waiting)
+  assert.deepEqual(read.orders, [{ unitRef: 'red_spears', action: 'advance' }], 'the horse in reserve stays where it is')
+
+  const named = interpretLines(['horse spring the trap'], waiting)
+  assert.deepEqual(named.orders.map(o => o.unitRef), ['red_horse'], 'a unit named is the unit meant')
+
+  const noTrap = interpretLines(['spring the trap'], { ...context, lyingInWait: [] })
+  assert.equal(noTrap.orders.length, 0)
+  assert.match(noTrap.questions[0], /no trap to spring/)
+})
+
+test('seek and destroy, attack on sight: a unit hunts only when told to', async () => {
+  for (const words of ['horse seek and destroy', 'horse attack on sight', 'horse hunt them down', 'horse engage at will']) {
+    const read = interpretLines([words], context)
+    assert.deepEqual(read.orders, [{ unitRef: 'red_horse', action: 'advance' }], words)
+  }
+  // Read whole by the grammar: no AI call for it, though it holds an "and".
+  const ai = createAiClient({ transport: scriptedTransport([]) })
+  const read = await interpretText('everyone seek and destroy', context, { ai })
+  assert.equal(read.source, 'grammar')
+  assert.equal(read.orders.length, 3)
 })

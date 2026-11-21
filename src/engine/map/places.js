@@ -252,7 +252,14 @@ function findPlace(map, from, reference) {
 
   const close = ranked.filter(r => r.tiles < best.tiles * CLEAR_MARGIN.ratio || r.tiles < best.tiles + CLEAR_MARGIN.tiles)
     .slice(0, 3)
-  const options = close.map(pick)
+  const all = close.map(pick)
+  // A question is only worth asking if the commander can tell the answers
+  // apart. Two unnamed woods in the same direction read the same ("the woods
+  // 100 m east, or the woods 125 m east?"), and are often two arms of one
+  // forest: the nearest is the one meant.
+  const way = compassWord(from, all[0].position)
+  const options = all.filter((o, i) => i === 0 || o.feature.name || compassWord(from, o.position) !== way)
+  if (options.length === 1) return options[0]
   return {
     question: `Which ${ref.word ?? ref.kinds[0]}: ${options.map(o => o.description).join(', or ')}?`,
     options

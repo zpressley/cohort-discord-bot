@@ -8,6 +8,7 @@
 const { createGame, submitOrders, sideView } = require('../../engine/orchestrator')
 const { sides } = require('../../engine/world')
 const { interpretLines, interpretText } = require('../../interpreter/orders')
+const { lyingInWait } = require('../../interpreter/resolve')
 const { narrateTurn } = require('../../narrator/turnNarrator')
 const { renderMap, renderRoster, renderTurnReport } = require('./render')
 const { isGridRef } = require('../../engine/map/grid')
@@ -54,7 +55,8 @@ function createSession(spec, options = {}) {
         map: game.battle.map,
         units: game.battle.world.units.filter(u =>
           u.side === side && u.strength > 0 && !game.battle.broken.has(u.id)),
-        enemies: sideView(game, side).intel
+        enemies: sideView(game, side).intel,
+        lyingInWait: lyingInWait(game.battle, side)
       }
     },
 

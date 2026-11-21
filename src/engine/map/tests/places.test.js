@@ -124,3 +124,26 @@ test('the same question always gets the same answer', () => {
   assert.equal(JSON.stringify(at('D4', 'the ridge')), JSON.stringify(at('D4', 'the ridge')))
   assert.equal(JSON.stringify(at('K15', 'the woods to the north')), JSON.stringify(at('K15', 'the woods to the north')))
 })
+
+test('a question is asked only when the answers can be told apart', () => {
+  // In a big forest "the woods" used to ask "the woods 100 m east, or the
+  // woods 125 m east?": two arms of one wood. The nearest is meant.
+  const { compassWord } = require('../places')
+  for (const name of ['thornwood', 'ashford', 'ravenridge', 'crownhill']) {
+    const field = resolveMap(name)
+    for (let y = 1; y < field.height; y += 3) {
+      for (let x = 1; x < field.width; x += 3) {
+        const from = { x, y }
+        if (!field.passable(from)) continue
+        for (const words of ['the woods', 'the hill', 'the ford']) {
+          const found = findPlace(field, from, words)
+          if (!found.question) continue
+          const first = compassWord(from, found.options[0].position)
+          for (const other of found.options.slice(1)) {
+            assert.ok(other.feature.name || compassWord(from, other.position) !== first, `${name} ${x},${y}: ${found.question}`)
+          }
+        }
+      }
+    }
+  }
+})

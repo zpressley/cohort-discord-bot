@@ -126,7 +126,7 @@ function createServer(store) {
           }
           if (req.method === 'POST' && parts[3] === 'orders') {
             const body = await readBody(req)
-            return send(res, 200, await store.submit(token, String(body.text ?? '').slice(0, 4000)))
+            return send(res, 200, await store.submit(token, String(body.text ?? '').slice(0, 4000), { sendClear: body.sendClear === true }))
           }
         }
         return send(res, 404, { error: 'not found' })

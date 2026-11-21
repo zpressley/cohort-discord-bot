@@ -68,11 +68,16 @@ const SCENARIOS = {
  * formations and form up on that map's deployment ground (deploy.js).
  * Crownhill, where both scenarios were drawn, keeps their own positions.
  */
-function loadScenario(name, { map = null } = {}) {
+// On Crownhill the armies stand where the scenario drew them (close, in the
+// north-west corner: the quick fight the engine's tests were written on),
+// unless `deploy` asks for the map's own deployment: either side of the
+// river, with an approach march, as on every other map.
+function loadScenario(name, { map = null, deploy = false } = {}) {
   const factory = SCENARIOS[name]
   if (!factory) return null
   const spec = factory()
-  if (!map || map === 'crownhill') return spec
+  if ((!map || map === 'crownhill') && !deploy) return spec
+  map = map ?? 'crownhill'
   if (!MAPS[map]) return null
   return { ...spec, map, units: deployArmies(resolveMap(map), spec.units, spec.sides) }
 }
