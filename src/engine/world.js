@@ -38,6 +38,11 @@ function createUnit(spec) {
     shield: spec.shield ?? 'medium_shield',
     formation: spec.formation ?? 'line',
     morale: spec.morale ?? 100,
+    // What a veteran unit has earned (veterans/veterancy.js): it stands
+    // longer, and rallies when greener troops would not. Carried only when
+    // set. (It used to be dropped here, so a veteran unit fought and broke
+    // exactly like a new one.)
+    ...(spec.veteranResistance ? { veteranResistance: spec.veteranResistance } : {}),
 
     aliases: spec.aliases ?? []
   }

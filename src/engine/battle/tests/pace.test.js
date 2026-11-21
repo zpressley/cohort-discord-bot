@@ -1,10 +1,10 @@
 // src/engine/battle/tests/pace.test.js
 //
-// The rulings of 2026-11-21 on how long a battle lasts and what becomes of
-// broken units: a tick of a battle is a share of a combat round, a unit
-// fighting several enemies splits its effort, a broken unit that gets clear
-// rallies (once, with the morale it had), and morale comes back only when an
-// enemy breaks nearby. Fixtures on an open 20x20 plain.
+// The rulings of 2026-11-21 on how a battle can last and what becomes of
+// broken units: a unit fighting several enemies splits its effort, a broken
+// unit that gets clear rallies (as often as it is fit to, with the morale it
+// had), and morale comes back only when an enemy breaks nearby. Damage a
+// tick is as it was. Fixtures on an open 20x20 plain.
 
 const { test } = require('node:test')
 const assert = require('node:assert/strict')
@@ -49,10 +49,10 @@ const ticksToFirstRout = (extra) => {
   return Infinity
 }
 
-test('an even fight lasts the better part of an hour, not three ticks', () => {
+test('a tick of a battle is a whole combat round, unless the battle asks for a slower pace', () => {
   const ticks = ticksToFirstRout()
-  assert.ok(ticks >= 5 && ticks <= 12, `first rout after ${ticks} ticks`)
-  assert.ok(ticksToFirstRout({ combatPace: 1 }) < ticks, 'a whole round a tick, the old pace, is quicker')
+  assert.ok(ticks <= 6, `first rout after ${ticks} ticks: the fighting is as sharp as it was`)
+  assert.ok(ticksToFirstRout({ combatPace: 0.4 }) > ticks, 'combatPace slows every fight')
 })
 
 // ── Split effort ───────────────────────────────────────
@@ -102,25 +102,45 @@ test('a broken unit that gets clear of the enemy rallies, with the morale it had
   assert.deepEqual(get(state, 'runner').position, rallied[0].at, 'it stands where it formed up')
 })
 
-test('it rallies once: a unit that breaks again is gone, and one cut to pieces never forms up', () => {
+test('it can rally again: what stops a unit is how worn it is, not how often it has run', () => {
   const state = routedUnit()
   for (let i = 0; i < 6; i++) stepTurn(state, {})
   state.broken.add('runner')
-  for (let i = 0; i < 6 && !state.outcome.decided; i++) stepTurn(state, {})
-  assert.equal(of(state, 'rallied').length, 1)
-  assert.deepEqual(state.outcome, { decided: true, winner: 'red', reason: 'enemy army broken' })
+  for (let i = 0; i < 2; i++) stepTurn(state, {})
+  assert.equal(of(state, 'rallied').length, 2)
+  assert.equal(state.rallied.get('runner'), 2)
+  assert.equal(state.outcome.decided, false)
+})
 
+test('a unit too worn does not form up, and the field is lost with it', () => {
+  // Professionals need 30% of their men when fresh.
   const remnant = routedUnit({ strength: 25 })
   stepTurn(remnant, {})
   assert.equal(of(remnant, 'rallied').length, 0)
-  assert.equal(remnant.outcome.decided, true, 'with no one able to rally, the field is lost at once')
+  assert.deepEqual(remnant.outcome, { decided: true, winner: 'red', reason: 'enemy army broken' })
+
+  const holdingOn = routedUnit({ strength: 35 })
+  stepTurn(holdingOn, {})
+  assert.equal(holdingOn.outcome.decided, false, 'the field is not won while a broken enemy may yet rally')
 })
 
-test('the field is not won while a broken enemy may yet rally', () => {
-  const state = routedUnit()
-  stepTurn(state, {})
-  assert.equal(state.outcome.decided, false)
-  assert.equal(checkBattleOutcome(state.world, state.broken, state.rallied).decided, false)
+test('experience lowers the bar, and fatigue raises it', () => {
+  const fit = (overrides, tire = 0) => {
+    const state = battle([unit({ id: 'x', ...overrides }), unit({ id: 'foe', side: 'blue', position: { x: 18, y: 18 } })])
+    if (tire) state.resolver.tire(get(state, 'x'), tire)
+    return state.resolver.canRally(get(state, 'x'))
+  }
+  // Half their men gone.
+  assert.equal(fit({ strength: 50, quality: 'levy' }), false, 'levies do not come back from that')
+  assert.equal(fit({ strength: 50, quality: 'professional' }), true)
+  assert.equal(fit({ strength: 25, quality: 'professional' }), false)
+  assert.equal(fit({ strength: 25, quality: 'elite' }), true, 'the best re-form from a quarter')
+  // What a veteran unit has earned counts like its tier.
+  assert.equal(fit({ strength: 50, quality: 'levy', veteranResistance: 0.5 }), true)
+  // Spent men need more of their number: 35 fresh professionals rally, 35
+  // exhausted ones do not.
+  assert.equal(fit({ strength: 35 }), true)
+  assert.equal(fit({ strength: 35 }, 10000), false)
 })
 
 // ── Taking heart ───────────────────────────────────────

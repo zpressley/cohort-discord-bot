@@ -239,7 +239,7 @@ function victoryContext(game) {
   return {
     world: game.battle.world,
     broken: game.battle.broken,
-    rallied: game.battle.rallied,
+    canRally: game.battle.resolver.canRally,
     surrendered: game.surrendered,
     startingStrength: game.startingStrength,
     objectiveHolds: game.objectiveHolds,

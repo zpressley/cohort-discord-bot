@@ -215,23 +215,37 @@ From Zach's answers to `docs/REVIEW-2026-11.md`.
    - Reading (Claude's, not ruled): commanders are not on the field yet, so
      the commander's presence waits for them; until then nearby success is
      the only way morale rises. A rallied unit comes back shaken, not fresh.
+7. **Damage stays as it was.** (Third round of answers, after a first build
+   that slowed all fighting to 40%.) "The design direction was for the
+   ability to go longer, not for the whole experience to change. Remember
+   human players might not dive in to combat right away."
+8. **A unit may rally more than once.** "The combat fatigue threshold is
+   the right limiter, but have it impact the overall morale formula so
+   that it's not always 30% and some veteran units rally because they are
+   more experienced."
 
 ### How the pace rulings were built (Claude's choices, open to change)
 
 The numbers are in `src/engine/combat/tables.js` (`PACE`, `RALLY`, `HEART`),
-tuned with `npm run soak` and 24 battles through the web app's own code.
+tuned with `npm run soak` and 32 battles through the web app's own code.
+With them a battle runs about 12 player turns and 140 minutes of battle
+time, where it ran 5 turns and 50 minutes. A fight between two units is as
+sharp as it was.
 
-- **A tick of a battle is 0.4 of a combat round.** Losses, morale and
-  fatigue all run at that share. The duel tables and the balance matrix
-  are untouched: they still fight whole rounds.
+- **A tick of a battle is one combat round**, as before. `PACE.PER_TICK`
+  (and `combatPace` on a battle's spec) can slow every fight; it is at 1.
 - **A unit fighting several enemies splits its effort.** Each enemy takes
   its share of the unit's blows; the unit takes all of theirs. Before, one
   unit against three dealt its full weight to each.
 - **Safe distance is 6 tiles (150 m)** from the nearest formed enemy. A
   unit does not rally in the tick it broke.
-- **A unit rallies once**, and not at all below 30% of its original men.
-  Without a limit, shaken units broke, ran, rallied and came back for
-  hours.
+- **How worn a unit may be and still rally.** Its condition is the share
+  of its men still standing, times its fatigue (1 when fresh, down to 0.5
+  when spent). It rallies while that is at least 0.64 divided by its
+  morale resistance: the same divisor the morale formula uses, made of the
+  quality tier and what a veteran unit has earned. Fresh, that asks 64% of
+  their men of levies, 46% of militia, 30% of professionals and tribal
+  warriors, 22% of the elite; tired units need more.
 - **Rallying does not raise morale.** A rallied unit is as shaken as when
   it broke, and will break at the next blow unless it takes heart first.
 - **Taking heart: +8 morale** to every unit within 6 tiles of an enemy
@@ -243,3 +257,6 @@ tuned with `npm run soak` and 24 battles through the web app's own code.
   none is left.
 - **A unit rallying ends the player turn**, like a sighting: it is back in
   hand and wants orders.
+- **Found on the way:** what a veteran unit had earned (`veteranResistance`)
+  was dropped when the unit was put on the field, so veterans fought and
+  broke like new troops. It is carried now.

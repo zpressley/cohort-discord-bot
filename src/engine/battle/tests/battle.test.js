@@ -166,9 +166,9 @@ test('pursuit bleeds a caught fugitive, and a trapped one bleeds faster', () => 
 
 // ── Victory ────────────────────────────────────────────
 
-// Since the rulings of 2026-11-21 a broken unit may rally once, so a side is
-// beaten only when its broken units can no longer do so.
-const spent = (...ids) => new Map(ids.map(id => [id, 1]))
+// Since the rulings of 2026-11-21 a broken unit may rally, so a side is
+// beaten only when its broken units can no longer do so. The battle passes
+// its own test of that (pace.test.js); with none, broken is lost.
 
 test('a side whose every unit is broken for good has lost, even with men still alive', () => {
   const world = createWorld({
@@ -177,23 +177,23 @@ test('a side whose every unit is broken for good has lost, even with men still a
       unit({ id: 'b', side: 'blue', position: 'H12' })
     ]
   })
-  const outcome = checkBattleOutcome(world, new Set(['b']), spent('b'))
+  const outcome = checkBattleOutcome(world, new Set(['b']))
   assert.deepEqual(outcome, { decided: true, winner: 'red', reason: 'enemy army broken' })
 })
 
 test('the field is not won while a broken enemy could still rally', () => {
-  const units = (strength) => createWorld({
-    units: [unit({ id: 'a', side: 'red' }), unit({ id: 'b', side: 'blue', position: 'H12', strength, maxStrength: 100 })]
+  const world = createWorld({
+    units: [unit({ id: 'a', side: 'red' }), unit({ id: 'b', side: 'blue', position: 'H12' })]
   })
-  assert.equal(checkBattleOutcome(units(60), new Set(['b'])).decided, false, 'it may yet form up')
-  assert.equal(checkBattleOutcome(units(20), new Set(['b'])).decided, true, 'too few left to form up')
+  assert.equal(checkBattleOutcome(world, new Set(['b']), () => true).decided, false, 'it may yet form up')
+  assert.equal(checkBattleOutcome(world, new Set(['b']), () => false).decided, true)
 })
 
 test('both armies collapsing together is a draw', () => {
   const world = createWorld({
     units: [unit({ id: 'a', side: 'red' }), unit({ id: 'b', side: 'blue', position: 'H12' })]
   })
-  const outcome = checkBattleOutcome(world, new Set(['a', 'b']), spent('a', 'b'))
+  const outcome = checkBattleOutcome(world, new Set(['a', 'b']))
   assert.deepEqual(outcome, { decided: true, winner: 'draw', reason: 'mutual collapse' })
 })
 
@@ -236,7 +236,7 @@ test('exit: two four-unit armies fight to a decision inside the turn cap', () =>
   for (let seed = 1; seed <= 10; seed++) {
     const result = runBattle(meetingBattle, { seed })
     assert.ok(result.outcome.decided, `seed ${seed} ended undecided`)
-    assert.ok(result.turns.length <= 20, `seed ${seed} overran the cap`)
+    assert.ok(result.turns.length <= 40, `seed ${seed} overran the cap`)
     assert.ok(['red', 'blue', 'draw'].includes(result.outcome.winner))
   }
 })

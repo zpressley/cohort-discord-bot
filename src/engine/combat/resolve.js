@@ -361,6 +361,14 @@ function createCombatResolver(options = {}) {
     state.moraleDamageTaken += amount
     return state.morale
   }
+  // Is this unit in a state to form up again? Men standing and fatigue,
+  // against a bar its experience lowers (tables.RALLY).
+  resolveCombat.canRally = (unit) => {
+    if (!(unit.strength > 0)) return false
+    const men = unit.strength / (unit.maxStrength || unit.strength)
+    const fatigue = R.fatigueMultiplier(stateFor(unit).stamina / R.staminaPool(unit))
+    return men * fatigue >= T.RALLY.CONDITION / R.moraleResistance(unit)
+  }
   // A broken unit forms up again (ruled 2026-11-21). Its morale is what it
   // was: rallying brings back order, not heart.
   resolveCombat.rally = (unit) => {

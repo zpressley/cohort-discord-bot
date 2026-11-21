@@ -70,7 +70,7 @@ function createBattleState(spec, options = {}) {
     // concept of a unit that is broken but alive, and adding the field there
     // would make every existing snapshot lie about it.
     broken: new Set(),
-    // How many times each unit has rallied (RALLY.TIMES is the limit).
+    // How many times each unit has rallied.
     rallied: new Map(),
     fledUnits: [],
     // Each unit's standing order (see orders.js): unitId -> normalized order.
@@ -469,12 +469,13 @@ function stepTurn(state, sideOrders = {}) {
   // ── Rallying ────────────────────────────────
   // A broken unit that has got clear (no formed enemy within SAFE_TILES,
   // so no one is chasing it) stops running and forms up (ruled 2026-11-21).
-  // Not in the turn it broke; not a unit cut down too far to re-form. It
-  // comes back with the morale it had, and under no order: its side's
-  // standing order, which for a commander's own units is to hold.
+  // Not in the turn it broke; not a unit too worn to re-form (how worn
+  // depends on its men, its fatigue and its experience: RALLY). It comes
+  // back with the morale it had, and under no order: its side's standing
+  // order, which for a commander's own units is to hold.
   const brokeThisTurn = new Set(log.forTurn(turn).filter(e => e.type === 'rout').map(e => e.unitId))
   for (const unit of livingUnits(world)) {
-    if (!broken.has(unit.id) || brokeThisTurn.has(unit.id) || !canRally(unit, state.rallied)) continue
+    if (!broken.has(unit.id) || brokeThisTurn.has(unit.id) || !resolver.canRally(unit)) continue
     const chased = livingUnits(world).some(e =>
       e.side !== unit.side && !broken.has(e.id) && tileDistance(e.position, unit.position) <= T.RALLY.SAFE_TILES)
     if (chased) continue
@@ -573,7 +574,7 @@ function stepTurn(state, sideOrders = {}) {
   }
 
   // ── Victory ─────────────────────────────────────
-  const outcome = checkBattleOutcome(world, broken, state.rallied)
+  const outcome = checkBattleOutcome(world, broken, resolver.canRally)
   if (outcome.decided) {
     state.outcome = outcome
     log.emit('victory', turn, { winner: outcome.winner, reason: outcome.reason })
@@ -811,19 +812,13 @@ function sightBySide(map, world, hidden = new Map()) {
 // A side is beaten when it has no effective units left: alive, unbroken, and
 // still on the field. Broken units still fleeing count for nothing — they are
 // running, not fighting.
-// A broken unit can form up again unless it has been cut down too far, or
-// has rallied already.
-function canRally(unit, rallied = new Map()) {
-  return unit.strength > 0 &&
-    unit.strength >= (unit.maxStrength || unit.strength) * T.RALLY.MIN_STRENGTH &&
-    (rallied.get(unit.id) ?? 0) < T.RALLY.TIMES
-}
-
 // A side is still in the battle while it has a formed unit, or a broken one
 // that could yet rally: the field is not won the instant the last enemy
 // unit turns to run, only once the enemy has left it or cannot re-form.
-function checkBattleOutcome(world, broken, rallied = new Map()) {
-  const effective = (side) => unitsOnSide(world, side).filter(u => u.strength > 0 && (!broken.has(u.id) || canRally(u, rallied)))
+// `canRally` is the battle's own test (the resolver's, which knows how
+// tired each unit is); without one, a broken unit counts as lost.
+function checkBattleOutcome(world, broken, canRally = () => false) {
+  const effective = (side) => unitsOnSide(world, side).filter(u => u.strength > 0 && (!broken.has(u.id) || canRally(u)))
   const remaining = sides(world).filter(side => effective(side).length > 0)
 
   // sides() reads the roster, so a side whose last unit fled the field
@@ -863,7 +858,6 @@ function isOnEdge(map, position, edge) {
 module.exports = {
   createBattleState,
   stepTurn,
-  canRally,
   runBattle,
   checkBattleOutcome,
   tileAwayFrom,
