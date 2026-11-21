@@ -171,7 +171,27 @@ const SPRING = /^(?:(.+?)\s+)?(?:spring (?:the )?(?:trap|ambush)|strike now)$/i
 // (ruled 2026-11-21: a unit attacks of its own accord only when ordered to).
 const HUNT = /^(?:(.+?)\s+)?(?:(?:seek|search|find) and (?:destroy|attack|kill)|hunt(?: (?:them|the enemy|the enemies))?(?: down)?|(?:attack|engage|charge|strike|fight) (?:on sight|at will)|(?:free|cleared) to (?:attack|engage))\.?$/i
 
+// Missile troops (ruled 2026-11-21). They shoot from where they stand
+// without being told; these say what to shoot first, or not to shoot.
+const HOLD_FIRE = /^(?:(.+?)\s+)?(?:hold (?:your |their |its )?fire|cease fire|cease shooting|stop shooting|do not shoot|don't shoot|save (?:your |their )?arrows)$/i
+const SHOOT = /^(?:(.+?)\s+)?(?:shoot|loose|fire|open fire|let fly|rain arrows)(?:\s+at will)?(?:\s+(?:at|on|upon|into)\b)?(?:\s+(.+))?$/i
+// What "shoot ..." names: a kind of enemy, or the last word of a name
+// ("their spearmen" -> "spearmen"), or nothing in particular.
+function shootFirst(words) {
+  if (!words) return null
+  for (const [kind, pattern] of KINDS) if (pattern.test(words)) return kind
+  const bare = clean(words.replace(/\b(?:the|their|his|enemy|enemy's|enemies|those|that|them|it|anything|everything|anyone|at will|in range|first)\b/ig, ''))
+  return bare ? bare.split(' ').at(-1).toLowerCase() : null
+}
+
 function readStage3(text, extra) {
+  const holdFire = text.match(HOLD_FIRE)
+  if (holdFire) return order(holdFire[1], 'hold', null, null, { ...extra, fire: 'hold', holdFire: true })
+  const shoot = text.match(SHOOT)
+  if (shoot) {
+    const against = shootFirst(shoot[2])
+    return order(shoot[1], 'hold', null, null, { ...extra, fire: 'shoot', ...(against ? { against } : {}) })
+  }
   // With no one named, "spring the trap" is for the units lying in wait, not
   // the whole army: `spring` tells the resolver so.
   const spring = text.match(SPRING)

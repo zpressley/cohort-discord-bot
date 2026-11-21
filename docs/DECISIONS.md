@@ -228,8 +228,10 @@ From Zach's answers to `docs/REVIEW-2026-11.md`.
 
 The numbers are in `src/engine/combat/tables.js` (`PACE`, `RALLY`, `HEART`),
 tuned with `npm run soak` and 32 battles through the web app's own code.
-With them a battle runs about 12 player turns and 140 minutes of battle
-time, where it ran 5 turns and 50 minutes. A fight between two units is as
+With them, and ranged fire below, a battle runs about 9 player turns and
+100 minutes of battle time when both sides charge at once, and about 12
+turns and 150 minutes when the player holds and lets the enemy come; it
+ran 5 turns and 50 minutes. A fight between two units is as
 sharp as it was.
 
 - **A tick of a battle is one combat round**, as before. `PACE.PER_TICK`
@@ -250,13 +252,50 @@ sharp as it was.
   it broke, and will break at the next blow unless it takes heart first.
 - **Taking heart: +8 morale** to every unit within 6 tiles of an enemy
   unit that breaks or is destroyed, never above the starting morale.
-- **The verdict waits.** A side is beaten when it has no formed unit and no
-  broken unit that could still rally; both sides in that state is a draw.
+- **The verdict.** A side is in the battle while it has a steady unit:
+  formed up, and not shaken (rallied without having taken heart since).
+  With none it is beaten, and both sides in that state is a draw. (The
+  first build waited on any broken unit that could still rally. Once
+  archers could break a shaken unit from a distance for the loss of a man
+  or two, the tail of a battle ran to ten hours, so it was changed with
+  ranged fire.)
 - **Under the computer's standing advance, a rallied unit that is still
-  shaken holds** behind the steadier units, and goes forward only when
-  none is left.
+  shaken holds** behind the steadier units until it takes heart.
 - **A unit rallying ends the player turn**, like a sighting: it is back in
   hand and wants orders.
 - **Found on the way:** what a veteran unit had earned (`veteranResistance`)
   was dropped when the unit was put on the field, so veterans fought and
   broke like new troops. It is carried now.
+
+### How ranged fire was built (Claude's choices, open to change)
+
+Ruling 3 above: missile troops shoot. The numbers are `MISSILES` in
+`src/engine/combat/tables.js`; the rules are `src/engine/combat/ranged.js`
+and the missile step of `src/engine/battle/battle.js`.
+
+- **Who shoots.** A unit whose weapon reaches 100 m or more: bows, slings,
+  crossbows. Javelins, pila and throwing axes are thrown in the charge and
+  stay inside the melee tables.
+- **How far.** The weapon's range in the tables (a composite bow 200 m, a
+  basic bow 125 m, a sling 300 m), and no farther than the unit can see.
+- **When.** Every ten-minute tick, without being told, at an enemy it can
+  see within reach, if it stood still that tick (horse archers may ride)
+  and is not itself in a melee (the design's rule). Not while hidden or
+  lying in ambush.
+- **At whom.** The nearest enemy in reach, or first the kind it was told
+  to shoot ("archers shoot the horse"). "Hold fire" stops it.
+- **Into a melee: yes, at half effect, and no friend is harmed.** The
+  first build forbade it and the archers loosed one volley in a whole
+  battle, because armies close from sight to contact in one tick.
+- **How hard.** Light beside a melee: a hundred bowmen at close range fell
+  about three men in medium armour a volley, five unarmoured, one or two
+  in heavy; a round of melee costs each side about ten. Less past half
+  the weapon's reach, against big shields, and into trees. The losses
+  shake morale by the ordinary formula, and a unit can break under fire.
+- **Arrows do not run out.** Simpler; a supply of volleys is an easy
+  addition if archers prove too strong standing off all day.
+- **"Advance" for missile troops** means close until they can shoot, and
+  stand there shooting. The computer's archers do this now.
+- **A volley ends the player turn**, like contact.
+- **Not done:** an order to attack or follow a named enemy unit hand to
+  hand (the rest of L10 in the review).

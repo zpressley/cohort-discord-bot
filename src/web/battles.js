@@ -23,6 +23,7 @@ const { gridLabel } = require('../engine/map/grid')
 const { detectFeatures } = require('../engine/map/features')
 const { isGridRef } = require('../engine/map/grid')
 const { staminaPool } = require('../engine/combat/ratings')
+const { missileRangeMetres } = require('../engine/combat/ranged')
 const { fateChances, perOfficer, woundReason, exposureFromEvents } = require('../engine/veterans')
 const { createRng } = require('../engine/rng')
 const { interpretText } = require('../interpreter/orders')
@@ -319,6 +320,9 @@ function createBattleStore({ dir = null, ai = null, now = () => Date.now() } = {
         broken: battle.broken.has(u.id),
         hidden: battle.hidden.has(u.id),
         crowding: battle.crowding.get(u.id) ?? 'organized',
+        // Missile troops: how far they shoot, and whether they are holding fire.
+        shootsTo: missileRangeMetres(u) || null,
+        holdingFire: Boolean(battle.orderBook.get(u.id)?.holdFire),
         order: battle.broken.has(u.id)
           ? 'broken and fleeing'
           : describeOrder(battle.orderBook.get(u.id), game.spec.standingOrders?.[side]) +

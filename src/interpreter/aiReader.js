@@ -19,8 +19,14 @@ const { distance } = require('../engine/map/labels')
 const { gridLabel } = require('../engine/map/grid')
 const { detectFeatures } = require('../engine/map/features')
 const { resolveUnitReference } = require('../engine/movement/unitResolver')
+const { missileRangeMetres } = require('../engine/combat/ranged')
 
 const ACTIONS = ['move', 'hold', 'defend', 'advance', 'attack', 'withdraw', 'hide', 'check', 'ambush']
+// What the model may answer: the engine's actions, and two of its own for
+// missile troops, which the code turns into a hold that shoots (with what to
+// shoot first) or holds its fire. A small model reads "shoot" far more
+// surely as its own choice than as an exception to "hold".
+const REPLY_ACTIONS = [...ACTIONS, 'shoot', 'hold_fire']
 const KINDS = ['cavalry', 'infantry', 'archers', 'scouts', null]
 
 // Every field is required and nothing else is allowed: that is what lets
@@ -38,7 +44,7 @@ const REPLY_SCHEMA = {
         required: ['units', 'action', 'place', 'then_hold', 'careful', 'against', 'let_pass', 'regardless'],
         properties: {
           units: { type: 'array', items: { type: 'string' } },
-          action: { type: 'string', enum: ACTIONS },
+          action: { type: 'string', enum: REPLY_ACTIONS },
           place: { type: ['string', 'null'] },
           then_hold: { type: 'boolean' },
           careful: { type: 'boolean' },
@@ -74,6 +80,8 @@ Each order:
   hide      go to ground and hide (hide, take cover, conceal, lie low)
   check     search ground for hidden enemies (check, search, scout, sweep, reconnoitre)
   ambush    hide and strike enemies that pass (ambush, lie in wait, hide and hit them)
+  shoot     missile troops (marked "shoots to ..." in the briefing) shoot from where they stand (shoot, loose, fire, volley, open fire, rain arrows). They do this without being told; use it when the commander says so, and set against if he names what to shoot
+  hold_fire missile troops stop shooting (hold fire, cease fire, do not shoot)
 - place: where, or null if no place was given. Write it in ONE of these forms:
   1. a grid square exactly as the commander wrote it: "C7" or "C7-NE"
   2. a named place copied exactly from "Named places" (match loose wording to the list: "the mill bridge" -> "Old Mill Bridge")
@@ -84,7 +92,7 @@ Each order:
   Never write a unit name, "the enemy", "forward" or "ahead" as a place. "Forward", "toward the enemy" or "whoever is nearest" is the action advance with place null.
 - then_hold: true if they should hold once they arrive ("and hold", "and hold it", "make them hold it", "and stay there", "and dig in"). defend always holds; set true for it.
 - careful: true if they should move carefully, cautiously, slowly, on guard, in good order.
-- against: for ambush only, what to strike: "cavalry", "infantry", "archers" or "scouts" (horsemen = cavalry, bowmen or slingers = archers, foot = infantry). null for anything, and for every other action.
+- against: for ambush, what to strike; for shoot, what to shoot first: "cavalry", "infantry", "archers" or "scouts" (horsemen = cavalry, bowmen or slingers = archers, foot = infantry). null for anything, and for every other action.
 - let_pass: for ambush only, how many enemy units to let go by before striking. 0 otherwise.
 - regardless: for ambush only, and only when the commander says so in words like "whatever happens", "no matter what", "at all costs": true. In every other case false.
 
@@ -124,7 +132,8 @@ function briefing(context, text) {
   for (const u of units) {
     const called = [...new Set([...(u.aliases ?? []), String(u.role ?? '').replace(/_/g, ' ')].filter(Boolean))].slice(0, 3)
     const waiting = (context.lyingInWait ?? []).includes(u.id) ? ', lying in wait' : ''
-    lines.push(`- ${u.id}${called.length ? ` (called: ${called.join(', ')})` : ''}${u.mounted ? ', mounted' : ''}, at ${square(u.position)}${waiting}`)
+    const reach = missileRangeMetres(u)
+    lines.push(`- ${u.id}${called.length ? ` (called: ${called.join(', ')})` : ''}${u.mounted ? ', mounted' : ''}, at ${square(u.position)}${reach ? `, shoots to ${reach} m` : ''}${waiting}`)
   }
   const named = detectFeatures(map).filter(f => f.name)
   if (named.length > 0) {
@@ -197,6 +206,16 @@ async function readWithAi(ai, text, context) {
       then: o.then_hold && o.action !== 'hold' ? 'hold' : null
     }
     if (o.careful) intent.careful = true
+    // Missile troops, standing where they are: shooting (and what first),
+    // or holding their fire.
+    if (o.action === 'shoot' || o.action === 'hold_fire') {
+      intent.action = 'hold'
+      intent.place = null
+      intent.then = null
+      intent.fire = o.action === 'shoot' ? 'shoot' : 'hold'
+      if (o.action === 'hold_fire') intent.holdFire = true
+      else if (o.against) intent.against = o.against
+    }
     if (o.action === 'ambush') {
       if (o.against) intent.against = o.against
       if (o.let_pass > 0) intent.letPass = Math.min(10, o.let_pass)
@@ -214,4 +233,4 @@ async function readWithAi(ai, text, context) {
   return { intents }
 }
 
-module.exports = { readWithAi, briefing, surroundings, REPLY_SCHEMA, SYSTEM, ACTIONS }
+module.exports = { readWithAi, briefing, surroundings, REPLY_SCHEMA, SYSTEM, ACTIONS, REPLY_ACTIONS }

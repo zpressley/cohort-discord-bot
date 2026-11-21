@@ -27,7 +27,7 @@ const world = createWorld({
   units: [
     { id: 'red_spears', side: 'red', role: 'spearmen', position: 'E7', strength: 100, aliases: ['spears'] },
     { id: 'red_swords', side: 'red', role: 'heavy_infantry', position: 'E8', strength: 100, aliases: ['swords'] },
-    { id: 'red_archers', side: 'red', role: 'archers', position: 'D8', strength: 100, aliases: ['archers'] },
+    { id: 'red_archers', side: 'red', role: 'archers', position: 'D8', strength: 100, aliases: ['archers'], primaryWeapon: 'greek_composite_bow' },
     { id: 'red_horse', side: 'red', role: 'cavalry', mounted: true, position: 'E9', strength: 100, aliases: ['horse'] }
   ]
 })
@@ -100,6 +100,10 @@ const CASES = [
   },
 
   // Ambushes, with their terms.
+  // Missile troops.
+  { say: 'archers shoot the horse', expect: [{ units: ['red_archers'], action: 'hold', against: 'cavalry' }], grammar: true },
+  { say: 'archers hold fire', expect: [{ units: ['red_archers'], action: 'hold' }], grammar: true },
+  { say: 'Have the archers loose at their cavalry while the spears stand fast', expect: [{ units: ['red_archers'], action: 'hold', against: 'cavalry' }, { units: ['red_spears'], action: 'hold' }] },
   { say: 'spears, lie in wait in the woods and hit their cavalry when it comes past', expect: [{ units: ['red_spears'], action: 'ambush', test: t => terrain(t) === 'forest', against: 'cavalry', regardless: false, letPass: 0 }] },
   { say: 'Swords set an ambush in the trees. Let the first two go by, then strike no matter what.', expect: [{ units: ['red_swords'], action: 'ambush', test: t => terrain(t) === 'forest', letPass: 2, regardless: true }] },
   { say: 'archers hide in the woods and jump any bowmen that pass', expect: [{ units: ['red_archers'], action: 'ambush', test: t => terrain(t) === 'forest', against: 'archers' }] },
@@ -120,7 +124,7 @@ const CASES = [
   // Things to ask about, not guess.
   { say: 'send them over there', ask: true },
   { say: 'the elephants charge', ask: true },
-  { say: 'archers shoot at the enemy swords', ask: true },
+  { say: 'archers shoot at the enemy swords', expect: [{ units: ['red_archers'], action: 'hold', against: 'swords' }], grammar: true },
   { say: 'spears to the ridge', ask: true },
   { say: 'what should I do?', ask: true },
 

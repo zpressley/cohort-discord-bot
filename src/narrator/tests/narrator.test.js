@@ -169,3 +169,13 @@ test('everyone who took heart at one enemy\'s breaking is told in one line', () 
   assert.equal(told.length, 1)
   assert.equal(fact(map, told[0]), 'red_spears and red_archers took heart at the breaking of blue_swords')
 })
+
+test('shooting is told with the fighting: who shot whom, and what it cost', () => {
+  const volley = (by, unitId, killed) => ({ type: 'volley', turn: 5, unitId, by, killed, remaining: 90, distance: 4 })
+  const told = report({
+    map, ...knowledge,
+    events: [volley('red_archers', 'blue_swords', 2), volley('red_archers', 'blue_swords', 3), volley('blue_scouts', 'red_spears', 1)]
+  })
+  assert.ok(told.includes('red_archers: shot at blue_swords, felling 5 men'), told.join(' / '))
+  assert.ok(told.includes('red_spears: was shot at by an unseen enemy, losing 1 man'), told.join(' / '))
+})

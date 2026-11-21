@@ -247,3 +247,26 @@ test('one unclear order does not throw away the others: the clear ones can be se
     assert.equal(none.canSendRest, false)
   } finally { await app.close() }
 })
+
+test('archers shoot: the order is read, the Army tab says how far, and the dispatch tells it', async () => {
+  const app = await start()
+  try {
+    const token = (await app.api('POST', '/api/battles', { opponent: 'standing', side: 'red', seed: 1 })).body.seats.red
+    const read = (await app.api('POST', `/api/seat/${token}/read`, { text: 'archers shoot the horse\nspears shoot' })).body
+    assert.match(read.understood[0], /^Archers: hold, and shoot at any enemy they can see within 200 m, cavalry first$/)
+    assert.match(read.questions[0], /^Spears cannot shoot/)
+
+    const before = (await app.api('GET', `/api/seat/${token}`)).body
+    assert.equal(before.own.find(u => u.name === 'Archers').shootsTo, 200)
+    assert.equal(before.own.find(u => u.name === 'Spears').shootsTo, null)
+
+    // Hold the line and let them come: the archers shoot as they close.
+    let tent
+    for (let i = 0; i < 8; i++) {
+      await app.api('POST', `/api/seat/${token}/orders`, { text: i === 0 ? 'archers shoot the horse' : '' })
+      tent = (await app.api('GET', `/api/seat/${token}`)).body
+      if (tent.dispatches.some(d => d.lines.some(l => /^Archers: .*shot at enemy/.test(l)))) break
+    }
+    assert.ok(tent.dispatches.some(d => d.lines.some(l => /^Archers: .*shot at enemy/.test(l))), 'a volley is in the dispatch')
+  } finally { await app.close() }
+})

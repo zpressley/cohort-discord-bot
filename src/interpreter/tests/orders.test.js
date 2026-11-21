@@ -214,5 +214,7 @@ test('the standing instructions say nothing about this battle, so they can be ca
 
 test('the reply schema allows exactly the actions the engine knows', () => {
   const { ACTIONS } = require('../../engine/battle/orders')
-  assert.deepEqual([...REPLY_SCHEMA.properties.orders.items.properties.action.enum].sort(), [...ACTIONS].sort())
+  // The engine's actions, plus the two the reader turns into a hold for
+  // missile troops (shooting, or holding fire).
+  assert.deepEqual([...REPLY_SCHEMA.properties.orders.items.properties.action.enum].sort(), [...ACTIONS, 'shoot', 'hold_fire'].sort())
 })

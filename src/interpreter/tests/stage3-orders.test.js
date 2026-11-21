@@ -159,8 +159,52 @@ test('seek and destroy, attack on sight: a unit hunts only when told to', async 
     assert.deepEqual(read.orders, [{ unitRef: 'red_horse', action: 'advance' }], words)
   }
   // Read whole by the grammar: no AI call for it, though it holds an "and".
-  const ai = createAiClient({ transport: scriptedTransport([]) })
+  const transport = scriptedTransport(() => { throw new Error('the AI was called') })
+  const ai = createAiClient({ transport, retries: 0 })
   const read = await interpretText('everyone seek and destroy', context, { ai })
   assert.equal(read.source, 'grammar')
+  assert.equal(transport.calls.length, 0)
   assert.equal(read.orders.length, 3)
+})
+
+// ── Missile troops (ruled 2026-11-21) ──────────────────
+
+test('shoot, shoot the horse first, hold fire: orders for missile troops', async () => {
+  const bowmen = { ...context, units: context.units.map(u => u.id === 'red_archers' ? { ...u, primaryWeapon: 'greek_composite_bow' } : u) }
+  const read = (line) => interpretLines([line], bowmen)
+
+  assert.deepEqual(read('archers shoot').orders, [{ unitRef: 'red_archers', action: 'hold' }])
+  assert.match(read('archers shoot').understood[0], /shoot at any enemy they can see within 200 m$/)
+  assert.deepEqual(read('archers loose at their cavalry').orders, [{ unitRef: 'red_archers', action: 'hold', against: 'cavalry' }])
+  assert.match(read('archers shoot the horse').understood[0], /cavalry first$/)
+  assert.deepEqual(read('archers hold fire').orders, [{ unitRef: 'red_archers', action: 'hold', holdFire: true }])
+  // With no one named, the order is for those who can shoot.
+  assert.deepEqual(read('everyone hold fire').orders.map(o => o.unitRef), ['red_archers'])
+  // A unit with nothing to shoot with is a question, not an order dropped.
+  assert.match(read('spears shoot the horse').questions[0], /red_spears cannot shoot/)
+  assert.match(interpretLines(['everyone shoot'], context).questions[0], /None of your units has bows or slings/)
+
+  // All read by the grammar: no AI call.
+  const transport = scriptedTransport(() => { throw new Error('the AI was called') })
+  const ai = createAiClient({ transport, retries: 0 })
+  assert.equal((await interpretText('archers shoot the horse', bowmen, { ai })).source, 'grammar')
+  assert.equal((await interpretText('archers hide in the woods and jump any bowmen that pass', bowmen, { ai })).source, 'grammar')
+  assert.equal(transport.calls.length, 0)
+})
+
+test('the AI\'s own "shoot" and "hold_fire" become a hold for missile troops', async () => {
+  const bowmen = { ...context, units: context.units.map(u => u.id === 'red_archers' ? { ...u, primaryWeapon: 'greek_composite_bow' } : u) }
+  const reply = (action, against = null) => ({
+    orders: [{ units: ['red_archers'], action, place: null, then_hold: false, careful: false, against, let_pass: 0, regardless: false }],
+    question: null, note: null, surrender: false
+  })
+  const replies = [reply('shoot', 'cavalry'), reply('hold_fire')]
+  const ai = createAiClient({
+    transport: scriptedTransport((request, n) => ({ text: JSON.stringify(replies[n - 1]), usage: { inputTokens: 300, outputTokens: 40 } })),
+    retries: 0
+  })
+  const shoot = await interpretText('have the archers loose at their horse, please', bowmen, { ai })
+  assert.deepEqual(shoot.orders, [{ unitRef: 'red_archers', action: 'hold', against: 'cavalry' }])
+  const cease = await interpretText('tell the archers they should stop loosing', bowmen, { ai })
+  assert.deepEqual(cease.orders, [{ unitRef: 'red_archers', action: 'hold', holdFire: true }])
 })

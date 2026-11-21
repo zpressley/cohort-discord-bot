@@ -78,6 +78,7 @@ function summarise(events) {
   const fights = new Map()
   const crowds = new Map()
   const hearts = new Map()
+  const shots = new Map()
   const pair = (a, b) => [a, b].sort().join('|')
 
   for (const e of events) {
@@ -99,6 +100,14 @@ function summarise(events) {
       }
       const merged = { ...e, a: { ...e.a }, b: { ...e.b }, rounds: 1 }
       fights.set(key, merged)
+      out.push(merged)
+    } else if (e.type === 'volley') {
+      // The volleys one unit loosed at another, as one line with the total.
+      const key = `${e.by}>${e.unitId}`
+      const seen = shots.get(key)
+      if (seen) { seen.killed += e.killed; seen.remaining = e.remaining; seen.volleys += 1; continue }
+      const merged = { ...e, volleys: 1 }
+      shots.set(key, merged)
       out.push(merged)
     } else if (e.type === 'heartened') {
       // Everyone who took heart at the same enemy's breaking, in one line.
@@ -183,6 +192,7 @@ function plainFact(map, event) {
     case 'standoff': return `${event.aId} and ${event.bId} were both close to breaking`
     case 'push': return `${event.by} drove ${event.unitId} back${event.lostHighGround ? ' off the high ground' : ''}`
     case 'crush': return `${event.unitId} was pinned with nowhere to give way`
+    case 'volley': return `${event.by} shot at ${event.unitId}` + (event.killed ? `, felling ${men(event.killed)}` : ', to little effect')
     case 'rout': return `${event.unitId} broke and fled from ${event.by}`
     case 'pursuit': return `${event.by} cut down ${event.killed} of the fleeing ${event.unitId}` + (event.trapped ? ', who were cornered' : '')
     case 'fled': return `${event.unitId} escaped the field with ${event.strength} men`
@@ -221,6 +231,7 @@ function plainFact(map, event) {
 // How much a commander needs to hear of each kind of event: lower is sooner.
 const WEIGHT = {
   victory: 0, destroyed: 1, rout: 1, fled: 1, rallied: 1, pursuit: 2, ambush: 1, surprise: 2, objective: 2,
+  volley: 3,
   heartened: 5,
   revealed: 3, exchange: 3, standoff: 3, push: 4, crush: 4, disengage: 4, contact: 4,
   hidden: 5, hideFailed: 5, checked: 5, ambushHeld: 5, crowding: 6, arrived: 6, halted: 6, move: 7
@@ -231,7 +242,7 @@ const MAX_FACTS = 14
 
 // The kinds of event that together tell how a unit's fighting went. They are
 // reported per unit (digest, below), not one by one.
-const FIGHTING = new Set(['contact', 'exchange', 'rout', 'pursuit', 'push', 'destroyed', 'fled'])
+const FIGHTING = new Set(['contact', 'exchange', 'rout', 'pursuit', 'push', 'destroyed', 'fled', 'volley'])
 
 /**
  * How the fighting went for each of the side's own units, one line a unit:
@@ -249,7 +260,7 @@ function digest(events, { map, ownIds, whereIs = () => null }) {
   const units = new Map()
   const of = (id) => {
     if (!units.has(id)) {
-      units.set(id, { id, foes: [], lost: 0, killed: 0, morale: null, broke: null, lostInFlight: 0, left: null, destroyed: false, brokeEnemies: [], cutDown: 0, drove: [], drivenBy: [], met: [] })
+      units.set(id, { id, foes: [], lost: 0, killed: 0, morale: null, broke: null, lostInFlight: 0, left: null, destroyed: false, brokeEnemies: [], cutDown: 0, drove: [], drivenBy: [], met: [], shotAt: [], felled: 0, shotBy: [], lostToFire: 0 })
     }
     return units.get(id)
   }
@@ -265,6 +276,9 @@ function digest(events, { map, ownIds, whereIs = () => null }) {
         u.killed += theirs.killed
         u.morale = mine.morale
       }
+    } else if (e.type === 'volley') {
+      if (ownIds.has(e.by)) { const u = of(e.by); add(u.shotAt, e.unitId); u.felled += e.killed }
+      if (ownIds.has(e.unitId)) { const u = of(e.unitId); add(u.shotBy, e.by); u.lostToFire += e.killed }
     } else if (e.type === 'contact') {
       for (const [mine, theirs] of [[e.aId, e.bId], [e.bId, e.aId]]) if (ownIds.has(mine)) add(of(mine).met, theirs)
     } else if (e.type === 'rout') {
@@ -293,6 +307,8 @@ function digest(events, { map, ownIds, whereIs = () => null }) {
       parts.push(`${u.foes.length ? 'fought' : 'met'} ${list(foes)}${where ? ` ${whereAt(map, where)}` : ''}`)
     }
     if (u.foes.length) parts.push(`lost ${men(u.lost)} and killed ${u.killed}`)
+    if (u.shotAt.length) parts.push(`shot at ${list(u.shotAt)}` + (u.felled ? `, felling ${men(u.felled)}` : ', to little effect'))
+    if (u.shotBy.length) parts.push(`was shot at by ${list(u.shotBy)}` + (u.lostToFire ? `, losing ${men(u.lostToFire)}` : ', without loss'))
     if (u.drove.length) parts.push(`drove ${list(u.drove)} back`)
     if (u.brokeEnemies.length) parts.push(`broke ${list(u.brokeEnemies)}` + (u.cutDown ? `, cutting down ${u.cutDown} as they ran` : ''))
     else if (u.cutDown) parts.push(`cut down ${u.cutDown} of the fleeing enemy`)

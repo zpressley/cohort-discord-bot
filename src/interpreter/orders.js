@@ -37,7 +37,7 @@ function interpretLines(lines, context) {
 }
 
 // Phrases the grammar handles that contain "and" or a comma.
-const SAFE_PHRASES = /\s*(?:,|\band\b|\bthen\b)\s*(?:then\s+)?(?:hold(?: it| there| the position)?|dig in|stand|set up (?:a )?defensive positions?|defend it|make a stand|let\s+\S+(?:\s+\S+){0,3}\s+(?:pass|go by|go past|through|by)(?:\s+first)?|hit\b.*|strike\b.*|attack\b.*|fall on\b.*|ambush\b.*)/ig
+const SAFE_PHRASES = /\s*(?:,|\band\b|\bthen\b)\s*(?:then\s+)?(?:hold(?: it| there| the position)?|dig in|stand|set up (?:a )?defensive positions?|defend it|make a stand|let\s+\S+(?:\s+\S+){0,3}\s+(?:pass|go by|go past|through|by)(?:\s+first)?|hit\b.*|strike\b.*|attack\b.*|fall on\b.*|ambush\b.*|jump\b.*|charge\b.*)/ig
 // Words that mean a line says more than one simple order, or asks for
 // something conditional.
 const COMPOUND = /[,;:]|\b(?:and|then|while|but|unless|if|after|before|when|until|once|have|should|please|tell|send|order|make|let's|want|need)\b/i

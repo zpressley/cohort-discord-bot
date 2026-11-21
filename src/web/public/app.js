@@ -68,7 +68,7 @@ function ago(at) {
 const STATUS = { 'your-orders': 'Your orders', waiting: 'Waiting on the enemy', finished: 'Finished' }
 const WHY = {
   contact: 'blows were struck', sighting: 'the enemy was sighted', time: 'an hour passed',
-  stalled: 'all was quiet', ready: 'your orders were carried out', rallied: 'a broken unit rallied', objective: 'ground changed hands', decided: 'the battle was decided',
+  stalled: 'all was quiet', ready: 'your orders were carried out', fire: 'missiles flew', rallied: 'a broken unit rallied', objective: 'ground changed hands', decided: 'the battle was decided',
   surrender: 'a commander yielded'
 }
 const sideName = (side) => side.charAt(0).toUpperCase() + side.slice(1)
@@ -408,7 +408,7 @@ async function tent(token) {
         <header><h3>${esc(u.name)}</h3><span class="where">${esc(u.at)} · ${esc(terrainWords(v, u.position.x, u.position.y))}</span></header>
         <span class="note">${esc([u.quality, u.role].filter(Boolean).join(' ').replace(/_/g, ' '))}, ${u.strength} of ${u.maxStrength} men</span>
         <div class="bars">${meter('Men', u.strength, u.maxStrength)}${meter('Morale', u.morale, 100)}${meter('Wind', u.stamina, u.staminaPool)}</div>
-        <p class="unit-order"><strong>Orders:</strong> ${esc(u.order)}</p>
+        <p class="unit-order"><strong>Orders:</strong> ${esc(u.order)}${u.shootsTo ? esc(u.holdingFire ? '; holding fire' : `; shoots at enemies within ${u.shootsTo} m`) : ''}</p>
         <div class="flags">${flags(u)}</div>
         ${v.battle.status === 'finished' || u.broken ? '' : `<div style="display: flex; gap: 8px; flex-wrap: wrap">
           <button class="btn btn-quiet" type="button" data-pick="${esc(u.id)}">${u.id === state.picked ? 'Picked on the map' : 'Pick on the map'}</button>
@@ -472,7 +472,7 @@ async function tent(token) {
     const rb = state.readback
     body.innerHTML = `
       <label for="orders" style="font-weight: 600; font-size: 14px">Your orders, as you would say them</label>
-      <textarea id="orders" class="orders-box" spellcheck="false" placeholder="spears to the ridge to the east&#10;archers hide in the woods&#10;everyone advance">${esc(state.draft)}</textarea>
+      <textarea id="orders" class="orders-box" spellcheck="false" placeholder="spears to the ridge to the east&#10;archers shoot the horse&#10;everyone advance">${esc(state.draft)}</textarea>
       <div style="display: flex; gap: 8px; flex-wrap: wrap">
         <button class="btn" type="button" id="read-back">Read them back</button>
         ${state.draft ? '<button class="btn btn-quiet" type="button" id="clear">Clear</button>' : ''}

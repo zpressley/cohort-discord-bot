@@ -13,13 +13,14 @@
 // ridge to the east"), resolved from where the ordered units stand.
 
 const { resolveUnitReference } = require('../engine/movement/unitResolver')
+const ranged = require('../engine/combat/ranged')
 const { findPlace, DIRECTIONS, TILE_METRES } = require('../engine/map/places')
 const { isGridRef, gridTarget, gridLabel } = require('../engine/map/grid')
 const { coverFor } = require('../engine/battle/hiding')
 
 // The extra parts of an order the engine reads (Stage 3), carried through
 // unchanged when set.
-const EXTRAS = ['careful', 'against', 'letPass', 'regardless']
+const EXTRAS = ['careful', 'against', 'letPass', 'regardless', 'holdFire']
 
 // How well a unit will hide there, in words for the read-back: the engine's
 // own table (battle/hiding.js), so the player hears what the engine will do.
@@ -159,6 +160,32 @@ function resolveIntents(intents, context) {
     }
     if (match.units.length === 0) {
       questions.push(`Who do you mean by "${match.unknown ?? intent.unitRef}"? Your units: ${units.map(u => u.id).join(', ')}.`)
+      continue
+    }
+
+    // "Shoot" and "hold fire" are for missile troops. With no one named they
+    // are for all of them; a unit named that has nothing to shoot with is a
+    // question, not an order quietly dropped.
+    if (intent.fire) {
+      const shooters = match.units.filter(u => ranged.missileRange(u) > 0)
+      const others = match.units.filter(u => !shooters.includes(u))
+      if (shooters.length === 0 || (others.length > 0 && intent.unitRef !== 'everyone')) {
+        questions.push(shooters.length === 0 && intent.unitRef === 'everyone'
+          ? 'None of your units has bows or slings to shoot with.'
+          : `${others.map(u => u.id).join(', ')} cannot shoot. Only troops with bows, slings or crossbows can.`)
+        continue
+      }
+      for (const unit of shooters) {
+        orders.push({
+          unitRef: unit.id, action: 'hold',
+          ...(intent.holdFire ? { holdFire: true } : {}),
+          ...(intent.against ? { against: intent.against } : {})
+        })
+      }
+      const reach = Math.min(...shooters.map(u => ranged.missileRangeMetres(u)))
+      understood.push(`${shooters.map(u => u.id).join(', ')}: ` + (intent.holdFire
+        ? 'hold, and hold their fire'
+        : `hold, and shoot at any enemy they can see within ${reach} m` + (intent.against ? `, ${intent.against} first` : '')))
       continue
     }
 
