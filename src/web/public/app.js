@@ -68,7 +68,7 @@ function ago(at) {
 const STATUS = { 'your-orders': 'Your orders', waiting: 'Waiting on the enemy', finished: 'Finished' }
 const WHY = {
   contact: 'blows were struck', sighting: 'the enemy was sighted', time: 'an hour passed',
-  stalled: 'all was quiet', objective: 'ground changed hands', decided: 'the battle was decided',
+  stalled: 'all was quiet', ready: 'your orders were carried out', objective: 'ground changed hands', decided: 'the battle was decided',
   surrender: 'a commander yielded'
 }
 const sideName = (side) => side.charAt(0).toUpperCase() + side.slice(1)

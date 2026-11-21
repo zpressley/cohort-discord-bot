@@ -450,3 +450,40 @@ test('without a time limit, a mutual hold goes on', () => {
   }
   assert.equal(game.outcome.decided, false)
 })
+
+// ── Orders carried out (review, November 2026) ─────────
+
+test('the turn stops when a side\'s orders are carried out, not an hour later', () => {
+  // The enemy marches the whole hour, far out of sight; our one unit has six
+  // tiles to go. Before, the clock ran on for the full six ticks.
+  const game = createGame(gameSpec({
+    units: [
+      unit({ id: 'a', side: 'red', position: 'C7' }),
+      unit({ id: 'b', side: 'blue', position: 'AA30' })
+    ]
+  }))
+  submitOrders(game, 'red', [{ unitRef: 'a', target: 'I7' }])
+  submitOrders(game, 'blue', [{ unitRef: 'b', target: 'AA4' }])
+
+  const turn = game.history[0]
+  assert.equal(turn.interrupt, 'ready')
+  assert.equal(turn.ticks.length, 2, 'six tiles at three a tick')
+  assert.equal(toLabel(game.battle.world.units.find(u => u.id === 'a').position), 'I7')
+})
+
+test('it does not stop for the first unit to arrive while another is still on its way', () => {
+  const game = createGame(gameSpec({
+    units: [
+      unit({ id: 'near', side: 'red', position: 'C7' }),
+      unit({ id: 'far', side: 'red', position: 'C9' }),
+      unit({ id: 'b', side: 'blue', position: 'AA30' })
+    ]
+  }))
+  submitOrders(game, 'red', [{ unitRef: 'near', target: 'F7' }, { unitRef: 'far', target: 'L9' }])
+  submitOrders(game, 'blue', [{ unitRef: 'b', target: 'AA4' }])
+
+  const turn = game.history[0]
+  assert.equal(turn.interrupt, 'ready')
+  assert.ok(turn.ticks.length > 1, 'the near unit arrived in the first tick, and the clock ran on')
+  assert.equal(toLabel(game.battle.world.units.find(u => u.id === 'far').position), 'L9')
+})
