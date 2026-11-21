@@ -17,6 +17,10 @@
 // verdict — the same orders keep running, so armies marching in empty country
 // cover real ground per decision instead of trickling three tiles a turn.
 // The moment anything happens the turn ends and both commanders decide again.
+// So does the moment a side's orders are carried out (a unit arrived, hid or
+// finished its search, and none of that side's units is still on its way):
+// without that, an ambush could be laid and sprung inside one turn, with no
+// say for the commander in between.
 // A stalled tick (nobody moved, nothing happened) also ends the turn — there
 // is nothing to fast-forward through.
 //
@@ -36,6 +40,7 @@
 
 const { createBattleState, stepTurn } = require('../battle/battle')
 const { unitsOnSide, sides } = require('../world')
+const { samePosition } = require('../map/labels')
 const { createIntel, updateIntel, sideView: fogSideView } = require('./fogOfWar')
 const { evaluateVictory, objectiveController, objectiveArea, OBJECTIVE_HOLD_MINUTES } = require('./victory')
 
@@ -174,6 +179,7 @@ function processPlayerTurn(game) {
     if (turnRecord.engagements.length > 0) { interrupt = 'contact'; break }
     if (sightings.length > 0) { interrupt = 'sighting'; break }
     if (objectiveChanges) { interrupt = 'objective'; break }
+    if (ordersCarriedOut(battle)) { interrupt = 'ready'; break }
     if (nothingMoved(turnRecord)) { interrupt = 'stalled'; break }
   }
 
@@ -241,6 +247,32 @@ function victoryContext(game) {
     timeLimitMinutes: game.spec.timeLimitMinutes ?? null,
     fledStrength: game.battle.fledUnits.reduce((m, u) => ({ ...m, [u.side]: (m[u.side] ?? 0) + u.strength }), {})
   }
+}
+
+// A side's orders are carried out when one of its units finished what it was
+// told this tick, and none of its units is still on the way somewhere.
+// Standing still and pressing the enemy (advance) never finish, so a side
+// under the standing order to advance never stops the clock this way.
+const DONE = ['arrived', 'halted', 'hidden', 'checked']
+function ordersCarriedOut(battle) {
+  const done = battle.log.forTurn(battle.turn)
+    .filter(e => DONE.includes(e.type) || (e.type === 'hideFailed' && e.reason === 'no cover'))
+  if (done.length === 0) return false
+  const doneIds = new Set(done.map(e => e.unitId))
+
+  const working = (unit) => {
+    if (doneIds.has(unit.id) || battle.broken.has(unit.id) || unit.strength <= 0) return false
+    const order = battle.orderBook.get(unit.id)
+    if (!order) return false
+    switch (order.action) {
+      case 'hold': case 'advance': return false
+      case 'check': return true
+      case 'hide': case 'ambush': return !battle.hidden.has(unit.id)
+      default: return order.target ? !samePosition(order.target, unit.position) : true
+    }
+  }
+  const finishedSides = new Set(battle.world.units.filter(u => doneIds.has(u.id)).map(u => u.side))
+  return [...finishedSides].some(side => !unitsOnSide(battle.world, side).some(working))
 }
 
 function nothingMoved(turnRecord) {

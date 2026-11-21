@@ -49,11 +49,11 @@ test('read back, then send: alone, the turn runs at once and a dispatch arrives'
   const app = await start()
   try {
     const token = (await app.api('POST', '/api/battles', { opponent: 'standing', side: 'red' })).body.seats.red
-    const read = (await app.api('POST', `/api/seat/${token}/read`, { text: 'spears to the ridge to the east' })).body
+    const read = (await app.api('POST', `/api/seat/${token}/read`, { text: 'spears to the ridge to the west' })).body
     assert.equal(read.questions.length, 0)
-    assert.match(read.understood[0], /^Spears: move The Crownhill/)
+    assert.match(read.understood[0], /^Spears: move Shepherd's Ridge/)
 
-    const asked = (await app.api('POST', `/api/seat/${token}/orders`, { text: 'spears to the ridge' })).body
+    const asked = (await app.api('POST', `/api/seat/${token}/orders`, { text: 'spears to the ford' })).body
     assert.equal(asked.status, 'clarify', 'a question sends nothing')
     assert.equal((await app.api('GET', `/api/seat/${token}`)).body.battle.turn, 1)
 
@@ -182,10 +182,10 @@ test('a question comes with choices; a finished battle tells what became of your
   const app = await start()
   try {
     const token = (await app.api('POST', '/api/battles', { opponent: 'standing', side: 'red', seed: 3 })).body.seats.red
-    const asked = (await app.api('POST', `/api/seat/${token}/orders`, { text: 'spears to the ridge' })).body
+    const asked = (await app.api('POST', `/api/seat/${token}/orders`, { text: 'spears to the ford' })).body
     assert.equal(asked.status, 'clarify')
-    assert.equal(asked.choices[0].place, 'the ridge')
-    assert.ok(asked.choices[0].options.some(o => o.text === 'The Crownhill'))
+    assert.equal(asked.choices[0].place, 'the ford')
+    assert.ok(asked.choices[0].options.some(o => o.text === "Miller's Crossing" && /east/.test(o.label) && o.square))
 
     let tent
     for (let i = 0; i < 40; i++) {
@@ -198,5 +198,52 @@ test('a question comes with choices; a finished battle tells what became of your
     for (const o of officers) assert.ok(['killed', 'captured', 'wounded', 'unhurt'].includes(o.fate))
     const again = (await app.api('GET', `/api/seat/${token}`)).body
     assert.deepEqual(again.verdict.officers, officers, 'the same story every time')
+  } finally { await app.close() }
+})
+
+// ── Review, November 2026 ──────────────────────────────
+
+test('your units hold until ordered; only the computer\'s side advances of its own accord', async () => {
+  const app = await start()
+  try {
+    const token = (await app.api('POST', '/api/battles', { opponent: 'standing', side: 'red', seed: 3 })).body.seats.red
+    const before = (await app.api('GET', `/api/seat/${token}`)).body
+    assert.ok(before.own.every(u => u.order === 'holding (no orders yet)'))
+    // Crownhill is fought across the river now, not in its north-west corner.
+    assert.ok(before.own.every(u => /^[BC][67]/.test(u.at)), before.own.map(u => u.at).join(' '))
+
+    const sent = (await app.api('POST', `/api/seat/${token}/orders`, { text: '' })).body
+    assert.equal(sent.status, 'turn-ran')
+    const after = (await app.api('GET', `/api/seat/${token}`)).body
+    assert.deepEqual(after.own.map(u => u.at), before.own.map(u => u.at), 'no one moved without an order')
+
+    await app.api('POST', `/api/seat/${token}/orders`, { text: 'horse seek and destroy' })
+    const hunting = (await app.api('GET', `/api/seat/${token}`)).body
+    assert.equal(hunting.own.find(u => u.name === 'Horse').order, 'advancing on the enemy')
+    assert.equal(hunting.own.find(u => u.name === 'Spears').order, 'holding (no orders yet)')
+  } finally { await app.close() }
+})
+
+test('one unclear order does not throw away the others: the clear ones can be sent', async () => {
+  const app = await start()
+  try {
+    const token = (await app.api('POST', '/api/battles', { opponent: 'standing', side: 'red', seed: 3 })).body.seats.red
+    const text = 'spears to the ford\nswords to the ridge to the west'
+    const asked = (await app.api('POST', `/api/seat/${token}/orders`, { text })).body
+    assert.equal(asked.status, 'clarify')
+    assert.equal(asked.canSendRest, true)
+    assert.equal((await app.api('GET', `/api/seat/${token}`)).body.battle.turn, 1, 'nothing sent yet')
+
+    const sent = (await app.api('POST', `/api/seat/${token}/orders`, { text, sendClear: true })).body
+    assert.equal(sent.status, 'turn-ran')
+    assert.match(sent.notes[0], /^Not sent: Which ford/)
+    const tent = (await app.api('GET', `/api/seat/${token}`)).body
+    assert.match(tent.own.find(u => u.name === 'Swords').order, /^moving to/)
+    assert.equal(tent.own.find(u => u.name === 'Spears').order, 'holding (no orders yet)')
+
+    // Nothing understood at all: there is no "rest" to send.
+    const none = (await app.api('POST', `/api/seat/${token}/orders`, { text: 'spears to the ford', sendClear: true })).body
+    assert.equal(none.status, 'clarify')
+    assert.equal(none.canSendRest, false)
   } finally { await app.close() }
 })

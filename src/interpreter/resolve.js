@@ -108,6 +108,7 @@ function resolvePlace(map, origin, words) {
       question: found.question,
       options: found.options.map(o => ({
         label: o.description,
+        square: gridLabel(o.position, { quarter: true }),
         text: o.feature?.name ?? gridLabel(o.position, { quarter: true })
       }))
     }
@@ -143,9 +144,19 @@ function resolveIntents(intents, context) {
     if (intent.kind === 'note') { notes.push(intent.note); continue }
     if (intent.kind !== 'order') continue
 
-    const match = intent.unitIds
+    let match = intent.unitIds
       ? { units: units.filter(u => intent.unitIds.includes(u.id)) }
       : resolveUnits(intent.unitRef, units)
+    // "Spring the trap" with no one named: the units lying in wait, and no
+    // one else. (A caller that does not say who is lying in wait gets the
+    // old reading: everyone.)
+    if (intent.spring && !intent.unitIds && intent.unitRef === 'everyone' && context.lyingInWait) {
+      match = { units: units.filter(u => context.lyingInWait.includes(u.id)) }
+      if (match.units.length === 0) {
+        questions.push('None of your units is lying in wait, so there is no trap to spring. To attack, name the units: "spears advance".')
+        continue
+      }
+    }
     if (match.units.length === 0) {
       questions.push(`Who do you mean by "${match.unknown ?? intent.unitRef}"? Your units: ${units.map(u => u.id).join(', ')}.`)
       continue
@@ -217,4 +228,12 @@ function resolveUnits(reference, units) {
   return { units: found }
 }
 
-module.exports = { resolveIntents, resolvePlace, resolveUnits, parseRelative, groupOrigin, coverWords }
+// The units of a side that are lying in wait (hiding or in ambush): the
+// ones "spring the trap" is said to. For a context's `lyingInWait`.
+function lyingInWait(battle, side) {
+  return battle.world.units
+    .filter(u => u.side === side && ['ambush', 'hide'].includes(battle.orderBook.get(u.id)?.action))
+    .map(u => u.id)
+}
+
+module.exports = { resolveIntents, resolvePlace, resolveUnits, parseRelative, groupOrigin, coverWords, lyingInWait }

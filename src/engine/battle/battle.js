@@ -353,18 +353,28 @@ function stepTurn(state, sideOrders = {}) {
     .filter(m => !m.skipped && !m.held && !m.failed && m.tilesMoved > 0 && !m.careful)
     .map(m => m.unitId))
 
+  // Units that set out to march this turn, however far they got: one stopped
+  // short by the enemy stepping up first was no more ready than the enemy.
+  const setOut = new Set(movement
+    .filter(m => !m.skipped && !m.held && !m.failed && !m.careful)
+    .map(m => m.unitId))
+
   for (const engagement of engagements) {
     const key = `${engagement.aId}|${engagement.bId}`
     if (state.previousEngagementKeys.has(key)) continue
     log.emit('contact', turn, { aId: engagement.aId, bId: engagement.bId })
 
     // Surprise: the one who sought the fight was unseen by the other side
-    // when the turn began, and caught the other on the march.
+    // when the turn began, and caught the other on the march. It must have
+    // been ready for it: standing in wait, or on the move toward an enemy it
+    // had already seen. Two columns that blunder into each other in a wood
+    // are both startled, and neither has the advantage.
     const surprises = []
     for (const [by, target] of [[engagement.aId, engagement.bId], [engagement.bId, engagement.aId]]) {
       const victim = getUnit(world, target)
       if (!seeking(by) || !marching.has(target)) continue
       if (seenAtStart.get(victim.side)?.has(by)) continue
+      if (setOut.has(by) && !seenAtStart.get(getUnit(world, by).side)?.has(target)) continue
       surprises.push(by)
       log.emit('surprise', turn, { unitId: target, by, posture: 'marching' })
     }
@@ -397,7 +407,7 @@ function stepTurn(state, sideOrders = {}) {
     for (const rout of combat.routed) {
       broken.add(rout.unitId)
       log.emit('rout', turn, { unitId: rout.unitId, by: rout.by })
-      applyPursuit(world, getUnit(world, rout.unitId), turn, log)
+      applyPursuit(world, getUnit(world, rout.unitId), turn, log, broken)
     }
   }
 
@@ -410,7 +420,7 @@ function stepTurn(state, sideOrders = {}) {
     if (!broken.has(unit.id)) continue
     if (log.forTurn(turn).some(e => e.type === 'rout' && e.unitId === unit.id)) continue
     const trapped = samePosition(positionsAtTurnStart.get(unit.id), unit.position)
-    applyPursuit(world, unit, turn, log, trapped)
+    applyPursuit(world, unit, turn, log, broken, trapped)
   }
 
   // ── Searching and hiding ────────────────────
@@ -622,11 +632,12 @@ function tileAwayFrom(map, winnerPosition, loserPosition) {
 // is overrun at three times the rate. MIN_KILLED guarantees convergence: the
 // first battle runs produced an immortal nine-man remnant whose 10% losses
 // rounded to zero, gridlocking both armies behind it past the turn cap.
-function applyPursuit(world, unit, turn, log, trapped = false) {
+// Only formed units pursue: men who are running themselves cut no one down.
+function applyPursuit(world, unit, turn, log, broken, trapped = false) {
   if (!unit || unit.strength === 0) return
 
   const pursuers = livingUnits(world)
-    .filter(u => u.side !== unit.side && tileDistance(u.position, unit.position) <= 1)
+    .filter(u => u.side !== unit.side && !broken.has(u.id) && tileDistance(u.position, unit.position) <= 1)
     .sort((a, b) => a.id.localeCompare(b.id))
     .slice(0, T.PURSUIT.MAX_PURSUERS)
 

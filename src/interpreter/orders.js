@@ -53,7 +53,7 @@ function grammarReadsWhole(line, parsed) {
   // archers" is half an order swallowed into a name.
   if (who.split(/\s+/).length > 6 || /\b(?:to|in|at|on|into|from|by|toward|towards|near)\b/.test(who)) return false
   if (who && who !== 'everyone' && rest.includes(who)) rest = rest.replace(who, ' ')
-  rest = rest.replace(SAFE_PHRASES, ' ')
+  rest = rest.replace(SAFE_PHRASES, ' ').replace(/\b(?:seek|search|find) and (?:destroy|attack|kill)\b/g, ' ')
   return !COMPOUND.test(rest)
 }
 

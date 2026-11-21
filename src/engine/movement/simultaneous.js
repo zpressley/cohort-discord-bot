@@ -156,7 +156,12 @@ function resolveSimultaneousMovement(world, orders, map, options = {}) {
       const terrain = map.terrainAt(nextCoord)
       const cost = map.moveCost(nextCoord)
 
-      if (plan.budget < cost) {
+      // A unit can always make one tile of ground in a turn, however slow
+      // it is and however rough the tile: without this, a careful or
+      // crowded unit (budget under 2) could never enter woods, marsh or a
+      // hill at all. It spends everything it has doing so.
+      const firstStep = plan.tilesTraversed.length === 0 && plan.budget > 0 && Number.isFinite(cost)
+      if (plan.budget < cost && !firstStep) {
         plan.stopped = true
         continue
       }
@@ -194,7 +199,7 @@ function resolveSimultaneousMovement(world, orders, map, options = {}) {
       }
 
       moveUnit(occupancy, unit, nextCoord)
-      plan.budget = Math.round((plan.budget - cost) * 100) / 100
+      plan.budget = Math.max(0, Math.round((plan.budget - cost) * 100) / 100)
       plan.stepIndex += 1
       plan.tilesTraversed.push({ coord: nextCoord, terrain })
       plan.blockedTicks = 0

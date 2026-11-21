@@ -28,16 +28,22 @@ function findPath(map, from, to, options = {}) {
   const startKey = positionKey(start)
   const positions = new Map([[startKey, start]])
 
-  const openSet = [{ key: startKey, f: 0, g: 0, h: 0 }]
+  const openSet = [{ key: startKey, f: 0, g: 0, h: 0, off: 0 }]
   const closedSet = new Set()
   const cameFrom = new Map()
   const gScore = new Map()
   gScore.set(startKey, 0)
 
   const heuristic = (p) => Math.abs(goal.x - p.x) + Math.abs(goal.y - p.y)
+  // Between two equally short ways, take the one nearer the straight line
+  // from start to goal. Without this the first step was always north or
+  // south, and two units three tiles apart and one row off, each making for
+  // the other at a tile a turn (in a wood), sidestepped past each other for
+  // ever: one stepped down a row as the other stepped up.
+  const offLine = (p) => Math.abs((p.x - goal.x) * (start.y - goal.y) - (start.x - goal.x) * (p.y - goal.y))
 
   while (openSet.length > 0) {
-    openSet.sort((a, b) => a.f - b.f)
+    openSet.sort((a, b) => a.f - b.f || a.off - b.off)
     const current = openSet.shift()
 
     if (current.key === goalKey) {
@@ -72,7 +78,7 @@ function findPath(map, from, to, options = {}) {
           existingNode.h = h
           existingNode.f = f
         } else {
-          openSet.push({ key, g: tentativeG, h, f })
+          openSet.push({ key, g: tentativeG, h, f, off: offLine(neighbor) })
         }
       }
     }

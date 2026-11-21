@@ -200,3 +200,18 @@ From Zach's answers to `docs/REVIEW-2026-11.md`.
 3. **Ranged fire: yes, now.** Archers and other missile troops shoot.
 4. **Remove the `grog` package** and **move the Discord bot to `archive/`**
    (the web app can run a full battle, as ruled October 14).
+5. **Battle length.** Two to three hours of battle time (about 12 to 20
+   player turns) is a fine target, especially for testing. (Same day,
+   second round of answers.)
+6. **Rallying and morale.** This replaces locked decision 5's "morale only
+   goes down". In Zach's words: "Broken unit can rally at a safe distance
+   and if not pursued. Morale only recovers with nearby success or a
+   commander's presence."
+   - A broken unit rallies (stops running and forms up) once it is a safe
+     distance from the enemy and no one is chasing it.
+   - Morale itself comes back only from success nearby (friends breaking an
+     enemy close by) or from a commander's presence. It does not come back
+     with time or rest.
+   - Reading (Claude's, not ruled): commanders are not on the field yet, so
+     the commander's presence waits for them; until then nearby success is
+     the only way morale rises. A rallied unit comes back shaken, not fresh.

@@ -68,10 +68,16 @@ function ago(at) {
 const STATUS = { 'your-orders': 'Your orders', waiting: 'Waiting on the enemy', finished: 'Finished' }
 const WHY = {
   contact: 'blows were struck', sighting: 'the enemy was sighted', time: 'an hour passed',
-  stalled: 'all was quiet', objective: 'ground changed hands', decided: 'the battle was decided',
+  stalled: 'all was quiet', ready: 'your orders were carried out', objective: 'ground changed hands', decided: 'the battle was decided',
   surrender: 'a commander yielded'
 }
 const sideName = (side) => side.charAt(0).toUpperCase() + side.slice(1)
+// An answer to "which woods?": the words that tell the choices apart, then
+// the grid square ("The woods 100 m east · D7-NE").
+const optionWords = (o) => {
+  const label = o.label ? o.label.charAt(0).toUpperCase() + o.label.slice(1) : o.text
+  return o.square && !label.includes(o.square) ? `${label} · ${o.square}` : label
+}
 // The engine gives its reason from the winner's side ("enemy army
 // broken"); a commander reads it from their own.
 const REASONS = {
@@ -477,14 +483,15 @@ async function tent(token) {
           const choice = (rb.choices ?? []).find(c => c.question === q)
           if (!choice) return `<p class="question">${esc(q)}</p>`
           return `<div class="question"><p style="margin: 0 0 8px">${esc(q)}</p><div style="display: flex; gap: 8px; flex-wrap: wrap">${
-            choice.options.map((o, i) => `<button class="btn" type="button" data-choice="${esc(rb.choices.indexOf(choice))}" data-option="${i}">${esc(o.text)}</button>`).join('')
+            choice.options.map((o, i) => `<button class="btn" type="button" data-choice="${esc(rb.choices.indexOf(choice))}" data-option="${i}">${esc(optionWords(o))}</button>`).join('')
           }</div></div>`
         }).join('')}
         ${(rb.notes ?? []).map(n => `<p class="note">Note: ${esc(n)}</p>`).join('')}
+        ${rb.canSendRest ? '<button class="btn" type="button" id="send-rest">Send the orders that were understood</button>' : ''}
         ${rb.error ? `<p class="error">${esc(rb.error)}</p>` : ''}` : ''}`
     foot.innerHTML = `
       <button class="btn btn-main btn-wide" type="button" id="send"${state.sending ? ' disabled' : ''}>${state.sending ? 'Sending…' : 'Send the orders'}</button>
-      <p class="note" style="text-align: center">Units you give no order keep their last one.</p>`
+      <p class="note" style="text-align: center">Units you give no order keep their last one. Units hold until ordered.</p>`
 
     const box = document.getElementById('orders')
     box.addEventListener('input', () => { state.draft = box.value; state.readback = null; saveDraft(token, state.draft) })
@@ -506,14 +513,16 @@ async function tent(token) {
       saveDraft(token, state.draft)
       readBack()
     }))
-    document.getElementById('send').addEventListener('click', async () => {
+    // One unclear order does not hold up the others: the answer to a
+    // question can wait a turn, and "send the rest" sends what was clear.
+    const sendOrders = async (sendClear) => {
       state.sending = true
       renderPanel()
       try {
-        const result = await api('POST', `/api/seat/${token}/orders`, { text: state.draft })
+        const result = await api('POST', `/api/seat/${token}/orders`, { text: state.draft, sendClear })
         state.sending = false
         if (result.status === 'clarify') {
-          state.readback = { understood: result.understood, questions: result.questions, choices: result.choices }
+          state.readback = { understood: result.understood, questions: result.questions, choices: result.choices, canSendRest: result.canSendRest }
           return renderPanel()
         }
         state.draft = ''
@@ -529,7 +538,9 @@ async function tent(token) {
         state.readback = { understood: [], questions: [], error: error.message }
         renderPanel()
       }
-    })
+    }
+    document.getElementById('send').addEventListener('click', () => sendOrders(false))
+    document.getElementById('send-rest')?.addEventListener('click', () => sendOrders(true))
   }
 
   function verdict(body) {

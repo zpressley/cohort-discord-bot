@@ -1,19 +1,16 @@
 {
   "name": "cohort-discord-bot",
   "version": "1.0.0",
-  "main": "src/index.js",
+  "main": "src/web/server.js",
   "scripts": {
-    "start": "node src/index.js",
-    "dev": "nodemon src/index.js",
+    "start": "node src/web/server.js",
+    "dev": "node --watch src/web/server.js",
     "test": "node --test \"src/engine/**/*.test.js\" \"src/harness/**/*.test.js\" \"src/adapters/**/*.test.js\" \"src/llm/**/*.test.js\" \"src/interpreter/**/*.test.js\" \"src/narrator/**/*.test.js\" \"src/web/**/*.test.js\"",
     "test:engine": "node --test \"src/engine/**/*.test.js\"",
     "test:harness": "node --test \"src/harness/**/*.test.js\"",
-    "test:core": "node src/tests/core/coreEngine.test.js",
-    "test:legacy": "node src/tests/core/coreEngine.test.js",
     "sim": "node src/harness/run.js",
     "balance": "node src/harness/balance/run-balance.js",
     "play": "node src/adapters/hotseat/play.js",
-    "replay": "node scripts/replayBattle.js",
     "officers": "node src/harness/officer-fates.js",
     "soak": "node src/harness/soak.js",
     "web": "node src/web/server.js",
@@ -21,32 +18,19 @@
     "test:browser": "node --test src/web/browser/battle.browser.js"
   },
   "keywords": [
-    "discord",
     "strategy",
     "ancient",
-    "warfare"
+    "warfare",
+    "wargame"
   ],
   "author": "",
   "license": "ISC",
-  "description": "Ancient warfare strategy game for Discord",
+  "description": "Cohort: an ancient warfare battle game. A pure engine, a web app (the Command Tent) and a hotseat CLI.",
   "dependencies": {
-    "@anthropic-ai/claude-agent-sdk": "^0.1.1",
-    "@anthropic-ai/sdk": "^0.24.2",
     "ajv": "^8.17.1",
-    "discord.js": "^14.14.1",
-    "dotenv": "^16.3.1",
-    "grog": "^0.0.1",
-    "groq-sdk": "^0.5.0",
-    "lodash": "^4.17.21",
-    "openai": "^4.52.0",
-    "papaparse": "^5.4.1",
-    "sequelize": "^6.35.0",
-    "sqlite3": "^5.1.6",
-    "uuid": "^9.0.1"
+    "dotenv": "^16.3.1"
   },
   "devDependencies": {
-    "eslint": "^9.38.0",
-    "install": "^0.13.0",
-    "nodemon": "^3.0.2"
+    "eslint": "^9.38.0"
   }
 }

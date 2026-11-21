@@ -181,5 +181,9 @@ module.exports = {
   width: 40,
   height: 40,
   cells: CELLS,
-  terrain: TERRAIN
+  terrain: TERRAIN,
+  // Where each side's army forms up when asked to deploy (the web app): the
+  // open ground either side of the river, south of the Merchant Road, with
+  // Miller's Crossing between them.
+  deploy: { west: { x: 11, y: 23 }, east: { x: 27, y: 23 } }
 }

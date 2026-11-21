@@ -167,10 +167,17 @@ function order(unitRef, action, place, then, extra = {}) {
 
 // Ambush, hide, check and attack-a-place, or null for the older verbs.
 const SPRING = /^(?:(.+?)\s+)?(?:spring (?:the )?(?:trap|ambush)|strike now)$/i
+// "seek and destroy", "attack on sight": hunt the enemy, until told otherwise
+// (ruled 2026-11-21: a unit attacks of its own accord only when ordered to).
+const HUNT = /^(?:(.+?)\s+)?(?:(?:seek|search|find) and (?:destroy|attack|kill)|hunt(?: (?:them|the enemy|the enemies))?(?: down)?|(?:attack|engage|charge|strike|fight) (?:on sight|at will)|(?:free|cleared) to (?:attack|engage))\.?$/i
 
 function readStage3(text, extra) {
+  // With no one named, "spring the trap" is for the units lying in wait, not
+  // the whole army: `spring` tells the resolver so.
   const spring = text.match(SPRING)
-  if (spring) return order(spring[1], 'advance', null, null, extra)
+  if (spring) return order(spring[1], 'advance', null, null, { ...extra, spring: true })
+  const hunt = text.match(HUNT)
+  if (hunt) return order(hunt[1], 'advance', null, null, extra)
   const ambushExtra = () => {
     const against = ambushKind(text)
     return { ...extra, ...(against ? { against } : {}) }

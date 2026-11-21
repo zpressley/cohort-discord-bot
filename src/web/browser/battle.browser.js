@@ -75,12 +75,12 @@ test('alone, on a phone: muster, an order written on the map, turns to a verdict
     await p.waitForSelector('.readback')
 
     // An unclear place comes with choices; picking one rewrites the order.
-    await p.fill('#orders', 'spears to the ridge')
+    await p.fill('#orders', 'spears to the ford')
     await p.click('#read-back')
     await p.waitForSelector('[data-choice]')
     await p.click('[data-choice] >> nth=0')
     await p.waitForSelector('.readback')
-    assert.doesNotMatch(await p.inputValue('#orders'), /the ridge/)
+    assert.doesNotMatch(await p.inputValue('#orders'), /the ford/)
     await p.fill('#orders', 'everyone advance')
     await p.click('#send')
     await p.waitForSelector('.dispatch')

@@ -48,12 +48,16 @@ it.
 - A player turn with both: about **$0.0002**, so 20 cents per thousand
   turns. A turn whose orders the grammar reads costs the dispatch only.
 
-**The free tier** costs nothing and allows this model 8,000 tokens a minute
-(about three AI turns a minute across everyone playing; the limit is in
-Groq's own error message) and, by third-party listings, 1,000 requests a
-day. Over the limit, the client waits out a short limit (up to 12 seconds)
-and otherwise falls back to the grammar and the plain report. The paid
-"Dev" tier removes the squeeze at the prices above.
+**The free tier** costs nothing and allows this model 8,000 tokens a
+minute, 200,000 tokens a day and 1,000 requests a day (from Groq's own
+reply headers and error message, 2026-11-21). The day's tokens are the
+limit that bites: about 110 AI order reads, or 100 full AI turns, a day
+across everyone playing, and one full benchmark run uses about a quarter of
+it. Over a limit, the client waits out a short one (up to 12 seconds) and
+otherwise falls back to the grammar and the plain report: the game goes on,
+and orders the grammar cannot read get its "I don't follow" until the limit
+lifts. The paid "Dev" tier removes the squeeze at the prices above (100
+full AI turns cost about two cents).
 
 ## How it is kept cheap and correct
 
@@ -105,3 +109,8 @@ Model replies vary a little from run to run even at temperature 0; earlier
 runs of the same set scored 39 to 42. The three misses were fixed in code
 where code could fix them (a name given for an id, two orders to one unit).
 
+2026-11-21, after the bug sweep's small prompt changes ("seek and destroy",
+"spring the trap" for units lying in wait): 40 of 42, every order the model
+answered read right. The two misses were not misreadings: the day's free
+tokens ran out near the end of the run (several benchmark runs in a day)
+and those two orders fell back to the grammar.

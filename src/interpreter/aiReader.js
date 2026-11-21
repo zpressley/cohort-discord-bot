@@ -68,7 +68,7 @@ Each order:
   move      go to a place
   hold      stay where they are (hold, wait, stay, stand, halt, stop)
   defend    go to a place and hold it (defend, guard, protect, dig in, take and hold, set up a position at)
-  advance   close with and fight the nearest enemy (advance, charge, engage, attack with no place named, spring the trap)
+  advance   close with and fight the nearest enemy, and keep hunting until told otherwise (advance, charge, engage, attack with no place named, seek and destroy, attack on sight, engage at will). "Spring the trap" is advance for the units marked "lying in wait" only, unless the commander names others.
   attack    go to a place looking for a fight (attack, assault, storm, seize, take + a place or an enemy unit)
   withdraw  fall back (retreat, pull back, disengage); to a place if one is named, else toward home
   hide      go to ground and hide (hide, take cover, conceal, lie low)
@@ -123,7 +123,8 @@ function briefing(context, text) {
   const lines = ['Your units:']
   for (const u of units) {
     const called = [...new Set([...(u.aliases ?? []), String(u.role ?? '').replace(/_/g, ' ')].filter(Boolean))].slice(0, 3)
-    lines.push(`- ${u.id}${called.length ? ` (called: ${called.join(', ')})` : ''}${u.mounted ? ', mounted' : ''}, at ${square(u.position)}`)
+    const waiting = (context.lyingInWait ?? []).includes(u.id) ? ', lying in wait' : ''
+    lines.push(`- ${u.id}${called.length ? ` (called: ${called.join(', ')})` : ''}${u.mounted ? ', mounted' : ''}, at ${square(u.position)}${waiting}`)
   }
   const named = detectFeatures(map).filter(f => f.name)
   if (named.length > 0) {

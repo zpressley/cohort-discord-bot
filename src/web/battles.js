@@ -26,6 +26,7 @@ const { staminaPool } = require('../engine/combat/ratings')
 const { fateChances, perOfficer, woundReason, exposureFromEvents } = require('../engine/veterans')
 const { createRng } = require('../engine/rng')
 const { interpretText } = require('../interpreter/orders')
+const { lyingInWait } = require('../interpreter/resolve')
 const { narrateTurn, report } = require('../narrator/turnNarrator')
 const { loadScenario, SCENARIOS, mapChoices } = require('../adapters/hotseat/scenarios')
 const { MAPS } = require('../data/maps')
@@ -49,9 +50,10 @@ function unitName(unit) {
   return words.charAt(0).toUpperCase() + words.slice(1)
 }
 
-// An order in force, in plain words.
-function describeOrder(order) {
-  if (!order) return 'following the standing orders'
+// An order in force, in plain words. A unit with no order follows its
+// side's standing order: to advance (the computer's side), or to hold.
+function describeOrder(order, standing = null) {
+  if (!order) return standing === 'advance' ? 'advancing on the enemy (standing orders)' : 'holding (no orders yet)'
   const at = order.target ? ` ${where(order.target)}` : ''
   const careful = order.careful ? ', carefully' : ''
   switch (order.action) {
@@ -197,10 +199,15 @@ function createBattleStore({ dir = null, ai = null, now = () => Date.now() } = {
   function muster(m = {}) {
     const scenario = SCENARIOS[m.scenario] ? m.scenario : 'meeting-battle'
     const mapName = MAPS[m.map] ? m.map : 'crownhill'
-    let spec = loadScenario(scenario, { map: mapName })
+    let spec = loadScenario(scenario, { map: mapName, deploy: true })
     const allSides = Object.keys(spec.sides)
     const side = allSides.includes(m.side) ? m.side : allSides[0]
     const other = allSides.find(s => s !== side)
+    const solo = m.opponent !== 'friend'
+    // A commander's units hold until ordered (ruled 2026-11-21): they attack
+    // of their own accord only when told to ("seek and destroy"). The
+    // standing order to advance is the computer's side's alone.
+    spec = { ...spec, standingOrders: solo && spec.standingOrders?.[other] ? { [other]: spec.standingOrders[other] } : {} }
     if (m.timeLimitMinutes) spec = { ...spec, timeLimitMinutes: Number(m.timeLimitMinutes) }
     const objectives = (m.objectives ?? []).filter(Boolean).map((ground, i) => isGridRef(ground)
       ? { id: `objective-${i + 1}`, square: ground }
@@ -208,7 +215,6 @@ function createBattleStore({ dir = null, ai = null, now = () => Date.now() } = {
     if (objectives.length) spec = { ...spec, objectives }
 
     const game = createGame(spec, { seed: m.seed ?? crypto.randomInt(1, 1_000_000) })
-    const solo = m.opponent !== 'friend'
     const entry = {
       id: crypto.randomBytes(6).toString('hex'),
       scenario,
@@ -270,7 +276,8 @@ function createBattleStore({ dir = null, ai = null, now = () => Date.now() } = {
       map: game.battle.map,
       units: game.battle.world.units.filter(u => u.side === side && u.strength > 0 && !game.battle.broken.has(u.id))
         .map(u => ({ ...u, aliases: [unitName(u).toLowerCase()] })),
-      enemies: sideView(game, side).intel
+      enemies: sideView(game, side).intel,
+      lyingInWait: lyingInWait(game.battle, side)
     }
   }
 
@@ -312,7 +319,7 @@ function createBattleStore({ dir = null, ai = null, now = () => Date.now() } = {
         broken: battle.broken.has(u.id),
         hidden: battle.hidden.has(u.id),
         crowding: battle.crowding.get(u.id) ?? 'organized',
-        order: battle.broken.has(u.id) ? 'broken and fleeing' : describeOrder(battle.orderBook.get(u.id)),
+        order: battle.broken.has(u.id) ? 'broken and fleeing' : describeOrder(battle.orderBook.get(u.id), game.spec.standingOrders?.[side]),
         target: battle.orderBook.get(u.id)?.target ?? null
       }
     })
@@ -395,10 +402,12 @@ function createBattleStore({ dir = null, ai = null, now = () => Date.now() } = {
   }
 
   /**
-   * Send orders. Questions send nothing. When every side is in, the turn
-   * runs and each side gets its report.
+   * Send orders. A question sends nothing, unless `sendClear` says to send
+   * the orders that were understood and leave the rest: one unclear order
+   * should not hold up, or throw away, the others. When every side is in,
+   * the turn runs and each side gets its report.
    */
-  async function submit(token, text) {
+  async function submit(token, text, { sendClear = false } = {}) {
     const seat = seatOf(token)
     if (!seat) return null
     const { entry, side } = seat
@@ -408,11 +417,15 @@ function createBattleStore({ dir = null, ai = null, now = () => Date.now() } = {
     const read = await interpretText(String(text ?? ''), context(entry, side), { ai })
     const name = namer(game, side)
     const understood = read.understood.map(name)
-    if (read.questions.length > 0) {
-      return { status: 'clarify', questions: read.questions.map(name), choices: (read.choices ?? []).map(c => ({ ...c, question: name(c.question) })), understood }
+    if (read.questions.length > 0 && !(sendClear && read.orders.length > 0)) {
+      return {
+        status: 'clarify', questions: read.questions.map(name), understood,
+        choices: (read.choices ?? []).map(c => ({ ...c, question: name(c.question) })),
+        canSendRest: read.orders.length > 0
+      }
     }
 
-    const notes = (read.notes ?? []).map(name)
+    const notes = [...(read.notes ?? []), ...read.questions.map(q => `Not sent: ${q}`)].map(name)
     entry.pending[side] = { text: String(text ?? ''), understood, notes, at: now() }
     let result = submitOrders(game, side, read.surrender ? { surrender: true } : read.orders)
     // Solo: the standing orders answer at once.
