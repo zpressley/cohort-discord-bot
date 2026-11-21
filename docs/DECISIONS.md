@@ -200,8 +200,6 @@ From Zach's answers to `docs/REVIEW-2026-11.md`.
 3. **Ranged fire: yes, now.** Archers and other missile troops shoot.
 4. **Remove the `grog` package** and **move the Discord bot to `archive/`**
    (the web app can run a full battle, as ruled October 14).
-
-
 5. **Battle length.** Two to three hours of battle time (about 12 to 20
    player turns) is a fine target, especially for testing. (Same day,
    second round of answers.)
