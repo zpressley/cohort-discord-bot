@@ -394,6 +394,8 @@ function stepTurn(state, sideOrders = {}) {
       if (!seeking(by) || !marching.has(target)) continue
       if (seenAtStart.get(victim.side)?.has(by)) continue
       if (setOut.has(by) && !seenAtStart.get(getUnit(world, by).side)?.has(target)) continue
+      // A rallied unit still shaken is in no state to spring anything.
+      if (shaken(getUnit(world, by))) continue
       surprises.push(by)
       log.emit('surprise', turn, { unitId: target, by, posture: 'marching' })
     }

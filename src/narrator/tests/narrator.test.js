@@ -162,3 +162,10 @@ test('a rally is told, with how shaken the unit is; taking heart is the side\'s 
   assert.deepEqual(visibleEvents([heart, rallied], knowledge), [rallied], "the enemy's morale is not ours to read")
   assert.match(fact(map, { ...heart, unitId: 'red_archers', by: 'blue_swords' }), /red_archers took heart at the breaking of blue_swords/)
 })
+
+test('everyone who took heart at one enemy\'s breaking is told in one line', () => {
+  const heart = (unitId) => ({ type: 'heartened', turn: 4, unitId, by: 'blue_swords', morale: 60 })
+  const told = summarise([heart('red_spears'), heart('red_archers')])
+  assert.equal(told.length, 1)
+  assert.equal(fact(map, told[0]), 'red_spears and red_archers took heart at the breaking of blue_swords')
+})

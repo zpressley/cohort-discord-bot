@@ -77,6 +77,7 @@ function summarise(events) {
   const moves = new Map()
   const fights = new Map()
   const crowds = new Map()
+  const hearts = new Map()
   const pair = (a, b) => [a, b].sort().join('|')
 
   for (const e of events) {
@@ -98,6 +99,13 @@ function summarise(events) {
       }
       const merged = { ...e, a: { ...e.a }, b: { ...e.b }, rounds: 1 }
       fights.set(key, merged)
+      out.push(merged)
+    } else if (e.type === 'heartened') {
+      // Everyone who took heart at the same enemy's breaking, in one line.
+      const seen = hearts.get(e.by)
+      if (seen) { if (!seen.units.includes(e.unitId)) seen.units.push(e.unitId); continue }
+      const merged = { ...e, units: [e.unitId] }
+      hearts.set(e.by, merged)
       out.push(merged)
     } else if (e.type === 'crowding') {
       const seen = crowds.get(e.unitId)
@@ -139,6 +147,8 @@ function whereAt(map, position) {
 }
 
 const possessive = (name) => (/s$/i.test(name) ? `${name}'` : `${name}'s`)
+const listOf = (names) => names.length <= 1 ? names.join('') : `${names.slice(0, -1).join(', ')} and ${names.at(-1)}`
+const men = (n) => (n === 1 ? '1 man' : `${n} men`)
 const capital = (word) => String(word).charAt(0).toUpperCase() + String(word).slice(1)
 
 // How a unit stands after a fight, when it is worth saying.
@@ -178,7 +188,7 @@ function plainFact(map, event) {
     case 'fled': return `${event.unitId} escaped the field with ${event.strength} men`
     case 'rallied': return `${event.unitId} rallied ${whereAt(map, event.at)} with ${event.strength} men` +
       (event.morale <= 25 ? ', badly shaken: it will not stand long without a success near it' : '')
-    case 'heartened': return `${event.unitId} took heart at the breaking of ${event.by}`
+    case 'heartened': return `${listOf(event.units ?? [event.unitId])} took heart at the breaking of ${event.by}`
     case 'destroyed': return `${event.unitId} was destroyed`
     case 'crowding': return event.tier === 'organized'
       ? `${event.unitId} had room to fight again`
@@ -282,7 +292,7 @@ function digest(events, { map, ownIds, whereIs = () => null }) {
     if (foes.length) {
       parts.push(`${u.foes.length ? 'fought' : 'met'} ${list(foes)}${where ? ` ${whereAt(map, where)}` : ''}`)
     }
-    if (u.foes.length) parts.push(`lost ${u.lost} men and killed ${u.killed}`)
+    if (u.foes.length) parts.push(`lost ${men(u.lost)} and killed ${u.killed}`)
     if (u.drove.length) parts.push(`drove ${list(u.drove)} back`)
     if (u.brokeEnemies.length) parts.push(`broke ${list(u.brokeEnemies)}` + (u.cutDown ? `, cutting down ${u.cutDown} as they ran` : ''))
     else if (u.cutDown) parts.push(`cut down ${u.cutDown} of the fleeing enemy`)
