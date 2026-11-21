@@ -487,3 +487,20 @@ test('it does not stop for the first unit to arrive while another is still on it
   assert.ok(turn.ticks.length > 1, 'the near unit arrived in the first tick, and the clock ran on')
   assert.equal(toLabel(game.battle.world.units.find(u => u.id === 'far').position), 'L9')
 })
+
+test('a unit rallying stops the turn: it is back in hand and wants orders', () => {
+  const game = createGame(gameSpec({
+    units: [
+      unit({ id: 'a', side: 'red', position: 'C7' }),
+      unit({ id: 'runner', side: 'red', position: 'E7' }),
+      unit({ id: 'b', side: 'blue', position: 'AA30' })
+    ]
+  }))
+  game.battle.broken.add('runner')
+  submitOrders(game, 'red', [])
+  submitOrders(game, 'blue', [{ unitRef: 'b', target: 'AA4' }])
+
+  const turn = game.history[0]
+  assert.equal(turn.interrupt, 'rallied')
+  assert.equal(game.battle.broken.has('runner'), false)
+})

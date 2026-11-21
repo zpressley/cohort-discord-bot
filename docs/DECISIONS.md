@@ -215,3 +215,31 @@ From Zach's answers to `docs/REVIEW-2026-11.md`.
    - Reading (Claude's, not ruled): commanders are not on the field yet, so
      the commander's presence waits for them; until then nearby success is
      the only way morale rises. A rallied unit comes back shaken, not fresh.
+
+### How the pace rulings were built (Claude's choices, open to change)
+
+The numbers are in `src/engine/combat/tables.js` (`PACE`, `RALLY`, `HEART`),
+tuned with `npm run soak` and 24 battles through the web app's own code.
+
+- **A tick of a battle is 0.4 of a combat round.** Losses, morale and
+  fatigue all run at that share. The duel tables and the balance matrix
+  are untouched: they still fight whole rounds.
+- **A unit fighting several enemies splits its effort.** Each enemy takes
+  its share of the unit's blows; the unit takes all of theirs. Before, one
+  unit against three dealt its full weight to each.
+- **Safe distance is 6 tiles (150 m)** from the nearest formed enemy. A
+  unit does not rally in the tick it broke.
+- **A unit rallies once**, and not at all below 30% of its original men.
+  Without a limit, shaken units broke, ran, rallied and came back for
+  hours.
+- **Rallying does not raise morale.** A rallied unit is as shaken as when
+  it broke, and will break at the next blow unless it takes heart first.
+- **Taking heart: +8 morale** to every unit within 6 tiles of an enemy
+  unit that breaks or is destroyed, never above the starting morale.
+- **The verdict waits.** A side is beaten when it has no formed unit and no
+  broken unit that could still rally; both sides in that state is a draw.
+- **Under the computer's standing advance, a rallied unit that is still
+  shaken holds** behind the steadier units, and goes forward only when
+  none is left.
+- **A unit rallying ends the player turn**, like a sighting: it is back in
+  hand and wants orders.

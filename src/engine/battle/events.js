@@ -51,6 +51,12 @@
 //              a unit broke
 //   pursuit    unitId, by, killed, remaining, trapped
 //              a fleeing unit cut down from behind
+//   heartened  unitId, by, morale
+//              a unit took heart: enemy unit `by` broke or was destroyed
+//              near it. morale is what it has now
+//   rallied    unitId, at, strength, morale
+//              a broken unit got clear of the enemy, stopped running and
+//              formed up again
 //   crowding   unitId, at, men, tier, was
 //              a unit's crowding tier changed: friends packed onto its tile
 //              (organized, crowded, compressed, crushing, critical). See

@@ -459,10 +459,54 @@ const PURSUIT = {
   MAX_PURSUERS: 2           // more than two cannot reach a fleeing column
 }
 
+// ── Pace ───────────────────────────────────────────────
+//
+// Ruled 2026-11-21: battles should last longer (two to three hours of
+// battle time). The combat tables above and below are tuned in ROUNDS, and
+// a round used to be one ten-minute tick of a battle: an even fight broke a
+// unit in three ticks, and a whole battle was over half an hour after first
+// contact. A tick of a battle now holds PER_TICK of a round (fighting comes
+// in bouts, with lulls between): losses, morale and fatigue all run at this
+// share. The duel harness and the balance matrix still fight whole rounds,
+// so everything tuned there stands.
+
+const PACE = {
+  PER_TICK: 0.4
+}
+
+// ── Rallying, and taking heart ─────────────────────────
+//
+// Ruled 2026-11-21, in place of "morale only goes down": "Broken unit can
+// rally at a safe distance and if not pursued. Morale only recovers with
+// nearby success or a commander's presence."
+//
+// A broken unit with no formed enemy within SAFE_TILES stops running and
+// forms up. Its morale is what it was: shaken, and likely to break again at
+// the first blow unless friends succeed near it. A unit cut down below
+// MIN_STRENGTH of its original numbers does not re-form, and a unit rallies
+// TIMES in a battle: one that breaks again is gone. (Without the limit a
+// shaken unit broke, ran, rallied and came back for ever: the first soak
+// run had battles of eleven hours.)
+//
+// When an enemy unit breaks or is destroyed, every unit of the other side
+// within RANGE of it takes heart: MORALE points, never above the starting
+// morale. (A commander's presence waits for commanders on the field.)
+
+const RALLY = {
+  SAFE_TILES: 6,
+  MIN_STRENGTH: 0.3,
+  TIMES: 1
+}
+
+const HEART = {
+  RANGE: 6,
+  MORALE: 8
+}
+
 // ── Morale ─────────────────────────────────────────────
 //
-// [locked decision 5] Monotonic down. No recovery inside an engagement —
-// reinforcements and visible victory elsewhere are a phase 8 feature.
+// [locked decision 5, replaced 2026-11-21] Morale falls in a fight and rises
+// only with success nearby (HEART above); a broken unit may rally (RALLY).
 //
 // Morale is a 0-100 pool on every unit (the harness already carries the field).
 // The tier's `morale` stat is not the pool size; it is RESISTANCE, a divisor on
@@ -574,6 +618,9 @@ module.exports = {
   EXPOSURE,
   SURPRISE,
   PURSUIT,
+  PACE,
+  RALLY,
+  HEART,
   MORALE,
   DAMAGE,
   CHARGE,

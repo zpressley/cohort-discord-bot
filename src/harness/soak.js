@@ -57,7 +57,8 @@ for (const field of fields) for (const name of Object.keys(SCENARIOS)) {
 let decided = 0
 let meetingTurns = 0
 for (let seed = 1; seed <= 50; seed++) {
-  const record = runBattle(meeting, { seed })
+  // The scenario's own cap of 20 ticks was set when a battle lasted five.
+  const record = runBattle({ ...meeting, maxTurns: 120 }, { seed })
   if (record.outcome.decided) { decided++; meetingTurns += record.turns.length }
 }
 

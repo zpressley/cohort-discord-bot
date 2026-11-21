@@ -180,6 +180,8 @@ function processPlayerTurn(game) {
     if (sightings.length > 0) { interrupt = 'sighting'; break }
     if (objectiveChanges) { interrupt = 'objective'; break }
     if (ordersCarriedOut(battle)) { interrupt = 'ready'; break }
+    // A unit back in hand wants orders.
+    if (battle.log.forTurn(battle.turn).some(e => e.type === 'rallied')) { interrupt = 'rallied'; break }
     if (nothingMoved(turnRecord)) { interrupt = 'stalled'; break }
   }
 
@@ -237,6 +239,7 @@ function victoryContext(game) {
   return {
     world: game.battle.world,
     broken: game.battle.broken,
+    rallied: game.battle.rallied,
     surrendered: game.surrendered,
     startingStrength: game.startingStrength,
     objectiveHolds: game.objectiveHolds,

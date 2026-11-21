@@ -41,7 +41,7 @@ function involved(event) {
 
 // Events only the unit's own side knows of: its hiding, its search, an
 // ambush it held back, how packed its ranks are.
-const PRIVATE = new Set(['hidden', 'hideFailed', 'ambushHeld', 'checked', 'crowding'])
+const PRIVATE = new Set(['hidden', 'hideFailed', 'ambushHeld', 'checked', 'crowding', 'heartened'])
 
 /**
  * The events one side could know about: everything involving its own units,
@@ -176,6 +176,9 @@ function plainFact(map, event) {
     case 'rout': return `${event.unitId} broke and fled from ${event.by}`
     case 'pursuit': return `${event.by} cut down ${event.killed} of the fleeing ${event.unitId}` + (event.trapped ? ', who were cornered' : '')
     case 'fled': return `${event.unitId} escaped the field with ${event.strength} men`
+    case 'rallied': return `${event.unitId} rallied ${whereAt(map, event.at)} with ${event.strength} men` +
+      (event.morale <= 25 ? ', badly shaken: it will not stand long without a success near it' : '')
+    case 'heartened': return `${event.unitId} took heart at the breaking of ${event.by}`
     case 'destroyed': return `${event.unitId} was destroyed`
     case 'crowding': return event.tier === 'organized'
       ? `${event.unitId} had room to fight again`
@@ -207,7 +210,8 @@ function plainFact(map, event) {
 
 // How much a commander needs to hear of each kind of event: lower is sooner.
 const WEIGHT = {
-  victory: 0, destroyed: 1, rout: 1, fled: 1, pursuit: 2, ambush: 1, surprise: 2, objective: 2,
+  victory: 0, destroyed: 1, rout: 1, fled: 1, rallied: 1, pursuit: 2, ambush: 1, surprise: 2, objective: 2,
+  heartened: 5,
   revealed: 3, exchange: 3, standoff: 3, push: 4, crush: 4, disengage: 4, contact: 4,
   hidden: 5, hideFailed: 5, checked: 5, ambushHeld: 5, crowding: 6, arrived: 6, halted: 6, move: 7
 }
