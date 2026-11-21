@@ -254,7 +254,12 @@ sharp as it was.
   unit that breaks or is destroyed, never above the starting morale.
 - **The verdict.** A side is in the battle while it has a steady unit:
   formed up, and not shaken (rallied without having taken heart since).
-  With none it is beaten, and both sides in that state is a draw. (The
+  With none it is beaten. If neither side has one, the field goes to the
+  side with more men still in the ranks; a draw only if neither has a
+  formed man left or they are exactly even (asked by Zach: "how often do
+  both sides break ... that does not logically make sense"; it was 2
+  battles in 960, and in the one examined the unit that had just won the
+  last fight was counted as beaten). (The
   first build waited on any broken unit that could still rally. Once
   archers could break a shaken unit from a distance for the loss of a man
   or two, the tail of a battle ran to ten hours, so it was changed with

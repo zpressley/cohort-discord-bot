@@ -883,27 +883,35 @@ function sightBySide(map, world, hidden = new Map()) {
 }
 
 // ── Victory ──────────────────────────────────────────────
-// A side is beaten when it has no effective units left: alive, unbroken, and
-// still on the field. Broken units still fleeing count for nothing — they are
-// running, not fighting.
 // A side is still in the battle while it has a steady unit: one that is
 // formed up and not shaken. Broken units may rally, but they come back
 // shaken, and take heart only from a success near them; an army with no
 // steady unit left has no one to give it one, and is beaten. (`isShaken` is
 // the battle's own test; without one, every formed unit counts.)
+//
+// When neither side has a steady unit left, the field belongs to the side
+// with more men still in the ranks: someone won the last fight, and two
+// armies do not both run from each other. Only when neither has a formed
+// man left, or they are exactly even, is it a draw.
 function checkBattleOutcome(world, broken, isShaken = () => false) {
-  const effective = (side) => unitsOnSide(world, side).filter(u => u.strength > 0 && !broken.has(u.id) && !isShaken(u))
-  const remaining = sides(world).filter(side => effective(side).length > 0)
+  const formed = (side) => unitsOnSide(world, side).filter(u => u.strength > 0 && !broken.has(u.id))
+  const steady = (side) => formed(side).filter(u => !isShaken(u))
+  const remaining = sides(world).filter(side => steady(side).length > 0)
 
-  // sides() reads the roster, so a side whose last unit fled the field
-  // disappears from it entirely — handle the empty world first.
   if (remaining.length === 1) {
     return { decided: true, winner: remaining[0], reason: 'enemy army broken' }
   }
-  if (remaining.length === 0) {
-    return { decided: true, winner: 'draw', reason: 'mutual collapse' }
+  if (remaining.length > 1) return { decided: false, winner: null, reason: null }
+
+  // sides() reads the roster, so a side whose last unit fled the field
+  // disappears from it entirely: an empty world is a draw too.
+  const inRanks = sides(world)
+    .map(side => ({ side, men: formed(side).reduce((n, u) => n + u.strength, 0) }))
+    .sort((x, y) => y.men - x.men)
+  if (inRanks.length > 0 && inRanks[0].men > (inRanks[1]?.men ?? 0)) {
+    return { decided: true, winner: inRanks[0].side, reason: 'enemy army broken' }
   }
-  return { decided: false, winner: null, reason: null }
+  return { decided: true, winner: 'draw', reason: 'mutual collapse' }
 }
 
 // ── Edges ────────────────────────────────────────────────

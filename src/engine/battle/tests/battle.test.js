@@ -190,6 +190,22 @@ test('an army with only shaken units left is beaten', () => {
   assert.deepEqual(outcome, { decided: true, winner: 'red', reason: 'enemy army broken' })
 })
 
+test('with no steady unit on either side, the field goes to the side with more men still in the ranks', () => {
+  // Seen in the soak: a rallied unit, still shaken, broke the enemy's last
+  // steady unit, and the battle was called a draw though it had just won.
+  const world = createWorld({
+    units: [
+      unit({ id: 'a', side: 'red', strength: 60 }),
+      unit({ id: 'b', side: 'blue', position: 'H12', strength: 40 }),
+      unit({ id: 'c', side: 'blue', position: 'H14' })
+    ]
+  })
+  const shaken = (u) => u.id === 'a' || u.id === 'b'
+  assert.deepEqual(checkBattleOutcome(world, new Set(['c']), shaken), { decided: true, winner: 'red', reason: 'enemy army broken' })
+  // A formed unit, however shaken, beats an army with no one in the ranks.
+  assert.equal(checkBattleOutcome(world, new Set(['b', 'c']), shaken).winner, 'red')
+})
+
 test('both armies collapsing together is a draw', () => {
   const world = createWorld({
     units: [unit({ id: 'a', side: 'red' }), unit({ id: 'b', side: 'blue', position: 'H12' })]
