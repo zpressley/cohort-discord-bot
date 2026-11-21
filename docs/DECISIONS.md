@@ -186,3 +186,17 @@ From Zach's answers to the Stage 4 plan.
    assets.
 4. **Solo first:** Zach tests alone against the standing orders first, then
    with friends.
+
+## Rulings, November 21, 2026 (after the review)
+
+From Zach's answers to `docs/REVIEW-2026-11.md`.
+
+1. **A human side's units hold by default.** A unit given no order stands.
+   It attacks of its own accord only when commanded to: an order to attack
+   on sight, to seek and destroy, or a related attack order, which lasts
+   until countermanded. (The computer's side keeps its standing advance.)
+2. **Battles should last longer.** Ten to fifteen player turns is fine for
+   testing; the real game can run longer. Pace is tuned up, not down.
+3. **Ranged fire: yes, now.** Archers and other missile troops shoot.
+4. **Remove the `grog` package** and **move the Discord bot to `archive/`**
+   (the web app can run a full battle, as ruled October 14).
