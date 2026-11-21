@@ -159,7 +159,11 @@ function processPlayerTurn(game) {
   let interrupt = null
 
   for (let tick = 1; tick <= MAX_TICKS_PER_TURN; tick++) {
-    const turnRecord = stepTurn(battle, orders)
+    // Orders are given once, as the turn opens. They stand in the battle's
+    // order book from then on, so later ticks need nothing new. (Before
+    // November 2026 the same orders were handed in again every tick, which
+    // would have put a unit back on the first step of a chain each time.)
+    const turnRecord = stepTurn(battle, tick === 1 ? orders : {}, { sameTurn: tick > 1 })
     game.minutesElapsed += MINUTES_PER_TICK
 
     // Sightings on either side interrupt: yours because you would give new
@@ -259,8 +263,9 @@ function victoryContext(game) {
 // under the standing order to advance never stops the clock this way.
 const DONE = ['arrived', 'halted', 'hidden', 'checked']
 function ordersCarriedOut(battle) {
+  // (A unit arriving at one step of a longer order has not finished.)
   const done = battle.log.forTurn(battle.turn)
-    .filter(e => DONE.includes(e.type) || (e.type === 'hideFailed' && e.reason === 'no cover'))
+    .filter(e => (DONE.includes(e.type) && !e.more) || (e.type === 'hideFailed' && e.reason === 'no cover'))
   if (done.length === 0) return false
   const doneIds = new Set(done.map(e => e.unitId))
 

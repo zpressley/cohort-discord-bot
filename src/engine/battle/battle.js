@@ -38,7 +38,8 @@ const {
   resolveSimultaneousMovement, expandOrders, buildOccupancy, canEnter, moveUnit, crowdingByUnit
 } = require('../movement')
 const { createEventLog } = require('./events')
-const { normalizeOrder, planUnit, isSeeking } = require('./orders')
+const { normalizeOrder, planUnit, nextStep, isSeeking, NEAR_TILES } = require('./orders')
+const { grasp, losingTheThread } = require('../command/officers')
 const { canSee } = require('../map/sight')
 const { coverFor } = require('./hiding')
 
@@ -62,6 +63,13 @@ function createBattleState(spec, options = {}) {
     map: resolveMap(spec.map),
     world: createWorld({ units: spec.units }),
     random: createRng(seed),
+    // A stream of its own for what officers keep of their orders, so that
+    // giving a deeper order never changes how the fighting falls out.
+    officerRandom: createRng((Math.imul(seed, 2654435761) + 97) >>> 0),
+    // Units given an order in the player turn now running, and those shot
+    // at in the tick before this one.
+    fresh: new Set(),
+    shotLastTurn: new Set(),
     // A tick of a battle is a share of a combat round (tables.PACE).
     resolver: createCombatResolver({ pace: spec.combatPace ?? T.PACE.PER_TICK }),
     log: createEventLog(),
@@ -106,8 +114,12 @@ function createBattleState(spec, options = {}) {
  * @returns {Object} turn record (also appended nowhere — the caller owns the
  *                   ledger; runBattle and the orchestrator each keep their own)
  */
-function stepTurn(state, sideOrders = {}) {
+function stepTurn(state, sideOrders = {}, { sameTurn = false } = {}) {
   const { spec, map, world, random, resolver, log, broken, fledUnits } = state
+  // A player turn can run several ticks (the orchestrator's elastic time).
+  // Orders are given in its first; `sameTurn` marks the ticks after it, in
+  // which those orders are still this turn's.
+  if (!sameTurn) state.fresh = new Set()
   const engagementRange = spec.engagementRange ?? 1
 
   state.turn += 1
@@ -162,19 +174,53 @@ function stepTurn(state, sideOrders = {}) {
 
   // ── Orders ──────────────────────────────────────
   const orders = []
-  const freshThisTurn = new Set()
+  const freshThisTurn = state.fresh
+
+  // Has the moment an order's condition spoke of come, as this unit's
+  // officer can tell from where he stands?
+  const whenTrue = (unit, when) => {
+    if (when.type === 'attacked') return engagedAtStart.has(unit.id) || state.shotLastTurn.has(unit.id)
+    if (when.type === 'breaks') return broken.has(when.unitId) || !livingUnits(world).some(u => u.id === when.unitId)
+    return livingUnits(world).some(e =>
+      e.side !== unit.side && !broken.has(e.id) &&
+      seenAtStart.get(unit.side)?.has(e.id) && canSee(map, unit, e) &&
+      matchesKind(e, when.kind) &&
+      (!when.near || tileDistance(e.position, when.near) <= NEAR_TILES))
+  }
+  const HOLD = { action: 'hold', target: null, then: null }
+  const ADVANCE = { action: 'advance', target: null, then: null }
+  // An officer who no longer remembers what he was to do: his personality
+  // decides (command/officers.js), and the log says so.
+  const loseThread = (unit, lost, current) => {
+    const inSight = (seenAtStart.get(unit.side)?.size ?? 0) > 0
+    const did = losingTheThread(unit.officer, lost, inSight)
+    log.emit('lostThread', turn, { unitId: unit.id, officer: unit.officer?.name ?? null, lost, did })
+    if (did === 'advance') return { ...ADVANCE }
+    if (did === 'hold') return { ...HOLD }
+    const carried = { ...current }
+    delete carried.when
+    return carried
+  }
 
   for (const side of sides(world)) {
     const effective = unitsOnSide(world, side).filter(u => !broken.has(u.id))
     const { orders: expanded } = expandOrders(sideOrders[side] ?? [], effective)
 
     // Orders given this turn replace each unit's standing order.
-    const fresh = new Set()
+    // What its officer keeps of an order with more than one thing in it is
+    // rolled here, once, as the order is given.
     for (const order of expanded) {
-      state.orderBook.set(order.unitId, normalizeOrder(order))
-      fresh.add(order.unitId)
+      let given = normalizeOrder(order)
+      const officer = getUnit(world, order.unitId)?.officer
+      if (officer) {
+        const kept = grasp(given, officer, state.officerRandom)
+        if (kept.clauses > 0) log.emit('grasp', turn, { unitId: order.unitId, officer: officer.name ?? null, clauses: kept.clauses, kept: kept.kept })
+        given = kept.order
+      }
+      state.orderBook.set(order.unitId, given)
       freshThisTurn.add(order.unitId)
     }
+    const fresh = freshThisTurn
 
     const edge = spec.sides?.[side]?.homeEdge ?? 'west'
     const context = (unit) => ({
@@ -184,7 +230,28 @@ function stepTurn(state, sideOrders = {}) {
     })
 
     for (const unit of effective) {
-      const { move, order } = planUnit(unit, state.orderBook.get(unit.id), context(unit))
+      // The order's condition, if it has one and its moment has come: the
+      // unit does the other thing, from now on. (Or its officer, having
+      // lost that part, does as his nature tells him.)
+      let current = state.orderBook.get(unit.id)
+      if (current?.when && whenTrue(unit, current.when)) {
+        if (current.when.lost) {
+          current = loseThread(unit, 'condition', current)
+        } else {
+          const { type, kind = null } = current.when
+          current = { ...current.when.do }
+          log.emit('reacted', turn, { unitId: unit.id, when: type, kind, action: current.action, target: current.target ? { ...current.target } : null })
+        }
+        state.orderBook.set(unit.id, current)
+        freshThisTurn.add(unit.id)
+      }
+
+      let { move, order, lostThread } = planUnit(unit, current, context(unit))
+      if (lostThread) {
+        // He has done what he remembered, and not what came after.
+        const instead = loseThread(unit, 'steps', current);
+        ({ move, order } = planUnit(unit, instead, context(unit)))
+      }
       if (order) state.orderBook.set(unit.id, order)
       else state.orderBook.delete(unit.id)
       // Missile troops told to press the enemy do it their own way: they
@@ -318,7 +385,9 @@ function stepTurn(state, sideOrders = {}) {
     if (move.reachedTarget && order && order.action !== 'hold' && order.action !== 'advance') {
       log.emit('arrived', turn, {
         unitId: move.unitId, action: order.action, at: { ...move.to },
-        then: order.then === 'hold' ? 'hold' : 'standing'
+        then: order.then === 'hold' ? 'hold' : 'standing',
+        // More of the order to come (a chain's next steps).
+        ...(order.steps?.length ? { more: order.steps.length } : {})
       })
     }
   }
@@ -459,6 +528,7 @@ function stepTurn(state, sideOrders = {}) {
     })
   }
   const volleys = []
+  state.shotLastTurn = new Set(loosed.map(l => l.target.id))
   for (const { shooter, target, distance, felled } of loosed) {
     if (target.strength <= 0) continue
     const hit = resolver.volley(target, felled, turn)
@@ -574,7 +644,8 @@ function stepTurn(state, sideOrders = {}) {
         .sort()
       for (const id of found) reveal(id, 'found', unit.id)
       log.emit('checked', turn, { unitId: unit.id, at: { ...unit.position }, found })
-      state.orderBook.set(unit.id, { action: 'hold', target: null, then: null })
+      // The search is done: on to the next step of the order, if it has one.
+      state.orderBook.set(unit.id, nextStep(order) ?? { action: 'hold', target: null, then: null, ...(order.lostAfter ? { lostAfter: true } : {}) })
     }
 
     if ((order.action === 'hide' || order.action === 'ambush') && !state.hidden.has(unit.id) && !fought.has(unit.id)) {
