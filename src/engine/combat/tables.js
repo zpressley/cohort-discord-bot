@@ -481,6 +481,10 @@ const PURSUIT = {
 // line are for. (The first build forbade it, and in a whole battle the
 // archers loosed one volley: armies close from sight to contact in a tick.)
 // No volley harms a friend. Starting values, to be tuned in play.
+//
+// Arrows do not run out (ruled 2026-11-21): having to stand still to shoot
+// is the limit, and a supply would need more damage up front or it would
+// handicap the factions built on missile troops.
 
 const MISSILES = {
   MIN_RANGE_M: 100,
@@ -495,7 +499,12 @@ const MISSILES = {
   // A target locked in a melee with the shooters' friends.
   INTO_MELEE: 0.5,
   // Horse archers shooting as they ride.
-  ON_THE_MOVE: 0.6
+  ON_THE_MOVE: 0.6,
+  // Ruled 2026-11-21: "horse archers will need reduced numbers to be fair
+  // in fights". They shoot without having to stand, which is the limit on
+  // everyone else, so a mounted missile unit is raised at this share of
+  // its quality tier's men (army/builder.js). A starting value.
+  HORSE_ARCHER_NUMBERS: 0.6
 }
 
 // ── Pace ───────────────────────────────────────────────

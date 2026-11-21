@@ -224,6 +224,13 @@ From Zach's answers to `docs/REVIEW-2026-11.md`.
    that it's not always 30% and some veteran units rally because they are
    more experienced."
 
+9. **No limit on arrows, for now.** "From a balance standpoint limiting
+   arrows would need more damage up front or factions with ranged based
+   unique units have a major disadvantage ... the stopping to fire is
+   enough to keep them from being too hard to counter."
+10. **Horse archers need reduced numbers to be fair in fights.** They are
+    the ones who do not have to stop to shoot.
+
 ### How the pace rulings were built (Claude's choices, open to change)
 
 The numbers are in `src/engine/combat/tables.js` (`PACE`, `RALLY`, `HEART`),
@@ -297,8 +304,10 @@ and the missile step of `src/engine/battle/battle.js`.
   in heavy; a round of melee costs each side about ten. Less past half
   the weapon's reach, against big shields, and into trees. The losses
   shake morale by the ordinary formula, and a unit can break under fire.
-- **Arrows do not run out.** Simpler; a supply of volleys is an easy
-  addition if archers prove too strong standing off all day.
+- **Arrows do not run out** (ruled, 9 below).
+- **Horse archers are raised at 60% of their tier's men** (ruled, 10
+  below; the 60% is Claude's starting number). They also shoot at 60%
+  effect while riding.
 - **"Advance" for missile troops** means close until they can shoot, and
   stand there shooting. The computer's archers do this now.
 - **A volley ends the player turn**, like contact.

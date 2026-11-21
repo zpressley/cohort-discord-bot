@@ -19,6 +19,13 @@ const { tables: T } = require('../combat')
 
 // The purchase ladder (Q8: quality IS training; elites are not purchasable —
 // one arrives free per army, culture-assigned).
+// How many men a unit is raised with: its quality tier's number, except
+// horse archers, who are fewer (ruled 2026-11-21; MISSILES.HORSE_ARCHER_NUMBERS).
+function unitSize(tier, weapon, mounted) {
+  const shoots = (T.WEAPONS[weapon]?.range ?? 0) >= T.MISSILES.MIN_RANGE_M
+  return mounted && shoots ? Math.round(tier.size * T.MISSILES.HORSE_ARCHER_NUMBERS) : tier.size
+}
+
 const PURCHASABLE = ['levy', 'militia', 'tribal_warriors', 'professional', 'veteran_mercenary']
 
 function qualityRank(quality) {
@@ -112,7 +119,7 @@ function buildUnit(pick, culture) {
     ok: true,
     errors: [],
     cost,
-    unit: { quality, weapon, armor, shield, mounted, size: tier.size, cost }
+    unit: { quality, weapon, armor, shield, mounted, size: unitSize(tier, weapon, mounted), cost }
   }
 }
 
