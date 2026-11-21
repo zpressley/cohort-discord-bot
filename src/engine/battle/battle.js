@@ -30,7 +30,7 @@ const {
   createWorld, cloneWorld, getUnit, livingUnits, unitsOnSide, sides, tileDistance
 } = require('../world')
 const { detectEngagements, applyCasualties } = require('../runner')
-const { createCombatResolver, tables: T } = require('../combat')
+const { createCombatResolver, tables: T, ranged } = require('../combat')
 const { findPath } = require('../movement/pathfinding')
 const { resolveMap } = require('../map/map')
 const { toPosition, samePosition } = require('../map/labels')
@@ -53,7 +53,7 @@ const DEFAULT_MAX_TURNS = 20
 function createBattleState(spec, options = {}) {
   const seed = options.seed ?? spec.seed ?? 1
 
-  return {
+  const state = {
     spec,
     seed,
     // The battlefield. spec.map may name an authored map, carry a definition,
@@ -89,6 +89,11 @@ function createBattleState(spec, options = {}) {
     exposure: new Map(),
     outcome: { decided: false, winner: null, reason: 'battle still open' }
   }
+  // A unit that has rallied and not taken heart since: formed up, but its
+  // morale still at or under the rout line. It will break at the next blow.
+  state.isShaken = (unit) => state.rallied.has(unit.id) &&
+    (state.resolver.getState(unit.id)?.morale ?? T.MORALE.START) <= T.MORALE.ROUT_THRESHOLD
+  return state
 }
 
 /**
@@ -109,20 +114,28 @@ function stepTurn(state, sideOrders = {}) {
   const turn = state.turn
   world.turn = turn
 
-  // A side's standing order, for one unit. A unit that has rallied and not
-  // taken heart since (its morale still at or under the rout line) keeps
-  // out of a standing advance: it would only break again at the first
-  // blow. It holds where it formed up, behind the units still steady, and
-  // still does as it is ordered. When no steady unit is left on its side
-  // there is nothing to stand behind, and it goes forward with the rest.
-  const shaken = (unit) => state.rallied.has(unit.id) &&
-    (resolver.getState(unit.id)?.morale ?? T.MORALE.START) <= T.MORALE.ROUT_THRESHOLD
-  const steadySides = new Set(livingUnits(world)
-    .filter(u => !broken.has(u.id) && !shaken(u))
-    .map(u => u.side))
+  // A side's standing order, for one unit. A shaken unit (rallied, and no
+  // heart taken since) keeps out of a standing advance: it would only break
+  // again at the first blow. It holds where it formed up, behind the units
+  // still steady, and still does as it is ordered.
+  const shaken = state.isShaken
+
+  // Could this unit shoot at that one from where each stands? In reach, in
+  // its own sight, not hidden from its side, and not running.
+  const canShootAt = (shooter, target, seen) =>
+    target.side !== shooter.side && !broken.has(target.id) &&
+    seen.get(shooter.side)?.has(target.id) &&
+    tileDistance(shooter.position, target.position) <= ranged.missileRange(shooter) &&
+    canSee(map, shooter, target)
+  // A missile unit with something to shoot at from here (judged as the turn
+  // opens, by who was fighting last turn).
+  const meleeLastTurn = new Set([...state.previousEngagementKeys].flatMap(k => k.split('|')))
+  const standsOff = (unit) => ranged.missileRange(unit) > 0 && !meleeLastTurn.has(unit.id) &&
+    !state.orderBook.get(unit.id)?.holdFire &&
+    livingUnits(world).some(e => canShootAt(unit, e, seenAtStart))
   const standingFor = (unit) => {
     const standing = spec.standingOrders?.[unit.side]
-    return shaken(unit) && steadySides.has(unit.side) ? null : standing
+    return shaken(unit) ? null : standing
   }
 
   // ── What each side can see as the turn opens ────
@@ -174,6 +187,13 @@ function stepTurn(state, sideOrders = {}) {
       const { move, order } = planUnit(unit, state.orderBook.get(unit.id), context(unit))
       if (order) state.orderBook.set(unit.id, order)
       else state.orderBook.delete(unit.id)
+      // Missile troops told to press the enemy do it their own way: they
+      // close until they can shoot, and stand there shooting.
+      const pressing = order ? order.action === 'advance' : standingFor(unit) === 'advance'
+      if (pressing && standsOff(unit)) {
+        orders.push({ unitId: unit.id, target: 'hold', seeking: true })
+        continue
+      }
       if (move) {
         const held = state.orderBook.get(unit.id)
         orders.push({
@@ -403,6 +423,58 @@ function stepTurn(state, sideOrders = {}) {
   }
   state.previousEngagementKeys = new Set(engagements.map(e => `${e.aId}|${e.bId}`))
 
+  // Units beaten this turn (broken or destroyed), for those who take heart
+  // at it below.
+  const beaten = []
+
+  // ── Missiles ────────────────────────────────────
+  // Every missile unit that stood still this turn (horse archers may have
+  // ridden), is in no melee, is not lying hidden and has not been told to
+  // hold its fire looses one volley at an enemy in reach: the kind it was
+  // told to shoot first, if one is there, else the nearest. An enemy locked
+  // in a melee can be shot at, to less effect. All volleys fly at once, so
+  // two bodies of archers shoot each other.
+  const inMelee = new Set(engagements.flatMap(e => [e.aId, e.bId]))
+  const movedFar = new Set(movement.filter(m => (m.tilesMoved ?? 0) > 0).map(m => m.unitId))
+  const loosed = []
+  for (const shooter of [...livingUnits(world)].sort((a, b) => a.id.localeCompare(b.id))) {
+    if (!ranged.missileRange(shooter) || broken.has(shooter.id) || inMelee.has(shooter.id)) continue
+    if (state.hidden.has(shooter.id)) continue
+    const order = state.orderBook.get(shooter.id)
+    if (order?.holdFire || order?.action === 'hide' || order?.action === 'ambush') continue
+    const moved = movedFar.has(shooter.id)
+    if (moved && !shooter.mounted) continue
+
+    const first = order?.against ?? null
+    const target = livingUnits(world)
+      .filter(e => canShootAt(shooter, e, seenNow))
+      .map(e => ({ unit: e, distance: tileDistance(shooter.position, e.position), wanted: first && matchesKind(e, first) ? 0 : 1 }))
+      .sort((x, y) => x.wanted - y.wanted || x.distance - y.distance || x.unit.id.localeCompare(y.unit.id))[0]
+    if (!target) continue
+    loosed.push({
+      shooter, target: target.unit, distance: target.distance,
+      felled: ranged.volley(shooter, target.unit, {
+        distance: target.distance, targetTerrain: map.terrainAt(target.unit.position), moved, inMelee: inMelee.has(target.unit.id)
+      })
+    })
+  }
+  const volleys = []
+  for (const { shooter, target, distance, felled } of loosed) {
+    if (target.strength <= 0) continue
+    const hit = resolver.volley(target, felled, turn)
+    const [applied] = applyCasualties(world, [{ unitId: target.id, killed: hit.killed }])
+    volleys.push({ unitId: target.id, by: shooter.id, killed: hit.killed })
+    log.emit('volley', turn, { unitId: target.id, by: shooter.id, killed: hit.killed, remaining: target.strength, distance })
+    if (applied?.destroyed) {
+      log.emit('destroyed', turn, { unitId: target.id })
+      beaten.push(target.id)
+    } else if (hit.broke && !broken.has(target.id)) {
+      broken.add(target.id)
+      log.emit('rout', turn, { unitId: target.id, by: shooter.id })
+      beaten.push(target.id)
+    }
+  }
+
   // ── Combat (phase 2) ────────────────────────────
   let casualties = []
   if (engagements.length > 0) {
@@ -431,28 +503,28 @@ function stepTurn(state, sideOrders = {}) {
       applyPursuit(world, getUnit(world, rout.unitId), turn, log, broken)
     }
 
-    // ── Taking heart ──────────────────────────────
-    // An enemy breaking, or cut down to the last man, lifts everyone of the
-    // other side who is near enough to see it (ruled 2026-11-21: morale
-    // comes back only with success nearby). One event a unit, however many
-    // enemies went at once.
-    const beaten = [
+    beaten.push(
       ...combat.routed.map(r => r.unitId),
-      ...casualties.filter(c => c.destroyed).map(c => c.unitId)
-    ]
-    const lifted = new Map()
-    for (const id of [...new Set(beaten)].sort()) {
-      const loser = getUnit(world, id)
-      if (!loser) continue
-      for (const friend of livingUnits(world)) {
-        if (friend.side === loser.side) continue
-        if (tileDistance(friend.position, loser.position) > T.HEART.RANGE) continue
-        const morale = resolver.hearten(friend, T.HEART.MORALE)
-        lifted.set(friend.id, { unitId: friend.id, by: lifted.get(friend.id)?.by ?? id, morale })
-      }
-    }
-    for (const id of [...lifted.keys()].sort()) log.emit('heartened', turn, lifted.get(id))
+      ...casualties.filter(c => c.destroyed).map(c => c.unitId))
   }
+
+  // ── Taking heart ────────────────────────────────
+  // An enemy breaking, or cut down to the last man, lifts everyone of the
+  // other side who is near enough to see it (ruled 2026-11-21: morale comes
+  // back only with success nearby). One event a unit, however many enemies
+  // went at once.
+  const lifted = new Map()
+  for (const id of [...new Set(beaten)].sort()) {
+    const loser = getUnit(world, id)
+    if (!loser) continue
+    for (const friend of livingUnits(world)) {
+      if (friend.side === loser.side) continue
+      if (tileDistance(friend.position, loser.position) > T.HEART.RANGE) continue
+      const morale = resolver.hearten(friend, T.HEART.MORALE)
+      lifted.set(friend.id, { unitId: friend.id, by: lifted.get(friend.id)?.by ?? id, morale })
+    }
+  }
+  for (const id of [...lifted.keys()].sort()) log.emit('heartened', turn, lifted.get(id))
 
   // ── Pursuit of units already in flight ──────────
   // A broken unit that STARTS a turn adjacent to an enemy is being chased
@@ -569,12 +641,14 @@ function stepTurn(state, sideOrders = {}) {
     movement,
     engagements,
     casualties,
+    // Missile fire this turn: { unitId (the target), by, killed }.
+    volleys,
     broken: [...broken].sort(),
     snapshot: cloneWorld(world)
   }
 
   // ── Victory ─────────────────────────────────────
-  const outcome = checkBattleOutcome(world, broken, resolver.canRally)
+  const outcome = checkBattleOutcome(world, broken, state.isShaken)
   if (outcome.decided) {
     state.outcome = outcome
     log.emit('victory', turn, { winner: outcome.winner, reason: outcome.reason })
@@ -812,13 +886,13 @@ function sightBySide(map, world, hidden = new Map()) {
 // A side is beaten when it has no effective units left: alive, unbroken, and
 // still on the field. Broken units still fleeing count for nothing — they are
 // running, not fighting.
-// A side is still in the battle while it has a formed unit, or a broken one
-// that could yet rally: the field is not won the instant the last enemy
-// unit turns to run, only once the enemy has left it or cannot re-form.
-// `canRally` is the battle's own test (the resolver's, which knows how
-// tired each unit is); without one, a broken unit counts as lost.
-function checkBattleOutcome(world, broken, canRally = () => false) {
-  const effective = (side) => unitsOnSide(world, side).filter(u => u.strength > 0 && (!broken.has(u.id) || canRally(u)))
+// A side is still in the battle while it has a steady unit: one that is
+// formed up and not shaken. Broken units may rally, but they come back
+// shaken, and take heart only from a success near them; an army with no
+// steady unit left has no one to give it one, and is beaten. (`isShaken` is
+// the battle's own test; without one, every formed unit counts.)
+function checkBattleOutcome(world, broken, isShaken = () => false) {
+  const effective = (side) => unitsOnSide(world, side).filter(u => u.strength > 0 && !broken.has(u.id) && !isShaken(u))
   const remaining = sides(world).filter(side => effective(side).length > 0)
 
   // sides() reads the roster, so a side whose last unit fled the field

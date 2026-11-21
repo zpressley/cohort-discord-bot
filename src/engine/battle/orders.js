@@ -7,6 +7,9 @@
 //             standing orders, or holds if then is 'hold'.
 //   hold      stand where you are. A unit that holds is prepared from the
 //             next tick (the combat resolver infers it from not moving).
+//             Missile troops shoot from where they stand, whatever their
+//             order, at any enemy in reach: holdFire stops them, and
+//             against (as for ambush) names what to shoot first.
 //   defend    go to target if one is given, then hold there. "Set up a
 //             defensive position."
 //   advance   press the nearest enemy, every tick, until told otherwise.
@@ -125,7 +128,7 @@ function planUnit(unit, order, context) {
       // dig in if told to, else back to the side's standing orders.
       if (context.fresh) return { move: { unitId: unit.id, target }, order }
       if (order.then === 'hold') {
-        const holding = { action: 'hold', target: null, then: null }
+        const holding = withCareful({ action: 'hold', target: null, then: null }, { holdFire: order.holdFire, against: order.against })
         return { move: { unitId: unit.id, target: 'hold' }, order: holding }
       }
       return { move: null, order: undefined }
@@ -141,6 +144,9 @@ function planUnit(unit, order, context) {
 function withCareful(normalized, order) {
   const out = { ...normalized }
   if (order.careful) out.careful = true
+  // Missile troops: hold their fire, or shoot a kind of enemy first.
+  if (order.holdFire) out.holdFire = true
+  if (order.against && normalized.action !== 'ambush') out.against = order.against
   if (normalized.action === 'ambush') {
     out.against = order.against ?? null
     out.letPass = Math.max(0, Math.floor(order.letPass ?? 0))

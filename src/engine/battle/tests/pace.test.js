@@ -77,11 +77,13 @@ test('a unit fighting two enemies deals each less, and suffers more, than in a d
 // ── Rallying ───────────────────────────────────────────
 
 // A slow unit (one tile a tick) broken three tiles from a standing enemy,
-// running north for its edge.
-const routedUnit = (overrides = {}) => {
+// running north for its edge. A steady unit of its side stands far off, so
+// the battle goes on.
+const routedUnit = (overrides = {}, others = [unit({ id: 'anchor', side: 'blue', position: { x: 18, y: 1 } })]) => {
   const state = battle([
     unit({ id: 'runner', side: 'blue', position: { x: 10, y: 10 }, movementRange: 1, ...overrides }),
-    unit({ id: 'victor', position: { x: 10, y: 13 } })
+    unit({ id: 'victor', position: { x: 10, y: 13 } }),
+    ...others
   ])
   state.broken.add('runner')
   state.resolver.shake(get(state, 'runner'), 80)
@@ -112,16 +114,33 @@ test('it can rally again: what stops a unit is how worn it is, not how often it 
   assert.equal(state.outcome.decided, false)
 })
 
-test('a unit too worn does not form up, and the field is lost with it', () => {
+test('a unit too worn does not form up', () => {
   // Professionals need 30% of their men when fresh.
   const remnant = routedUnit({ strength: 25 })
-  stepTurn(remnant, {})
+  for (let i = 0; i < 6; i++) stepTurn(remnant, {})
   assert.equal(of(remnant, 'rallied').length, 0)
-  assert.deepEqual(remnant.outcome, { decided: true, winner: 'red', reason: 'enemy army broken' })
 
   const holdingOn = routedUnit({ strength: 35 })
-  stepTurn(holdingOn, {})
-  assert.equal(holdingOn.outcome.decided, false, 'the field is not won while a broken enemy may yet rally')
+  for (let i = 0; i < 6; i++) stepTurn(holdingOn, {})
+  assert.equal(of(holdingOn, 'rallied').length, 1)
+})
+
+test('an army is beaten when it has no steady unit left: shaken units cannot carry a battle', () => {
+  // The same rout with no one else on the field: the runner's side is beaten
+  // the moment it breaks, and rallying would not change that.
+  const alone = routedUnit({}, [])
+  stepTurn(alone, {})
+  assert.deepEqual(alone.outcome, { decided: true, winner: 'red', reason: 'enemy army broken' })
+
+  // With a steady unit beside it, the side fights on; when that unit breaks
+  // too, the rallied one does not keep the battle going.
+  const state = routedUnit()
+  for (let i = 0; i < 6; i++) stepTurn(state, {})
+  assert.equal(state.isShaken(get(state, 'runner')), true)
+  assert.equal(state.outcome.decided, false)
+  state.broken.add('anchor')
+  stepTurn(state, {})
+  assert.deepEqual(state.outcome, { decided: true, winner: 'red', reason: 'enemy army broken' })
 })
 
 test('experience lowers the bar, and fatigue raises it', () => {
@@ -165,23 +184,19 @@ test('an enemy breaking lifts the morale of those near enough to see it, and no 
 
 // ── A shaken unit and the standing advance ─────────────
 
-test('a rallied unit still shaken keeps out of a standing advance while steadier units remain', () => {
-  const field = (withSteady) => {
-    const units = [
-      unit({ id: 'shaken', side: 'blue', position: { x: 10, y: 3 } }),
-      unit({ id: 'enemy', position: { x: 10, y: 17 } })
-    ]
-    if (withSteady) units.push(unit({ id: 'steady', side: 'blue', position: { x: 12, y: 3 } }))
-    const state = battle(units, { standingOrders: { blue: 'advance' } })
-    state.rallied.set('shaken', 1)
-    state.resolver.shake(get(state, 'shaken'), 80)
-    stepTurn(state, {})
-    return state
-  }
-  const behind = field(true)
-  assert.deepEqual(get(behind, 'shaken').position, { x: 10, y: 3 }, 'it holds behind the line')
-  assert.notDeepEqual(get(behind, 'steady').position, { x: 12, y: 3 }, 'the steady unit goes forward')
+test('a rallied unit still shaken keeps out of a standing advance; heart taken, it rejoins', () => {
+  const state = battle([
+    unit({ id: 'shaken', side: 'blue', position: { x: 10, y: 3 } }),
+    unit({ id: 'steady', side: 'blue', position: { x: 12, y: 3 } }),
+    unit({ id: 'enemy', position: { x: 10, y: 17 } })
+  ], { standingOrders: { blue: 'advance' } })
+  state.rallied.set('shaken', 1)
+  state.resolver.shake(get(state, 'shaken'), 80)
+  stepTurn(state, {})
+  assert.deepEqual(get(state, 'shaken').position, { x: 10, y: 3 }, 'it holds behind the line')
+  assert.notDeepEqual(get(state, 'steady').position, { x: 12, y: 3 }, 'the steady unit goes forward')
 
-  const alone = field(false)
-  assert.notDeepEqual(get(alone, 'shaken').position, { x: 10, y: 3 }, 'with no one to stand behind, it goes forward')
+  state.resolver.hearten(get(state, 'shaken'), 10)
+  stepTurn(state, {})
+  assert.notDeepEqual(get(state, 'shaken').position, { x: 10, y: 3 }, 'above the rout line again, it goes forward too')
 })

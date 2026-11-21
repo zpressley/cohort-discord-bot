@@ -51,6 +51,8 @@
 //              a unit broke
 //   pursuit    unitId, by, killed, remaining, trapped
 //              a fleeing unit cut down from behind
+//   volley     unitId, by, killed, remaining, distance
+//              missile fire: `by` shot at `unitId` from `distance` tiles
 //   heartened  unitId, by, morale
 //              a unit took heart: enemy unit `by` broke or was destroyed
 //              near it. morale is what it has now
