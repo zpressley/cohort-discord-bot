@@ -408,6 +408,7 @@ async function tent(token) {
         <header><h3>${esc(u.name)}</h3><span class="where">${esc(u.at)} · ${esc(terrainWords(v, u.position.x, u.position.y))}</span></header>
         <span class="note">${esc([u.quality, u.role].filter(Boolean).join(' ').replace(/_/g, ' '))}, ${u.strength} of ${u.maxStrength} men</span>
         <div class="bars">${meter('Men', u.strength, u.maxStrength)}${meter('Morale', u.morale, 100)}${meter('Wind', u.stamina, u.staminaPool)}</div>
+        ${u.officer ? `<p class="unit-order"><strong>Officer:</strong> ${esc(u.officer.name)}, ${esc(u.officer.grade)} and ${esc(u.officer.personality)}</p>` : ''}
         <p class="unit-order"><strong>Orders:</strong> ${esc(u.order)}${u.shootsTo ? esc(u.holdingFire ? '; holding fire' : `; shoots at enemies within ${u.shootsTo} m`) : ''}</p>
         <div class="flags">${flags(u)}</div>
         ${v.battle.status === 'finished' || u.broken ? '' : `<div style="display: flex; gap: 8px; flex-wrap: wrap">
@@ -472,7 +473,7 @@ async function tent(token) {
     const rb = state.readback
     body.innerHTML = `
       <label for="orders" style="font-weight: 600; font-size: 14px">Your orders, as you would say them</label>
-      <textarea id="orders" class="orders-box" spellcheck="false" placeholder="spears to the ridge to the east&#10;archers shoot the horse&#10;everyone advance">${esc(state.draft)}</textarea>
+      <textarea id="orders" class="orders-box" spellcheck="false" placeholder="spears to the ford; if their horse is there, hold&#10;swords to C4, then on to the bridge&#10;archers shoot the horse">${esc(state.draft)}</textarea>
       <div style="display: flex; gap: 8px; flex-wrap: wrap">
         <button class="btn" type="button" id="read-back">Read them back</button>
         ${state.draft ? '<button class="btn btn-quiet" type="button" id="clear">Clear</button>' : ''}
@@ -486,6 +487,7 @@ async function tent(token) {
             choice.options.map((o, i) => `<button class="btn" type="button" data-choice="${esc(rb.choices.indexOf(choice))}" data-option="${i}">${esc(optionWords(o))}</button>`).join('')
           }</div></div>`
         }).join('')}
+        ${(rb.counsel ?? []).map(c => `<p class="counsel">${esc(c)}</p>`).join('')}
         ${(rb.notes ?? []).map(n => `<p class="note">Note: ${esc(n)}</p>`).join('')}
         ${rb.canSendRest ? '<button class="btn" type="button" id="send-rest">Send the orders that were understood</button>' : ''}
         ${rb.error ? `<p class="error">${esc(rb.error)}</p>` : ''}` : ''}`
@@ -522,7 +524,7 @@ async function tent(token) {
         const result = await api('POST', `/api/seat/${token}/orders`, { text: state.draft, sendClear })
         state.sending = false
         if (result.status === 'clarify') {
-          state.readback = { understood: result.understood, questions: result.questions, choices: result.choices, canSendRest: result.canSendRest }
+          state.readback = { understood: result.understood, questions: result.questions, choices: result.choices, counsel: result.counsel, canSendRest: result.canSendRest }
           return renderPanel()
         }
         state.draft = ''
@@ -572,9 +574,9 @@ async function tent(token) {
 
   function officerLines(officers) {
     const hurt = officers.filter(o => o.fate !== 'unhurt')
-    const lines = hurt.map(o => `<p class="note">The captain of the ${esc(o.unit.toLowerCase())}: ${
+    const lines = hurt.map(o => `<p class="note">${o.officer ? `${esc(o.officer)}, officer` : 'The officer'} of the ${esc(o.unit.toLowerCase())}: ${
       o.fate === 'killed' ? 'killed' : o.fate === 'captured' ? 'taken by the enemy' : `wounded (${esc(o.how)}), back after the next battle`}.</p>`)
-    lines.push(`<p class="note">${hurt.length ? 'All others came through.' : 'Every captain came through.'}</p>`)
+    lines.push(`<p class="note">${hurt.length ? 'All others came through.' : 'Every officer came through.'}</p>`)
     return lines.join('')
   }
 

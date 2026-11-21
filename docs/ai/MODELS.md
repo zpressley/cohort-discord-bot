@@ -121,3 +121,11 @@ to the set. The model has two answers of its own for them, `shoot` and
 `hold_fire`, which the code turns into a hold; asked instead to remember
 "shoot is a hold with a target", it read "loose at their cavalry" as an
 ambush.
+
+2026-11-21, with orders that have depth: the reply gained five fields for
+one condition, and a chain is written as orders for the same unit one after
+another. An AI read now costs about 2,150 tokens in and 290 out, about
+$0.00022. On the ten orders this touches: 7 of 10 at first, 9 of 10 after
+two fixes in code, and then, with a worked example added to the prompt, the
+six that go to the model read 6 of 6 twice. A full run of the whole set is
+still owed: the day's free tokens were spent.

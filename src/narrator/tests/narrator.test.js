@@ -179,3 +179,14 @@ test('shooting is told with the fighting: who shot whom, and what it cost', () =
   assert.ok(told.includes('red_archers: shot at blue_swords, felling 5 men'), told.join(' / '))
   assert.ok(told.includes('red_spears: was shot at by an unseen enemy, losing 1 man'), told.join(' / '))
 })
+
+test('an officer reacting as ordered, or losing the thread, is told to his own side only; the roll is told to no one', () => {
+  const reacted = { type: 'reacted', turn: 4, unitId: 'red_spears', when: 'sees', kind: 'cavalry', action: 'hold', target: null }
+  const lost = { type: 'lostThread', turn: 4, unitId: 'red_archers', officer: 'Marcus', lost: 'steps', did: 'advance' }
+  const roll = { type: 'grasp', turn: 1, unitId: 'red_spears', officer: 'Marcus', clauses: 2, kept: 1 }
+  assert.equal(fact(map, reacted), 'red_spears saw the enemy it was warned of (cavalry) and, as ordered, held')
+  assert.equal(fact(map, lost), 'Marcus of red_archers lost the thread of his orders once the first part was done and went at the enemy')
+  assert.deepEqual(visibleEvents([reacted, lost, roll], knowledge), [reacted, lost])
+  const theirs = { ownIds: new Set(['blue_swords']), seenEnemyIds: new Set(['red_spears', 'red_archers']) }
+  assert.deepEqual(visibleEvents([reacted, lost, roll], theirs), [], 'the enemy learns nothing of your orders')
+})

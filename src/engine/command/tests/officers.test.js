@@ -73,3 +73,25 @@ test('losing the thread: the bold attack, the cautious dig in, the steady carry 
   assert.equal(losingTheThread(officer(0, 'steady'), 'condition', true), 'carry on')
   assert.equal(losingTheThread(officer(0, 'steady'), 'steps', true), 'hold', 'nothing left of the order to carry on with')
 })
+
+// ── Giving a battle its officers ───────────────────────
+
+const { assignOfficers } = require('../roster')
+const { NAMES } = require('../../../data/officers')
+
+test('every unit gets an officer, the same ones for the same seed, named for its culture', () => {
+  const units = [
+    { id: 'a', side: 'red', culture: 'Roman Republic', quality: 'professional' },
+    { id: 'b', side: 'red', culture: 'Roman Republic', quality: 'elite' },
+    { id: 'c', side: 'blue', quality: 'levy' },
+    { id: 'd', side: 'blue', quality: 'militia', officer: { name: 'Kept', experience: 4, personality: 'bold' } }
+  ]
+  const once = assignOfficers(units, 7)
+  assert.deepEqual(assignOfficers(units, 7), once)
+  assert.notDeepEqual(assignOfficers(units, 8).map(u => u.officer), once.map(u => u.officer))
+  assert.ok(once.every(u => u.officer.name && ['bold', 'steady', 'cautious'].includes(u.officer.personality)))
+  assert.ok(NAMES['Roman Republic'].includes(once[0].officer.name))
+  assert.equal(gradeOf(once[1].officer), 'veteran', 'the elite are led by a veteran')
+  assert.deepEqual(once[3].officer, units[3].officer, 'an officer a unit brings with it is kept')
+  assert.equal(new Set(once.map(u => u.officer.name)).size, 4, 'no two share a name')
+})

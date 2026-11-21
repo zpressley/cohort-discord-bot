@@ -270,3 +270,27 @@ test('archers shoot: the order is read, the Army tab says how far, and the dispa
     assert.ok(tent.dispatches.some(d => d.lines.some(l => /^Archers: .*shot at enemy/.test(l))), 'a volley is in the dispatch')
   } finally { await app.close() }
 })
+
+test('officers: named on the Army tab, counsel before a deep order, and the chain is carried', async () => {
+  const app = await start()
+  try {
+    const token = (await app.api('POST', '/api/battles', { opponent: 'standing', side: 'red', seed: 2 })).body.seats.red
+    const tent = (await app.api('GET', `/api/seat/${token}`)).body
+    assert.ok(tent.own.every(u => u.officer.name && ['green', 'seasoned', 'veteran'].includes(u.officer.grade) && ['bold', 'steady', 'cautious'].includes(u.officer.personality)))
+    assert.equal(JSON.stringify(tent.enemies).includes('officer'), false)
+
+    const green = tent.own.find(u => u.officer.grade === 'green')
+    const sage = tent.own.find(u => u.officer.grade !== 'green')
+    const text = `${green.name} to D6, then on to E6, then dig in`
+    const read = (await app.api('POST', `/api/seat/${token}/read`, { text })).body
+    assert.match(read.understood[0], new RegExp(`^${green.name}: move D6 \\(D6-NW\\); then defend E6 \\(E6-NW\\)$`))
+    assert.match(read.counsel[0], new RegExp(`^${sage.officer.name} of ${sage.name} warns: ${green.officer.name} of ${green.name} is green\\.`))
+    assert.deepEqual((await app.api('POST', `/api/seat/${token}/read`, { text: `${green.name} to D6` })).body.counsel, [])
+
+    const sent = (await app.api('POST', `/api/seat/${token}/orders`, { text })).body
+    assert.equal(sent.status, 'turn-ran')
+    const after = (await app.api('GET', `/api/seat/${token}`)).body
+    const told = after.dispatches.flatMap(d => d.lines).join(' / ')
+    assert.equal(/grasp|clauses/.test(told), false, 'the roll itself is not told')
+  } finally { await app.close() }
+})

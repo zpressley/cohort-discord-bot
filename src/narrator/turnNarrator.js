@@ -41,7 +41,9 @@ function involved(event) {
 
 // Events only the unit's own side knows of: its hiding, its search, an
 // ambush it held back, how packed its ranks are.
-const PRIVATE = new Set(['hidden', 'hideFailed', 'ambushHeld', 'checked', 'crowding', 'heartened'])
+const PRIVATE = new Set(['hidden', 'hideFailed', 'ambushHeld', 'checked', 'crowding', 'heartened', 'reacted', 'lostThread'])
+// The engine's own record of a roll, which no commander is told of.
+const UNTOLD = new Set(['grasp'])
 
 /**
  * The events one side could know about: everything involving its own units,
@@ -51,6 +53,7 @@ const PRIVATE = new Set(['hidden', 'hideFailed', 'ambushHeld', 'checked', 'crowd
  */
 function visibleEvents(events, { ownIds, seenEnemyIds }) {
   return events.filter(e => {
+    if (UNTOLD.has(e.type)) return false
     if (e.type === 'victory' || e.type === 'objective') return true
     if (PRIVATE.has(e.type)) return ownIds.has(e.unitId)
     if (e.type === 'revealed') {
@@ -139,7 +142,7 @@ function summarise(events) {
 // The events anyone may hear of, whoever is reading: for a report shown to
 // both commanders at once (the two-player hotseat screen).
 function publicEvents(events) {
-  return events.filter(e => !PRIVATE.has(e.type))
+  return events.filter(e => !PRIVATE.has(e.type) && !UNTOLD.has(e.type))
 }
 
 // One event as a plain fact the model can retell: names and places. Names
@@ -153,6 +156,21 @@ function fact(map, event, known = null) {
 // gives orders by.
 function whereAt(map, position) {
   return `${placeName(map, position)} (${gridLabel(position, { quarter: true })})`
+}
+
+// What an order's condition was, and what the unit then did, in words.
+const REACTED_TO = { sees: 'saw the enemy it was warned of', attacked: 'was attacked', breaks: 'saw its friends break' }
+function didWords(map, event) {
+  switch (event.action) {
+    case 'hold': return 'held'
+    case 'withdraw': return 'fell back'
+    case 'advance': return 'went at the enemy'
+    case 'attack': return event.target ? `attacked ${whereAt(map, event.target)}` : 'went at the enemy'
+    case 'defend': return event.target ? `made for ${whereAt(map, event.target)} to hold it` : 'dug in'
+    case 'move': return event.target ? `made for ${whereAt(map, event.target)}` : 'moved off'
+    case 'hide': return 'went to ground'
+    default: return `turned to its other order (${event.action})`
+  }
 }
 
 const possessive = (name) => (/s$/i.test(name) ? `${name}'` : `${name}'s`)
@@ -192,6 +210,10 @@ function plainFact(map, event) {
     case 'standoff': return `${event.aId} and ${event.bId} were both close to breaking`
     case 'push': return `${event.by} drove ${event.unitId} back${event.lostHighGround ? ' off the high ground' : ''}`
     case 'crush': return `${event.unitId} was pinned with nowhere to give way`
+    case 'reacted': return `${event.unitId} ${REACTED_TO[event.when] ?? 'saw the moment come'}${event.when === 'sees' && event.kind ? ` (${event.kind})` : ''} and, as ordered, ${didWords(map, event)}`
+    case 'lostThread': return `${event.officer ? `${event.officer} of ${event.unitId}` : `the officer of ${event.unitId}`} lost the thread of his orders` +
+      (event.lost === 'condition' ? ' when the moment came' : ' once the first part was done') +
+      (event.did === 'advance' ? ' and went at the enemy' : event.did === 'hold' ? ' and held where he stood' : ' and carried on as he was')
     case 'volley': return `${event.by} shot at ${event.unitId}` + (event.killed ? `, felling ${men(event.killed)}` : ', to little effect')
     case 'rout': return `${event.unitId} broke and fled from ${event.by}`
     case 'pursuit': return `${event.by} cut down ${event.killed} of the fleeing ${event.unitId}` + (event.trapped ? ', who were cornered' : '')
@@ -231,7 +253,7 @@ function plainFact(map, event) {
 // How much a commander needs to hear of each kind of event: lower is sooner.
 const WEIGHT = {
   victory: 0, destroyed: 1, rout: 1, fled: 1, rallied: 1, pursuit: 2, ambush: 1, surprise: 2, objective: 2,
-  volley: 3,
+  volley: 3, lostThread: 1, reacted: 2,
   heartened: 5,
   revealed: 3, exchange: 3, standoff: 3, push: 4, crush: 4, disengage: 4, contact: 4,
   hidden: 5, hideFailed: 5, checked: 5, ambushHeld: 5, crowding: 6, arrived: 6, halted: 6, move: 7

@@ -104,10 +104,11 @@ Each order:
 - against: for ambush, what to strike; for shoot, what to shoot first: "cavalry", "infantry", "archers" or "scouts" (horsemen = cavalry, bowmen or slingers = archers, foot = infantry). null for anything, and for every other action.
 - let_pass: for ambush only, how many enemy units to let go by before striking. 0 otherwise.
 - regardless: for ambush only, and only when the commander says so in words like "whatever happens", "no matter what", "at all costs": true. In every other case false.
-- if_event: one condition on this order, when the commander gives one ("if ...", "should ...", "unless ..."); otherwise "none". sees_enemy / sees_cavalry / sees_infantry / sees_archers: the unit sees the enemy, or that kind of enemy. attacked: it is attacked, charged or shot at. unit_breaks: another of the commander's own units breaks or runs.
+- if_event: one condition on this order, when the commander gives one ("if ...", "should ...", "unless ..."); otherwise "none". sees_enemy / sees_cavalry / sees_infantry / sees_archers: the unit sees the enemy, or that kind of enemy. attacked: it is attacked, charged or shot at. unit_breaks: another of the commander's own units breaks, routs or flees.
 - if_there: true when the condition is about the place this order goes to ("if their horse is at the ford", "if the bridge is held"). false otherwise, and always false with "none".
 - if_unit: for unit_breaks, the id of the commander's unit that breaks. null otherwise.
 - if_action, if_place: what the unit does instead when the condition comes true ("hold", "withdraw", "attack", "move" with a place). if_place is written like place, or null. Both null with "none".
+  action and place are always what the unit does now; if_action and if_place are only for after the condition. "Archers hold; if they are attacked, fall back to the bridge" is action "hold", place null, if_event "attacked", if_action "withdraw", if_place the bridge. "Spears to the ford unless their horse is there, then hold" is action "move", place the ford, if_event "sees_cavalry", if_there true, if_action "hold", if_place null.
 
 Rules:
 - question stops the orders from being sent, so use it only when you could not record an order: it is too unclear, it names a unit that is not in "Your units", or it could mean two units. Ask one short question a commander can answer. Never guess between two units.
@@ -175,7 +176,7 @@ async function readWithAi(ai, text, context) {
   if (!ai || !ai.configured) return null
   const reply = await ai.complete({
     purpose: 'read-orders', system: SYSTEM, user: briefing(context, text),
-    schema: REPLY_SCHEMA, schemaName: 'orders', maxTokens: 500, temperature: 0
+    schema: REPLY_SCHEMA, schemaName: 'orders', maxTokens: 900, temperature: 0
   })
   // A reply from before orders could carry a condition (a recorded fixture,
   // say) simply has none.
@@ -241,7 +242,14 @@ async function readWithAi(ai, text, context) {
     const key = everyone ? 'everyone' : [...units].sort().join(',')
     const earlier = chains.get(key)
     if (earlier) {
-      if ((earlier.steps?.length ?? 0) < MAX_STEPS) earlier.steps = [...(earlier.steps ?? []), stepOf(o)]
+      // "On to the bridge and dig in there", written as two orders for the
+      // same place: one step that ends by holding.
+      const step = stepOf(o)
+      const last = earlier.steps?.at(-1) ?? earlier
+      const samePlace = step.place && last.place && step.place.toLowerCase() === last.place.toLowerCase()
+      if (samePlace && (step.action === 'defend' || step.then === 'hold') && ['move', 'defend'].includes(last.action)) {
+        last.then = 'hold'
+      } else if ((earlier.steps?.length ?? 0) < MAX_STEPS) earlier.steps = [...(earlier.steps ?? []), step]
       else for (const id of units ?? ['everyone']) secondStep.add(id)
       if (!earlier.when) addCondition(earlier, o)
       continue

@@ -28,6 +28,8 @@ const { fateChances, perOfficer, woundReason, exposureFromEvents } = require('..
 const { createRng } = require('../engine/rng')
 const { interpretText } = require('../interpreter/orders')
 const { lyingInWait } = require('../interpreter/resolve')
+const { assignOfficers } = require('../engine/command/roster')
+const { gradeOf } = require('../engine/command/officers')
 const { narrateTurn, report } = require('../narrator/turnNarrator')
 const { loadScenario, SCENARIOS, mapChoices } = require('../adapters/hotseat/scenarios')
 const { MAPS } = require('../data/maps')
@@ -123,6 +125,7 @@ function officerFates(game, side) {
         : roll < pKill + pCapture + pWound ? 'wounded' : 'unhurt'
     return {
       unit: unitName(spec),
+      officer: spec.officer?.name ?? null,
       fate,
       ...(fate === 'wounded' ? { how: woundReason(exposure) } : {})
     }
@@ -215,7 +218,11 @@ function createBattleStore({ dir = null, ai = null, now = () => Date.now() } = {
       : { id: `objective-${i + 1}`, feature: ground })
     if (objectives.length) spec = { ...spec, objectives }
 
-    const game = createGame(spec, { seed: m.seed ?? crypto.randomInt(1, 1_000_000) })
+    // Every unit gets an officer to carry the Commander's orders: a name,
+    // his experience and his nature, drawn from the battle's seed.
+    const seed = m.seed ?? crypto.randomInt(1, 1_000_000)
+    spec = { ...spec, units: assignOfficers(spec.units, seed) }
+    const game = createGame(spec, { seed })
     const entry = {
       id: crypto.randomBytes(6).toString('hex'),
       scenario,
@@ -278,7 +285,9 @@ function createBattleStore({ dir = null, ai = null, now = () => Date.now() } = {
       units: game.battle.world.units.filter(u => u.side === side && u.strength > 0 && !game.battle.broken.has(u.id))
         .map(u => ({ ...u, aliases: [unitName(u).toLowerCase()] })),
       enemies: sideView(game, side).intel,
-      lyingInWait: lyingInWait(game.battle, side)
+      lyingInWait: lyingInWait(game.battle, side),
+      // For counsel: the units that would break at the first blow.
+      shaken: game.battle.world.units.filter(u => u.side === side && game.battle.isShaken(u)).map(u => u.id)
     }
   }
 
@@ -320,6 +329,8 @@ function createBattleStore({ dir = null, ai = null, now = () => Date.now() } = {
         broken: battle.broken.has(u.id),
         hidden: battle.hidden.has(u.id),
         crowding: battle.crowding.get(u.id) ?? 'organized',
+        // The officer who carries your orders to this unit.
+        officer: u.officer ? { name: u.officer.name, grade: gradeOf(u.officer), personality: u.officer.personality } : null,
         // Missile troops: how far they shoot, and whether they are holding fire.
         shootsTo: missileRangeMetres(u) || null,
         holdingFire: Boolean(battle.orderBook.get(u.id)?.holdFire),
@@ -404,6 +415,7 @@ function createBattleStore({ dir = null, ai = null, now = () => Date.now() } = {
     const name = namer(seat.entry.game, seat.side)
     return {
       understood: read.understood.map(name), questions: read.questions.map(name), notes: (read.notes ?? []).map(name),
+      counsel: (read.counsel ?? []).map(name),
       choices: (read.choices ?? []).map(c => ({ ...c, question: name(c.question) })), source: read.source, surrender: read.surrender
     }
   }
@@ -426,7 +438,7 @@ function createBattleStore({ dir = null, ai = null, now = () => Date.now() } = {
     const understood = read.understood.map(name)
     if (read.questions.length > 0 && !(sendClear && read.orders.length > 0)) {
       return {
-        status: 'clarify', questions: read.questions.map(name), understood,
+        status: 'clarify', questions: read.questions.map(name), understood, counsel: (read.counsel ?? []).map(name),
         choices: (read.choices ?? []).map(c => ({ ...c, question: name(c.question) })),
         canSendRest: read.orders.length > 0
       }
