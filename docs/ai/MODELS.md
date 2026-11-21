@@ -112,5 +112,5 @@ where code could fix them (a name given for an id, two orders to one unit).
 2026-11-21, after the bug sweep's small prompt changes ("seek and destroy",
 "spring the trap" for units lying in wait): 40 of 42, every order the model
 answered read right. The two misses were not misreadings: the day's free
-tokens ran out near the end of the run (three benchmark runs in one day)
+tokens ran out near the end of the run (several benchmark runs in a day)
 and those two orders fell back to the grammar.
