@@ -2,8 +2,10 @@
 //
 // Does every game end? Plays many hotseat games with silent commanders: each
 // side gives one opening order (or none) and then leaves its units to their
-// orders and standing orders. A game that has not ended after 60 player
-// turns is stuck, and the run fails. The closed-loop meeting battle must also
+// orders and standing orders. A game that has not ended after 150 player
+// turns is stuck, and the run fails. (It was 60 until units stopped knowing
+// where an unseen enemy stood: a side that falls back into a big wood and
+// sits there now has to be searched for, which takes a long time.) The closed-loop meeting battle must also
 // reach a verdict on every seed. No time limit is set, so a game ends only
 // by the fighting.
 //
@@ -20,7 +22,7 @@ const meeting = require('./scenarios/meeting-battle')
 
 const seedsArg = process.argv.indexOf('--seeds')
 const seeds = seedsArg > -1 ? Number(process.argv[seedsArg + 1]) : 25
-const MAX_PLAYER_TURNS = 60
+const MAX_PLAYER_TURNS = 150
 
 // [red's opening, blue's opening]
 const OPENINGS = [
