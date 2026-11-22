@@ -9,6 +9,7 @@ const { createGame, submitOrders, sideView } = require('../../engine/orchestrato
 const { sides } = require('../../engine/world')
 const { interpretLines, interpretText } = require('../../interpreter/orders')
 const { lyingInWait } = require('../../interpreter/resolve')
+const { planTurn } = require('../../opponent/planner')
 const { narrateTurn } = require('../../narrator/turnNarrator')
 const { renderMap, renderRoster, renderTurnReport } = require('./render')
 const { isGridRef } = require('../../engine/map/grid')
@@ -88,12 +89,10 @@ function createSession(spec, options = {}) {
 
       let result = submitOrders(game, side, surrender ? { surrender: true } : orders)
 
-      // The scripted opponent: standing orders carry its aggression, so its
-      // submission is empty — the point is WHEN it submits, which is
-      // immediately after the human, exactly like the second Discord account
-      // used to.
+      // The computer's side submits immediately after the human, with the
+      // orders it thinks best from what it has seen (opponent/planner.js).
       if (result.status === 'waiting' && autoSide && result.waitingOn.includes(autoSide)) {
-        result = submitOrders(game, autoSide, [])
+        result = submitOrders(game, autoSide, planTurn(game, autoSide))
       }
 
       if (result.status === 'waiting') {
