@@ -464,3 +464,16 @@ one." The code is `src/engine/command/company.js` (the rules, pure) and
   own company (for now only the player who musters does); and whether an
   officer may be in two unfinished battles at once (for now he may).
 
+## Rulings, November 22, 2026 (Commanders)
+
+Zach, on reading how officers go from battle to battle:
+
+1. **A new player comes in through the tutorial, and the tutorial is woven
+   into the lore.**
+2. **"When your commander dies you actually lose everything and have to
+   restart."**
+3. **"You can only have 1 commander at a time."**
+
+What the earlier docs say on each, and where the web app stands against
+them, is in `docs/design/commanders-lore-and-tutorial.md`.
+
