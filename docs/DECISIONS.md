@@ -451,9 +451,10 @@ one." The code is `src/engine/command/company.js` (the rules, pure) and
 - **The company leads the mustering player's side.** Each unit gets the
   officer who led that kind of unit last time; failing that the most
   experienced officer without a command; failing that a new man.
-- **The first company** is drawn as a single battle's officers always were:
-  a veteran with the best unit, the rest green to seasoned. **A man who
-  replaces one lost is green.**
+- **The first company** has one veteran, with the elite unit, and the rest
+  green (ruled November 22, below). The battles in the web app have no
+  elite unit yet, so there he is with the best unit, the first listed.
+  **A man who replaces one lost is green.**
 - **After a battle,** by the fates the engine already decides (October 21):
   one who came through gains one battle's experience (the grades are
   unchanged: green 0 to 1, seasoned 2 to 4, veteran 5 and more); one
@@ -483,6 +484,15 @@ Zach, on reading how officers go from battle to battle:
    only fight one battle at a time." So a player may keep several
    Commanders, each with an army of his own; an army in a battle cannot be
    mustered for another until that battle ends.
+
+4. **A new Commander's officers.** "There will be a tutorial and the new
+   commander gets a veteran officer for the unique elite unit, you meet
+   during the tutorial and win over that officer, the rest you earn
+   throughout the game." Built as: one veteran, with the elite unit; every
+   other officer starts green and earns his grade in battle. (Claude's
+   reading of "the rest you earn"; the other reading, that the other units
+   have no officer at all until one is earned, is open to Zach.) Until the
+   tutorial is built the veteran is there from the first muster.
 
 What the earlier docs say on each, and where the web app stands against
 them, is in `docs/design/commanders-lore-and-tutorial.md`.

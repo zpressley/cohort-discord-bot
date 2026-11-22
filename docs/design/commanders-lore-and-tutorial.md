@@ -21,6 +21,9 @@ men who carry his orders are **officers**.
 3. **One Commander at a time.** Relaxed the same day: a player may have
    more than one game going, "but that army can only fight one battle at a
    time".
+4. **A new Commander has one veteran officer, for his unique elite unit.**
+   "You meet during the tutorial and win over that officer, the rest you
+   earn throughout the game."
 
 ## What the docs say
 
@@ -67,7 +70,7 @@ from nothing.
 | Several Commanders, one battle each | Built. A browser keeps its Commanders' private links; the muster asks which one leads, and refuses one whose army is in the field. A cleared browser loses them. | A way to carry a Commander's link to another device. |
 | The Commander dies | He is not on the field, so he cannot. | Put him with a unit; decide what kills him (open, below); then end the company and start anew. |
 | His officers | One to each unit, from the November design (`officers-memory-delegation.md`). The lore doc has 8 to 12 named officers inside the one elite unit. Taken here as: the November design holds. | |
-| A new Commander's officers | One veteran with the best unit, the rest green to seasoned. | The lore's recruit would start with untried men (open, below). |
+| A new Commander's officers | Built to the ruling of November 22: one veteran, with the elite unit (the best unit, where a battle has no elite), the rest green. | The veteran is met and won over in the tutorial, not handed over at the first muster. |
 | The tutorial | None. Any battle can be mustered at once. | Missions 0 to 4 as scenarios, in order, before the open muster. Needs a risk to officers that a scenario can set (none, 5%, standing). |
 | Making a Commander | Nothing is asked. He is given a plain name to tell him from the others. | The two questions and a name from his kind. |
 
@@ -75,6 +78,5 @@ from nothing.
 
 - What kills a Commander in an ordinary battle, and what capture means for
   him (the same total loss, or something he can come back from).
-- Whether a new Commander's officers all start green.
 - Whether the ten kinds of commander and glory or survival still stand for
   the web app, and what they change beyond the name.

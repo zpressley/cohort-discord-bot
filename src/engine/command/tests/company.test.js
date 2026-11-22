@@ -22,7 +22,9 @@ test('a new company is given its first officers, and the same battle gives the s
   assert.deepEqual(musterOfficers(createCompany(), units(), 7), first)
   assert.equal(first.company.officers.length, 3)
   assert.deepEqual(first.company.officers.map(o => o.leads), ['spears', 'swords', 'elite'])
-  assert.equal(gradeOf(first.units[2].officer), 'veteran', 'the elite are led by a veteran')
+  assert.deepEqual(first.units.map(u => gradeOf(u.officer)), ['green', 'green', 'veteran'], 'one veteran, with the elite; the rest are still to be earned')
+  const plain = musterOfficers(createCompany(), units().map(u => ({ ...u, quality: u.kind === 'elite' ? 'militia' : 'professional' })), 7)
+  assert.deepEqual(plain.units.map(u => gradeOf(u.officer)), ['veteran', 'green', 'green'], 'with no elite unit, he is with the best')
   assert.ok(first.units.every(u => u.officer.id && u.officer.name))
 })
 

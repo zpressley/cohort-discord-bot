@@ -22,6 +22,7 @@ const { createRng } = require('../rng')
 const { PERSONALITIES } = require('./officers')
 const { assignOfficers } = require('./roster')
 const { NAMES, PLAIN } = require('../../data/officers')
+const { QUALITY_ORDER } = require('../combat/tables')
 
 function createCompany() {
   return { officers: [], fallen: [], battles: 0, nextId: 1 }
@@ -33,10 +34,13 @@ const copy = (company) => JSON.parse(JSON.stringify(company))
  * Give a battle's units their officers from the company.
  *
  * Each unit gets the fit officer who leads its kind; failing that the most
- * experienced fit officer without a command; failing that a new man. A new
- * company's first officers are drawn as a single battle's are (roster.js:
- * a veteran for the elite, the rest green to seasoned); a man who replaces
- * one lost is green, and "needs everything spelled out".
+ * experienced fit officer without a command; failing that a new man.
+ *
+ * A new Commander has one veteran, with his elite unit (ruled 2026-11-22:
+ * "the new commander gets a veteran officer for the unique elite unit ...
+ * the rest you earn throughout the game"). Every other officer starts
+ * green, as does a man who replaces one lost, and "needs everything spelled
+ * out". Where the army has no elite unit the veteran is with its best.
  *
  * @param {Object} company
  * @param {Array}  units   this side's battle unit specs, each with a `kind`
@@ -47,6 +51,9 @@ const copy = (company) => JSON.parse(JSON.stringify(company))
 function musterOfficers(company, units, seed) {
   const next = copy(company)
   const founding = next.officers.length === 0 && next.fallen.length === 0
+  // The founding veteran's unit: the elite, else the best, the first listed.
+  const rank = (u) => QUALITY_ORDER.indexOf(u.quality)
+  const veteranAt = founding ? units.reduce((best, u, i) => (rank(u) > rank(units[best]) ? i : best), 0) : -1
   const drawn = assignOfficers(units.map(u => ({ ...u, officer: undefined })), seed)
   const random = createRng((Math.imul(seed, 69069) + 5) >>> 0)
   const used = new Set([...next.officers, ...next.fallen].map(o => o.name))
@@ -65,7 +72,7 @@ function musterOfficers(company, units, seed) {
       officer = {
         id: `o${next.nextId++}`,
         name,
-        experience: founding ? drawn[i].officer.experience : 0,
+        experience: i === veteranAt ? 6 + (drawn[i].officer.experience % 4) : 0,
         personality: founding ? drawn[i].officer.personality : PERSONALITIES[Math.floor(random() * PERSONALITIES.length)],
         leads: unit.kind,
         status: 'fit',
