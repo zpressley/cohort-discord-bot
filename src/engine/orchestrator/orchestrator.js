@@ -177,6 +177,7 @@ function processPlayerTurn(game) {
     game.outcome = evaluateVictory(victoryContext(game))
     if (game.outcome.decided) { interrupt = 'decided'; break }
     if (turnRecord.engagements.length > 0) { interrupt = 'contact'; break }
+    if (turnRecord.volleys.length > 0) { interrupt = 'fire'; break }
     if (sightings.length > 0) { interrupt = 'sighting'; break }
     if (objectiveChanges) { interrupt = 'objective'; break }
     if (ordersCarriedOut(battle)) { interrupt = 'ready'; break }
@@ -239,7 +240,7 @@ function victoryContext(game) {
   return {
     world: game.battle.world,
     broken: game.battle.broken,
-    canRally: game.battle.resolver.canRally,
+    isShaken: game.battle.isShaken,
     surrendered: game.surrendered,
     startingStrength: game.startingStrength,
     objectiveHolds: game.objectiveHolds,

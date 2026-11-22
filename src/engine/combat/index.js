@@ -8,6 +8,7 @@
 const tables = require('./tables')
 const ratings = require('./ratings')
 const damage = require('./damage')
+const ranged = require('./ranged')
 const { createCombatResolver, chaosFor, chargeRoundFor, breakingLoser } = require('./resolve')
 
 module.exports = {
@@ -17,5 +18,6 @@ module.exports = {
   breakingLoser,
   tables,
   ratings,
-  damage
+  damage,
+  ranged
 }

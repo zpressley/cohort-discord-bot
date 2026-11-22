@@ -114,3 +114,10 @@ where code could fix them (a name given for an id, two orders to one unit).
 answered read right. The two misses were not misreadings: the day's free
 tokens ran out near the end of the run (several benchmark runs in a day)
 and those two orders fell back to the grammar.
+
+2026-11-21, with ranged fire: 45 of 45 (15 by the grammar alone, 30 AI
+calls, about $0.000154 a read). Three orders for missile troops were added
+to the set. The model has two answers of its own for them, `shoot` and
+`hold_fire`, which the code turns into a hold; asked instead to remember
+"shoot is a hold with a target", it read "loose at their cavalry" as an
+ambush.

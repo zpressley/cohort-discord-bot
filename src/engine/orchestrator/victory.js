@@ -112,7 +112,7 @@ function evaluateVictory(ctx) {
     return { decided: true, winner, reason: 'enemy surrendered' }
   }
 
-  const broken_ = checkBattleOutcome(world, broken, ctx.canRally)
+  const broken_ = checkBattleOutcome(world, broken, ctx.isShaken)
   if (broken_.decided) return broken_
 
   // Strength collapse. Checked for both sides; if both collapse in the same

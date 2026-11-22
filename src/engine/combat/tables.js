@@ -459,6 +459,54 @@ const PURSUIT = {
   MAX_PURSUERS: 2           // more than two cannot reach a fleeing column
 }
 
+// ── Missiles ───────────────────────────────────────────
+//
+// Ruled 2026-11-21: missile troops shoot. A unit whose weapon reaches
+// MIN_RANGE_M or more (bows, slings, crossbows) looses a volley each tick at
+// an enemy it can see within its reach, when it stood still that tick (horse
+// archers may shoot on the move) and is not itself in a melee (design:
+// "archers cannot use ranged attacks while under melee attack"). See
+// combat/ranged.js and the missile step of battle/battle.js.
+//
+// Losses are light beside a melee's: RATE men per shooter per volley with a
+// weapon of NORMAL_DAMAGE, times the weapon's `effectiveness` against the
+// target's armour, the same table melee uses. A hundred bowmen at close
+// range fell about five unarmoured men a volley, three in medium armour,
+// one or two in heavy; a round of melee between even units costs each
+// about ten. The losses shake morale through the ordinary morale formula,
+// and a unit can break under fire.
+//
+// An enemy locked in a melee can be shot at, over the heads of the men
+// fighting it, at INTO_MELEE of the effect: this is what archers behind a
+// line are for. (The first build forbade it, and in a whole battle the
+// archers loosed one volley: armies close from sight to contact in a tick.)
+// No volley harms a friend. Starting values, to be tuned in play.
+//
+// Arrows do not run out (ruled 2026-11-21): having to stand still to shoot
+// is the limit, and a supply would need more damage up front or it would
+// handicap the factions built on missile troops.
+
+const MISSILES = {
+  MIN_RANGE_M: 100,
+  RATE: 0.08,
+  NORMAL_DAMAGE: 9,
+  // Past half the weapon's reach the volley falls thin.
+  LONG_SHOT: 0.6,
+  // What the target's shield stops.
+  SHIELD: { no_shield: 1, light_shield: 0.9, medium_shield: 0.8, heavy_shield: 0.65 },
+  // A target among trees.
+  IN_WOODS: 0.5,
+  // A target locked in a melee with the shooters' friends.
+  INTO_MELEE: 0.5,
+  // Horse archers shooting as they ride.
+  ON_THE_MOVE: 0.6,
+  // Ruled 2026-11-21: "horse archers will need reduced numbers to be fair
+  // in fights". They shoot without having to stand, which is the limit on
+  // everyone else, so a mounted missile unit is raised at this share of
+  // its quality tier's men (army/builder.js). A starting value.
+  HORSE_ARCHER_NUMBERS: 0.6
+}
+
 // ── Pace ───────────────────────────────────────────────
 //
 // How much of a combat round is fought in one ten-minute tick of a battle.
@@ -628,6 +676,7 @@ module.exports = {
   EXPOSURE,
   SURPRISE,
   PURSUIT,
+  MISSILES,
   PACE,
   RALLY,
   HEART,

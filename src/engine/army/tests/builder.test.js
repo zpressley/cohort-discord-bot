@@ -194,3 +194,12 @@ test('a persistent elite carries its veteran resistance onto the field', () => {
   assert.equal(elite.veteranResistance, 0.6)
   assert.equal(elite.strength, 58, 'the survivors of the last battle, not a fresh 80')
 })
+
+test('horse archers are raised in reduced numbers; other cavalry and foot archers are not', () => {
+  const { tables: T } = require('../../combat')
+  const size = (pick) => buildUnit(pick, 'Parthian Empire').unit.size
+  const bow = { quality: 'professional', weapon: 'parthian_horse_bow', armor: 'light_armor', shield: 'no_shield' }
+  assert.equal(size({ ...bow, mounted: true }), Math.round(100 * T.MISSILES.HORSE_ARCHER_NUMBERS))
+  assert.equal(size({ ...bow, mounted: false }), 100)
+  assert.equal(size({ quality: 'professional', weapon: 'sword_standard', armor: 'light_armor', shield: 'light_shield', mounted: true }), 100)
+})

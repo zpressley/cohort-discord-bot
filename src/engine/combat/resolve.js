@@ -361,6 +361,23 @@ function createCombatResolver(options = {}) {
     state.moraleDamageTaken += amount
     return state.morale
   }
+  // A volley lands on a unit (combat/ranged.js works out how hard). The men
+  // it fells shake morale through the ordinary formula, and a unit already
+  // near breaking breaks: no one is at its throat, but it has had enough.
+  // Returns the whole men lost, the morale left, and whether it broke.
+  resolveCombat.volley = (target, felled, turn = null) => {
+    const state = stateFor(target)
+    const killed = takeCasualties(state, felled, target.strength)
+    const loss = D.moraleDamage(target, { killed: felled }).total
+    state.morale = Math.max(0, state.morale - loss)
+    state.moraleDamageTaken += loss
+    const broke = !state.routed && state.morale <= T.MORALE.ROUT_THRESHOLD
+    if (broke) {
+      state.routed = true
+      state.routedOnTurn = turn
+    }
+    return { killed, morale: state.morale, broke }
+  }
   // Is this unit in a state to form up again? Men standing and fatigue,
   // against a bar its experience lowers (tables.RALLY).
   resolveCombat.canRally = (unit) => {
