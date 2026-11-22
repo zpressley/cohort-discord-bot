@@ -22,9 +22,10 @@
 //                                           after turn n
 //   POST /api/seat/:token/read   { text }   read orders back, send nothing
 //   POST /api/seat/:token/orders { text }   send orders
-//   POST /api/commanders                    a new Commander -> { token }
+//   POST /api/commanders                    a new Commander -> { token, name }
 //   GET  /api/commander/:token              his company: officers, their
-//                                           records, and those lost
+//                                           records, those lost, and the
+//                                           battle his army is in
 //
 // A seat's token is its secret link. Every answer about a battle is that
 // seat's side's view only (fog of war is held on the server).
@@ -116,7 +117,7 @@ function createServer(store) {
           return send(res, 201, store.commanders.create())
         }
         if (req.method === 'GET' && parts[1] === 'commander' && parts[2] && parts.length === 3) {
-          const company = store.commanders.view(parts[2])
+          const company = store.commanderView(parts[2])
           return company ? send(res, 200, company) : send(res, 404, { error: 'no such commander' })
         }
         if (req.method === 'GET' && parts[1] === 'seats' && parts.length === 2) {

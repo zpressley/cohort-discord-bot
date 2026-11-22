@@ -9,8 +9,8 @@
 //   /officers    your officers: who they are and what they have been through
 //   /b/<link>    the Command Tent for one side of one battle
 //
-// The links to your battles, and the link to you as a Commander (your
-// officers go with it), are kept in this browser (localStorage); the server
+// The links to your battles, and the links to your Commanders (each with
+// his own officers), are kept in this browser (localStorage); the server
 // holds the battles and the officers. Everything shown about a battle comes from the
 // server already cut to your side's view.
 
@@ -38,20 +38,34 @@ function saveDraft(token, text) {
   try { text ? localStorage.setItem(`cohort.draft.${token}`, text) : localStorage.removeItem(`cohort.draft.${token}`) } catch { /* fine */ }
 }
 
-// ── You, the Commander ─────────────────────────────────
-// A private link the server gives this browser the first time you muster;
-// your officers are kept under it.
-const COMMANDER_KEY = 'cohort.commander'
-function commanderToken() {
-  try { return localStorage.getItem(COMMANDER_KEY) } catch { return null }
+// ── Your Commanders ────────────────────────────────────
+// Each is a private link the server gives this browser; his officers are
+// kept under it. You may have several, and so several battles going: a
+// Commander's army fights one battle at a time.
+const COMMANDERS_KEY = 'cohort.commanders'
+function commanderTokens() {
+  try {
+    const list = JSON.parse(localStorage.getItem(COMMANDERS_KEY)) ?? []
+    const old = localStorage.getItem('cohort.commander')   // when there was only one
+    return old && !list.includes(old) ? [old, ...list] : list
+  } catch { return [] }
 }
-async function ensureCommander() {
-  const known = commanderToken()
-  if (known) {
-    try { await api('GET', `/api/commander/${known}`); return known } catch (error) { if (error.status !== 404) throw error }
-  }
+function saveCommanders(tokens) {
+  try { localStorage.setItem(COMMANDERS_KEY, JSON.stringify(tokens)); localStorage.removeItem('cohort.commander') } catch { /* private browsing: this battle only */ }
+}
+// Your Commanders as the server knows them; one it has no record of is dropped.
+async function loadCommanders() {
+  const tokens = commanderTokens()
+  const found = await Promise.all(tokens.map(async (token) => {
+    try { return { token, ...(await api('GET', `/api/commander/${token}`)) } } catch (error) { if (error.status === 404) return null; throw error }
+  }))
+  const known = found.filter(Boolean)
+  if (known.length !== tokens.length) saveCommanders(known.map(c => c.token))
+  return known
+}
+async function newCommander() {
   const { token } = await api('POST', '/api/commanders')
-  try { localStorage.setItem(COMMANDER_KEY, token) } catch { return null /* private browsing: officers for this battle only */ }
+  saveCommanders([...commanderTokens(), token])
   return token
 }
 
@@ -192,11 +206,7 @@ const GRADE_WORDS = { green: 'green', seasoned: 'seasoned', veteran: 'a veteran'
 const RESULT_WORDS = { victory: 'a victory', defeat: 'a defeat', draw: 'a draw' }
 const FATE_WORDS = { killed: 'killed', captured: 'taken by the enemy' }
 async function officers() {
-  const token = commanderToken()
-  let company = null
-  if (token) {
-    try { company = await api('GET', `/api/commander/${token}`) } catch (error) { if (error.status !== 404) throw error }
-  }
+  const commanders = await loadCommanders()
   const battleLine = (r) => `<li><strong>${esc(r.title)}</strong>, ${esc(RESULT_WORDS[r.result] ?? r.result)}${
     r.fate === 'wounded' ? `; wounded${r.how ? ` (${esc(r.how)})` : ''}` : ''}.${r.deeds ? ` His men ${esc(r.deeds)}.` : ''}</li>`
   const card = (o) => `<div class="officer">
@@ -207,21 +217,31 @@ async function officers() {
         : '<span>Yet to fight under you.</span>'}
     </div>`
   const fallen = (f) => `<p class="note">${esc(f.name)}, who led the ${esc(f.led)}: ${esc(FATE_WORDS[f.fate] ?? f.fate)} at ${esc(f.at)}, after ${f.battles} battle${f.battles === 1 ? '' : 's'} with you.</p>`
+  const company = (c) => `
+      <h2 class="commander">Commander ${esc(c.name)}</h2>
+      <p class="note">${c.battles} battle${c.battles === 1 ? '' : 's'} fought. ${c.battle
+        ? `His army is in the field${c.battle.seat ? `: <a href="/b/${esc(c.battle.seat)}" data-link>${esc(c.battle.title)}</a>` : ` (${esc(c.battle.title)})`}.`
+        : 'His army is ready to muster.'}</p>
+      ${c.officers.map(card).join('')}
+      ${c.fallen.length ? `<p class="label-caps">Lost</p>${c.fallen.map(fallen).join('')}` : ''}`
   app.innerHTML = `
     <header class="bar"><a href="/battles" data-link>Your battles</a><strong style="font-family: var(--font-display); font-size: 18px">Your officers</strong><span></span></header>
     <main class="page">
-      ${!company || company.officers.length + company.fallen.length === 0
-        ? '<p class="note">No officers yet. They join you at your first battle, and those who live go with you to the next: they learn, and they remember.</p>'
-        : `<p class="note">${company.battles} battle${company.battles === 1 ? '' : 's'} fought. An officer learns from each one he lives through: a green one keeps to the first thing you tell him, a veteran follows a longer order.</p>`}
-      ${company ? company.officers.map(card).join('') : ''}
-      ${company?.fallen.length ? `<p class="label-caps">Lost</p>${company.fallen.map(fallen).join('')}` : ''}
+      ${commanders.length === 0
+        ? '<p class="note">No officers yet. They join a Commander at his first battle, and those who live go with him to the next: they learn, and they remember.</p>'
+        : '<p class="note">An officer learns from each battle he lives through: a green one keeps to the first thing you tell him, a veteran follows a longer order. An army fights one battle at a time.</p>'}
+      ${commanders.map(company).join('')}
       <a class="btn btn-main btn-wide" href="/muster" data-link>Muster a new battle</a>
     </main>`
 }
 
 // ── Muster ─────────────────────────────────────────────
 async function muster() {
-  const [scenarios, maps] = await Promise.all([api('GET', '/api/scenarios'), api('GET', '/api/maps')])
+  const [scenarios, maps, commanders] = await Promise.all([api('GET', '/api/scenarios'), api('GET', '/api/maps'), loadCommanders()])
+  // The first Commander whose army is not in the field leads; with none, a new one.
+  const ready = commanders.find(c => !c.battle)
+  const commanderOption = (c) => `<option value="${esc(c.token)}"${c.battle ? ' disabled' : ''}${c === ready ? ' selected' : ''}>${esc(c.name)}${
+    c.battle ? ' (army in the field)' : `, ${c.battles} battle${c.battles === 1 ? '' : 's'} fought`}</option>`
   app.innerHTML = `
     <header class="bar"><a href="/battles" data-link>Your battles</a><strong style="font-family: var(--font-display); font-size: 18px">Muster a battle</strong><span></span></header>
     <main class="page">
@@ -237,6 +257,9 @@ async function muster() {
           <label class="choice"><input type="radio" name="opponent" value="standing" checked> The computer (play alone)</label>
           <label class="choice"><input type="radio" name="opponent" value="friend"> A friend, by link</label>
         </fieldset>
+        ${commanders.length ? `<label class="field">Your Commander
+          <select name="commander">${commanders.map(commanderOption).join('')}<option value=""${ready ? '' : ' selected'}>A new Commander</option></select>
+        </label>` : ''}
         <label class="field">You command
           <select name="side"><option value="red">Red, from the west</option><option value="blue">Blue, from the east</option></select>
         </label>
@@ -259,7 +282,7 @@ async function muster() {
     try {
       const side = form.get('side')
       const opponent = form.get('opponent')
-      const commander = await ensureCommander()
+      const commander = form.get('commander') || await newCommander()
       const result = await api('POST', '/api/battles', {
         scenario: form.get('scenario'), map: form.get('map'), opponent, side, commander,
         timeLimitMinutes: form.get('timeLimit') ? Number(form.get('timeLimit')) : null,

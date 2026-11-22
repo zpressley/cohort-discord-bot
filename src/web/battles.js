@@ -232,9 +232,14 @@ function createBattleStore({ dir = null, ai = null, now = () => Date.now() } = {
     // his experience and his nature, drawn from the battle's seed.
     const seed = m.seed ?? crypto.randomInt(1, 1_000_000)
     spec = { ...spec, units: assignOfficers(spec.units, seed) }
-    // The mustering Commander's own officers lead his side.
+    // The mustering Commander's own officers lead his side. His army can
+    // fight one battle at a time (ruled 2026-11-22).
     const commander = m.commander ? commanders.get(m.commander) : null
     if (commander) {
+      const busy = fighting(commander)
+      if (busy) {
+        throw Object.assign(new Error(`${commander.name ?? 'This Commander'}'s army is in the field (${busy.title}). An army fights one battle at a time.`), { status: 409 })
+      }
       const mine = spec.units.filter(u => u.side === side).map(u => ({ ...u, kind: unitName(u).toLowerCase() }))
       const led = musterOfficers(commander.company, mine, seed)
       commanders.setCompany(commander, led.company)
@@ -261,7 +266,23 @@ function createBattleStore({ dir = null, ai = null, now = () => Date.now() } = {
     }
     register(entry)
     save(entry)
+    if (commander) commanders.setBattle(commander, entry.id)
     return { id: entry.id, seats: Object.fromEntries(Object.entries(entry.seats).filter(([, t]) => t)) }
+  }
+
+  // The unfinished battle a Commander's army is in, if any.
+  function fighting(commander) {
+    const entry = commander.battle ? battles.get(commander.battle) : null
+    return entry && !entry.game.outcome.decided ? entry : null
+  }
+
+  /** A Commander's company, and the battle his army is in (with his seat). */
+  function commanderView(token) {
+    const commander = commanders.get(token)
+    if (!commander) return null
+    const entry = fighting(commander)
+    const side = entry && Object.keys(entry.commanders ?? {}).find(s => entry.commanders[s] === commander.id)
+    return { ...commanders.view(token), battle: entry ? { title: entry.title, seat: entry.seats[side] ?? null } : null }
   }
 
   // ── Reading ───────────────────────────────────────
@@ -517,6 +538,7 @@ function createBattleStore({ dir = null, ai = null, now = () => Date.now() } = {
         }
       })
       commanders.setCompany(commander, settleBattle(commander.company, { id: entry.id, title: entry.title, result }, fates))
+      if (commander.battle === entry.id) commanders.setBattle(commander, null)
     }
   }
 
@@ -564,6 +586,7 @@ function createBattleStore({ dir = null, ai = null, now = () => Date.now() } = {
     submit,
     seatOf,
     commanders,
+    commanderView,
     scenarios: () => Object.keys(SCENARIOS).map(id => ({ id, title: SCENARIO_TITLES[id] ?? id })),
     maps: () => mapChoices()
   }

@@ -439,9 +439,15 @@ one." The code is `src/engine/command/company.js` (the rules, pure) and
 `src/web/commanders.js` (where they are kept).
 
 - **A Commander is a private link**, as a battle's seat is: no account. The
-  browser is given one the first time it musters and keeps it; the server
-  keeps the company under it (`data/web/commanders/`). A new browser is a new
-  Commander.
+  browser is given one when it musters with a new Commander and keeps it;
+  the server keeps the company under it (`data/web/commanders/`). A browser
+  can hold several, and the muster asks which one leads.
+- **One battle at a time for each army** (ruled November 22). A Commander
+  whose army is in an unfinished battle cannot muster; the muster offers
+  the others, or a new one. Yielding a battle frees the army.
+- **A Commander has a name** from the plain list of names, only to tell
+  one from another. It stands in until how a Commander is made is settled
+  (`docs/design/commanders-lore-and-tutorial.md`).
 - **The company leads the mustering player's side.** Each unit gets the
   officer who led that kind of unit last time; failing that the most
   experienced officer without a command; failing that a new man.
@@ -461,8 +467,8 @@ one." The code is `src/engine/command/company.js` (the rules, pure) and
   read.
 - **Not settled, and asked of Zach:** how loyalty is earned and what it
   does; what a callback does; whether a friend who joins by link brings his
-  own company (for now only the player who musters does); and whether an
-  officer may be in two unfinished battles at once (for now he may).
+  own company (for now only the player who musters does). Whether an
+  officer may be in two battles at once was settled on November 22: no.
 
 ## Rulings, November 22, 2026 (Commanders)
 
@@ -472,7 +478,11 @@ Zach, on reading how officers go from battle to battle:
    into the lore.**
 2. **"When your commander dies you actually lose everything and have to
    restart."**
-3. **"You can only have 1 commander at a time."**
+3. **"You can only have 1 commander at a time."** Relaxed the same day:
+   "people can have more than one game going at a time but that army can
+   only fight one battle at a time." So a player may keep several
+   Commanders, each with an army of his own; an army in a battle cannot be
+   mustered for another until that battle ends.
 
 What the earlier docs say on each, and where the web app stands against
 them, is in `docs/design/commanders-lore-and-tutorial.md`.

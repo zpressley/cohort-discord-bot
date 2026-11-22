@@ -314,8 +314,9 @@ test('a Commander\'s officers go with him from battle to battle: they learn, the
   let app
   try {
     app = await start(createBattleStore({ dir }))
-    const commander = (await app.api('POST', '/api/commanders')).body.token
-    assert.deepEqual((await app.api('GET', `/api/commander/${commander}`)).body, { battles: 0, officers: [], fallen: [] })
+    const made = (await app.api('POST', '/api/commanders')).body
+    const commander = made.token
+    assert.deepEqual((await app.api('GET', `/api/commander/${commander}`)).body, { name: made.name, battles: 0, officers: [], fallen: [], battle: null })
 
     const first = (await app.api('POST', '/api/battles', { opponent: 'standing', side: 'red', seed: 3, commander })).body.seats.red
     const mustered = (await app.api('GET', `/api/commander/${commander}`)).body
@@ -384,5 +385,33 @@ test('without a Commander, or with a link the server does not know, a battle mus
     const b = (await app.api('GET', `/api/seat/${plain}`)).body
     assert.deepEqual(a.own, b.own)
     assert.equal((await fight(app, plain)).verdict.company, false)
+  } finally { await app.close() }
+})
+
+test('an army fights one battle at a time; another Commander can take the field meanwhile', async () => {
+  const app = await start()
+  try {
+    const first = (await app.api('POST', '/api/commanders')).body
+    const second = (await app.api('POST', '/api/commanders')).body
+    assert.notEqual(first.name, second.name, 'told apart by name')
+
+    const seat = (await app.api('POST', '/api/battles', { opponent: 'standing', side: 'red', seed: 3, commander: first.token })).body.seats.red
+    const inField = (await app.api('GET', `/api/commander/${first.token}`)).body
+    assert.deepEqual(inField.battle, { title: 'Crownhill: the meeting battle', seat }, 'he knows where his army is')
+
+    const refused = await app.api('POST', '/api/battles', { opponent: 'standing', side: 'red', seed: 4, commander: first.token })
+    assert.equal(refused.status, 409)
+    assert.match(refused.body.error, new RegExp(`${first.name}'s army is in the field`))
+    const company = (await app.api('GET', `/api/commander/${first.token}`)).body
+    assert.deepEqual(company, inField, 'and nothing was mustered')
+
+    // A second Commander has an army of his own.
+    const other = await app.api('POST', '/api/battles', { opponent: 'standing', side: 'red', seed: 4, commander: second.token })
+    assert.equal(other.status, 201)
+
+    // The battle over, the first army can muster again.
+    await fight(app, seat)
+    assert.equal((await app.api('GET', `/api/commander/${first.token}`)).body.battle, null)
+    assert.equal((await app.api('POST', '/api/battles', { opponent: 'standing', side: 'red', seed: 5, commander: first.token })).status, 201)
   } finally { await app.close() }
 })

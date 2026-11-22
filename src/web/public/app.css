@@ -121,6 +121,7 @@ a { color: var(--accent); }
 .page h1 { margin: 8px 0 0; font-family: var(--font-display); font-size: 28px; font-weight: 600; }
 .battle-link { display: flex; flex-direction: column; gap: 4px; padding: 14px 16px; background: var(--panel-raised); border: 1px solid var(--rule); color: var(--ink); text-decoration: none; }
 .battle-link.mine { border: 2px solid var(--ink); }
+.commander { margin: 8px 0 0; font-family: var(--font-display); font-size: 22px; font-weight: 600; }
 .officer { display: flex; flex-direction: column; gap: 4px; padding: 14px 16px; background: var(--panel-raised); border: 1px solid var(--rule); }
 .officer strong { font-family: var(--font-display); font-size: 18px; }
 .officer span, .officer li { font-size: 14px; color: var(--ink-soft); }

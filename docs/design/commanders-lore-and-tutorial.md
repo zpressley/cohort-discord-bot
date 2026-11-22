@@ -18,7 +18,9 @@ men who carry his orders are **officers**.
 1. **A new player comes in through the tutorial, and the tutorial is the
    lore.** Play is taught by the story, not by a help page.
 2. **When your Commander dies you lose everything and start again.**
-3. **One Commander at a time.**
+3. **One Commander at a time.** Relaxed the same day: a player may have
+   more than one game going, "but that army can only fight one battle at a
+   time".
 
 ## What the docs say
 
@@ -62,12 +64,12 @@ from nothing.
 
 | | Now | To match |
 |---|---|---|
-| One Commander at a time | One to a browser: a private link kept there. Nothing stops a second browser, and a cleared browser loses him. | A way to carry the link to another device. Holding a person to one Commander needs sign-in. |
+| Several Commanders, one battle each | Built. A browser keeps its Commanders' private links; the muster asks which one leads, and refuses one whose army is in the field. A cleared browser loses them. | A way to carry a Commander's link to another device. |
 | The Commander dies | He is not on the field, so he cannot. | Put him with a unit; decide what kills him (open, below); then end the company and start anew. |
 | His officers | One to each unit, from the November design (`officers-memory-delegation.md`). The lore doc has 8 to 12 named officers inside the one elite unit. Taken here as: the November design holds. | |
 | A new Commander's officers | One veteran with the best unit, the rest green to seasoned. | The lore's recruit would start with untried men (open, below). |
 | The tutorial | None. Any battle can be mustered at once. | Missions 0 to 4 as scenarios, in order, before the open muster. Needs a risk to officers that a scenario can set (none, 5%, standing). |
-| Making a Commander | Nothing is asked; he has no name. | The two questions and a given name. |
+| Making a Commander | Nothing is asked. He is given a plain name to tell him from the others. | The two questions and a name from his kind. |
 
 ## Open
 
