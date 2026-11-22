@@ -431,3 +431,36 @@ itself the two sides come out even (31 to 33 in 64).
 be searched for, so the soak's cap went from 60 player turns to 150. The
 soak also plays the computer's side against three kinds of commander on
 every map.
+
+### How officers who go from battle to battle were built (Claude's choices, open to change)
+
+"The game is about keeping your people alive across battles, not winning
+one." The code is `src/engine/command/company.js` (the rules, pure) and
+`src/web/commanders.js` (where they are kept).
+
+- **A Commander is a private link**, as a battle's seat is: no account. The
+  browser is given one the first time it musters and keeps it; the server
+  keeps the company under it (`data/web/commanders/`). A new browser is a new
+  Commander.
+- **The company leads the mustering player's side.** Each unit gets the
+  officer who led that kind of unit last time; failing that the most
+  experienced officer without a command; failing that a new man.
+- **The first company** is drawn as a single battle's officers always were:
+  a veteran with the best unit, the rest green to seasoned. **A man who
+  replaces one lost is green.**
+- **After a battle,** by the fates the engine already decides (October 21):
+  one who came through gains one battle's experience (the grades are
+  unchanged: green 0 to 1, seasoned 2 to 4, veteran 5 and more); one
+  wounded gains it too, and sits out the next battle; one killed or taken
+  leaves the company, which keeps his name on a roll and nothing else.
+- **His record is his memory.** For each battle: which it was and how it
+  ended, what his men did (from the engine's log, the same facts the
+  dispatches are written from), what became of him, and the orders the
+  Commander gave him, in the words they were read back in. Nothing uses the
+  record yet but the Officers page; it is what memory and callbacks will
+  read.
+- **Not settled, and asked of Zach:** how loyalty is earned and what it
+  does; what a callback does; whether a friend who joins by link brings his
+  own company (for now only the player who musters does); and whether an
+  officer may be in two unfinished battles at once (for now he may).
+

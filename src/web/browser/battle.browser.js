@@ -106,6 +106,16 @@ test('alone, on a phone: muster, an order written on the map, turns to a verdict
     await p.goto(base + '/')
     await p.waitForSelector('.battle-link')
     assert.match(p.url(), /\/battles$/, 'nothing waiting, so home is your battles')
+
+    // Your officers: those who lived, with the battle in their record.
+    await p.click('a[href="/officers"]')
+    await p.waitForSelector('.officer, .label-caps')
+    assert.match(await p.textContent('main'), /1 battle fought/)
+    if (await p.locator('.officer').count()) {
+      await p.locator('.officer summary').first().click()
+      assert.match(await p.locator('.officer li').first().textContent(), /a victory|a defeat|a draw/)
+    }
+    if (process.env.SHOT) await p.screenshot({ path: process.env.SHOT, fullPage: true })
   })
 })
 

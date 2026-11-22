@@ -30,6 +30,9 @@ const { interpretText } = require('../interpreter/orders')
 const { lyingInWait } = require('../interpreter/resolve')
 const { assignOfficers } = require('../engine/command/roster')
 const { planTurn } = require('../opponent/planner')
+const { musterOfficers, settleBattle } = require('../engine/command/company')
+const { createCommanderStore } = require('./commanders')
+const { digest, summarise } = require('../narrator/turnNarrator')
 const { gradeOf } = require('../engine/command/officers')
 const { narrateTurn, report } = require('../narrator/turnNarrator')
 const { orderWords } = require('../narrator/words')
@@ -120,7 +123,9 @@ function officerFates(game, side) {
         : roll < pKill + pCapture + pWound ? 'wounded' : 'unhurt'
     return {
       unit: unitName(spec),
+      unitId: spec.id,
       officer: spec.officer?.name ?? null,
+      officerId: spec.officer?.id ?? null,
       fate,
       ...(fate === 'wounded' ? { how: woundReason(exposure) } : {})
     }
@@ -142,6 +147,7 @@ function newToken() {
 function createBattleStore({ dir = null, ai = null, now = () => Date.now() } = {}) {
   const battles = new Map()   // id -> entry
   const seats = new Map()     // token -> { id, side }
+  const commanders = createCommanderStore({ dir, now })
 
   // ── Saving and loading ────────────────────────────
 
@@ -158,6 +164,12 @@ function createBattleStore({ dir = null, ai = null, now = () => Date.now() } = {
       auto: entry.auto,
       dispatches: entry.dispatches,
       pending: entry.pending,
+      // Whose company each side's officers belong to, what each Commander
+      // said turn by turn (for his officers' memory), and whether the
+      // battle has been written into the companies.
+      commanders: entry.commanders ?? {},
+      said: entry.said ?? {},
+      settled: Boolean(entry.settled),
       record: gameRecord(entry.game)
     }
     const file = path.join(dir, `${entry.id}.json`)
@@ -193,6 +205,9 @@ function createBattleStore({ dir = null, ai = null, now = () => Date.now() } = {
    *   timeLimitMinutes  null or minutes of battle
    *   objectives  ground to hold: grid squares or feature names
    *   seed        optional
+   *   commander   the mustering player's Commander token: his company's
+   *               officers lead his side, and the battle is written into
+   *               the company when it ends
    * @returns {{ id, seats: { [side]: token } }} only the seats for people
    */
   function muster(m = {}) {
@@ -217,6 +232,15 @@ function createBattleStore({ dir = null, ai = null, now = () => Date.now() } = {
     // his experience and his nature, drawn from the battle's seed.
     const seed = m.seed ?? crypto.randomInt(1, 1_000_000)
     spec = { ...spec, units: assignOfficers(spec.units, seed) }
+    // The mustering Commander's own officers lead his side.
+    const commander = m.commander ? commanders.get(m.commander) : null
+    if (commander) {
+      const mine = spec.units.filter(u => u.side === side).map(u => ({ ...u, kind: unitName(u).toLowerCase() }))
+      const led = musterOfficers(commander.company, mine, seed)
+      commanders.setCompany(commander, led.company)
+      const officerOf = new Map(led.units.map(u => [u.id, u.officer]))
+      spec = { ...spec, units: spec.units.map(u => (officerOf.has(u.id) ? { ...u, officer: officerOf.get(u.id) } : u)) }
+    }
     const game = createGame(spec, { seed })
     const entry = {
       id: crypto.randomBytes(6).toString('hex'),
@@ -230,6 +254,9 @@ function createBattleStore({ dir = null, ai = null, now = () => Date.now() } = {
       // What each side has sent this turn, in its own words, until the
       // turn runs: so a commander can see and change it.
       pending: {},
+      commanders: commander ? { [side]: commander.id } : {},
+      said: {},
+      settled: false,
       game
     }
     register(entry)
@@ -376,7 +403,9 @@ function createBattleStore({ dir = null, ai = null, now = () => Date.now() } = {
       objectives,
       pending: entry.pending[side] ?? null,
       dispatches: [...entry.dispatches[side]].reverse(),
-      verdict: game.outcome.decided && !atGame ? { ...tally(game), officers: officerFates(game, side) } : null
+      verdict: game.outcome.decided && !atGame
+        ? { ...tally(game), officers: officerFates(game, side), company: Boolean(entry.commanders?.[side]) }
+        : null
     }
   }
 
@@ -441,6 +470,10 @@ function createBattleStore({ dir = null, ai = null, now = () => Date.now() } = {
 
     const notes = [...(read.notes ?? []), ...read.questions.map(q => `Not sent: ${q}`)].map(name)
     entry.pending[side] = { text: String(text ?? ''), understood, notes, at: now() }
+    if (understood.length > 0) {
+      entry.said = entry.said ?? {}
+      entry.said[side] = [...(entry.said[side] ?? []), { turn: game.playerTurn + 1, lines: understood }].slice(-60)
+    }
     let result = submitOrders(game, side, read.surrender ? { surrender: true } : read.orders)
     // Solo: the computer's side answers at once, with the orders it thinks
     // best from what it has seen (opponent/planner.js).
@@ -451,10 +484,40 @@ function createBattleStore({ dir = null, ai = null, now = () => Date.now() } = {
     if (result.status !== 'waiting') {
       entry.pending = {}
       await writeDispatches(entry)
+      settle(entry)
     }
     entry.updatedAt = now()
     save(entry)
     return { status: result.status === 'waiting' ? 'waiting' : 'turn-ran', understood, notes }
+  }
+
+  // A finished battle is written into the company of each Commander who
+  // fought it, once: who lived, what each officer's unit did, and what the
+  // Commander told him (his memory of it).
+  function settle(entry) {
+    const game = entry.game
+    if (!game.outcome.decided || entry.settled) return
+    entry.settled = true
+    for (const [side, id] of Object.entries(entry.commanders ?? {})) {
+      const commander = commanders.byId(id)
+      if (!commander) continue
+      const name = namer(game, side)
+      const result = game.outcome.winner === 'draw' ? 'draw' : game.outcome.winner === side ? 'victory' : 'defeat'
+      const events = summarise(game.battle.log.all())
+      const said = (entry.said?.[side] ?? []).flatMap(s => s.lines)
+      const fates = officerFates(game, side).filter(f => f.officerId).map(f => {
+        const deeds = digest(events, { map: game.battle.map, ownIds: new Set([f.unitId]) })[0]?.text ?? ''
+        return {
+          officerId: f.officerId, unit: f.unit.toLowerCase(), fate: f.fate, ...(f.how ? { how: f.how } : {}),
+          deeds: name(deeds).replace(/^[^:]+:\s*/, '').replace('BROKE', 'broke'),
+          // "Spears, Swords: advance on the enemy" was said to both.
+          orders: said
+            .filter(line => line.slice(0, line.indexOf(':')).toLowerCase().split(/,\s*/).includes(f.unit.toLowerCase()))
+            .map(line => line.replace(/^[^:]+:\s*/, ''))
+        }
+      })
+      commanders.setCompany(commander, settleBattle(commander.company, { id: entry.id, title: entry.title, result }, fates))
+    }
   }
 
   // Each human side's report of the turn just run: the plain account (fog
@@ -500,6 +563,7 @@ function createBattleStore({ dir = null, ai = null, now = () => Date.now() } = {
     readBack,
     submit,
     seatOf,
+    commanders,
     scenarios: () => Object.keys(SCENARIOS).map(id => ({ id, title: SCENARIO_TITLES[id] ?? id })),
     maps: () => mapChoices()
   }

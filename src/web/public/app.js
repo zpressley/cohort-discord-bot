@@ -6,10 +6,12 @@
 //                your battles, else the muster
 //   /battles     your battles
 //   /muster      muster a new battle
+//   /officers    your officers: who they are and what they have been through
 //   /b/<link>    the Command Tent for one side of one battle
 //
-// The links to your battles are kept in this browser (localStorage); the
-// server holds the battles. Everything shown about a battle comes from the
+// The links to your battles, and the link to you as a Commander (your
+// officers go with it), are kept in this browser (localStorage); the server
+// holds the battles and the officers. Everything shown about a battle comes from the
 // server already cut to your side's view.
 
 import { drawMap, attachGestures, gridRef, terrainWords, TILE } from './map.js'
@@ -34,6 +36,23 @@ function loadDraft(token) {
 }
 function saveDraft(token, text) {
   try { text ? localStorage.setItem(`cohort.draft.${token}`, text) : localStorage.removeItem(`cohort.draft.${token}`) } catch { /* fine */ }
+}
+
+// ── You, the Commander ─────────────────────────────────
+// A private link the server gives this browser the first time you muster;
+// your officers are kept under it.
+const COMMANDER_KEY = 'cohort.commander'
+function commanderToken() {
+  try { return localStorage.getItem(COMMANDER_KEY) } catch { return null }
+}
+async function ensureCommander() {
+  const known = commanderToken()
+  if (known) {
+    try { await api('GET', `/api/commander/${known}`); return known } catch (error) { if (error.status !== 404) throw error }
+  }
+  const { token } = await api('POST', '/api/commanders')
+  try { localStorage.setItem(COMMANDER_KEY, token) } catch { return null /* private browsing: officers for this battle only */ }
+  return token
 }
 
 // ── Talking to the server ──────────────────────────────
@@ -123,6 +142,7 @@ async function route() {
     if (seat) return await tent(seat[1])
     if (path === '/battles') return await battles()
     if (path === '/muster') return await muster()
+    if (path === '/officers') return await officers()
     return await home()
   } catch (error) {
     app.innerHTML = `<main class="page"><h1>Cohort</h1><p class="error">${esc(error.status === 404 ? 'There is no battle at this link.' : error.message)}</p><a href="/battles" data-link>Your battles</a></main>`
@@ -162,6 +182,39 @@ async function battles() {
       ${section('Waiting on you', group('your-orders'))}
       ${section('Waiting on the enemy', group('waiting'))}
       ${section('Finished', group('finished'))}
+      <a class="btn btn-main btn-wide" href="/muster" data-link>Muster a new battle</a>
+      <a class="btn btn-wide" href="/officers" data-link>Your officers</a>
+    </main>`
+}
+
+// ── Your officers ──────────────────────────────────────
+const GRADE_WORDS = { green: 'green', seasoned: 'seasoned', veteran: 'a veteran' }
+const RESULT_WORDS = { victory: 'a victory', defeat: 'a defeat', draw: 'a draw' }
+const FATE_WORDS = { killed: 'killed', captured: 'taken by the enemy' }
+async function officers() {
+  const token = commanderToken()
+  let company = null
+  if (token) {
+    try { company = await api('GET', `/api/commander/${token}`) } catch (error) { if (error.status !== 404) throw error }
+  }
+  const battleLine = (r) => `<li><strong>${esc(r.title)}</strong>, ${esc(RESULT_WORDS[r.result] ?? r.result)}${
+    r.fate === 'wounded' ? `; wounded${r.how ? ` (${esc(r.how)})` : ''}` : ''}.${r.deeds ? ` His men ${esc(r.deeds)}.` : ''}</li>`
+  const card = (o) => `<div class="officer">
+      <strong>${esc(o.name)}</strong>
+      <span>Leads the ${esc(o.leads)} · ${esc(GRADE_WORDS[o.grade] ?? o.grade)}, ${esc(o.personality)}${o.status === 'wounded' ? ' · wounded, back after the next battle' : ''}</span>
+      ${o.record.length
+        ? `<details><summary>${o.record.length} battle${o.record.length === 1 ? '' : 's'} with you</summary><ul>${o.record.map(battleLine).join('')}</ul></details>`
+        : '<span>Yet to fight under you.</span>'}
+    </div>`
+  const fallen = (f) => `<p class="note">${esc(f.name)}, who led the ${esc(f.led)}: ${esc(FATE_WORDS[f.fate] ?? f.fate)} at ${esc(f.at)}, after ${f.battles} battle${f.battles === 1 ? '' : 's'} with you.</p>`
+  app.innerHTML = `
+    <header class="bar"><a href="/battles" data-link>Your battles</a><strong style="font-family: var(--font-display); font-size: 18px">Your officers</strong><span></span></header>
+    <main class="page">
+      ${!company || company.officers.length + company.fallen.length === 0
+        ? '<p class="note">No officers yet. They join you at your first battle, and those who live go with you to the next: they learn, and they remember.</p>'
+        : `<p class="note">${company.battles} battle${company.battles === 1 ? '' : 's'} fought. An officer learns from each one he lives through: a green one keeps to the first thing you tell him, a veteran follows a longer order.</p>`}
+      ${company ? company.officers.map(card).join('') : ''}
+      ${company?.fallen.length ? `<p class="label-caps">Lost</p>${company.fallen.map(fallen).join('')}` : ''}
       <a class="btn btn-main btn-wide" href="/muster" data-link>Muster a new battle</a>
     </main>`
 }
@@ -206,8 +259,9 @@ async function muster() {
     try {
       const side = form.get('side')
       const opponent = form.get('opponent')
+      const commander = await ensureCommander()
       const result = await api('POST', '/api/battles', {
-        scenario: form.get('scenario'), map: form.get('map'), opponent, side,
+        scenario: form.get('scenario'), map: form.get('map'), opponent, side, commander,
         timeLimitMinutes: form.get('timeLimit') ? Number(form.get('timeLimit')) : null,
         objectives: String(form.get('objectives') ?? '').split(',').map(s => s.trim()).filter(Boolean)
       })
@@ -561,6 +615,7 @@ async function tent(token) {
         <input id="replay" type="range" min="0" max="${state.view.battle.turn - 1}" value="${state.shown ? state.shown.turn : state.view.battle.turn - 1}" style="min-height: 44px">
       </label>
       <p class="note" id="replay-note">${state.shown ? replayWords(state.shown) : 'The field as the battle ended.'}</p>
+      ${v?.company ? '<a class="btn btn-wide" href="/officers" data-link>Your officers</a>' : ''}
       <a class="btn btn-wide" href="/battles" data-link>Your battles</a>`
     const slider = document.getElementById('replay')
     slider.addEventListener('change', async () => {
@@ -576,7 +631,7 @@ async function tent(token) {
     const hurt = officers.filter(o => o.fate !== 'unhurt')
     const lines = hurt.map(o => `<p class="note">${o.officer ? `${esc(o.officer)}, officer` : 'The officer'} of the ${esc(o.unit.toLowerCase())}: ${
       o.fate === 'killed' ? 'killed' : o.fate === 'captured' ? 'taken by the enemy' : `wounded (${esc(o.how)}), back after the next battle`}.</p>`)
-    lines.push(`<p class="note">${hurt.length ? 'All others came through.' : 'Every officer came through.'}</p>`)
+    lines.push(`<p class="note">${hurt.length ? 'All others came through.' : 'Every officer came through.'}${state.view.verdict?.company ? ' Those who lived go with you to your next battle, the wiser for this one.' : ''}</p>`)
     return lines.join('')
   }
 
