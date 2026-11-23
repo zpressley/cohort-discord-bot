@@ -38,7 +38,8 @@
 // brings out of their camp (learnFromCaptivity, as his side's intel does).
 
 const { canSee } = require('../map/sight')
-const { riders } = require('../command/messengers')
+const { riders, orderDelays } = require('../command/messengers')
+const { COMMAND } = require('../combat/tables')
 
 const copy = (x) => (x === undefined || x === null ? null : JSON.parse(JSON.stringify(x)))
 
@@ -94,6 +95,7 @@ function updateWord(game, side) {
   const free = c?.status === 'free'
   const road = free ? riders(battle, side) : null
   const sighted = []
+  const toldCutOff = Boolean(game.spec.everyoneAsked)
 
   const theirs = battle.world.units.filter(u => u.side !== side && u.strength > 0)
   const seesNow = (unit) => theirs.filter(e => {
@@ -115,10 +117,13 @@ function updateWord(game, side) {
     const ticks = road ? road.ticks(unit) : Infinity
     const arrives = ticks === Infinity ? Infinity : turn + ticks
     ;(word.sent[unit.id] ??= []).push([turn, arrives])
-    // Cut off, or in touch again: he knows when his riders cannot get
-    // through (an event only his side hears of).
+    // Cut off, or in touch again: in a battle saved before the riders
+    // rulings he knew at once when his riders could not get through (an
+    // event only his side heard of). Since, he notices only when no word
+    // comes (ruled 2026-11-23: "Notice when no word comes back"): see
+    // overdue, below.
     const known = word.units[unit.id]
-    if (free && known && !gone && !known.gone && known.cutOff !== (ticks === Infinity)) {
+    if (toldCutOff && free && known && !gone && !known.gone && known.cutOff !== (ticks === Infinity)) {
       known.cutOff = ticks === Infinity
       battle.log.emit(known.cutOff ? 'cutOff' : 'inTouch', turn, { side, unitId: unit.id })
     }
@@ -138,7 +143,9 @@ function updateWord(game, side) {
     for (const r of due) {
       const known = word.units[r.unitId]
       if (!known || r.sent >= known.heard) {
-        word.units[r.unitId] = { ...r.report, heard: r.sent, live: r.live && r.sent === turn, cutOff: known?.cutOff ?? false }
+        // Word from a unit he had given up hearing from: it has come again.
+        if (known?.overdue) (word.back ??= []).push({ unitId: r.unitId, turn })
+        word.units[r.unitId] = { ...r.report, heard: r.sent, live: r.live && r.sent === turn, cutOff: known?.cutOff ?? false, ...(toldCutOff ? {} : { overdue: false }) }
       }
       for (const { id, ...seen } of r.sees) {
         if ((word.enemies[id]?.seenOnTurn ?? -1) > seen.seenOnTurn) continue
@@ -157,8 +164,30 @@ function updateWord(game, side) {
       if (e.status === 'visible' && e.seenOnTurn < turn) e.status = 'ghost'
     }
     for (const u of Object.values(word.units)) if (u.heard < turn) u.live = false
+    if (!toldCutOff) overdue(game, side)
   }
   return { sighted: [...new Set(sighted)].sort() }
+}
+
+// Which of his units he has had no word of for longer than he should
+// (ruled 2026-11-23: "Notice when no word comes back. The lost legions in
+// the tuetoberg forest"). Each sends word every ten minutes, so the last to
+// reach him should be no older than a rider's ride from where the unit last
+// was, plus COMMAND.OVERDUE of slack. Judged from his ledger alone: where
+// he last heard each unit was, the enemy he knows of, and where he is
+// himself. So a unit cut off, one destroyed out of his sight and one far
+// off on bad ground look alike to him, until word comes or does not.
+function overdue(game, side) {
+  const word = game.word[side]
+  const turn = game.battle.turn
+  const ids = Object.keys(word.units).filter(id => !word.units[id].gone)
+  const delays = orderDelays(game.battle, side, ids, { word }) ?? {}
+  for (const id of ids) {
+    const u = word.units[id]
+    const minutes = delays[id]
+    const ride = minutes === undefined || minutes === Infinity ? 1 : Math.max(1, minutes / 10)
+    u.overdue = turn - u.heard > ride + COMMAND.OVERDUE
+  }
 }
 
 /** What a freed Commander brings out of his captors' camp: where each enemy stood. */

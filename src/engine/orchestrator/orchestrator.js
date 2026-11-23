@@ -45,7 +45,7 @@ const { createIntel, updateIntel, learnFromCaptivity, sideView: fogSideView } = 
 const { createWord, updateWord, wordFromCaptivity, arrivalOf } = require('./word')
 const { evaluateVictory, objectiveController, objectiveArea, OBJECTIVE_HOLD_MINUTES } = require('./victory')
 const { bargainChips, commanderFate } = require('../command/commander')
-const { PARLEY } = require('../combat/tables')
+const { PARLEY, COMMAND } = require('../combat/tables')
 
 const MAX_TICKS_PER_TURN = 6   // one hour of battle time per decision
 const MINUTES_PER_TICK = 10    // locked decision 1
@@ -62,6 +62,12 @@ const MINUTES_PER_TICK = 10    // locked decision 1
  *                        as a time limit is
  *   timeLimitMinutes:    battle time after which the side that lost the
  *                        larger share of its men loses (a testing aid)
+ *   dayMinutes:          battle time after which the day is over, decided
+ *                        as a time limit is (the app's end of the day)
+ *   everyoneAsked:       true for a battle saved before the riders rulings:
+ *                        every side is asked at every stop, and a Commander
+ *                        is told at once when a unit is cut off (see
+ *                        "Asked when wanted", below)
  * @param {Object} [options] { seed }
  */
 function createGame(spec, options = {}) {
@@ -103,8 +109,27 @@ function createGame(spec, options = {}) {
   game.word = {}
   // (A battle saved before riders has none: spec.messengers false.)
   if (spec.messengers !== false) for (const side of Object.keys(spec.commanders ?? {}).sort()) game.word[side] = createWord(game, side)
+  // Who the next turn waits on (see "Asked when wanted"): at the start,
+  // everyone. How many times the battle has stopped for each side (his own
+  // turns), and the battle turn it last did.
+  game.wanted = sides(battle.world)
+  game.calls = Object.fromEntries(game.wanted.map(s => [s, 0]))
+  game.askedAt = Object.fromEntries(game.wanted.map(s => [s, 0]))
 
   return game
+}
+
+/**
+ * Is each side asked only when wanted (ruled 2026-11-23)? So in a battle
+ * with a Commander on the field, unless it was saved before the ruling.
+ */
+const askedWhenWanted = (game) => Object.keys(game.word ?? {}).length > 0 && !game.spec.everyoneAsked
+
+/** The sides the next turn still waits on: those wanted that have not given orders. */
+function waitingOn(game) {
+  if (game.outcome.decided) return []
+  const wanted = askedWhenWanted(game) ? game.wanted : sides(game.battle.world)
+  return wanted.filter(s => !(s in game.submitted))
 }
 
 /**
@@ -158,9 +183,11 @@ function submitOrders(game, side, orders) {
     game.submitted[side] = orders ?? []
   }
 
-  const waitingOn = sides(game.battle.world).filter(s => !(s in game.submitted))
-  if (waitingOn.length > 0 && !game.surrendered) {
-    return { status: 'waiting', waitingOn }
+  // A side not wanted may still give orders: they go out when the battle
+  // moves on. The turn runs when every side wanted has given its own.
+  const waiting = waitingOn(game)
+  if (waiting.length > 0 && !game.surrendered) {
+    return { status: 'waiting', waitingOn: waiting }
   }
 
   const turnReport = processPlayerTurn(game)
@@ -325,8 +352,11 @@ function processPlayerTurn(game) {
 
   const ticks = []
   let interrupt = null
+  // Asked when wanted: who the battle stops for, and why (side -> reason).
+  const asking = askedWhenWanted(game)
+  let wantedBy = null
 
-  for (let tick = 1; tick <= MAX_TICKS_PER_TURN; tick++) {
+  for (let tick = 1; tick <= (asking ? COMMAND.LONGEST : MAX_TICKS_PER_TURN); tick++) {
     // Orders are given once, as the turn opens. They stand in the battle's
     // order book from then on, so later ticks need nothing new. (Before
     // November 2026 the same orders were handed in again every tick, which
@@ -360,11 +390,23 @@ function processPlayerTurn(game) {
     ticks.push({ tick, battleTurn: battle.turn, record: turnRecord, sightings })
 
     game.outcome = evaluateVictory(victoryContext(game))
+    // The end of the day, counted in battle time (the app's battles since
+    // the riders rulings).
+    if (!game.outcome.decided && game.spec.dayMinutes && game.minutesElapsed >= game.spec.dayMinutes) {
+      game.outcome = evaluateVictory({ ...victoryContext(game), dayOver: true })
+    }
     if (game.outcome.decided) { interrupt = 'decided'; break }
     // A Commander taken or freed: both sides stop, for both know of it. (One
     // who only got away to another of his units is his own side's secret,
     // and a stop would tell the enemy something had happened.)
     if (battle.log.forTurn(battle.turn).some(e => e.type === 'commanderTaken' || e.type === 'commanderFreed')) { interrupt = 'commander'; break }
+    if (asking) {
+      // Each side is asked only when it is wanted: the battle goes on
+      // until one is (ruled 2026-11-23).
+      wantedBy = wantedNow(game, turnRecord, sightedBy, heard, objectiveChanges)
+      if (wantedBy) { interrupt = Object.values(wantedBy)[0]; break }
+      continue
+    }
     if (Object.keys(game.word).length > 0) {
       // A battle with a Commander on the field stops when news worth
       // stopping for reaches a Commander, not when it happens out of his
@@ -392,12 +434,109 @@ function processPlayerTurn(game) {
     interrupt = 'decided'
   }
 
+  if (!asking) {
+    game.history.push({
+      playerTurn: game.playerTurn,
+      ticks,
+      interrupt: interrupt ?? 'time'   // six ticks passed; the commander checks in
+    })
+    for (const s of sides(battle.world)) { game.calls[s] = (game.calls[s] ?? 0) + 1; game.askedAt[s] = battle.turn }
+    return game.history.at(-1)
+  }
+  // Everyone is wanted when the battle is decided, when a Commander is
+  // taken or freed (both sides know of it), and when the battle has run as
+  // long as it may without asking anyone (COMMAND.LONGEST).
+  const all = sides(battle.world)
+  if (!wantedBy || game.outcome.decided) wantedBy = Object.fromEntries(all.map(s => [s, interrupt ?? 'long']))
+  game.wanted = all.filter(s => wantedBy[s])
+  for (const s of game.wanted) { game.calls[s] = (game.calls[s] ?? 0) + 1; game.askedAt[s] = battle.turn }
   game.history.push({
     playerTurn: game.playerTurn,
     ticks,
-    interrupt: interrupt ?? 'time'   // six ticks passed; the commander checks in
+    interrupt: interrupt ?? 'long',
+    wanted: wantedBy
   })
   return game.history.at(-1)
+}
+
+// ── Asked when wanted ──────────────────────────────────
+//
+// Ruled 2026-11-23: "No the game keeps going. This is true for two human
+// players as well. If one player gives move command for a march taking 3
+// turns don't notify that commander for 3 turns unless the units spot the
+// enemy. If the other command moves 1 turn of movement at a time that is
+// fine... both would only be notified when there are commands to give or
+// things happen to them."
+//
+// In a battle with a Commander on the field (unless saved before the
+// ruling: spec.everyoneAsked), the battle runs on from one stop to the next,
+// and each stop is for the sides wanted at it. Only those are asked for
+// orders; the others are not told of it, nor waited for. A side is wanted:
+//   - free with his army: when news worth stopping for reaches him (a fight,
+//     shooting, a rout, a sighting, a rally), or his orders are carried out
+//     (judged by what has reached him); or when, by what he knows, his men
+//     have nothing left to do and COMMAND.QUIET has passed since he was
+//     last asked;
+//   - held: when his captors hear what would stop them (as before), and
+//     every COMMAND.QUIET, for he always has an offer to make;
+//   - with no Commander on the field (the computer): on its own side's
+//     news, as every side was before, and every COMMAND.QUIET;
+//   - every side: when ground changes hands (all know at once).
+// Who was wanted, and why, is history[i].wanted (side -> reason).
+function wantedNow(game, turnRecord, sightedBy, heard, objectiveChanges) {
+  const { battle } = game
+  const all = sides(battle.world)
+  if (objectiveChanges) return Object.fromEntries(all.map(s => [s, 'objective']))
+  const recent = battle.log.all().filter(e => e.turn > battle.turn - NEWS_LOOKBACK)
+  const now = recent.filter(e => e.turn === battle.turn)
+  const quiet = (side) => battle.turn - (game.askedAt[side] ?? 0) >= COMMAND.QUIET
+  const ofSide = (id, side) => [...battle.world.units, ...battle.fledUnits].some(u => u.id === id && u.side === side)
+  const by = {}
+  const order = ['contact', 'fire', 'sighting', 'ready', 'rallied', 'stalled', 'time']
+  for (const side of all) {
+    const c = battle.commanders?.[side]
+    const reasons = []
+    if (game.word[side] && c?.status === 'free') {
+      reasons.push(...newsFor(game, side, recent, heard))
+      if (quiet(side) && nothingToDo(game, side)) reasons.push('time')
+    } else if (game.word[side] && c?.status === 'held') {
+      reasons.push(...heldNews(game, side, turnRecord, sightedBy, now))
+      if (quiet(side)) reasons.push('time')
+    } else {
+      // As every side was asked before.
+      if (turnRecord.engagements.length > 0) reasons.push('contact')
+      if (turnRecord.volleys.length > 0) reasons.push('fire')
+      if (sightedBy[side]?.length > 0) reasons.push('sighting')
+      if (ordersCarriedOut(battle, { side })) reasons.push('ready')
+      if (now.some(e => e.type === 'rallied' && ofSide(e.unitId, side))) reasons.push('rallied')
+      if (nothingMoved(turnRecord)) reasons.push('stalled')
+      if (quiet(side)) reasons.push('time')
+    }
+    const why = order.find(r => reasons.includes(r))
+    if (why) by[side] = why
+  }
+  return Object.keys(by).length > 0 ? by : null
+}
+
+// Does a Commander know of nothing left for his men to do? Judged from the
+// last word of each unit to have reached him, and the orders he has sent
+// that are still on the road: never from how they truly stand.
+function nothingToDo(game, side) {
+  const { battle } = game
+  for (const [id, r] of Object.entries(game.word[side].units)) {
+    if (r.gone || r.broken || r.strength <= 0) continue
+    if (battle.riders?.some(x => x.side === side && x.unitId === id)) return false
+    const order = r.order
+    if (!order) continue
+    if (order.enemy) return false
+    switch (order.action) {
+      case 'hold': continue
+      case 'advance': case 'check': return false
+      case 'hide': case 'ambush': if (!r.hidden) return false; continue
+      default: if (!order.target || !samePosition(order.target, r.position)) return false
+    }
+  }
+  return true
 }
 
 // Objective control is measured once per TICK but victory counts consecutive
@@ -481,28 +620,43 @@ function byNews(game, turnRecord, sightedBy, heard, objectiveChanges) {
   for (const side of Object.keys(game.word).sort()) {
     const c = battle.commanders?.[side]
     if (c?.status === 'held') {
-      const captor = captorOf(game, side)
-      const now = recent.filter(e => e.turn === battle.turn)
-      if (turnRecord.engagements.length > 0) reasons.push('contact')
-      if (turnRecord.volleys.length > 0) reasons.push('fire')
-      if (captor && sightedBy[captor]?.length > 0) reasons.push('sighting')
-      if (now.some(e => e.type === 'rallied')) reasons.push('rallied')
+      reasons.push(...heldNews(game, side, turnRecord, sightedBy, recent.filter(e => e.turn === battle.turn)))
       continue
     }
     if (c?.status !== 'free') continue
-    const arrived = recent.filter(e => arrivalOf(game, side, e) === battle.turn)
-    if (arrived.some(e => e.type === 'contact' || e.type === 'exchange')) reasons.push('contact')
-    if (arrived.some(e => e.type === 'volley')) reasons.push('fire')
-    if (arrived.some(e => e.type === 'rout')) reasons.push('contact')
-    if (heard[side]?.sighted.length > 0) reasons.push('sighting')
-    if (ordersCarriedOut(battle, { side, events: arrived })) reasons.push('ready')
-    if (arrived.some(e => e.type === 'rallied')) reasons.push('rallied')
+    reasons.push(...newsFor(game, side, recent, heard))
   }
   if (objectiveChanges) reasons.push('objective')
   const order = ['contact', 'fire', 'sighting', 'objective', 'ready', 'rallied']
   const why = order.find(r => reasons.includes(r))
   if (why) return why
   return nothingMoved(turnRecord) ? 'stalled' : null
+}
+
+// What would stop the turn for a held Commander: what his captors hear.
+function heldNews(game, side, turnRecord, sightedBy, now) {
+  const captor = captorOf(game, side)
+  const reasons = []
+  if (turnRecord.engagements.length > 0) reasons.push('contact')
+  if (turnRecord.volleys.length > 0) reasons.push('fire')
+  if (captor && sightedBy[captor]?.length > 0) reasons.push('sighting')
+  if (now.some(e => e.type === 'rallied')) reasons.push('rallied')
+  return reasons
+}
+
+// What would stop the turn for a free Commander: news that reached him this
+// tick, and his orders carried out.
+function newsFor(game, side, recent, heard) {
+  const { battle } = game
+  const reasons = []
+  const arrived = recent.filter(e => arrivalOf(game, side, e) === battle.turn)
+  if (arrived.some(e => e.type === 'contact' || e.type === 'exchange')) reasons.push('contact')
+  if (arrived.some(e => e.type === 'volley')) reasons.push('fire')
+  if (arrived.some(e => e.type === 'rout')) reasons.push('contact')
+  if (heard[side]?.sighted.length > 0) reasons.push('sighting')
+  if (ordersCarriedOut(battle, { side, events: arrived })) reasons.push('ready')
+  if (arrived.some(e => e.type === 'rallied')) reasons.push('rallied')
+  return reasons
 }
 
 const DONE = ['arrived', 'halted', 'hidden', 'checked']
@@ -600,6 +754,8 @@ module.exports = {
   replayGame,
   submitOrders,
   forceProcess,
+  waitingOn,
+  askedWhenWanted,
   sideView,
   MAX_TICKS_PER_TURN,
   MINUTES_PER_TICK
