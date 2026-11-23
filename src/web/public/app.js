@@ -34,6 +34,12 @@ function saveSeat(seat) {
 function loadDraft(token) {
   try { return localStorage.getItem(`cohort.draft.${token}`) ?? '' } catch { return '' }
 }
+function howToHidden() {
+  try { return localStorage.getItem('cohort.hideHowTo') === '1' } catch { return false }
+}
+function hideHowTo() {
+  try { localStorage.setItem('cohort.hideHowTo', '1') } catch { /* it comes back next time */ }
+}
 function saveDraft(token, text) {
   try { text ? localStorage.setItem(`cohort.draft.${token}`, text) : localStorage.removeItem(`cohort.draft.${token}`) } catch { /* fine */ }
 }
@@ -334,6 +340,10 @@ async function tent(token) {
     editing: false,
     sending: false,
     zoom: null,
+    // Your units under one fingertip, to choose from.
+    stack: null,
+    // The map at full height (on a phone it shares the screen with the orders).
+    tall: false,
     // The verdict's replay: the battle as you saw it after an earlier turn.
     shown: null
   }
@@ -355,6 +365,7 @@ async function tent(token) {
         <div class="map-tools">
           <button class="btn" type="button" id="zoom-in" aria-label="Zoom in">+</button>
           <button class="btn" type="button" id="zoom-out" aria-label="Zoom out">−</button>
+          <button class="btn btn-tall" type="button" id="tall" aria-label="Taller map" aria-pressed="false">⇕</button>
         </div>
         <div class="map-hint" id="map-hint"></div>
       </section>
@@ -387,7 +398,9 @@ async function tent(token) {
     svg.style.height = 'auto'
     if (state.shown) { if (keepScroll) { scroll.scrollLeft = left; scroll.scrollTop = top } return }
     attachGestures(svg, state.view, () => state.picked, {
-      onPick: (id) => { state.picked = id; state.place = null; state.flash = null; renderMap(); renderHint(); if (state.tab === 'army') renderPanel() },
+      onPick: (id) => { state.picked = id; state.stack = null; state.place = null; state.flash = null; renderMap(); renderHint(); if (state.tab === 'army') renderPanel() },
+      onStack: (units) => { state.stack = units.map(u => u.id); state.place = null; state.flash = null; renderHint() },
+      onPinch: (factor, x, y) => zoomBy(factor, { x, y }),
       onOrder: (unit, x, y) => addLine(`${unit.name} to ${gridRef(x, y)}`),
       onPlace: (x, y) => { state.place = { x, y }; state.flash = null; renderHint() }
     })
@@ -405,23 +418,41 @@ async function tent(token) {
     scroll.scrollTop = (26 + my * TILE) * scale - scroll.clientHeight / 2
   }
 
-  function zoomBy(factor) {
+  // Zoom about a point of the screen (the pinch's middle), or the middle of
+  // the map's window.
+  function zoomBy(factor, about = null) {
     const svg = scroll.querySelector('svg')
     const W = Number(svg.getAttribute('width'))
-    const centreX = (scroll.scrollLeft + scroll.clientWidth / 2) / svg.clientWidth
-    const centreY = (scroll.scrollTop + scroll.clientHeight / 2) / svg.clientHeight
+    const rect = scroll.getBoundingClientRect()
+    const px = about ? about.x - rect.left : scroll.clientWidth / 2
+    const py = about ? about.y - rect.top : scroll.clientHeight / 2
+    const centreX = (scroll.scrollLeft + px) / svg.clientWidth
+    const centreY = (scroll.scrollTop + py) / svg.clientHeight
     state.zoom = Math.min(2.5, Math.max(scroll.clientWidth / W / 1.2, state.zoom * factor))
     svg.style.width = `${Math.round(W * state.zoom)}px`
-    scroll.scrollLeft = centreX * svg.clientWidth - scroll.clientWidth / 2
-    scroll.scrollTop = centreY * svg.clientHeight - scroll.clientHeight / 2
+    scroll.scrollLeft = centreX * svg.clientWidth - px
+    scroll.scrollTop = centreY * svg.clientHeight - py
   }
+  document.getElementById('tall').addEventListener('click', (event) => {
+    state.tall = !state.tall
+    document.querySelector('.map-wrap').classList.toggle('tall', state.tall)
+    event.currentTarget.setAttribute('aria-pressed', String(state.tall))
+    event.currentTarget.setAttribute('aria-label', state.tall ? 'Shorter map' : 'Taller map')
+  })
   document.getElementById('zoom-in').addEventListener('click', () => zoomBy(1.4))
   document.getElementById('zoom-out').addEventListener('click', () => zoomBy(1 / 1.4))
 
   function renderHint() {
     const hint = document.getElementById('map-hint')
     const finished = state.view.battle.status === 'finished'
-    if (state.flash) {
+    if (state.stack && !state.picked && !state.flash) {
+      const units = state.stack.map(id => state.view.own.find(u => u.id === id)).filter(Boolean)
+      hint.innerHTML = `<span>Which one?</span>${units.map(u => `<button class="btn" type="button" data-stack="${esc(u.id)}">${esc(u.name)}</button>`).join('')}<button class="btn btn-quiet" type="button" id="stack-away">Never mind</button>`
+      hint.querySelectorAll('[data-stack]').forEach(b => b.addEventListener('click', () => {
+        state.picked = b.dataset.stack; state.stack = null; renderMap(); renderHint(); if (state.tab === 'army') renderPanel()
+      }))
+      document.getElementById('stack-away').addEventListener('click', () => { state.stack = null; renderHint() })
+    } else if (state.flash) {
       hint.innerHTML = `<span>Added to your orders: <strong>${esc(state.flash)}</strong></span>`
     } else if (state.picked) {
       const unit = state.view.own.find(u => u.id === state.picked)
@@ -443,6 +474,7 @@ async function tent(token) {
     state.draft = state.draft ? `${state.draft}\n${line}` : line
     saveDraft(token, state.draft)
     state.picked = null
+    state.stack = null
     state.place = null
     state.flash = line
     state.readback = null
@@ -527,12 +559,37 @@ async function tent(token) {
     if (!list.length) { body.innerHTML = '<p class="note">No dispatches yet. They come in once the first turn runs.</p>'; return }
     body.innerHTML = list.map((d, i) => `
       <article class="dispatch">
-        <header><h3>Turn ${d.turn}</h3><span class="when">${esc(clock(d.minutes))} · ${esc(WHY[d.interrupt] ?? d.interrupt)}</span></header>
+        <header><h3>Turn ${d.turn}</h3><span class="when">${d.plainReport && !d.narrated ? '<span class="flag" title="The AI that tells the story did not answer; this is the plain account.">plain report</span> ' : ''}${esc(clock(d.minutes))} · ${esc(WHY[d.interrupt] ?? d.interrupt)}</span></header>
         ${d.narrated ? `<p class="told">${esc(d.narrated)}</p>` : ''}
         ${d.narrated
           ? `<details><summary>The plain account</summary><ul>${d.lines.map(l => `<li>${esc(l)}</li>`).join('')}</ul></details>`
           : `<ul>${d.lines.map(l => `<li>${esc(l)}</li>`).join('')}</ul>`}
       </article>`).join('')
+  }
+
+  // The first turn's card: what the game understands, as orders to tap.
+  // Every line here is one the interpreter's grammar reads.
+  function howTo() {
+    const v = state.view
+    if (v.battle.turn !== 1 || howToHidden()) return ''
+    const own = v.own.filter(u => !u.broken)
+    if (!own.length) return ''
+    const east = (u, n) => gridRef(Math.min(v.map.width - 1, u.position.x + n), u.position.y)
+    const a = own[0]
+    const b = own[own.length > 1 ? 1 : 0]
+    const examples = [
+      'everyone advance',
+      `${a.name} to ${east(a, 4)}`,
+      `${b.name} defend ${east(b, 2)}`,
+      `${a.name} hold`,
+      `${b.name} fall back`
+    ]
+    return `<div class="how-to">
+      <strong>How to give orders</strong>
+      <span class="note">Say them as you would to an officer: a unit, then what it should do and where. One order to a line. Tap one to put it in the box.</span>
+      <div class="examples">${examples.map(e => `<button class="btn btn-quiet" type="button" data-example="${esc(e)}">${esc(e)}</button>`).join('')}</div>
+      <button class="btn btn-quiet" type="button" id="how-to-hide">Hide this</button>
+    </div>`
   }
 
   function orders(body, foot) {
@@ -595,6 +652,7 @@ async function tent(token) {
         <button class="btn" type="button" id="read-back">Read them back</button>
         ${state.draft ? '<button class="btn btn-quiet" type="button" id="clear">Clear</button>' : ''}
       </div>
+      ${rb ? '' : howTo()}
       ${rb ? `
         ${rb.understood.length ? `<p class="label-caps">Your officers understood</p>${rb.understood.map(l => `<p class="readback">${esc(l)}</p>`).join('')}` : ''}
         ${rb.questions.map(q => {
@@ -612,6 +670,14 @@ async function tent(token) {
       <button class="btn btn-main btn-wide" type="button" id="send"${state.sending ? ' disabled' : ''}>${state.sending ? 'Sending…' : 'Send the orders'}</button>
       <p class="note" style="text-align: center">Units you give no order keep their last one. Units hold until ordered.</p>`
 
+    body.querySelectorAll('[data-example]').forEach(b => b.addEventListener('click', () => {
+      state.draft = state.draft ? `${state.draft.replace(/\s+$/, '')}\n${b.dataset.example}` : b.dataset.example
+      saveDraft(token, state.draft)
+      state.readback = null
+      renderPanel()
+      document.getElementById('orders')?.focus()
+    }))
+    document.getElementById('how-to-hide')?.addEventListener('click', () => { hideHowTo(); renderPanel() })
     const box = document.getElementById('orders')
     box.addEventListener('input', () => { state.draft = box.value; state.readback = null; saveDraft(token, state.draft) })
     document.getElementById('clear')?.addEventListener('click', () => { state.draft = ''; state.readback = null; saveDraft(token, ''); renderPanel() })
