@@ -76,7 +76,13 @@ one to a unit a few hundred metres off takes 10.
   minutes ago, marked with its age ("20 min ago").
 - **No word:** a unit with no path a rider could take is cut off. It is
   shown where it last was, with when it was last heard from. It keeps
-  fighting on the orders it has.
+  fighting on the orders it has. He is not told it is cut off (ruled
+  November 23: "Notice when no word comes back"): once the word that
+  should have come is late, by a rider's ride from where the unit last
+  was and a little slack, the unit is marked "no word of them since ...",
+  judged from what has reached him alone. A unit cut off, one destroyed out
+  of his sight and one merely far off look the same until word comes.
+  When it comes again it simply arrives, and the dispatch says so.
 - An enemy is on his map only if he sees it or a report of it has reached
   him; it is shown at the place and time of that report.
 
@@ -85,9 +91,18 @@ one to a unit a few hundred metres off takes 10.
 - The dispatch for a turn tells what has **reached** the Commander by its
   end, each piece of news with how old it is. A rout on the far wing an
   hour's ride away is in the dispatch an hour later.
-- A player turn stops early when stop-worthy news **reaches** a Commander
-  (contact, a sighting, a rout), not when it happens out of his knowledge.
-  A turn still ends after an hour at most.
+- The battle stops for a Commander when stop-worthy news **reaches** him
+  (contact, a sighting, a rout), not when it happens out of his knowledge,
+  or when his orders are carried out. Only he is asked then (ruled November
+  23: "No the game keeps going ... both would only be notified when there
+  are commands to give or things happen to them"): the other side is not
+  told the battle stopped, nor waited for. A march of three hours with no
+  news is one wait. A Commander whose men have nothing left to do is asked
+  again after an hour; no one waits more than six hours.
+- His dispatch, when he is next asked, tells all that reached him since
+  his last orders.
+- An order no rider can carry is told him when the rider is back, a ride
+  there and back as far as he knows, not at once.
 - The verdict, when the battle ends, tells all.
 
 ## The computer's side
@@ -123,13 +138,22 @@ Where the build stands:
   Commander, his immediate range, and his units known by rider, faded with
   their age). Cut-off units already show "no word since" here, as the
   path rule blocks news as it blocks orders.
-- **Step 3 is built.** A unit cut off, and back in touch, is told to its
+- **Step 3 is built.** A unit cut off, and back in touch, was told to its
   Commander (`cutOff`, `inTouch`), marked on the map with a cross and on
-  the Army tab. The computer's orders, marked as from its command post
+  the Army tab; since Zach's answer of November 23 only in battles saved
+  before it, and the cross now marks a unit with no word. The computer's orders, marked as from its command post
   (`byCommandPost`, in `web/battles.js` and the soak), go by rider from its
   best unit; what it knows is not delayed. That is the next step for it.
 
 All three steps are built. Not built: everything under "What comes after".
+
+- **Zach's answers of November 23 are built** (see `docs/DECISIONS.md`,
+  "How the riders rulings were built"): the immediate range stays at 6
+  tiles; a unit cut off is no longer told (`cutOff` and `inTouch` are only
+  in battles saved before), he notices that no word has come; an order on
+  the road still arrives, and no word returns; and each side is asked only
+  when wanted (`game.wanted`, `waitingOn` in the orchestrator), the day
+  counted in battle time (`dayMinutes`).
 
 ## What comes after, not in this build
 

@@ -152,6 +152,7 @@ function createServer(store) {
             timeLimitMinutes: body.timeLimitMinutes, objectives: Array.isArray(body.objectives) ? body.objectives.map(String) : [],
             seed: Number.isInteger(body.seed) ? body.seed : undefined,
             turnLimit: Number.isInteger(body.turnLimit) ? body.turnLimit : undefined,
+            dayMinutes: Number.isInteger(body.dayMinutes) ? body.dayMinutes : undefined,
             commander: typeof body.commander === 'string' ? body.commander : null,
             faction: typeof body.faction === 'string' && body.faction ? body.faction : null,
             enemyFaction: typeof body.enemyFaction === 'string' && body.enemyFaction ? body.enemyFaction : null,
