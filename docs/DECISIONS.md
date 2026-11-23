@@ -2089,3 +2089,47 @@ the change and after each step, on the same seeds:
    (`riders`), and one without the mark is rebuilt with
    `spec.messengers: false`. Should those battles take up riders from
    their next turn instead?
+
+## Rulings, November 23, 2026 (riders, and the balance of armies)
+
+Zach, on four questions the messengers raised:
+
+1. Whether an immediate range of 6 tiles is right: "For now it does, we
+   can manage that later. It's going to be part of the challenge of the
+   game."
+2. Whether he is told at once that a unit is cut off, or notices only when
+   word stops coming: "Notice when no word comes back. The lost legions in
+   the tuetoberg forest."
+3. Whether an order already on the road still reaches a unit cut off
+   afterwards: "Yes but no word returns."
+4. Whether a turn should stop for the computer's own news: "No the game
+   keeps going. This is true for two human players as well. If one player
+   gives move command for a march taking 3 turns don't notify that
+   commander for 3 turns unless the units spot the enemy. If the other
+   command moves 1 turn of movement at a time that is fine... both would
+   only be notified when there are commands to give or things happen to
+   them. The asymmetry is great because it allows for a better experience
+   and does not pass along additional knowledge to either side."
+
+Zach, on the army balance study (`docs/design/army-balance.md`):
+
+1. Take Recommendation A (the knife for missile troops, a volley's lesser
+   shock, steadier levy and militia, the sling's and the horse's price):
+   "Yes".
+2. Veterans that fight a little better and die less, with the computer's
+   army matching the player's average veterancy up to seasoned: "Yes".
+3. Whether Recommendation B (a muster roll for each faction, with a core,
+   support, and prices that rise on repeats) is the direction: "In some
+   ways it makes sense but is not as fun. The balance needs to come from
+   the units themselves and the combination of weapons and armor. I would
+   recommend looking at giving disadvantages in other places to offset the
+   balance issues. Some units should be best but can then cost more. It
+   should have a grounding in history so I am not rejecting B just changing
+   it to be what was historically reasonable. You can afford to make an
+   army of slingers because they were lightly armored and fell to heavy
+   infantry in most cases. Rome conquered the world with heavy infantry but
+   in many cases was bested and decimated by other infantry types."
+4. On the smaller questions (an all-levy army left at a third of its
+   battles, the war spear's price, the usual armies picked again, training
+   and veterancy together): "See answer to 3, pull more levers and
+   rebalance in a way to keeps the fun army building ideas alive."
