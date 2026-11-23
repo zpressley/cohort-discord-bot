@@ -1079,3 +1079,144 @@ So:
 - Not built: a unit's veterancy helping it stand in battle. The engine has
   the rule (`veteranResistance`) and the web app does not pass it in.
 
+
+
+### How buying the army and the one kind of battle were built (Claude's choices, open to change)
+
+Builds rulings 1, 3 and 4 of November 23 (factions and the battle).
+
+**Buying the army (ruling 1).**
+- **The army screen** (`/army/<Commander's link>`, `armyScreen` in
+  `app.js`) carries the Discord builder over to a phone: the elite at the
+  top, free and "not for sale"; the bought units as cards (name, kit, men,
+  price, officer or battles toward one; Change, Dismiss); a sticky bar of
+  supply points spent and left; "Buy a unit" opens the steps the Discord
+  builder had (the men, on foot or on horse, weapon in two groups, armour,
+  shield), each choice a button with its price. A choice the builder
+  refuses is struck through; tapping it says why, in the builder's own
+  reason put in plain words ("Heavy shield: the crossbow allows at most a
+  medium shield", "Levy troops cannot bear heavy armour", "The army would
+  cost 31 supply points against a budget of 30"). Only the culture's own
+  weapons are listed. "Keep this army" and "Take the usual army of Rome"
+  are at the foot.
+- **The server judges everything** (`src/web/armies.js`, on the engine's
+  `buildUnit`/`buildArmy` and `engine/army/standard.js`):
+  `POST /api/factions/:id/appraise` prices a list and every choice of the
+  unit being bought; `POST /api/commander/:token/army` keeps an army after
+  checking it again (budget, kit, names), or `{ usual: true }`. A choice is
+  refused only for what it would add (a reason the unit has not already,
+  or overspending where it was not), so a player is never stuck: what
+  stands in the way is named, and he changes that first.
+- **Kept with the Commander** (`commander.army`), bought after his faction
+  when he is made (the muster's "Make your Commander, and buy his army"),
+  changed between battles from the muster or Your officers, and refused
+  (409) while his army is in the field. A muster never waits on it: with
+  none bought he brings his faction's usual army, built exactly as
+  before (tested equal to `fieldFactions`). The default armies in
+  `src/data/factions.js` stay the computer's and the one-tap usual army.
+- **The friend who joins** brings his own Commander's army (bought or
+  usual); a new Commander on "Who leads?" may join with the usual army in
+  one tap, or buy his first and come back.
+- **The elite** is never in the list: a unit of elite quality is refused
+  with the builder's own reason ("elite troops cannot be bought"), its name
+  cannot be taken, and it comes with every army.
+
+**Names.** A unit's name is its own while it is kept, given by the game
+from its kit, never typed: "spears", "slingers", "horse archers",
+"riders", "lancers", or the faction's own name for that weapon where its
+usual army has one ("legionaries", then "hastati", for Roman swordsmen on
+foot; "sarissa foot" for Macedonian pikes). A second of a name is numbered
+("slingers 2") and the first keeps its bare name, so no unit's name
+changes when another is bought. Where every unit of a name is numbered (the
+usual armies' "sarissa foot 1" and "2") the bare name orders them all, as
+before. The server takes only names the game would give that kit (so none
+says "everyone" or "the enemy"), distinct, and never the elite's. Changing
+a unit's kit keeps its name if its kind of weapon is the same; a new kind
+of weapon is a new name. Tested: every unit of five armies a player might
+buy, in every faction, is found by the order reader by its name.
+
+**Officers when the army changes** (`armyChanged` in
+`engine/command/company.js`): a unit is known by its name. A unit kept
+(its kit changed or not) is the same men: its officer, or its count of
+battles toward one, stays. A unit dismissed takes its count with it (men
+raised again start from nothing); its officer stays in the company, a man
+and not a unit, and at the next muster leads a unit that has none, as an
+officer whose men are not on the field already did. A new unit has no
+officer and no battles. So changing the army moves officers but never
+makes one: they are still earned in battle (tested).
+
+**One kind of battle (ruling 4).** The muster asks only: the field, the
+opponent, the Commander (or a new one and his faction), his army, the
+enemy's faction (against the computer only) and the side. "The kind of
+battle", "When the day ends" and "Ground to hold" are gone from the form;
+the API still takes `scenario`, `timeLimitMinutes` and `objectives`, and
+the tests use them. The scenario (always the meeting battle from the app)
+still supplies the map's deployment; bought armies of up to eight units
+form up on every map (tested). With no time limit and no ground to hold,
+a battle from the app ends only as the ruling says: the enemy yields the
+field (or gives up a unit to go free, which is leaving the field), its
+army breaks or is destroyed, or its Commander is killed; or both at once,
+a draw. The verdict words for "yielded" now say "yielded the field".
+Tested over app-style battles; in 1,280 league battles the endings were
+army broken 1,241, collapsed 34, Commander killed 5.
+
+**The same faction on both sides (ruling 3).** Against the computer, its
+faction is chosen from every faction (the player's own among them) or
+drawn by lot from all of them (`anyFaction`, a new seeded draw; the old
+`enemyFaction` is left as it was). Against a friend the form does not ask:
+the muster gives his side a faction by lot until he joins, and his
+Commander's own army replaces it ("Rome against Rome" is a title).
+
+**Measured** (`node src/harness/bought-league.js`): five armies per
+faction against every faction's default army played by the computer, both
+sides played by the computer's planner (so it measures the army, not the
+player), the bought side with its Commander on the elite, on all four
+maps, both ways round, two seeds, every battle its own seed: 1,280
+battles, all ended, 13.9 player turns on average.
+
+| Army bought (each spends what it can) | Rome | Macedon | Sarmatia | Han |
+|---|---|---|---|---|
+| the usual army (yardstick) | 47% | 45% | 45% | 47% |
+| all levy spears (7 units) | 3% | 0% | 0% | 3% |
+| all levy slingers (7 units) | **97%** | 72% | 70% | 83% |
+| veteran mercenaries, best kit (2 units) | 44% | 36% | 48% | 61% |
+| all horse (3 units) | 16% | 13% | 33% | 17% |
+
+**Close to unbeatable: seven units of levy slingers** (4 points each). They
+win 70 to 97% against every default army, 100% against some. The faction
+work found slingers the strongest buy for the price; a bought army makes
+it the whole army. **Helpless: all cheap spears** (0 to 3%), and all horse
+(13 to 33%): three units of horse against four of foot. Combat was not
+retuned (the balance table is unchanged). The planner plays both sides,
+so a player who closes fast on slingers may do better against them.
+
+**Guessed.**
+- "Use the army builder" was read as the builder's rules and the Discord
+  builder's steps, not its other parts: no secondary weapon, ranged
+  weapon added to a melee one, or support specialists (the engine's
+  builder has one weapon per unit and no support).
+- Names come from the kit and cannot be typed. The other reading is that a
+  player names his units; that needs a guard on names the order reader
+  would misread.
+- The friend's side gets a placeholder faction by lot at the muster (the
+  battle needs both armies before he joins); it is replaced when he joins
+  with a Commander of another faction or with a bought army.
+- No time limit at all from the app. Between two friends who both only
+  hold, a battle could stand for ever; either can yield.
+
+**Open, for Zach.**
+1. Seven levy slingers beat everything. Should the price of slingers (or
+   of missile troops) go up, the budget favour mixed armies, or a cap on
+   units of one kind, or is that for players to find and counter?
+2. Should a player name his own units?
+3. When a unit is dismissed, should its officer stay (built), or go with
+   his men?
+4. Should a battle from the app have any end of day at all, for two
+   players who both hold?
+5. Secondary and ranged weapons on one unit, and support (engineers,
+   baggage), as the Discord builder had them: wanted?
+
+Also changed: `formUp` is exported from `engine/army/factions.js` (one
+word; the faction data there and in `src/data/factions.js` are untouched);
+kit words are in `narrator/words.js` (`KIT`); the soak plays the bought
+armies, mirror matches among them, on every map.

@@ -392,6 +392,24 @@ test('without a Commander, or with a link the server does not know, a battle mus
   } finally { await app.close() }
 })
 
+test('an army is bought only for a Commander the server knows, of a faction, from a faction that exists', async () => {
+  const app = await start()
+  try {
+    const units = [{ name: 'slingers', quality: 'levy', weapon: 'sling' }]
+    assert.equal((await app.api('POST', '/api/commander/not-a-real-token/army', { units })).status, 404)
+    assert.equal((await app.api('POST', '/api/factions/atlantis/appraise', { units })).status, 404)
+    const made = (await app.api('POST', '/api/commanders')).body
+    const refused = await app.api('POST', `/api/commander/${made.token}/army`, { units })
+    assert.equal(refused.status, 409)
+    assert.match(refused.body.error, /Choose a faction first/)
+    // A body that is not a list of units is an army with none.
+    const rome = (await app.api('POST', '/api/commanders', { faction: 'rome' })).body
+    const junk = await app.api('POST', `/api/commander/${rome.token}/army`, { units: 'all the legions' })
+    assert.equal(junk.status, 400)
+    assert.match(junk.body.error, /An army needs at least one unit/)
+  } finally { await app.close() }
+})
+
 test('an army fights one battle at a time; another Commander can take the field meanwhile', async () => {
   const app = await start()
   try {

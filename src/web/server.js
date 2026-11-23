@@ -32,8 +32,18 @@
 //                                           gives up a unit and leaves the field
 //   POST /api/commanders { faction }        a new Commander -> { token, name, faction }
 //   GET  /api/commander/:token              his company: officers, their
-//                                           records, those lost, and the
-//                                           battle his army is in
+//                                           records, those lost, his army,
+//                                           and the battle his army is in
+//   POST /api/commander/:token/army { units } | { usual: true }
+//                                           he buys his standard army (checked
+//                                           through the builder), or takes his
+//                                           faction's usual one; not while his
+//                                           army is in the field
+//   POST /api/factions/:id/appraise { units, draft, at }
+//                                           an army being bought, priced: each
+//                                           unit, the budget left, and every
+//                                           choice for the draft unit with the
+//                                           builder's reason for any refused
 //
 // A seat's token is its secret link. Every answer about a battle is that
 // seat's side's view only (fog of war is held on the server).
@@ -134,6 +144,17 @@ function createServer(store) {
           const body = await readBody(req)
           return send(res, 201, store.commanders.create({ faction: typeof body.faction === 'string' && body.faction ? body.faction : null }))
         }
+        // Buying an army: every choice priced, and why any is refused.
+        if (req.method === 'POST' && parts[1] === 'factions' && parts[2] && parts[3] === 'appraise' && parts.length === 4) {
+          const body = await readBody(req)
+          const seen = store.appraise(parts[2], { units: body.units, draft: body.draft ?? null, at: body.at ?? null })
+          return seen ? send(res, 200, seen) : send(res, 404, { error: 'no such faction' })
+        }
+        if (req.method === 'POST' && parts[1] === 'commander' && parts[2] && parts[3] === 'army' && parts.length === 4) {
+          const body = await readBody(req)
+          const company = store.setArmy(parts[2], { usual: body.usual === true, units: body.units })
+          return company ? send(res, 200, company) : send(res, 404, { error: 'no such commander' })
+        }
         if (req.method === 'GET' && parts[1] === 'commander' && parts[2] && parts.length === 3) {
           const company = store.commanderView(parts[2])
           return company ? send(res, 200, company) : send(res, 404, { error: 'no such commander' })
@@ -185,7 +206,9 @@ function createServer(store) {
       // Every page is the one app; it reads the address itself.
       return serveFile(res, path.join(PUBLIC, 'index.html'))
     } catch (error) {
-      send(res, error.status ?? 500, { error: error.status ? error.message : 'something went wrong' })
+      send(res, error.status ?? 500, error.status
+        ? { error: error.message, ...(Array.isArray(error.errors) ? { errors: error.errors } : {}) }
+        : { error: 'something went wrong' })
       if (!error.status) console.error(error)
     }
   })

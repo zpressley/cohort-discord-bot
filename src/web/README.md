@@ -33,3 +33,28 @@ side. Battles are JSON files; delete one and that battle is gone.
 A friend who opens their link to a two-player battle first sees "Who
 leads?": their Commanders whose armies are free, a new Commander, or none.
 Their orders wait on that choice; once the first turn has run it is closed.
+
+## Buying the army
+
+A Commander buys his standard army himself, within his faction's budget,
+on the army screen (`/army/<his link>`; from the muster, "Buy your own
+army", or from Your officers). It works as the Discord builder did: a unit
+at a time (the men, on foot or on horse, weapon, armour, shield), the
+supply points left always in view, the elite unit free and not for sale.
+Every choice is priced and judged by the server through the engine's
+builder (`armies.js`, `POST /api/factions/:id/appraise`); a refused one is
+struck through, and tapping it gives the builder's reason. The army is
+kept with the Commander on the server (`POST /api/commander/:token/army`),
+checked again there, and changed only while his army is home. With none
+bought, or with "Take the usual army", he musters with his faction's
+default army.
+
+The muster has one kind of battle: to the end, won when the other side
+yields the field, loses its army, or loses its Commander. Against the
+computer you choose its faction or let the lot choose (your own among
+them); against a friend you do not: his Commander brings his own army.
+
+```
+armies.js      buying an army: each choice priced and judged, the
+               builder's reasons in plain words, the names units are given
+```

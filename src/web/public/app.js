@@ -7,6 +7,7 @@
 //   /battles     your battles
 //   /muster      muster a new battle
 //   /officers    your officers: who they are and what they have been through
+//   /army/<link> a Commander's standard army, bought within his budget
 //   /b/<link>    the Command Tent for one side of one battle
 //
 // The links to your battles, and the links to your Commanders (each with
@@ -123,7 +124,7 @@ const optionWords = (o) => {
 const REASONS = {
   'enemy army broken': ['The enemy army broke', 'Your army broke'],
   'enemy army collapsed': ['The enemy army was destroyed', 'Your army was destroyed'],
-  'enemy surrendered': ['The enemy yielded', 'You yielded'],
+  'enemy surrendered': ['The enemy yielded the field', 'You yielded the field'],
   'enemy commander killed': ['The enemy Commander was killed', 'You were killed'],
   'enemy commander bargained': ['The enemy Commander gave up a unit to go free', 'You gave up a unit and left the field'],
   'objectives held': ['You held the field', 'The enemy held the field'],
@@ -161,8 +162,10 @@ async function route() {
   stopPolling = () => {}
   const path = location.pathname
   const seat = path.match(/^\/b\/([A-Za-z0-9_-]{8,})$/)
+  const armyOf = path.match(/^\/army\/([A-Za-z0-9_-]{8,})$/)
   try {
     if (seat) return await tent(seat[1])
+    if (armyOf) return await armyScreen(armyOf[1])
     if (path === '/battles') return await battles()
     if (path === '/muster') return await muster()
     if (path === '/officers') return await officers()
@@ -233,6 +236,7 @@ async function officers() {
         : c.battle
         ? `His army is in the field${c.battle.seat ? `: <a href="/b/${esc(c.battle.seat)}" data-link>${esc(c.battle.title)}</a>` : ` (${esc(c.battle.title)})`}.`
         : 'His army is ready to muster.'}</p>
+      ${!c.ended && c.faction ? `<a class="btn btn-wide" href="/army/${esc(c.token)}" data-link>${c.battle ? 'His army' : c.army?.own ? 'Change his army' : 'Buy his own army'}</a>` : ''}
       ${c.officers.map(card).join('')}
       ${(c.unled ?? []).map(u => `<p class="note">The ${esc(u.kind)} have no officer${u.battles >= c.earnedAt ? ': one of their own will step up after their next battle' : ` yet: ${u.battles} battle${u.battles === 1 ? '' : 's'} come through. One comes forward after ${c.earnedAt}`}.</p>`).join('')}
       ${c.fallen.length ? `<p class="label-caps">Lost</p>${c.fallen.map(fallen).join('')}` : ''}`
@@ -248,11 +252,20 @@ async function officers() {
 }
 
 // ── Muster ─────────────────────────────────────────────
+// One kind of battle (ruled 2026-11-23): to the end, won when the other side
+// yields the field, loses its army, or loses its Commander. Against the
+// computer you choose its faction, or let the lot choose (your own among
+// them); against a friend you do not: his Commander brings his own army.
+const LAST_COMMANDER = 'cohort.lastCommander'
+function lastCommander() { try { return localStorage.getItem(LAST_COMMANDER) } catch { return null } }
+function rememberCommander(token) { try { localStorage.setItem(LAST_COMMANDER, token) } catch { /* fine */ } }
+
 async function muster() {
-  const [scenarios, maps, commanders, factions] = await Promise.all([api('GET', '/api/scenarios'), api('GET', '/api/maps'), loadCommanders(), api('GET', '/api/factions')])
-  // The first Commander whose army is not in the field leads; with none, a new one.
+  const [maps, commanders, factions] = await Promise.all([api('GET', '/api/maps'), loadCommanders(), api('GET', '/api/factions')])
+  // The Commander last chosen leads, if his army is home; else the first
+  // whose army is not in the field; with none, a new one.
   commanders.splice(0, commanders.length, ...commanders.filter(c => !c.ended))   // the fallen muster no more
-  const ready = commanders.find(c => !c.battle)
+  const ready = commanders.find(c => !c.battle && c.token === lastCommander()) ?? commanders.find(c => !c.battle)
   const commanderOption = (c) => `<option value="${esc(c.token)}"${c.battle ? ' disabled' : ''}${c === ready ? ' selected' : ''}>${esc(c.name)}${
     c.battle ? ' (army in the field)' : `, ${c.battles} battle${c.battles === 1 ? '' : 's'} fought`}</option>`
   const factionOption = (f) => `<option value="${esc(f.id)}">${esc(f.title)}</option>`
@@ -260,11 +273,9 @@ async function muster() {
     <header class="bar"><a href="/battles" data-link>Your battles</a><strong style="font-family: var(--font-display); font-size: 18px">Muster a battle</strong><span></span></header>
     <main class="page">
       <form id="muster" class="page" style="padding: 0">
+        <p class="note">A battle to the end. It is won when the other side yields the field, its army breaks or is destroyed, or its Commander is killed.</p>
         <label class="field">The field
           <select name="map">${maps.map(m => `<option value="${esc(m.id)}">${esc(m.title)}</option>`).join('')}</select>
-        </label>
-        <label class="field">The kind of battle
-          <select name="scenario">${scenarios.map(s => `<option value="${esc(s.id)}">${esc(s.title.charAt(0).toUpperCase() + s.title.slice(1))}</option>`).join('')}</select>
         </label>
         <fieldset>
           <legend>Your opponent</legend>
@@ -278,17 +289,13 @@ async function muster() {
           <select name="faction">${factions.map(factionOption).join('')}</select>
         </label>
         <p class="note" id="faction-note"></p>
-        <label class="field">The enemy
-          <select name="enemyFaction"><option value="">Another faction, by lot</option>${factions.map(factionOption).join('')}</select>
+        <div class="buy-unit" id="army-line"></div>
+        <label class="field" id="enemy-field">The enemy
+          <select name="enemyFaction"><option value="">Any faction, by lot</option>${factions.map(factionOption).join('')}</select>
         </label>
+        <p class="note" id="enemy-note" hidden>Your friend's Commander brings his own army, of his own faction: it may be yours.</p>
         <label class="field">You command
           <select name="side"><option value="red">Red, from the west</option><option value="blue">Blue, from the east</option></select>
-        </label>
-        <label class="field">When the day ends
-          <select name="timeLimit"><option value="240">After 4 hours of battle</option><option value="">When an army breaks</option></select>
-        </label>
-        <label class="field">Ground to hold (optional)
-          <input type="text" name="objectives" placeholder="e.g. Harrow Bridge, C6" autocomplete="off">
         </label>
         <button class="btn btn-main btn-wide" type="submit">Muster the armies</button>
         <p class="note">Against a friend, you get a link to send them.</p>
@@ -299,18 +306,50 @@ async function muster() {
   // his is shown it; a new one (or one from before factions) chooses.
   const pickCommander = document.querySelector('select[name="commander"]')
   const pickFaction = document.querySelector('select[name="faction"]')
+  const chosenNow = () => commanders.find(c => c.token === pickCommander?.value) ?? null
   function showFaction() {
-    const chosen = commanders.find(c => c.token === pickCommander?.value)
+    const chosen = chosenNow()
     const own = chosen?.faction ? factions.find(f => f.id === chosen.faction) : null
     document.getElementById('faction-field').style.display = own ? 'none' : ''
     const f = own ?? factions.find(x => x.id === pickFaction.value)
     document.getElementById('faction-note').textContent = f
       ? `${own ? `As ${chosen.name}, you fight for ${f.title}. ` : ''}${f.fights} Your elite unit, the ${f.elite.charAt(0).toUpperCase() + f.elite.slice(1)}, comes free: your veteran officer leads them, and you ride with them.`
       : ''
+    // His army: the one he bought, or his faction's usual one.
+    const army = chosen?.faction ? chosen.army : null
+    const names = (army?.units ?? []).map(u => u.name.charAt(0).toUpperCase() + u.name.slice(1)).join(', ')
+    document.getElementById('army-line').innerHTML = chosen?.faction
+      ? `<strong>${army.own ? 'Your own army' : `The usual army of ${esc(f.title)}`}</strong>
+         <span class="note">${esc(names)}${names ? ', and ' : ''}the ${esc(f.elite)}.</span>
+         <a class="btn btn-wide" href="/army/${esc(chosen.token)}?then=/muster" data-link id="to-army">${army.own ? 'Change your army' : 'Buy your own army'}</a>`
+      : `<strong>The usual army of ${esc(f?.title ?? '')}</strong>
+         <span class="note">Or buy your own: make your Commander first, and choose his units within his budget.</span>
+         <button class="btn btn-wide" type="button" id="make-and-buy">Make your Commander, and buy his army</button>`
+    document.getElementById('to-army')?.addEventListener('click', () => rememberCommander(chosen.token))
+    document.getElementById('make-and-buy')?.addEventListener('click', async (event) => {
+      event.target.disabled = true
+      try {
+        const token = await newCommander(pickFaction.value)
+        rememberCommander(token)
+        go(`/army/${token}?then=/muster`)
+      } catch (error) {
+        event.target.disabled = false
+        event.target.insertAdjacentHTML('afterend', `<p class="error">${esc(error.message)}</p>`)
+      }
+    })
+  }
+  // The enemy's faction is asked only against the computer; your own is
+  // among the choices.
+  function showEnemy() {
+    const friend = document.querySelector('input[name="opponent"]:checked')?.value === 'friend'
+    document.getElementById('enemy-field').style.display = friend ? 'none' : ''
+    document.getElementById('enemy-note').hidden = !friend
   }
   pickCommander?.addEventListener('change', showFaction)
   pickFaction.addEventListener('change', showFaction)
+  document.querySelectorAll('input[name="opponent"]').forEach(r => r.addEventListener('change', showEnemy))
   showFaction()
+  showEnemy()
   document.getElementById('muster').addEventListener('submit', async (event) => {
     event.preventDefault()
     const form = new FormData(event.target)
@@ -322,11 +361,10 @@ async function muster() {
       const chosen = commanders.find(c => c.token === form.get('commander'))
       const faction = chosen?.faction ?? form.get('faction')
       const commander = form.get('commander') || await newCommander(faction)
+      rememberCommander(commander)
       const result = await api('POST', '/api/battles', {
-        scenario: form.get('scenario'), map: form.get('map'), opponent, side, commander,
-        faction, enemyFaction: form.get('enemyFaction') || null,
-        timeLimitMinutes: form.get('timeLimit') ? Number(form.get('timeLimit')) : null,
-        objectives: String(form.get('objectives') ?? '').split(',').map(s => s.trim()).filter(Boolean)
+        map: form.get('map'), opponent, side, commander, faction,
+        enemyFaction: opponent === 'friend' ? null : form.get('enemyFaction') || null
       })
       const mine = result.seats[side]
       saveSeat({ token: mine, title: result.title, side })
@@ -352,6 +390,218 @@ async function muster() {
   })
 }
 
+// ── Buying the army ────────────────────────────────────
+// A Commander's standard army, bought within his faction's budget as the
+// Discord builder had it: a unit at a time, quality, horse or foot, weapon,
+// armour and shield, the supply points left always in view. Every choice is
+// priced and judged by the server (the builder's rules); a refused one is
+// shown struck through, and tapping it says why. The elite comes free and
+// is not for sale. Kept on the server with the Commander, and changed only
+// while his army is home. `?then=` is where to go once it is kept.
+const STEPS = [
+  ['quality', 'The men'],
+  ['mounted', 'On foot or on horse'],
+  ['weapon', 'Their weapon'],
+  ['armor', 'Armour'],
+  ['shield', 'Shield']
+]
+const NEW_UNIT = { quality: 'levy', weapon: 'spear_basic', armor: 'no_armor', shield: 'no_shield', mounted: false }
+async function armyScreen(token) {
+  const commander = await api('GET', `/api/commander/${token}`)
+  const asked = new URLSearchParams(location.search).get('then') ?? ''
+  const then = asked === '/muster' || /^\/b\/[A-Za-z0-9_-]{8,}$/.test(asked) ? asked : null
+  const state = {
+    units: (commander.army?.units ?? []).map(u => ({ ...u })),
+    own: Boolean(commander.army?.own),
+    draft: null,          // the unit being bought or changed
+    at: null,             // its place in the army, when it is changed
+    seen: null,           // the server's appraisal
+    refused: null,        // why the choice just tapped is not allowed
+    note: null,
+    error: null,
+    changed: false,
+    saving: false
+  }
+  const cap = (s) => String(s).charAt(0).toUpperCase() + String(s).slice(1)
+  const inField = Boolean(commander.battle)
+  const back = then ? `<a href="${esc(then)}" data-link>${then === '/muster' ? 'Muster' : 'The battle'}</a>` : '<a href="/officers" data-link>Your officers</a>'
+
+  async function appraise() {
+    state.seen = await api('POST', `/api/factions/${commander.faction}/appraise`, { units: state.units, draft: state.draft, at: state.at })
+    if (state.draft) state.draft.name = state.seen.draft.name
+  }
+
+  // What his company has for a unit: its officer, or its battles toward one.
+  function officerLine(name) {
+    const officer = commander.officers.find(o => o.leads === name && o.status !== 'lost')
+    if (officer) return `Officer: ${esc(officer.name)}${officer.status === 'wounded' ? ' (wounded)' : ''}`
+    const count = (commander.unled ?? []).find(u => u.kind === name)
+    return count ? `No officer yet: ${count.battles} battle${count.battles === 1 ? '' : 's'} toward one` : 'No officer yet: new to your army'
+  }
+
+  function budget(spent, total) {
+    const over = spent > total
+    const pct = Math.max(0, Math.min(100, Math.round(100 * spent / (total || 1))))
+    return `<div class="budget${over ? ' over' : ''}" id="budget">
+      <strong>${spent} of ${total} supply points</strong>
+      <div class="track" role="meter" aria-label="Supply points spent" aria-valuemin="0" aria-valuemax="${total}" aria-valuenow="${spent}"><div class="fill" style="width: ${pct}%"></div></div>
+      <span class="note">${over ? `${spent - total} over the budget` : `${total - spent} left`}. The elite unit is free.</span>
+    </div>`
+  }
+
+  function render() {
+    const s = state.seen
+    if (state.draft) return renderDraft(s)
+    const room = s.left >= s.cheapest
+    app.innerHTML = `
+      <header class="bar">${back}<strong style="font-family: var(--font-display); font-size: 18px">Your army</strong><span></span></header>
+      <main class="page" id="army-screen">
+        <h1>${esc(commander.name)}'s army</h1>
+        ${budget(s.spent, s.budget)}
+        ${inField ? `<p class="question">His army is in the field (${esc(commander.battle.title)}). It can be changed when the battle is over.</p>` : ''}
+        <div class="buy-unit elite">
+          <header><h3>${esc(cap(s.elite.name))}</h3><span class="cost">Free</span></header>
+          <span class="note">${esc(s.elite.words)}</span>
+          <span class="note">Your elite unit, and ${esc(s.title)}'s own. Not for sale: it comes with every army. Your veteran officer leads them, and you ride with them.</span>
+        </div>
+        ${s.units.map((u, i) => `
+          <div class="buy-unit" data-unit="${i}">
+            <header><h3>${esc(cap(u.name))}</h3><span class="cost">${u.cost ?? '–'} points</span></header>
+            <span class="note">${esc(u.words)}${u.men ? `, ${u.men} men` : ''}</span>
+            <span class="note">${officerLine(u.name)}</span>
+            ${u.errors.map(e => `<p class="refused">${esc(e)}</p>`).join('')}
+            ${inField ? '' : `<div class="actions">
+              <button class="btn btn-quiet" type="button" data-change="${i}">Change</button>
+              <button class="btn btn-quiet" type="button" data-dismiss="${i}">Dismiss</button>
+            </div>`}
+          </div>`).join('')}
+        ${s.units.length === 0 ? '<p class="note">No units bought yet. Buy at least one, or take the usual army.</p>' : ''}
+        ${inField ? '' : `<button class="btn btn-wide" type="button" id="add"${room ? '' : ' disabled'}>Buy a unit</button>
+        ${room ? '' : `<p class="note">${s.left > 0 ? `${s.left} supply point${s.left === 1 ? '' : 's'} left` : 'Nothing left to spend'}: the cheapest unit costs ${s.cheapest}.</p>`}`}
+        ${s.errors.map(e => `<p class="refused">${esc(e)}</p>`).join('')}
+        ${state.note ? `<p class="note" role="status">${esc(state.note)}</p>` : ''}
+        ${state.error ? `<p class="error">${esc(state.error)}</p>` : ''}
+        <p class="note">A unit you keep keeps its officer, or its battles toward one, whatever you change. A unit you dismiss takes its battles with it; its officer stays with you, and leads a unit that has none. A new unit has no officer: it earns one in battle.</p>
+        ${inField ? '' : `<div class="buy-foot">
+          <button class="btn btn-main btn-wide" type="button" id="keep"${s.errors.length || state.saving ? ' disabled' : ''}>${state.changed || !state.own ? 'Keep this army' : 'Kept'}</button>
+          <button class="btn btn-wide" type="button" id="usual">Take the usual army of ${esc(s.title)}</button>
+        </div>`}
+      </main>`
+    app.querySelectorAll('[data-change]').forEach(b => b.addEventListener('click', async () => {
+      state.at = Number(b.dataset.change)
+      state.draft = { ...state.units[state.at] }
+      state.refused = null
+      await appraise()
+      render()
+      window.scrollTo(0, 0)
+    }))
+    app.querySelectorAll('[data-dismiss]').forEach(b => b.addEventListener('click', async () => {
+      const [gone] = state.units.splice(Number(b.dataset.dismiss), 1)
+      state.changed = true
+      state.note = `The ${gone.name} are dismissed.`
+      await appraise()
+      render()
+    }))
+    document.getElementById('add')?.addEventListener('click', async () => {
+      state.at = null
+      state.draft = { ...NEW_UNIT }
+      state.refused = null
+      state.note = null
+      await appraise()
+      render()
+      window.scrollTo(0, 0)
+    })
+    const done = (view) => {
+      Object.assign(commander, view)
+      state.units = view.army.units.map(u => ({ ...u }))
+      state.own = view.army.own
+      state.changed = false
+      state.saving = false
+      if (then) return go(then)
+      state.note = 'Your army is kept. It goes with you to your next battle.'
+      appraise().then(render)
+    }
+    const keep = async (body) => {
+      state.saving = true
+      state.error = null
+      try { done(await api('POST', `/api/commander/${token}/army`, body)) } catch (error) {
+        state.saving = false
+        state.error = error.message
+        render()
+      }
+    }
+    document.getElementById('keep')?.addEventListener('click', () => keep({ units: state.units }))
+    document.getElementById('usual')?.addEventListener('click', () => keep({ usual: true }))
+  }
+
+  function renderDraft(s) {
+    const d = s.draft
+    const spent = d.spentWith
+    const option = (field, o) => {
+      const on = String(state.draft[field]) === String(o.value)
+      return `<button class="opt" type="button" data-field="${field}" data-value="${esc(String(o.value))}" aria-pressed="${on}"${o.refused && !on ? ' aria-disabled="true"' : ''}>${esc(cap(o.words))}<span>${o.cost ? `+${o.cost}` : 'free'}</span></button>`
+    }
+    const step = ([field, title]) => {
+      const options = d.options[field]
+      if (field !== 'weapon') return `<section class="step"><h3>${title}</h3><div class="options">${options.map(o => option(field, o)).join('')}</div></section>`
+      const close = options.filter(o => !o.shoots)
+      const far = options.filter(o => o.shoots)
+      return `<section class="step"><h3>${title}: to fight hand to hand</h3><div class="options">${close.map(o => option(field, o)).join('')}</div>
+        <h3>Or to shoot and throw</h3><div class="options">${far.map(o => option(field, o)).join('')}</div></section>`
+    }
+    app.innerHTML = `
+      <header class="bar"><button class="btn btn-quiet" type="button" id="draft-back">Back</button><strong style="font-family: var(--font-display); font-size: 18px">${state.at === null ? 'Buy a unit' : 'Change a unit'}</strong><span></span></header>
+      <main class="page" id="army-screen">
+        ${budget(spent, s.budget)}
+        <div class="buy-unit" id="draft">
+          <header><h3>${esc(cap(d.name))}</h3><span class="cost">${d.cost ?? '–'} points</span></header>
+          <span class="note">${esc(d.words)}${d.men ? `, ${d.men} men` : ''}</span>
+        </div>
+        ${state.refused ? `<p class="refused" role="alert" id="refused"><strong>Not allowed:</strong> ${esc(state.refused)}</p>` : ''}
+        ${d.refused ? `<p class="refused" id="draft-refused">${esc(d.refused)}</p>` : ''}
+        ${STEPS.map(step).join('')}
+        <div class="buy-foot">
+          <button class="btn btn-main btn-wide" type="button" id="take"${d.refused ? ' disabled' : ''}>${state.at === null ? `Buy the ${esc(d.name)}` : 'Keep the change'}</button>
+          <button class="btn btn-wide" type="button" id="draft-cancel">${state.at === null ? 'Do not buy them' : 'Leave them as they were'}</button>
+        </div>
+      </main>`
+    app.querySelectorAll('[data-field]').forEach(b => b.addEventListener('click', async () => {
+      const field = b.dataset.field
+      const o = d.options[field].find(x => String(x.value) === b.dataset.value)
+      if (b.getAttribute('aria-disabled') === 'true') {
+        state.refused = `${cap(o.words)}: ${o.refused.charAt(0).toLowerCase()}${o.refused.slice(1)}`
+        render()
+        document.getElementById('refused')?.scrollIntoView({ block: 'center' })
+        return
+      }
+      state.refused = null
+      state.draft[field] = field === 'mounted' ? o.value === true : o.value
+      await appraise()
+      const y = window.scrollY
+      render()
+      window.scrollTo(0, y)
+    }))
+    const leave = async () => { state.draft = null; state.at = null; state.refused = null; await appraise(); render() }
+    document.getElementById('draft-back').addEventListener('click', leave)
+    document.getElementById('draft-cancel').addEventListener('click', leave)
+    document.getElementById('take').addEventListener('click', async () => {
+      const unit = { name: d.name, quality: d.quality, weapon: d.weapon, armor: d.armor, shield: d.shield, mounted: d.mounted }
+      if (state.at === null) state.units.push(unit)
+      else state.units[state.at] = unit
+      state.note = state.at === null ? `The ${d.name} join your army.` : `The ${d.name} are changed.`
+      state.changed = true
+      await leave()
+    })
+  }
+
+  if (!commander.faction) {
+    app.innerHTML = `<main class="page"><h1>${esc(commander.name)}</h1><p class="note">He has no faction yet: he takes one at his next muster, and then buys his army from its kit.</p><a class="btn btn-wide" href="/muster" data-link>Muster</a></main>`
+    return
+  }
+  await appraise()
+  render()
+}
+
 // ── Who leads: the friend's first screen in the tent ───
 // As at the muster: one of your Commanders whose army is free, or a new
 // one (one tap). Every player has a Commander (ruled 2026-11-23). Closed
@@ -359,7 +609,8 @@ async function muster() {
 async function whoLeads(token, view) {
   const b = view.battle
   const [all, factions] = await Promise.all([loadCommanders(), view.faction ? api('GET', '/api/factions') : []])
-  const ready = all.filter(c => !c.ended && !c.battle)
+  // The Commander last chosen in this browser first (one just made, and his army bought).
+  const ready = all.filter(c => !c.ended && !c.battle).sort((x, y) => (y.token === lastCommander()) - (x.token === lastCommander()))
   const titleOf = (id) => factions.find(f => f.id === id)?.title ?? ''
   const choice = (c, i) => `<button class="btn btn-wide${i === 0 ? ' btn-main' : ''}" type="button" data-lead="${esc(c.token)}">${esc(c.name)}, ${c.battles} battle${c.battles === 1 ? '' : 's'} fought${c.faction && view.faction ? ` (${esc(titleOf(c.faction))})` : ''}</button>`
   // A new Commander's faction is his for life; the army the muster gave
@@ -371,10 +622,11 @@ async function whoLeads(token, view) {
     <header class="bar"><a href="/battles" data-link>Battles</a><div class="bar-title"><strong>${esc(b.title)}</strong><span>${esc(sideName(b.side))} · against a friend</span></div><span></span></header>
     <main class="page" id="who-leads">
       <h1>Who leads?</h1>
-      <p class="note">You command ${esc(sideName(b.side))}${view.faction ? `, with the army of ${esc(titleOf(view.faction))} unless your Commander is of another faction` : ''}. Your Commander rides with your best unit, and his officers lead your units. What befalls them here goes with them to the next battle.</p>
+      <p class="note">You command ${esc(sideName(b.side))}${view.faction ? ', with your Commander\'s own army: the one he bought, or his faction\'s usual one' : ''}. Your Commander rides with your best unit, and his officers lead your units. What befalls them here goes with them to the next battle.</p>
       ${ready.map(choice).join('')}
       ${factionPick}
-      <button class="btn btn-wide${ready.length ? '' : ' btn-main'}" type="button" data-lead="new">A new Commander</button>
+      <button class="btn btn-wide${ready.length ? '' : ' btn-main'}" type="button" data-lead="new">A new Commander${view.faction ? ', with the usual army' : ''}</button>
+      ${view.faction ? '<button class="btn btn-wide" type="button" data-lead="new-buy">A new Commander, and buy his army first</button>' : ''}
       <div id="who-leads-error"></div>
     </main>`
   for (const button of app.querySelectorAll('[data-lead]')) {
@@ -382,6 +634,11 @@ async function whoLeads(token, view) {
       for (const b of app.querySelectorAll('[data-lead]')) b.disabled = true
       try {
         const lead = button.dataset.lead
+        if (lead === 'new-buy') {
+          const made = await newCommander(app.querySelector('select[name="faction"]')?.value || null)
+          rememberCommander(made)
+          return go(`/army/${made}?then=/b/${token}`)
+        }
         const faction = lead === 'new' ? app.querySelector('select[name="faction"]')?.value || null : null
         const commander = lead === 'new' ? await newCommander(faction) : lead || null
         await api('POST', `/api/seat/${token}/join`, { commander, faction })
