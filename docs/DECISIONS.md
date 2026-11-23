@@ -920,3 +920,60 @@ the same dice over and over. The first measurement with factions used five
 seeds and showed no deaths in 240 battles; it was wrong. Give every battle
 its own seed.
 
+## Rulings, November 23, 2026 (the Commander: capture, point of view, loyalty)
+
+Zach's answers to nine questions, in his words.
+
+1. **Bargaining.** "The opponent has to accept the bargain, otherwise they
+   can refuse and the battle can finish with whatever outcome happens.
+   Computers are worse than humans naturally and each commander is running
+   his own unit at that point. Unpredictable but probably risky to bank
+   your future on. So early on losing a whole army is likely, you can also
+   surrender the field in return for freedom which some opponents would
+   accept since it saves their manpower as well."
+   ("Each commander" here is each officer, in the names of November 21:
+   while the Commander is held, his officers run their own units.)
+2. **Haggling.** "It's more of a trade situation. The captive names a price,
+   the captor rejects or asks for more, this continues each turn til the
+   battle ends or the captive surrenders, or loses their army. Surrender is
+   also an option. The captor does not have to accept anything or even
+   respond, they can just ignore and keep fighting."
+3. **What a held Commander sees.** "You see everything around your
+   position, not everything. You get updates from the captors' point of
+   view... as if you are sitting nearby as reports come in."
+4. **Point of view, always.** "POV is limited to what the commander can
+   see and this was already hashed out. Commands take longer to reach
+   troops farther away, there is an immediate range around the commander
+   then outside that range every turn of movement by a messenger on
+   horseback is a delay in the order... so both ways, you are delayed in
+   hearing back from distant troops ... maybe even troops behind enemy
+   lines can't communicate. Adds disadvantage to being surrounded and adds
+   value to choke points and map control."
+   (The earlier design: `docs/design/architecture-roadmap.md`, command
+   zones: instant at 2 to 6 tiles, by messenger at 10 to 20, out of
+   contact beyond.)
+5. **Death.** "Should be lower for death, quarter or less with death odds.
+   Otherwise that is good."
+6. **The unit he rides with.** "Yes, we built that in the past or it was
+   lost, but a commander needed to be adjacent to another unit to switch.
+   Always start with elite though."
+7. **A friend with no Commander.** "Why can't they have a commander?" They
+   can, and now always do: the choice to fight without one is gone from
+   the screen.
+8. (A question back, about new officers arriving seasoned: see 9.)
+9. **Loyalty.** "Earned through glory or survival. The theme of the game.
+   You build loyalty through both over time, though sacrificing men for
+   glory will cost you with those who value survival and win favor with
+   those who value glory. It's a trait you have to manage. Win and it's
+   fine, a bloody victory or a boring one cost you in different ways.
+   Loyalty adds to officers' experience faster, they get to their highest
+   level of experience (need to plan this progression out) faster, maybe
+   25% faster with loyalty bonus, they will comment more and follow orders
+   without question unless a question is required. Low loyalty impacts
+   morale and more likely for an officer to follow personality in a battle
+   over orders."
+
+Built at once: **5** (a Commander who falls can be killed only when his
+unit is at a quarter of its strength or less, or destroyed; above that he
+is taken: `COMMANDER.DEATH_THRESHOLD`) and **7**.
+
