@@ -11,6 +11,11 @@
 // A: docs/design/army-balance.md): the same battles, the same code but the
 // rules. Before it they were f0ebadb3, 2cec0402, e92384f2, 4aaa5698,
 // e424a274, a2f07cdf, d567a781.
+//
+// Retaken again for the skirmish rule (a proposal, docs/design/army-
+// balance.md part 6: light missile troops give ground before slower men):
+// these battles have skirmishers in them. Before it they were 7dd10867,
+// 987939aa, aeded69a, b2a4ce2b, df860211, ade1ebaa, 29c7796a.
 
 const { test } = require('node:test')
 const assert = require('node:assert/strict')
@@ -29,12 +34,12 @@ function fingerprint(text) {
 }
 
 const BEFORE = {
-  'crownhill 1': '7dd10867',
-  'crownhill 2': '987939aa',
-  'thornwood 1': 'aeded69a',
-  'thornwood 2': 'b2a4ce2b',
-  'meeting 1': 'df860211',
-  'meeting 2': 'ade1ebaa',
+  'crownhill 1': 'e2b2495b',
+  'crownhill 2': '9d3ccd07',
+  'thornwood 1': '8b775320',
+  'thornwood 2': 'ec175c50',
+  'meeting 1': '4edc2f02',
+  'meeting 2': '6e08eb2f',
   'meeting 3': '29c7796a'
 }
 

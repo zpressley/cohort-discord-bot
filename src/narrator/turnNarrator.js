@@ -97,6 +97,7 @@ function fromCaptivity(events, { seen, side }) {
  *     ended; a unit that got nowhere is not said to have moved
  *   - the rounds two units fought become one fight with the losses summed,
  *     and "came to blows" is dropped when the fight itself is reported
+ *   - a unit that fell back before the enemy tick after tick is told once
  *   - crowding is reported once per unit, as it stood at the end, and not at
  *     all if the ranks had room again by then
  * Order is kept: each merged event stands where its first part stood.
@@ -108,6 +109,7 @@ function summarise(events) {
   const crowds = new Map()
   const hearts = new Map()
   const shots = new Map()
+  const falls = new Map()
   const pair = (a, b) => [a, b].sort().join('|')
 
   for (const e of events) {
@@ -137,6 +139,14 @@ function summarise(events) {
       if (seen) { seen.killed += e.killed; seen.remaining = e.remaining; seen.volleys += 1; continue }
       const merged = { ...e, volleys: 1 }
       shots.set(key, merged)
+      out.push(merged)
+    } else if (e.type === 'gaveGround') {
+      // A unit that fell back tick after tick, as one line: before whom, and
+      // where it ended.
+      const seen = falls.get(e.unitId)
+      if (seen) { seen.from = [...new Set([...seen.from, ...e.from])].sort(); seen.to = e.to; continue }
+      const merged = { ...e, from: [...e.from] }
+      falls.set(e.unitId, merged)
       out.push(merged)
     } else if (e.type === 'heartened') {
       // Everyone who took heart at the same enemy's breaking, in one line.
