@@ -79,6 +79,8 @@ a { color: var(--accent); }
 
 .label-caps { margin: 0; font-size: 12px; font-weight: 600; letter-spacing: 0.08em; text-transform: uppercase; color: var(--ink-soft); }
 .note { margin: 0; font-size: 13px; color: var(--ink-soft); }
+/* What an experienced officer says before you commit an order. */
+.counsel { margin: 0; padding: 8px 12px; font-size: 14px; font-style: italic; border-left: 3px solid var(--accent, #7a2e22); background: var(--paper-deep, rgba(0, 0, 0, 0.04)); }
 
 /* ── Army ────────────────────────────────────────── */
 .unit-card { padding: 12px 14px; background: var(--panel-raised); border: 1px solid var(--rule); display: flex; flex-direction: column; gap: 8px; text-align: left; font: inherit; color: var(--ink); width: 100%; cursor: pointer; }
@@ -119,6 +121,12 @@ a { color: var(--accent); }
 .page h1 { margin: 8px 0 0; font-family: var(--font-display); font-size: 28px; font-weight: 600; }
 .battle-link { display: flex; flex-direction: column; gap: 4px; padding: 14px 16px; background: var(--panel-raised); border: 1px solid var(--rule); color: var(--ink); text-decoration: none; }
 .battle-link.mine { border: 2px solid var(--ink); }
+.commander { margin: 8px 0 0; font-family: var(--font-display); font-size: 22px; font-weight: 600; }
+.officer { display: flex; flex-direction: column; gap: 4px; padding: 14px 16px; background: var(--panel-raised); border: 1px solid var(--rule); }
+.officer strong { font-family: var(--font-display); font-size: 18px; }
+.officer span, .officer li { font-size: 14px; color: var(--ink-soft); }
+.officer summary { padding: 12px 0; cursor: pointer; font-size: 14px; }
+.officer ul { margin: 0; padding-left: 18px; display: flex; flex-direction: column; gap: 6px; }
 .battle-link strong { font-family: var(--font-display); font-size: 18px; }
 .battle-link span { font-size: 14px; color: var(--ink-soft); }
 .field { display: flex; flex-direction: column; gap: 6px; font-size: 14px; font-weight: 600; }

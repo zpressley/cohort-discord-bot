@@ -5,7 +5,7 @@
   "scripts": {
     "start": "node src/web/server.js",
     "dev": "node --watch src/web/server.js",
-    "test": "node --test \"src/engine/**/*.test.js\" \"src/harness/**/*.test.js\" \"src/adapters/**/*.test.js\" \"src/llm/**/*.test.js\" \"src/interpreter/**/*.test.js\" \"src/narrator/**/*.test.js\" \"src/web/**/*.test.js\"",
+    "test": "node --test \"src/engine/**/*.test.js\" \"src/harness/**/*.test.js\" \"src/adapters/**/*.test.js\" \"src/llm/**/*.test.js\" \"src/interpreter/**/*.test.js\" \"src/narrator/**/*.test.js\" \"src/web/**/*.test.js\" \"src/opponent/**/*.test.js\"",
     "test:engine": "node --test \"src/engine/**/*.test.js\"",
     "test:harness": "node --test \"src/harness/**/*.test.js\"",
     "sim": "node src/harness/run.js",

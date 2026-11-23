@@ -43,6 +43,10 @@ function createUnit(spec) {
     // set. (It used to be dropped here, so a veteran unit fought and broke
     // exactly like a new one.)
     ...(spec.veteranResistance ? { veteranResistance: spec.veteranResistance } : {}),
+    // The officer who carries the Commander's orders to this unit
+    // (command/officers.js): { name, experience, personality }. A unit
+    // without one carries any order whole.
+    ...(spec.officer ? { officer: { ...spec.officer } } : {}),
 
     aliases: spec.aliases ?? []
   }

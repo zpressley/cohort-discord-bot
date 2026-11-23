@@ -33,13 +33,15 @@ const { detectEngagements, applyCasualties } = require('../runner')
 const { createCombatResolver, tables: T, ranged } = require('../combat')
 const { findPath } = require('../movement/pathfinding')
 const { resolveMap } = require('../map/map')
-const { toPosition, samePosition } = require('../map/labels')
+const { toPosition, samePosition, positionKey } = require('../map/labels')
 const {
   resolveSimultaneousMovement, expandOrders, buildOccupancy, canEnter, moveUnit, crowdingByUnit
 } = require('../movement')
 const { createEventLog } = require('./events')
-const { normalizeOrder, planUnit, isSeeking } = require('./orders')
-const { canSee } = require('../map/sight')
+const { normalizeOrder, planUnit, nextStep, isSeeking, NEAR_TILES } = require('./orders')
+const { grasp, losingTheThread } = require('../command/officers')
+const { createCommanders, stepCommanders } = require('../command/commander')
+const { canSee, visionRange } = require('../map/sight')
 const { coverFor } = require('./hiding')
 
 const DEFAULT_MAX_TURNS = 20
@@ -62,6 +64,19 @@ function createBattleState(spec, options = {}) {
     map: resolveMap(spec.map),
     world: createWorld({ units: spec.units }),
     random: createRng(seed),
+    // A stream of its own for what officers keep of their orders, so that
+    // giving a deeper order never changes how the fighting falls out.
+    officerRandom: createRng((Math.imul(seed, 2654435761) + 97) >>> 0),
+    // The Commanders on the field, where the battle has them (command/
+    // commander.js): side -> { unitId, status, heldBy }. A stream of their
+    // own, so that a Commander's fate never changes how the fighting goes.
+    commanders: createCommanders(spec),
+    commanderRandom: createRng((Math.imul(seed, 1597334677) + 211) >>> 0),
+    mustered: new Map(spec.units.map(u => [u.id, u.strength])),
+    // Units given an order in the player turn now running, and those shot
+    // at in the tick before this one.
+    fresh: new Set(),
+    shotLastTurn: new Set(),
     // A tick of a battle is a share of a combat round (tables.PACE).
     resolver: createCombatResolver({ pace: spec.combatPace ?? T.PACE.PER_TICK }),
     log: createEventLog(),
@@ -84,6 +99,17 @@ function createBattleState(spec, options = {}) {
     // Units hiding (Stage 3), and how well: unitId -> the row of hiding.js
     // they hide by. Moving or fighting gives a unit away.
     hidden: new Map(),
+    // Where each side last saw each enemy unit: side -> Map(unitId ->
+    // position). A unit told to press the enemy goes at one it can see, or
+    // failing that at where one was last seen; it does not know where an
+    // enemy no one has seen is standing.
+    lastSeen: new Map(),
+    // The ground each side has looked over for an enemy it has lost:
+    // side -> Set of tile keys. Emptied when an enemy comes in sight.
+    // searchFor: the place each searching unit is making for.
+    searchFor: new Map(),
+    searchedAhead: new Set(),
+    searched: new Map(),
     // Turns in a row a hidden unit has had an enemy right beside it: the
     // chance it is noticed grows with each (EXPOSURE).
     exposure: new Map(),
@@ -106,8 +132,12 @@ function createBattleState(spec, options = {}) {
  * @returns {Object} turn record (also appended nowhere — the caller owns the
  *                   ledger; runBattle and the orchestrator each keep their own)
  */
-function stepTurn(state, sideOrders = {}) {
+function stepTurn(state, sideOrders = {}, { sameTurn = false } = {}) {
   const { spec, map, world, random, resolver, log, broken, fledUnits } = state
+  // A player turn can run several ticks (the orchestrator's elastic time).
+  // Orders are given in its first; `sameTurn` marks the ticks after it, in
+  // which those orders are still this turn's.
+  if (!sameTurn) state.fresh = new Set()
   const engagementRange = spec.engagementRange ?? 1
 
   state.turn += 1
@@ -143,6 +173,104 @@ function stepTurn(state, sideOrders = {}) {
   // when the turn began, and who then attacks a marching unit, catches it
   // unawares.
   const seenAtStart = sightBySide(map, world, state.hidden)
+
+  // What each side remembers of where the enemy was. An enemy in sight is
+  // where it is; one out of sight stays where it was last seen, until a unit
+  // comes up close enough to find it gone.
+  for (const side of sides(world)) {
+    if (!state.lastSeen.has(side)) state.lastSeen.set(side, new Map())
+    const memory = state.lastSeen.get(side)
+    const seen = seenAtStart.get(side) ?? new Set()
+    // An enemy in sight ends any search for one; the next begins afresh.
+    if (seen.size > 0) {
+      state.searched.delete(side)
+      for (const u of unitsOnSide(world, side)) { state.searchFor.delete(u.id); state.searchedAhead.delete(u.id) }
+    }
+    for (const id of seen) {
+      const enemy = getUnit(world, id)
+      if (enemy && !broken.has(id)) memory.set(id, { ...enemy.position })
+    }
+    const watchers = unitsOnSide(world, side).filter(u => u.strength > 0 && !broken.has(u.id))
+    for (const [id, position] of [...memory]) {
+      if (seen.has(id) && !broken.has(id)) continue
+      const gone = broken.has(id) || !getUnit(world, id) || getUnit(world, id).strength <= 0
+      if (gone || watchers.some(w => tileDistance(w.position, position) <= STOOD_THERE)) memory.delete(id)
+    }
+  }
+  // Whom a unit pressing the enemy makes for: the nearest enemy its side
+  // can see; else the nearest place one was last seen; else the enemy's
+  // side of the field. Returns something with a `position`, or null.
+  const toPress = (unit) => {
+    const seen = seenAtStart.get(unit.side) ?? new Set()
+    const nearest = (candidates) => candidates
+      .map(c => ({ ...c, distance: tileDistance(unit.position, c.position) }))
+      .sort((x, y) => x.distance - y.distance || x.id.localeCompare(y.id))[0] ?? null
+    const inSight = nearest(livingUnits(world)
+      .filter(e => e.side !== unit.side && !broken.has(e.id) && seen.has(e.id))
+      .map(e => ({ id: e.id, position: e.position })))
+    if (inSight) return inSight
+    const remembered = nearest([...(state.lastSeen.get(unit.side) ?? [])].map(([id, position]) => ({ id, position })))
+    if (remembered) return remembered
+    // No one knows where the enemy is: go and look. First straight ahead to
+    // their side of the field; then the ground no one has yet looked over,
+    // nearest first.
+    // Ground is looked over when a unit could see an enemy standing on it
+    // (so open country from a distance, and a wood only from beside it).
+    // When the whole field has been looked over, begin again.
+    return { id: 'the ground not yet searched', position: whereToLook(unit) }
+  }
+  const lookedOver = new Set()
+  const whereToLook = (unit) => {
+    if (!state.searched.has(unit.side)) state.searched.set(unit.side, new Set())
+    const cleared = state.searched.get(unit.side)
+    if (!lookedOver.has(unit.side)) {
+      lookedOver.add(unit.side)
+      for (const friend of unitsOnSide(world, unit.side)) {
+        if (friend.strength <= 0 || broken.has(friend.id)) continue
+        const reach = visionRange(friend, map)
+        for (let dy = -reach; dy <= reach; dy++) {
+          for (let dx = -reach; dx <= reach; dx++) {
+            const tile = { x: friend.position.x + dx, y: friend.position.y + dy }
+            if (map.inBounds(tile) && canSee(map, friend, { position: tile })) cleared.add(positionKey(tile))
+          }
+        }
+      }
+    }
+    // A unit keeps to the place it set out to look at until that place has
+    // been looked over. (Choosing afresh every turn, two patches of ground
+    // either side of a river took turns at being the nearer, and the unit
+    // walked back and forth between them for ever.)
+    const bound = state.searchFor.get(unit.id)
+    if (bound && !cleared.has(positionKey(bound))) return bound
+    const choose = (tile) => { state.searchFor.set(unit.id, tile); return tile }
+
+    // Straight ahead to their side of the field first, once.
+    if (!state.searchedAhead.has(unit.id)) {
+      state.searchedAhead.add(unit.id)
+      const theirEdge = Object.entries(spec.sides ?? {}).find(([side]) => side !== unit.side)?.[1]?.homeEdge ?? null
+      const edge = edgePlace(map, theirEdge, unit.position)
+      if (edge && !cleared.has(positionKey(edge))) return choose(edge)
+    }
+
+    for (let pass = 0; pass < 2; pass++) {
+      const open = []
+      for (let y = 0; y < map.height; y++) {
+        for (let x = 0; x < map.width; x++) {
+          const tile = { x, y }
+          if (map.passable(tile) && !cleared.has(positionKey(tile))) open.push({ tile, distance: tileDistance(unit.position, tile) })
+        }
+      }
+      open.sort((a, b) => a.distance - b.distance || a.tile.y - b.tile.y || a.tile.x - b.tile.x)
+      // Ground that cannot be reached is as good as looked over.
+      for (const { tile } of open.slice(0, 6)) {
+        if (findPath(map, unit.position, tile)) return choose(tile)
+        cleared.add(positionKey(tile))
+      }
+      if (open.length > 6) return choose(open[6].tile)
+      cleared.clear()
+    }
+    return unit.position
+  }
   const reveal = (unitId, reason, by = null) => {
     state.exposure.delete(unitId)
     if (!state.hidden.delete(unitId)) return
@@ -162,29 +290,87 @@ function stepTurn(state, sideOrders = {}) {
 
   // ── Orders ──────────────────────────────────────
   const orders = []
-  const freshThisTurn = new Set()
+  const freshThisTurn = state.fresh
+
+  // Has the moment an order's condition spoke of come, as this unit's
+  // officer can tell from where he stands?
+  const whenTrue = (unit, when) => {
+    if (when.type === 'attacked') return engagedAtStart.has(unit.id) || state.shotLastTurn.has(unit.id)
+    if (when.type === 'breaks') return broken.has(when.unitId) || !livingUnits(world).some(u => u.id === when.unitId)
+    return livingUnits(world).some(e =>
+      e.side !== unit.side && !broken.has(e.id) &&
+      seenAtStart.get(unit.side)?.has(e.id) && canSee(map, unit, e) &&
+      matchesKind(e, when.kind) &&
+      (!when.near || tileDistance(e.position, when.near) <= NEAR_TILES))
+  }
+  const HOLD = { action: 'hold', target: null, then: null }
+  const ADVANCE = { action: 'advance', target: null, then: null }
+  // An officer who no longer remembers what he was to do: his personality
+  // decides (command/officers.js), and the log says so.
+  const loseThread = (unit, lost, current) => {
+    const inSight = (seenAtStart.get(unit.side)?.size ?? 0) > 0
+    const did = losingTheThread(unit.officer, lost, inSight)
+    log.emit('lostThread', turn, { unitId: unit.id, officer: unit.officer?.name ?? null, lost, did, ...(unit.officer?.headless ? { headless: true } : {}) })
+    if (did === 'advance') return { ...ADVANCE }
+    if (did === 'hold') return { ...HOLD }
+    const carried = { ...current }
+    delete carried.when
+    return carried
+  }
 
   for (const side of sides(world)) {
     const effective = unitsOnSide(world, side).filter(u => !broken.has(u.id))
-    const { orders: expanded } = expandOrders(sideOrders[side] ?? [], effective)
+    // A Commander in the enemy's hands gives no orders: his units carry on
+    // with the ones they have.
+    const held = state.commanders?.[side]?.status === 'held'
+    const { orders: expanded } = expandOrders(held ? [] : (sideOrders[side] ?? []), effective)
 
     // Orders given this turn replace each unit's standing order.
-    const fresh = new Set()
+    // What its officer keeps of an order with more than one thing in it is
+    // rolled here, once, as the order is given.
     for (const order of expanded) {
-      state.orderBook.set(order.unitId, normalizeOrder(order))
-      fresh.add(order.unitId)
+      let given = normalizeOrder(order)
+      const officer = getUnit(world, order.unitId)?.officer
+      if (officer) {
+        const kept = grasp(given, officer, state.officerRandom)
+        if (kept.clauses > 0) log.emit('grasp', turn, { unitId: order.unitId, officer: officer.name ?? null, clauses: kept.clauses, kept: kept.kept })
+        given = kept.order
+      }
+      state.orderBook.set(order.unitId, given)
       freshThisTurn.add(order.unitId)
     }
+    const fresh = freshThisTurn
 
     const edge = spec.sides?.[side]?.homeEdge ?? 'west'
     const context = (unit) => ({
       fresh: fresh.has(unit.id),
-      nearestEnemy: (u) => nearestEnemy(world, u, broken, state.hidden),
+      nearestEnemy: (u) => toPress(u),
       homeTarget: (u) => edgeTarget(map, u.position, edge)
     })
 
     for (const unit of effective) {
-      const { move, order } = planUnit(unit, state.orderBook.get(unit.id), context(unit))
+      // The order's condition, if it has one and its moment has come: the
+      // unit does the other thing, from now on. (Or its officer, having
+      // lost that part, does as his nature tells him.)
+      let current = state.orderBook.get(unit.id)
+      if (current?.when && whenTrue(unit, current.when)) {
+        if (current.when.lost) {
+          current = loseThread(unit, 'condition', current)
+        } else {
+          const { type, kind = null } = current.when
+          current = { ...current.when.do }
+          log.emit('reacted', turn, { unitId: unit.id, when: type, kind, action: current.action, target: current.target ? { ...current.target } : null })
+        }
+        state.orderBook.set(unit.id, current)
+        freshThisTurn.add(unit.id)
+      }
+
+      let { move, order, lostThread } = planUnit(unit, current, context(unit))
+      if (lostThread) {
+        // He has done what he remembered, and not what came after.
+        const instead = loseThread(unit, 'steps', current);
+        ({ move, order } = planUnit(unit, instead, context(unit)))
+      }
       if (order) state.orderBook.set(unit.id, order)
       else state.orderBook.delete(unit.id)
       // Missile troops told to press the enemy do it their own way: they
@@ -211,7 +397,7 @@ function stepTurn(state, sideOrders = {}) {
       // staring at each other. (A side without standing orders holds, which
       // is also a choice: a unit is allowed to stand.)
       if (standingFor(unit) === 'advance') {
-        const enemy = nearestEnemy(world, unit, broken, state.hidden)
+        const enemy = toPress(unit)
         if (enemy) orders.push({ unitId: unit.id, target: enemy.position, seeking: true })
       }
     }
@@ -318,7 +504,9 @@ function stepTurn(state, sideOrders = {}) {
     if (move.reachedTarget && order && order.action !== 'hold' && order.action !== 'advance') {
       log.emit('arrived', turn, {
         unitId: move.unitId, action: order.action, at: { ...move.to },
-        then: order.then === 'hold' ? 'hold' : 'standing'
+        then: order.then === 'hold' ? 'hold' : 'standing',
+        // More of the order to come (a chain's next steps).
+        ...(order.steps?.length ? { more: order.steps.length } : {})
       })
     }
   }
@@ -459,11 +647,18 @@ function stepTurn(state, sideOrders = {}) {
     })
   }
   const volleys = []
+  state.shotLastTurn = new Set(loosed.map(l => l.target.id))
   for (const { shooter, target, distance, felled } of loosed) {
     if (target.strength <= 0) continue
     const hit = resolver.volley(target, felled, turn)
     const [applied] = applyCasualties(world, [{ unitId: target.id, killed: hit.killed }])
     volleys.push({ unitId: target.id, by: shooter.id, killed: hit.killed })
+    // Men who are shot at can tell where it is coming from, though they
+    // cannot see the archers: their side remembers the place.
+    if (!seenNow.get(target.side)?.has(shooter.id)) {
+      if (!state.lastSeen.has(target.side)) state.lastSeen.set(target.side, new Map())
+      state.lastSeen.get(target.side).set(shooter.id, { ...shooter.position })
+    }
     log.emit('volley', turn, { unitId: target.id, by: shooter.id, killed: hit.killed, remaining: target.strength, distance })
     if (applied?.destroyed) {
       log.emit('destroyed', turn, { unitId: target.id })
@@ -574,7 +769,8 @@ function stepTurn(state, sideOrders = {}) {
         .sort()
       for (const id of found) reveal(id, 'found', unit.id)
       log.emit('checked', turn, { unitId: unit.id, at: { ...unit.position }, found })
-      state.orderBook.set(unit.id, { action: 'hold', target: null, then: null })
+      // The search is done: on to the next step of the order, if it has one.
+      state.orderBook.set(unit.id, nextStep(order) ?? { action: 'hold', target: null, then: null, ...(order.lostAfter ? { lostAfter: true } : {}) })
     }
 
     if ((order.action === 'hide' || order.action === 'ambush') && !state.hidden.has(unit.id) && !fought.has(unit.id)) {
@@ -647,8 +843,18 @@ function stepTurn(state, sideOrders = {}) {
     snapshot: cloneWorld(world)
   }
 
+  // ── The Commanders ──────────────────────────────
+  if (state.commanders) {
+    const fell = stepCommanders({
+      commanders: state.commanders, world, broken, fledUnits,
+      events: log.forTurn(turn), mustered: state.mustered, random: state.commanderRandom
+    })
+    for (const e of fell) log.emit(e.type, turn, e.fields)
+  }
+
   // ── Victory ─────────────────────────────────────
-  const outcome = checkBattleOutcome(world, broken, state.isShaken)
+  const outcome = commandersOutcome(state.commanders, [...new Set(spec.units.map(u => u.side))]) ??
+    checkBattleOutcome(world, broken, state.isShaken)
   if (outcome.decided) {
     state.outcome = outcome
     log.emit('victory', turn, { winner: outcome.winner, reason: outcome.reason })
@@ -833,19 +1039,33 @@ function offsetEdgeTarget(map, pos, edge, offset) {
 
 // Nearest fighting enemy by tile distance, unit-id tiebreak. Broken units are
 // not targets — chasing them is pursuit's job, not the battle line's.
-function nearestEnemy(world, unit, broken, hidden = new Map()) {
-  let best = null
-  let bestDistance = Infinity
-  for (const other of livingUnits(world)) {
-    if (other.side === unit.side || broken.has(other.id) || hidden.has(other.id)) continue
-    const distance = tileDistance(unit.position, other.position)
-    if (distance < bestDistance ||
-        (distance === bestDistance && other.id.localeCompare(best.id) < 0)) {
-      best = other
-      bestDistance = distance
+// How near a unit must come to the place an enemy was last seen (or shot
+// from) to know it is no longer there: an enemy in a wood is seen only from
+// beside it.
+const STOOD_THERE = 1
+
+// The first place to look for an enemy no one can find: straight ahead, to
+// their edge of the field (a few tiles short of it), on ground a unit can
+// stand on. Straight ahead, not the middle of the edge: two armies drawn up
+// facing each other then meet, where making for the middle they marched
+// past one another out of sight.
+function edgePlace(map, theirEdge, from) {
+  const IN = 4
+  const start = {
+    west: { x: IN, y: from.y }, east: { x: map.width - 1 - IN, y: from.y },
+    north: { x: from.x, y: IN }, south: { x: from.x, y: map.height - 1 - IN }
+  }[theirEdge]
+  if (!start) return null
+  for (let r = 0; r <= Math.max(map.width, map.height); r++) {
+    for (let dy = -r; dy <= r; dy++) {
+      for (let dx = -r; dx <= r; dx++) {
+        if (Math.max(Math.abs(dx), Math.abs(dy)) !== r) continue
+        const p = { x: start.x + dx, y: start.y + dy }
+        if (map.inBounds(p) && map.passable(p)) return p
+      }
     }
   }
-  return best
+  return null
 }
 
 // ── Ambush targets ───────────────────────────────────────
@@ -893,6 +1113,16 @@ function sightBySide(map, world, hidden = new Map()) {
 // with more men still in the ranks: someone won the last fight, and two
 // armies do not both run from each other. Only when neither has a formed
 // man left, or they are exactly even, is it a draw.
+// A Commander killed loses the battle for his side.
+function commandersOutcome(commanders, allSides) {
+  if (!commanders) return null
+  const dead = Object.keys(commanders).sort().filter(side => commanders[side].status === 'killed')
+  if (dead.length === 0) return null
+  const others = allSides.filter(side => !dead.includes(side))
+  if (others.length !== 1) return { decided: true, winner: 'draw', reason: 'both commanders killed' }
+  return { decided: true, winner: others[0], reason: 'enemy commander killed' }
+}
+
 function checkBattleOutcome(world, broken, isShaken = () => false) {
   const formed = (side) => unitsOnSide(world, side).filter(u => u.strength > 0 && !broken.has(u.id))
   const steady = (side) => formed(side).filter(u => !isShaken(u))
@@ -942,6 +1172,7 @@ module.exports = {
   stepTurn,
   runBattle,
   checkBattleOutcome,
+  commandersOutcome,
   tileAwayFrom,
   edgeTarget,
   isOnEdge,

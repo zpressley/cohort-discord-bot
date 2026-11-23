@@ -22,9 +22,21 @@ const { parseLine } = require('./grammar')
 const { resolveIntents } = require('./resolve')
 const { readWithAi } = require('./aiReader')
 
+// A line that begins "if ..." or "then ..." goes on from the line before
+// it: "spears to the ford; if their horse is there, hold" is one order,
+// however it was broken up.
+function joinContinued(lines) {
+  const out = []
+  for (const line of lines) {
+    if (out.length > 0 && /^(?:but\s+|and\s+)?(?:if|then|after that|afterwards)\b/i.test(line.trim())) out[out.length - 1] += `, ${line.trim()}`
+    else out.push(line)
+  }
+  return out
+}
+
 function grammarIntents(lines) {
   const intents = []
-  for (const line of lines) {
+  for (const line of joinContinued(lines)) {
     const parsed = parseLine(line)
     if (parsed.kind === 'done') break
     if (parsed.kind !== 'empty') intents.push(parsed)
@@ -47,6 +59,8 @@ const COMPOUND = /[,;:]|\b(?:and|then|while|but|unless|if|after|before|when|unti
 function grammarReadsWhole(line, parsed) {
   if (parsed.kind === 'surrender') return true
   if (parsed.kind !== 'order') return false
+  // A chain or a condition the grammar took apart piece by piece.
+  if (parsed.deep) return true
   let rest = String(line).toLowerCase()
   const who = String(parsed.unitRef ?? '').toLowerCase()
   // Unit names are short and hold no place words: "spears to the bridge and
@@ -58,7 +72,7 @@ function grammarReadsWhole(line, parsed) {
 }
 
 async function interpretText(text, context, { ai } = {}) {
-  const lines = String(text).split(/\n|;/).map(l => l.trim()).filter(Boolean)
+  const lines = joinContinued(String(text).split(/\n|;/).map(l => l.trim()).filter(Boolean))
 
   // Each line: read whole by the grammar and placed on the field without a
   // "who?" or "where?" question, or handed to the AI.
@@ -92,6 +106,7 @@ async function interpretText(text, context, { ai } = {}) {
     choices: [...fromGrammar.choices, ...rest.choices],
     surrender: fromGrammar.surrender || rest.surrender,
     understood: [...fromGrammar.understood, ...rest.understood],
+    counsel: [...(fromGrammar.counsel ?? []), ...(rest.counsel ?? [])],
     source: fromAi ? (kept.length ? 'grammar+ai' : 'ai') : 'grammar'
   }
 }
