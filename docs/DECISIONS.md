@@ -1288,3 +1288,154 @@ the engine's one old rule for it (harder to break) at its old top
 strength takes a side from 53% of its battles to 83%, while it loses
 hardly fewer men.
 
+
+
+### How the held Commander's negotiation, his officers' own command, his view and riding were built (Claude's choices, open to change)
+
+Built from rulings 1, 2, 3 and 6 above, and from three more given the same
+day while it was being built: "Honor binds a commander from killing his
+foe, but if he won't surrender the field to save his men then he leaves a
+commander of none. Desertion can be another part of a disloyal officer as
+his men abandon the unit by a % every round after the commander is
+captured. Loyal officers rally men and fight for their captured commander
+trying to free him." The code: `command/commander.js`, `command/officers.js`
+(`ownCommand`, `loyaltyOf`), `battle/battle.js` (the orders phase),
+`orchestrator/orchestrator.js` (the table: `makeOffer`, `answerOffer`),
+`opponent/captor.js` (the computer's answers), `web/battles.js` (`offer`,
+`answer`, `commanderView_`, `captiveView`, `view`, `heldThrough`,
+`settle`), `narrator/turnNarrator.js` (`fromCaptivity`) and the app. The
+numbers are in `tables.PARLEY`, `tables.LOYALTY` and `tables.RIDE`.
+
+**The table (rulings 1 and 2).** The automatic bargain is gone.
+- Each player turn the held Commander may put one offer down: any of his
+  units still on the field, from none to all. **Every deal gives the field:**
+  the battle is lost as his yield, so "the field alone" is an offer of no
+  units, and the other offers are the field and those units. (Read from
+  "an accepted offer ends the battle"; the other reading, units without
+  yielding the battle, is open.) A new offer replaces the one before.
+- The captor need not answer. A friend who holds him sees the offer above
+  his orders box and may Accept, Refuse, Ask for more (tick boxes: what was
+  offered and the enemy units his side has seen; nothing else), or send his
+  orders and fight on. An answered offer is off the table.
+- **A counter binds the captor:** if the captive's next offer gives all
+  that was asked, the deal is struck at once. It stands for the turn it is
+  made and one more (`PARLEY.COUNTER_LASTS`). The captive sees it with
+  those units ticked ready.
+- A deal: the battle ends ("enemy commander bargained"), he is free, each
+  unit given goes with its officer ('given up'), and a unit with no officer
+  starts its count toward one again. The field alone costs no unit.
+- Held, he cannot yield by his own word (ruled the same day): `{ surrender }`
+  while held is read as no orders, in the engine, and the button is gone.
+- Everything goes through `submitOrders` as `{ offer }` and `{ answer }`,
+  neither of which is a side's orders for the turn. A battle saved with the
+  old `{ bargain }` still plays back.
+- **Fog:** the captor's screen names only the units offered and the units
+  his side has seen; he may ask only for those (refused otherwise). A
+  page waiting on the turn, or at the table, looks again when an offer or an
+  answer comes.
+
+**The computer as captor (`opponent/captor.js`).** One roll for each offer,
+from a stream seeded by the battle's seed and the offer's number, so the
+same battle always gets the same answer (and it is in the log besides). It
+accepts with chance `0.08 + 1.0 × (men offered / its own men at the start)
++ 0.35 × (share of its own men dead, fled or broken)`, held between 5% and
+70%. A roll that misses by under 0.25 asks for more: what was offered and
+the strongest of his units it has seen; a wider miss is refused. It counts
+a unit it has never seen as one of the average size of those it has. So the
+field alone, from a captor that has lost no one, is an 8% chance; a captor
+that has bled will take less; it is never a sure thing.
+
+**At the end, held, no deal (ruled the same day).** "A commander of none":
+he goes free and alive; every officer leaves his company (those who sat the
+battle out too, kept on the roll of the fallen as 'left') and every unit's
+count toward an officer starts again; his name, faction and battles go on,
+and he may muster again with no officer at all, not even a new veteran.
+It is `heldWhenTheBattleEnds` in `commander.js` and `commanderOfNone` in
+`company.js`. The old price (his best unit) and the fate 'lost' are gone:
+the only total loss is death in the fighting.
+
+**His officers run their own units (ruling 1).** As each player turn opens
+while he is held (`ownCommand`): the bold go at the enemy if their side can
+see one, else carry on; the steady carry on with the order they have; the
+cautious halt and hold; a unit with no officer holds where it stands. Each
+decision is an event (`ownCommand`) his own side is told of, once, when it
+changes. Over nature stands loyalty: **loyalty does not exist yet**; an
+officer may carry `loyalty`, 0 to 100, and one without it is 50, neutral
+(`loyaltyOf`), so today every officer goes by his nature. When loyalty is
+built it plugs in there, on the officer the company gives the unit
+(`musterOfficers`). At 70 or over he goes for the unit holding his
+Commander, whatever his nature, and if his men are shaken they take 15
+morale of heart, once; at 30 or under, 3% of his men desert each ten
+minutes his Commander is held (an event, `deserted`, his side is told of;
+deserters are counted among the fallen in the tally). A unit with no
+officer is neutral. When he is free it all stops: his units keep what they
+were doing until he orders them. Nothing of it happens in a battle in which
+no Commander is held (tested; `npm run balance` unchanged).
+
+**What a held Commander sees (ruling 3).** "The captors' point of view" is
+taken as **what the unit holding him can see and takes part in**, not his
+captors' whole side's knowledge. His map and Army tab: his own units in
+that unit's sight, with where they are and about how many men (no morale,
+no orders); the rest named, with their officer, and "out of your sight";
+the enemy as that unit sees it now, nothing his side knew before or has
+learned since; the units he lost before he was taken, and those he can see
+lying where they fell. His dispatch for a turn he was held all through
+opens "You are held by ... at ...: this is what could be seen and heard
+from where you sit", and tells only events every unit of which was in that
+unit's sight at the turn's end, the verdict, ground changing hands, and
+what befell him. A turn in which he was taken he spent with his army, and
+hears of as before. Free again, or the battle over, he has his side's view.
+He cannot have orders read back while held.
+
+**Riding with another unit (ruling 6).** "I ride with the horse",
+"commander to the companions", "ride with the spears", or "Ride with them"
+on a unit's card (shown only where it is allowed): within one tile of the
+unit he is with (the eight round it), not broken, not while held. Read by
+the grammar, never the AI; the read-back is "You: ride with Horse", or why
+not ("Companions are 6 tiles (about 150 m) from Spears, whom you ride
+with: you can ride over only to a unit beside them..."). It goes through
+`submitOrders` and is an event (`commanderRode`) only his side hears of.
+
+**Measured** (`node src/harness/captive-league.js`): 3000 battles of the
+four factions against each other on every map, each battle with a seed of
+its own; red sends everyone in every turn, blue is the computer.
+- Red's Commander was taken in 131 (1 in 23).
+- Offering (the field alone first, then the field and his weakest unit,
+  one more each turn; meeting any counter he can): 240 offers, 1.8 a
+  captivity; 38% of offers accepted; 70% of captivities ended in a deal
+  (31 for the field alone, 61 with units, 94 units given in all); 46
+  counters, 29 met. 21 got free when their captors broke; 18 (14%) were
+  still held when the battle was lost and went home commanders of none.
+- Waiting, no offers: 75 of 131 (57%) went home commanders of none; 55 got
+  free when their captors broke; 1 was freed by his army's victory.
+- How his army fares with its officers running their own units: of
+  captivities with no deal, the army won 33 of 131 (25%), against 35 of
+  129 (27%) on the same seeds with the code before this change, where
+  units carried on with their orders. (A new Commander's units but the
+  elite have no officer, and now hold where they stand.) The two runs
+  differ by two captivities because the computer's own Commander is
+  sometimes taken first, and its officers now run its units.
+
+**Guessed at:**
+- That every deal yields the field (above).
+- That a counter binds the captor for a turn; the other reading is that a
+  captive who meets it must still wait for an acceptance.
+- "Captors' point of view" as the one unit holding him, not the whole
+  enemy side.
+- The computer's rule and its numbers, and that it answers at once.
+- "Rallies if it is shaken" as a shaken unit taking heart, not a broken
+  unit rallying.
+- The friend's page polls for offers every 30 seconds while at the table.
+
+**For Zach:**
+1. Should a deal be able to keep the battle going (units given without
+   yielding the field)?
+2. Is "the captors' point of view" the unit holding him, or everything his
+   captors' side knows?
+3. Is 70% of captivities ending in a deal, for a captive who keeps
+   offering, risky enough? The field alone from an unhurt computer is 8%.
+4. Should the computer, as a captive, make offers of its own? (Today its
+   Commander, when a player takes him, waits.)
+5. Should deserters count as fallen, as fled, or as a count of their own?
+6. A commander of none musters with no veteran at all: is that the intent,
+   or should he get the new Commander's one veteran back?

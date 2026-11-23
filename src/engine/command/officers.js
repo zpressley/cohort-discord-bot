@@ -25,6 +25,8 @@
 // seeded roll made when the order is given, weighted by his grade, and
 // written to the event log. Pure: the caller supplies the random stream.
 
+const { LOYALTY } = require('../combat/tables')
+
 // Grades, by battles come through (ruled 2026-11-23):
 //   nameless   0 to 3    no officer yet: the unit keeps a plain order only
 //   green      4 to 7    an officer comes forward, with a name
@@ -143,4 +145,41 @@ function losingTheThread(officer, lost, enemyInSight) {
   return lost === 'condition' ? 'carry on' : 'hold'
 }
 
-module.exports = { GRADES, GRASP, PERSONALITIES, MAX_STEPS, EARNED_AT, MAX_EXPERIENCE, DEATH_ODDS, gradeOf, chanceToKeep, clauses, grasp, losingTheThread }
+/**
+ * What an officer does with his unit while his Commander is in the enemy's
+ * hands (ruled 2026-11-23: "each commander is running his own unit at that
+ * point"). No word comes from the Commander, so each goes by his nature:
+ *   bold      goes at the enemy, if his side can see one to go at; else
+ *             carries on with the order he has
+ *   steady    carries on with the order he has
+ *   cautious  stops where he is and holds
+ *   no officer (headless)  holds where it stands: no one to lead it on
+ * Readable, as losingTheThread is: the Commander, who knows his officers,
+ * could say beforehand what each would do.
+ *
+ * Over his nature stands his loyalty (ruled 2026-11-23: "Loyal officers
+ * rally men and fight for their captured commander trying to free him"):
+ * a loyal officer, whatever his nature, goes for the men who hold his
+ * Commander ('rescue'). A disloyal one goes by his nature, and his men
+ * desert (battle.js). Loyalty is not built yet: `loyalty` on an officer,
+ * 0 to 100, else LOYALTY.NEUTRAL (loyaltyOf).
+ *
+ * @param {Object|null} officer
+ * @param {boolean} enemyInSight  can his side see an enemy to go at?
+ * @returns {'rescue'|'advance'|'hold'|'carry on'}
+ */
+function ownCommand(officer, enemyInSight) {
+  if (!officer || officer.headless) return 'hold'
+  if (loyaltyOf(officer) >= LOYALTY.LOYAL) return 'rescue'
+  if (officer.personality === 'bold') return enemyInSight ? 'advance' : 'carry on'
+  if (officer.personality === 'cautious') return 'hold'
+  return 'carry on'
+}
+
+/** An officer's loyalty, 0 to 100; neutral for one with none yet, or no officer. */
+function loyaltyOf(officer) {
+  const n = Number(officer?.loyalty)
+  return !officer || officer.headless || !Number.isFinite(n) ? LOYALTY.NEUTRAL : Math.max(0, Math.min(100, n))
+}
+
+module.exports = { GRADES, GRASP, PERSONALITIES, MAX_STEPS, EARNED_AT, MAX_EXPERIENCE, DEATH_ODDS, gradeOf, chanceToKeep, clauses, grasp, losingTheThread, ownCommand, loyaltyOf }

@@ -32,6 +32,13 @@ a { color: var(--accent); }
 .btn-wide { width: 100%; }
 .btn:disabled { opacity: 0.5; cursor: default; }
 .btn-quiet { border-color: var(--rule); }
+/* A tick box with its words: a whole row to tap (the units of an offer). */
+.check {
+  display: flex; align-items: center; gap: 10px;
+  min-height: 44px; padding: 0 12px;
+  border: 1px solid var(--rule); font-size: 15px; cursor: pointer;
+}
+.check input { width: 20px; height: 20px; margin: 0; accent-color: var(--ink); }
 
 /* ── Top bar ─────────────────────────────────────── */
 .bar {

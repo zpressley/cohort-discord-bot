@@ -310,4 +310,26 @@ function armyChanged(company, names) {
   return next
 }
 
-module.exports = { createCompany, musterOfficers, settleBattle, unitsOf, trainedQuality, leadUnit, ridesWith, armyChanged, HEADLESS }
+/**
+ * A Commander left "a commander of none" (ruled 2026-11-23: held when his
+ * battle was lost, and no deal struck; command/commander.js,
+ * heldWhenTheBattleEnds). Every officer leaves the company, those who sat
+ * the battle out too, and every unit starts again from nothing, its
+ * veterancy and training with it. The roll of the fallen keeps who they were. Run after the battle
+ * is written in (settleBattle).
+ */
+function commanderOfNone(company, title) {
+  const next = copy(company)
+  for (const officer of next.officers) {
+    next.fallen.push({
+      name: officer.name, fate: 'left', at: title, led: officer.leads,
+      experience: officer.experience, personality: officer.personality, battles: officer.record.length
+    })
+  }
+  // His army is gone with them: the men he raises next know nothing.
+  next.units = {}
+  next.officers = []
+  return next
+}
+
+module.exports = { createCompany, musterOfficers, settleBattle, commanderOfNone, unitsOf, trainedQuality, leadUnit, ridesWith, armyChanged, HEADLESS }

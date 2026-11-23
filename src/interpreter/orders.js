@@ -57,7 +57,7 @@ const COMPOUND = /[,;:]|\b(?:and|then|while|but|unless|if|after|before|when|unti
 // Is this line one the grammar can be trusted to have read whole? Its parse
 // must be an order, and outside the unit names it must say only one thing.
 function grammarReadsWhole(line, parsed) {
-  if (parsed.kind === 'surrender') return true
+  if (parsed.kind === 'surrender' || parsed.kind === 'ride') return true
   if (parsed.kind !== 'order') return false
   // A chain or a condition the grammar took apart piece by piece.
   if (parsed.deep) return true
@@ -86,7 +86,8 @@ async function interpretText(text, context, { ai } = {}) {
       const resolved = resolveIntents([parsed], context)
       // A question with choices ("which ridge?") is the grammar doing its
       // job. A question without is the grammar not understanding.
-      if (resolved.questions.length === 0 || resolved.choices.length > 0) { kept.push(parsed); continue }
+      // ("I ride with the horse" is the grammar's whole: a refusal is its answer.)
+      if (parsed.kind === 'ride' || resolved.questions.length === 0 || resolved.choices.length > 0) { kept.push(parsed); continue }
     }
     hard.push({ line, parsed })
   }

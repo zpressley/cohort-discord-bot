@@ -100,9 +100,14 @@ const HOLD = /^(?:(.+?)\s+)?(?:holds?(?:\s+(?:position|positions|the line|your g
 const COMPASS_WORDS = '(north[- ]?east|north[- ]?west|south[- ]?east|south[- ]?west|north|south|east|west)'
 const GO_DIRECTION = new RegExp(`^(?:(.+?)\\s+)?(?:go|move|march|head|shift|step|ride|walk)\\s+(?:(\\d{1,4})\\s*(?:m|metres?|meters?|paces|yards?)\\s+)?(?:to the\\s+|due\\s+)?${COMPASS_WORDS}$`, 'i')
 
+// The Commander riding over to another of his units.
+const RIDE = /^(?:i(?:'ll| will| shall)?|you|the commander|commander)\s+(?:ride|rides|go|goes|join|joins|move|moves|switch|switches)\s+(?:over\s+)?(?:with|to)\s+(.+)$/i
+const RIDE_SHORT = /^(?:(?:the\s+)?commander\s+(?:to|with)|ride with|join)\s+(.+)$/i
+
 /**
  * @returns one of
  *   { kind: 'order', unitRef, action, place, then }   place may be null
+ *   { kind: 'ride', unitRef }   the Commander rides with that unit
  *   { kind: 'surrender' } | { kind: 'done' } | { kind: 'empty' }
  *   { kind: 'ask', question }   the line could not be read
  */
@@ -113,6 +118,10 @@ function parseLine(line) {
   const lower = text.toLowerCase()
   if (lower === 'done' || lower === 'end' || lower === 'end turn') return { kind: 'done' }
   if (lower === 'surrender' || lower === 'yield') return { kind: 'surrender' }
+  // The Commander himself: "I ride with the horse", "commander to the
+  // companions". He rides over to another of his units.
+  const ride = text.match(RIDE) ?? text.match(RIDE_SHORT)
+  if (ride) return { kind: 'ride', unitRef: clean(ride[1]).replace(/^the\s+/i, '') }
 
   // Modifiers first, so the verb patterns read the bare order.
   const extra = {}

@@ -5,7 +5,7 @@
 // deeper: createGame / submitOrders / forceProcess / sideView.
 
 const {
-  createGame, submitOrders, forceProcess, sideView, gameRecord, replayGame, commanderOf,
+  createGame, submitOrders, forceProcess, sideView, gameRecord, replayGame, commanderOf, captorOf, checkOffer, checkAnswer,
   MAX_TICKS_PER_TURN, MINUTES_PER_TICK
 } = require('./orchestrator')
 const { VISION, visionRange, createIntel, updateIntel } = require('./fogOfWar')
@@ -20,6 +20,9 @@ module.exports = {
   gameRecord,
   replayGame,
   commanderOf,
+  captorOf,
+  checkOffer,
+  checkAnswer,
   MAX_TICKS_PER_TURN,
   MINUTES_PER_TICK,
   VISION,

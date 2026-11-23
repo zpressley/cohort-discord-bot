@@ -383,3 +383,83 @@ test('a dispatch says so when the AI is on but gave only the plain report', { sk
     assert.match(await p.textContent('.dispatch .flag'), /plain report/)
   }, { ai })
 })
+
+test('held, on a phone: an offer made with the tick boxes, the friend who holds him answers it, and riding with a unit beside him', { skip }, async () => {
+  await withApp(async ({ base, browser, errors, store }) => {
+    const post = async (url, body) => (await fetch(base + url, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body ?? {}) })).json()
+    const commander = (await post('/api/commanders')).token
+    const seats = (await post('/api/battles', { opponent: 'friend', side: 'red', seed: 3, commander })).seats
+    await post(`/api/seat/${seats.blue}/join`, { commander: null })
+    const game = store.seatOf(seats.red).entry.game
+    // Taken, by hand (the engine's rule is tested in the engine).
+    Object.assign(game.battle.commanders.red, { status: 'held', heldBy: 'blue_swords' })
+
+    const red = await page(browser, errors, { width: 390, height: 844 })
+    await red.goto(`${base}/b/${seats.red}`)
+    await red.waitForSelector('#make-offer')
+    assert.match(await red.textContent('#panel-body'), /You are taken/)
+    assert.equal(await red.locator('#yield-held').count(), 0, 'held, he cannot yield by his own word')
+    assert.equal(await red.textContent('#make-offer'), 'Offer the field alone')
+    await red.check('[data-chip="red_horse"]')
+    assert.equal(await red.textContent('#make-offer'), 'Offer the field and the horse')
+    if (process.env.SHOT) await red.screenshot({ path: process.env.SHOT.replace('.png', '-held-offer.png') })
+    await red.click('#make-offer')
+    await red.waitForSelector('#panel-body .readback')
+    assert.match(await red.textContent('#panel-body'), /Your offer is with them: the field and the horse/)
+    const tabs = await red.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)
+    assert.ok(tabs, 'no sideways scroll')
+    // His Army tab: what he can see from where he is held, and no more.
+    await red.click('[data-tab="army"]')
+    assert.match(await red.textContent('#panel-body'), /out of your sight|in sight from where you are held/)
+    assert.equal(await red.locator('[role="meter"][aria-label="Morale"]').count(), 0, 'no morale for units he cannot see')
+
+    const blue = await page(browser, errors, { width: 390, height: 844 })
+    await blue.goto(`${base}/b/${seats.blue}`)
+    await blue.waitForSelector('#offer-accept')
+    assert.match(await blue.textContent('.captive'), /For his freedom he offers the field and enemy horse/)
+    assert.equal(await blue.locator('#offer-more').count(), 0, 'his side has seen nothing more to ask for')
+    // Blue has seen red's spears and swords (by hand: the turn has not run).
+    for (const id of ['red_spears', 'red_swords']) game.intel.blue.known[id] = { status: 'ghost', strength: 100, position: { x: 1, y: 1 }, seenOnTurn: 0 }
+    await blue.reload()
+    await blue.waitForSelector('#offer-more')
+    await blue.locator('.captive').scrollIntoViewIfNeeded()
+    if (process.env.SHOT) await blue.screenshot({ path: process.env.SHOT.replace('.png', '-captor-offer.png') })
+    await blue.click('#offer-more')
+    await blue.waitForSelector('#ask-send')
+    assert.equal(await blue.locator('[data-ask]').count(), 3, 'what he offered, and what his side has seen')
+    await blue.check('[data-ask="red_spears"]')
+    if (process.env.SHOT) await blue.screenshot({ path: process.env.SHOT.replace('.png', '-captor-ask.png') })
+    await blue.click('#ask-send')
+    await blue.waitForFunction(() => /You asked for/.test(document.querySelector('.captive')?.textContent ?? ''))
+    assert.match(await blue.textContent('.captive'), /You asked for the field, enemy horse and enemy spears/)
+    await red.reload()
+    await red.waitForSelector('#panel-body')
+    assert.match(await red.textContent('#panel-body'), /They ask for more: the field, the horse and the spears/)
+    // The turn runs; his next offer has what they asked for ticked ready.
+    await post(`/api/seat/${seats.red}/orders`, { text: '' })
+    await post(`/api/seat/${seats.blue}/orders`, { text: 'everyone hold' })
+    await red.reload()
+    await red.waitForSelector('#make-offer')
+    assert.equal(await red.isChecked('[data-chip="red_spears"]'), true, 'what they asked for, ticked ready')
+    assert.equal(await red.textContent('#make-offer'), 'Offer the field and 2 units')
+
+    // Free again, the swords brought beside him: "Ride with them".
+    Object.assign(game.battle.commanders.red, { status: 'free', heldBy: null })
+    const withHim = game.battle.world.units.find(u => u.id === game.battle.commanders.red.unitId)
+    game.battle.world.units.find(u => u.id === 'red_swords').position = { x: withHim.position.x + 1, y: withHim.position.y }
+    await red.reload()
+    await red.waitForSelector('#tabs')
+    await red.click('[data-tab="army"]')
+    await red.waitForSelector('[data-ride="Swords"]')
+    const beside = game.battle.world.units.filter(u => u.side === 'red' && Math.max(Math.abs(u.position.x - withHim.position.x), Math.abs(u.position.y - withHim.position.y)) <= 1 && u !== withHim)
+    assert.equal(await red.locator('[data-ride]').count(), beside.length, 'only the units beside him')
+    await red.locator('[data-ride="Swords"]').scrollIntoViewIfNeeded()
+    if (process.env.SHOT) await red.screenshot({ path: process.env.SHOT.replace('.png', '-ride.png') })
+    await red.click('[data-ride="Swords"]')
+    await red.waitForSelector('#orders')
+    assert.equal(await red.inputValue('#orders'), 'I ride with the swords')
+    await red.click('#read-back')
+    await red.waitForSelector('.readback')
+    assert.equal(await red.textContent('.readback'), 'You: ride with Swords')
+  })
+})
