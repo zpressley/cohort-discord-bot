@@ -15,7 +15,8 @@
 //                                battles
 //                                and the computer's side against three kinds
 //                                of commander on every map, and every
-//                                faction's army against every other's
+//                                faction's army on every map, each against
+//                                a different enemy
 //   npm run soak -- --seeds 50
 
 const { createSession } = require('../adapters/hotseat/session')
@@ -91,18 +92,24 @@ for (const field of fields) for (const name of Object.keys(SCENARIOS)) for (cons
   }
 }
 
-// Faction armies (src/data/factions.js), as the web app musters them: each
-// against each other, on every map, red's Commander on the field with his
-// elite unit, red played by the three kinds of commander above and blue by
-// the computer. (Blue has no Commander, as the computer's side has none in
-// the app: one taken would send no orders, and against a commander who
-// sends none either the two would stand for ever.)
+// Faction armies (src/data/factions.js), as the web app musters them, on
+// every map, red's Commander on the field with his elite unit, red played
+// by the three kinds of commander above and blue by the computer. (Blue has
+// no Commander, as the computer's side has none in the app: one taken would
+// send no orders, and against a commander who sends none either the two
+// would stand for ever.) Twenty factions make 380 pairings; playing all of
+// them on every map is too long for CI, so every faction is red on every
+// map against a different enemy each time (and so blue as often), and each
+// battle has a seed of its own. The league (faction-league.js) plays them
+// all.
 const { fieldFactions, FACTIONS } = require('../engine/army/factions')
 const { leadUnit } = require('../engine/command/company')
 const armies = { games: 0, finished: 0, turns: 0, stuck: [] }
-for (const field of fields) for (const red of Object.keys(FACTIONS)) for (const blue of Object.keys(FACTIONS)) {
-  if (red === blue) continue
-  for (const [foe, orders] of Object.entries(FOES)) for (let seed = 1; seed <= Math.max(1, Math.round(seeds / 12)); seed++) {
+const factionKeys = Object.keys(FACTIONS)
+fields.forEach((field, m) => factionKeys.forEach((red, i) => {
+  for (let round = 0; round < Math.max(1, Math.round(seeds / 25)); round++) for (const [foe, orders] of Object.entries(FOES)) {
+    const blue = factionKeys[(i + 1 + (m * 5 + round * 3) % (factionKeys.length - 1)) % factionKeys.length]
+    const seed = 1 + i + factionKeys.length * (m + fields.length * round)
     const spec = fieldFactions(loadScenario('meeting-battle', { map: field, deploy: true }), { red, blue })
     const rides = (side) => { const mine = spec.units.filter(u => u.side === side); return { unitId: mine[leadUnit(mine)].id } }
     const game = createGame({ ...spec, standingOrders: {}, commanders: { red: rides('red') } }, { seed })
@@ -117,7 +124,7 @@ for (const field of fields) for (const red of Object.keys(FACTIONS)) for (const 
     armies.games++
     if (game.outcome.decided) { armies.finished++; armies.turns += turns } else armies.stuck.push(`${field} ${red} v ${blue}, red a commander who ${foe}, seed ${seed}`)
   }
-}
+}))
 
 let decided = 0
 let meetingTurns = 0

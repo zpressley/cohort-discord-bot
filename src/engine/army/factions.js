@@ -58,10 +58,12 @@ function factionUnits(key, side, homeEdge = side === 'red' ? 'west' : 'east') {
   const names = [...faction.army.map(u => u.name), built.elite.name]
   const specs = toBattleUnits(built.army, { side, positions: names.map(() => 'A1'), eliteWeapon: built.elite.weapon })
 
-  // The elite's own kit (toBattleUnits gives every elite the same).
+  // The elite's own kit and numbers (toBattleUnits gives every elite the
+  // same): the faction's doc gives some 40 men, some 100.
   const e = built.elite
   const elite = specs[specs.length - 1]
   Object.assign(elite, {
+    ...(e.size ? { strength: e.size, maxStrength: e.size } : {}),
     armor: e.armor ?? 'no_armor',
     shield: e.shield ?? 'no_shield',
     mounted: Boolean(e.mounted),

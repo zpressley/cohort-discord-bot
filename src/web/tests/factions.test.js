@@ -57,7 +57,7 @@ test('a Commander\'s faction is chosen when he is made and cannot change', async
     // Naming no faction, or his own, he brings his own army.
     const seat = (await app.api('POST', '/api/battles', { opponent: 'standing', side: 'red', commander: made.token, seed: 4 })).body.seats.red
     const tent = (await app.api('GET', `/api/seat/${seat}`)).body
-    assert.ok(tent.own.some(u => u.name === 'Companions'))
+    assert.ok(tent.own.some(u => u.name === 'Silver shields'))
     assert.equal(tent.faction, 'macedon')
   } finally { await app.close() }
 })
@@ -106,8 +106,8 @@ test('the order reader finds every unit of every faction by the name it is shown
       assert.deepEqual(read.understood, tent.own.map(u => `${u.name}: hold`), faction)
     }
     const seat = (await app.api('POST', '/api/battles', { opponent: 'standing', side: 'red', faction: 'macedon', seed: 3 })).body.seats.red
-    const read = (await app.api('POST', `/api/seat/${seat}/read`, { text: 'sarissa foot advance\nhypaspists and companions hold' })).body
-    assert.deepEqual(read.understood, ['Sarissa foot 1, Sarissa foot 2: advance on the enemy', 'Hypaspists, Companions: hold'])
+    const read = (await app.api('POST', `/api/seat/${seat}/read`, { text: 'sarissa foot advance\npeltasts and silver shields hold' })).body
+    assert.deepEqual(read.understood, ['Sarissa foot 1, Sarissa foot 2: advance on the enemy', 'Peltasts, Silver shields: hold'])
   } finally { await app.close() }
 })
 
@@ -116,7 +116,7 @@ test('the enemy is another faction by lot, or the one chosen; the armies, not th
   const app = await start(store)
   try {
     const drawn = (await app.api('POST', '/api/battles', { opponent: 'standing', side: 'red', faction: 'rome', seed: 8, map: 'thornwood' })).body
-    assert.match(drawn.title, /^Thornwood.*: Rome against (Macedon|Sarmatia|Han)$/)
+    assert.match(drawn.title, new RegExp(`^Thornwood.*: Rome against (${Object.values(FACTIONS).filter(f => f.title !== 'Rome').map(f => f.title).join('|')})$`))
     const chosen = (await app.api('POST', '/api/battles', { opponent: 'standing', side: 'red', faction: 'rome', enemyFaction: 'sarmatia', seed: 8 })).body
     assert.equal(chosen.title, 'Crownhill: Rome against Sarmatia')
     const spec = store.seatOf(chosen.seats.red).entry.game.spec
@@ -154,7 +154,7 @@ test('the friend who joins with a Commander of another faction brings that facti
     const tent = (await app.api('GET', `/api/seat/${seats.blue}`)).body
     assert.equal(tent.faction, 'sarmatia')
     assert.equal(tent.battle.title, 'Crownhill: Macedon against Sarmatia')
-    assert.equal(tent.commander.with, 'Scale riders')
+    assert.equal(tent.commander.with, 'Iron scale riders')
     assert.deepEqual((await app.api('GET', `/api/seat/${seats.red}`)).body.own, before, 'the mustering side is as it was')
 
     // A new Commander for the friend: the faction he names is his.
@@ -162,7 +162,7 @@ test('the friend who joins with a Commander of another faction brings that facti
     const fresh = (await app.api('POST', '/api/commanders')).body
     await app.api('POST', `/api/seat/${again.blue}/join`, { commander: fresh.token, faction: 'macedon' })
     assert.equal((await app.api('GET', `/api/commander/${fresh.token}`)).body.faction, 'macedon')
-    assert.equal((await app.api('GET', `/api/seat/${again.blue}`)).body.commander.with, 'Companions')
+    assert.equal((await app.api('GET', `/api/seat/${again.blue}`)).body.commander.with, 'Silver shields')
     // With none, the muster's army stands.
     const third = (await app.api('POST', '/api/battles', { opponent: 'friend', side: 'red', faction: 'rome', enemyFaction: 'han', seed: 5 })).body.seats
     await app.api('POST', `/api/seat/${third.blue}/join`, { commander: null })
