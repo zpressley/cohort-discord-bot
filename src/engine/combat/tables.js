@@ -643,7 +643,12 @@ const LOYALTY = {
   DISLOYAL: 30,        // at or under: his men desert while the Commander is held
   LOYAL: 70,           // at or over: he goes for the men who hold him
   DESERTION: 0.03,     // of the unit's men, each tick (ten minutes) he is held
-  RALLY_MORALE: 15     // a loyal officer's shaken men take this much heart, once
+  RALLY_MORALE: 15,    // a loyal officer's shaken men take this much heart, once
+  // An officer given to his captor in a deal for his own Commander's
+  // freedom (web/battles.js, settle): he has every reason to hate his new
+  // Commander. Under DISLOYAL, so that it bites when loyalty is built.
+  // Claude's number, a guess; nothing reads it in battle yet.
+  CAPTURED: 15
 }
 
 // Riding with another unit (ruled 2026-11-23: "a commander needed to be

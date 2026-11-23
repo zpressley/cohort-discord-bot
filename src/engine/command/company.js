@@ -126,9 +126,12 @@ function ridesWith(units) {
  * @param {Array}  units   this side's battle unit specs, each with a `kind`
  *                         (what the unit is called: "spears")
  * @param {number} seed    the battle's seed
+ * @param {Object} options
+ *   benched  the names of units he owns and has left at home: their
+ *            officers stay with them, and are not given another unit
  * @returns {{ company, units }} the units with `officer` set (and his id)
  */
-function musterOfficers(company, units, seed) {
+function musterOfficers(company, units, seed, { benched = [] } = {}) {
   const next = copy(company)
   const founding = next.officers.length === 0 && next.fallen.length === 0 && next.battles === 0
   if (founding && units.length > 0) {
@@ -153,7 +156,7 @@ function musterOfficers(company, units, seed) {
     const own = fit.find(o => o.leads === unit.kind && ![...lead.values()].includes(o))
     if (own) lead.set(unit.id, own)
   }
-  const spare = fit.filter(o => ![...lead.values()].includes(o) && !units.some(u => u.kind === o.leads))
+  const spare = fit.filter(o => ![...lead.values()].includes(o) && !units.some(u => u.kind === o.leads) && !benched.includes(o.leads))
     .sort((a, b) => b.experience - a.experience || a.id.localeCompare(b.id))
   const rank = (u) => QUALITY_ORDER.indexOf(u.quality)
   const wanting = units.filter(u => !lead.has(u.id)).sort((a, b) => rank(b) - rank(a) || units.indexOf(a) - units.indexOf(b))
@@ -228,8 +231,9 @@ function settleBattle(company, battle, fates) {
       deeds: f.deeds ?? '', orders: (f.orders ?? []).slice(-12)
     }
 
-    // The unit's own veterancy.
-    const gone = Boolean(f.destroyed) || f.fate === 'given up'
+    // The unit's own veterancy. A unit given in a deal is gone, whatever
+    // became of its officer (`given`).
+    const gone = Boolean(f.destroyed) || f.fate === 'given up' || Boolean(f.given)
     const mustered = f.mustered ?? next.units[f.unit]?.strength ?? 0
     let state = next.units[f.unit] ?? createVeteranState({ strength: mustered })
     if (gone) {
