@@ -25,9 +25,27 @@ const { usualArmy } = require('../../engine/army/standard')
 const { FACTIONS } = require('../../data/factions')
 const { fieldArmies } = require('../../engine/army/standard')
 
+const T = require('../../engine/combat/tables')
+
+// Ways earned veterancy might work, for --steps (the Part 4 proposal's
+// table, tables.VETERANCY.STEPS: at each step from so much average
+// experience, `fight` added to the unit's attack and defence ratings and
+// `stand` to its morale resistance).
+const STEP_SETS = {
+  stand: [{ from: 4, fight: 0, stand: 0.15 }, { from: 8, fight: 0, stand: 0.3 }, { from: 13, fight: 0, stand: 0.45 }, { from: 20, fight: 0, stand: 0.6 }],
+  fight: [{ from: 4, fight: 0.5, stand: 0 }, { from: 8, fight: 1, stand: 0 }, { from: 13, fight: 1.5, stand: 0 }, { from: 20, fight: 2, stand: 0 }],
+  mix: [{ from: 4, fight: 0.5, stand: 0.05 }, { from: 8, fight: 1, stand: 0.1 }, { from: 13, fight: 1.5, stand: 0.15 }, { from: 20, fight: 2, stand: 0.2 }],
+  half: [{ from: 4, fight: 0.25, stand: 0.05 }, { from: 8, fight: 0.5, stand: 0.1 }, { from: 13, fight: 0.75, stand: 0.15 }, { from: 20, fight: 1, stand: 0.2 }]
+}
+
 const arg = (name, dflt) => { const i = process.argv.indexOf(name); return i > -1 ? process.argv[i + 1] : dflt }
 const SEEDS = Number(arg('--seeds', 4))
 const VS = arg('--vs', 'mirror')
+const STEPS = arg('--steps', null)
+if (STEPS) {
+  if (!T.VETERANCY) throw new Error('no VETERANCY table')
+  T.VETERANCY.STEPS = STEP_SETS[STEPS]
+}
 
 // The battle, with one side's bought units carrying `extra` fields.
 function veteranBattle(faction, enemy, side, extra, { map, seed }) {
@@ -68,11 +86,12 @@ const ROWS = [
 
 if (require.main === module) {
   void fieldArmies
+  if (STEPS) console.log(`Veterancy steps: ${STEPS} (${JSON.stringify(STEP_SETS[STEPS])})\n`)
   console.log(`${VS === 'usual' ? 'The veteran army against the computer\'s usual armies (another faction each seed)' : 'Each usual army against itself'}: ${32 * SEEDS} battles a row.\n`)
   console.log('| Veteran side carries | Veteran side won | Its men lost | Other side\'s men lost |')
   console.log('|---|---|---|---|')
-  const only = process.argv.slice(2).filter(a => !a.startsWith('--') && !/^\d+$/.test(a) && a !== VS)
+  const only = process.argv.slice(2).filter(a => !a.startsWith('--') && !/^\d+$/.test(a) && a !== VS && a !== STEPS)
   for (const [label, extra] of ROWS) if (!only.length || only.some(o => label.startsWith(o))) row(label, extra)
 }
 
-module.exports = { veteranBattle, ROWS }
+module.exports = { veteranBattle, ROWS, STEP_SETS }
