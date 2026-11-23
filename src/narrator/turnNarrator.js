@@ -11,7 +11,7 @@
 const { featuresAt, detectFeatures } = require('../engine/map/features')
 const { distance } = require('../engine/map/labels')
 const { compassWord, TILE_METRES } = require('../engine/map/places')
-const { orderWords, moraleWords, ORDER } = require('./words')
+const { orderWords, moraleWords, ORDER, RIDER } = require('./words')
 const { gridLabel } = require('../engine/map/grid')
 
 // Where a tile is, in words: the feature it is part of, or the nearest
@@ -42,7 +42,7 @@ function involved(event) {
 
 // Events only the unit's own side knows of: its hiding, its search, an
 // ambush it held back, how packed its ranks are.
-const PRIVATE = new Set(['hidden', 'hideFailed', 'ambushHeld', 'checked', 'crowding', 'heartened', 'reacted', 'lostThread', 'commanderMoved', 'quarryGone', 'ownCommand', 'deserted', 'commanderRode'])
+const PRIVATE = new Set(['hidden', 'hideFailed', 'ambushHeld', 'checked', 'crowding', 'heartened', 'reacted', 'lostThread', 'commanderMoved', 'quarryGone', 'ownCommand', 'deserted', 'commanderRode', 'riderSent', 'riderBlocked', 'cutOff', 'inTouch'])
 // The engine's own record of a roll, which no commander is told of.
 const UNTOLD = new Set(['grasp'])
 
@@ -249,6 +249,10 @@ function plainFact(map, event) {
     case 'commanderRode': return `the Commander rode over from ${event.from} to ${event.unitId}`
     case 'ownCommand': return ownCommandWords(event)
     case 'officerYielded': return `${event.officer} of ${event.unitId}, the senior officer on the field, yielded it to save what was left of the army`
+    case 'riderSent': return RIDER.sent(event.unitId, event.minutes)
+    case 'riderBlocked': return RIDER.blocked(event.unitId)
+    case 'cutOff': return RIDER.lostTouch(event.unitId)
+    case 'inTouch': return RIDER.backInTouch(event.unitId)
     case 'deserted': return `${men(event.men)} of ${event.unitId} slipped away${event.officer ? `, ${event.officer} unable or unwilling to hold them` : ''}; ${event.strength} left`
     case 'fled': return `${event.unitId} left the field with ${men(event.strength)}`
     case 'rallied': return `${event.unitId} rallied ${whereAt(map, event.at)} with ${event.strength} men` +
@@ -298,7 +302,7 @@ function ownCommandWords(event) {
 // How much a commander needs to hear of each kind of event: lower is sooner.
 const WEIGHT = {
   victory: 0, commanderKilled: 0, commanderTaken: 0, commanderFreed: 0, commanderMoved: 1, destroyed: 1, rout: 1, fled: 1, rallied: 1, pursuit: 2, ambush: 1, surprise: 2, objective: 2,
-  volley: 3, lostThread: 1, reacted: 2, quarryGone: 2, ownCommand: 1, officerYielded: 0, deserted: 1, commanderRode: 1,
+  volley: 3, lostThread: 1, reacted: 2, quarryGone: 2, ownCommand: 1, officerYielded: 0, deserted: 1, commanderRode: 1, riderBlocked: 2, riderSent: 6, cutOff: 1, inTouch: 3,
   heartened: 5,
   revealed: 3, exchange: 3, standoff: 3, push: 4, crush: 4, disengage: 4, contact: 4,
   hidden: 5, hideFailed: 5, checked: 5, ambushHeld: 5, crowding: 6, arrived: 6, halted: 6, move: 7

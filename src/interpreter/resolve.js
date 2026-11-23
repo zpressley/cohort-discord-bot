@@ -14,7 +14,7 @@
 
 const { resolveUnitReference } = require('../engine/movement/unitResolver')
 const ranged = require('../engine/combat/ranged')
-const { orderWords, OWN_EDGE, HOLD_THERE, RIDE_WITH: RIDE_WORDS } = require('../narrator/words')
+const { orderWords, OWN_EDGE, HOLD_THERE, RIDE_WITH: RIDE_WORDS, RIDER } = require('../narrator/words')
 const { RIDE } = require('../engine/combat/tables')
 const { matchesKind, edgeTarget } = require('../engine/battle/battle')
 const { KINDS } = require('./grammar')
@@ -233,6 +233,15 @@ function resolveIntents(intents, context) {
   const understood = []
   const counsel = []
   let surrender = false
+  // How long a rider takes to each unit named (context.messengers, from
+  // engine/command/messengers.js): said after the order, in the app's words.
+  let riding = null
+  const carried = (ids) => {
+    const minutes = context.messengers ? context.messengers(ids, riding) : null
+    if (!minutes) return ''
+    const said = RIDER.readBack(ids.map(id => minutes[id] ?? 0), ids)
+    return said ? `. ${said}` : ''
+  }
 
   for (const intent of intents) {
     if (intent.kind === 'surrender') { surrender = true; continue }
@@ -242,6 +251,7 @@ function resolveIntents(intents, context) {
       const ride = resolveRide(intent, context)
       if (ride.question) { questions.push(ride.question); continue }
       orders.push({ ride: ride.unitId })
+      riding = ride.unitId
       understood.push(`You: ${RIDE_WORDS.say} ${ride.unitId}`)
       continue
     }
@@ -287,7 +297,8 @@ function resolveIntents(intents, context) {
       const reach = Math.min(...shooters.map(u => ranged.missileRangeMetres(u)))
       understood.push(`${shooters.map(u => u.id).join(', ')}: ` + (intent.holdFire
         ? 'hold, and hold their fire'
-        : `hold, and shoot at any enemy they can see within ${reach} m` + (intent.against ? `, ${intent.against} first` : '')))
+        : `hold, and shoot at any enemy they can see within ${reach} m` + (intent.against ? `, ${intent.against} first` : '')) +
+        carried(shooters.map(u => u.id)))
       continue
     }
 
@@ -311,7 +322,7 @@ function resolveIntents(intents, context) {
         orders.push({ unitRef: unit.id, action: 'attack', enemy: found.enemy.id, ...extras, ...deep.order })
       }
       const plain = orderWords('say', { action: 'attack', careful: extras.careful }, found.enemy.id)
-      understood.push(`${match.units.map(u => u.id).join(', ')}: ${plain}, ${seenWhere(found.enemy)}${deep.words}`)
+      understood.push(`${match.units.map(u => u.id).join(', ')}: ${plain}, ${seenWhere(found.enemy)}${deep.words}${carried(match.units.map(u => u.id))}`)
       counsel.push(...counselFor(match.units, units, { clauses: deep.clauses, action: 'attack', plain, shaken: context.shaken ?? [] }))
       continue
     }
@@ -376,6 +387,7 @@ function resolveIntents(intents, context) {
     }
     if (intent.action === 'ambush') line += `; ${ambushTerms(intent)}`
     line += deep.words
+    line += carried(match.units.map(u => u.id))
     understood.push(line)
     counsel.push(...counselFor(match.units, units, { clauses: deep.clauses, action: intent.action, plain, shaken: context.shaken ?? [] }))
   }

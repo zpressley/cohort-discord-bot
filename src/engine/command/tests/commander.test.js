@@ -119,7 +119,8 @@ test('a battle: a Commander with a beaten unit is taken or killed in time, and a
 
 test('held, he gives no orders: a steady officer carries on with the one he has', () => {
   const state = createBattleState(spec([
-    unit({ id: 'guard', position: { x: 2, y: 2 } }),
+    // Near enough the line that his first order reaches it at once.
+    unit({ id: 'guard', position: { x: 2, y: 14 } }),
     unit({ id: 'line', position: { x: 2, y: 18 }, officer: { name: 'Varro', experience: 3, personality: 'steady' } }),
     unit({ id: 'foe', side: 'blue', position: { x: 18, y: 2 } })
   ]))

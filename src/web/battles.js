@@ -32,13 +32,15 @@ const { assignOfficers } = require('../engine/command/roster')
 const { planTurn } = require('../opponent/planner')
 const { musterOfficers, settleBattle, ridesWith, createCompany } = require('../engine/command/company')
 const { bargainChips, canRide, heldSight, sightFrom } = require('../engine/command/commander')
+const { orderDelays, byCommandPost } = require('../engine/command/messengers')
+const { knownEnemies, newsBetween } = require('../engine/orchestrator/word')
 const { captorAnswer } = require('../opponent/captor')
 const { createCommanderStore } = require('./commanders')
 const { digest, summarise } = require('../narrator/turnNarrator')
 const { gradeOf, DEATH_ODDS, loyaltyBand } = require('../engine/command/officers')
 const T = require('../engine/combat/tables')
 const { narrateTurn, report } = require('../narrator/turnNarrator')
-const { orderWords } = require('../narrator/words')
+const { orderWords, RIDER } = require('../narrator/words')
 const { loadScenario, SCENARIOS, mapChoices } = require('../adapters/hotseat/scenarios')
 const { MAPS } = require('../data/maps')
 const { FACTIONS, factionChoices } = require('../engine/army/factions')
@@ -197,6 +199,9 @@ function createBattleStore({ dir = null, ai = null, now = () => Date.now() } = {
       joining: entry.joining ?? null,
       said: entry.said ?? {},
       settled: Boolean(entry.settled),
+      // Played with orders and news by rider (a battle saved before them
+      // plays back without: engine/command/messengers.js).
+      riders: entry.game.spec.messengers !== false,
       record: gameRecord(entry.game)
     }
     const file = path.join(dir, `${entry.id}.json`)
@@ -208,7 +213,11 @@ function createBattleStore({ dir = null, ai = null, now = () => Date.now() } = {
     if (!dir || !fs.existsSync(dir)) return
     for (const name of fs.readdirSync(dir).filter(n => n.endsWith('.json')).sort()) {
       const data = JSON.parse(fs.readFileSync(path.join(dir, name), 'utf8'))
-      const entry = { ...data, game: replayGame(data.record) }
+      // A battle saved before orders and news went by rider replays as it
+      // was played, and goes on so.
+      const record = data.riders ? data.record : { ...data.record, spec: { ...data.record.spec, messengers: false } }
+      const entry = { ...data, game: replayGame(record) }
+      delete entry.riders
       delete entry.record
       register(entry)
     }
@@ -686,11 +695,23 @@ function createBattleStore({ dir = null, ai = null, now = () => Date.now() } = {
   // knows of the enemy.
   function context(entry, side) {
     const game = entry.game
+    // A Commander with his army reads his orders against what he knows:
+    // each unit where word of it last put it, the enemy as reported to him
+    // (engine/orchestrator/word.js).
+    const word = game.battle.commanders?.[side]?.status === 'free' ? game.word?.[side] ?? null : null
+    const known = (u) => (word?.units[u.id] ? { ...u, position: { ...word.units[u.id].position } } : u)
+    // (A unit he last heard of as broken may have rallied since: he may
+    // still send it orders, and the rider finds out. So that his words are
+    // always read and a turn never waits on him, he may name any unit he
+    // has not heard is gone.)
+    const broken = (u) => (word ? false : game.battle.broken.has(u.id))
+    const there = (u) => (word ? Boolean(word.units[u.id]) && !word.units[u.id].gone : u.strength > 0)
     return {
       map: game.battle.map,
-      units: game.battle.world.units.filter(u => u.side === side && u.strength > 0 && !game.battle.broken.has(u.id))
-        .map(u => ({ ...u, aliases: [unitName(u).toLowerCase(), ...(u.aliases ?? [])] })),
-      enemies: sideView(game, side).intel,
+      units: [...game.battle.world.units, ...game.battle.fledUnits].filter(u => u.side === side && there(u) && !broken(u))
+        .filter(u => word || u.strength > 0)
+        .map(u => ({ ...known(u), aliases: [unitName(u).toLowerCase(), ...(u.aliases ?? [])] })),
+      enemies: word ? knownEnemies(word) : sideView(game, side).intel,
       // Where "fall back" takes a unit, for the read-back.
       homeEdge: game.spec.sides?.[side]?.homeEdge,
       lyingInWait: lyingInWait(game.battle, side),
@@ -699,8 +720,13 @@ function createBattleStore({ dir = null, ai = null, now = () => Date.now() } = {
       // "I ride with the horse": may he, and if not, why (canRide).
       ride: (unitId) => canRide(game.battle.commanders, game.battle.world, game.battle.broken, side, unitId),
       ridingWith: game.battle.commanders?.[side]?.status === 'free' ? game.battle.commanders[side].unitId : null,
-      allOwn: game.battle.world.units.filter(u => u.side === side && u.strength > 0)
-        .map(u => ({ ...u, aliases: [unitName(u).toLowerCase(), ...(u.aliases ?? [])] }))
+      // How long a rider takes to each unit (engine/command/messengers.js),
+      // for the read-back: from the unit he rides with, or the one he is
+      // riding over to first.
+      messengers: (ids, from) => orderDelays(game.battle, side, ids, { from, word }),
+      allOwn: [...game.battle.world.units, ...game.battle.fledUnits].filter(u => u.side === side && there(u))
+        .filter(u => word || u.strength > 0)
+        .map(u => ({ ...known(u), aliases: [unitName(u).toLowerCase(), ...(u.aliases ?? [])] }))
     }
   }
 
@@ -730,7 +756,18 @@ function createBattleStore({ dir = null, ai = null, now = () => Date.now() } = {
     // battle is over, he has his side's view back.
     const held = !atGame && !game.outcome.decided ? heldSight(battle, side) : null
     const ride = (u) => !atGame && !game.outcome.decided && canRide(battle.commanders, battle.world, battle.broken, side, u.id).ok
-    const own = battle.world.units.filter(u => u.side === side && u.strength > 0).map(u => {
+    // Free, with his army, he knows each unit of his as the last word of it
+    // to reach him: live within his immediate range, older beyond it, and
+    // none at all from a unit cut off (engine/orchestrator/word.js). Once
+    // the battle is over, everything is told.
+    const word = !atGame && !game.outcome.decided && !held ? game.word?.[side] ?? null : null
+    const ownUnits = word
+      ? [...battle.world.units, ...battle.fledUnits].filter(u => u.side === side && word.units[u.id] && !word.units[u.id].gone)
+      : battle.world.units.filter(u => u.side === side && u.strength > 0)
+    // Orders of his still on the road (command/messengers.js): he knows
+    // what he sent, and about when it arrives.
+    const onTheRoad = (id) => (battle.riders ?? []).filter(r => r.side === side && r.unitId === id).at(-1) ?? null
+    const own = ownUnits.map(u => {
       if (held && !held.seen.has(u.id)) {
         return {
           id: u.id, name: unitName(u), role: u.role ?? null, quality: u.quality ?? null, mounted: Boolean(u.mounted),
@@ -752,22 +789,34 @@ function createBattleStore({ dir = null, ai = null, now = () => Date.now() } = {
         }
       }
       const state = battle.resolver.getState(u.id)
+      // As the last word of them says, or as they stand.
+      const r = word ? word.units[u.id] : null
+      const now = r ?? {
+        position: u.position, strength: u.strength, maxStrength: u.maxStrength,
+        morale: state ? Math.round(state.morale) : null, stamina: state ? Math.round(state.stamina) : null,
+        broken: battle.broken.has(u.id), hidden: battle.hidden.has(u.id), crowding: battle.crowding.get(u.id) ?? 'organized',
+        rallied: battle.rallied?.has(u.id) ?? false, order: battle.orderBook.get(u.id) ?? null
+      }
+      const road = word ? onTheRoad(u.id) : null
       return {
         id: u.id,
         name: unitName(u),
         role: u.role ?? null,
         quality: u.quality ?? null,
         mounted: Boolean(u.mounted),
-        position: { ...u.position },
-        at: where(u.position),
-        strength: u.strength,
-        maxStrength: u.maxStrength,
-        morale: state ? Math.round(state.morale) : 100,
-        stamina: state ? Math.round(state.stamina) : staminaPool(u),
+        position: { ...now.position },
+        at: where(now.position),
+        strength: now.strength,
+        maxStrength: now.maxStrength,
+        morale: now.morale ?? 100,
+        stamina: now.stamina ?? staminaPool(u),
         staminaPool: staminaPool(u),
-        broken: battle.broken.has(u.id),
-        hidden: battle.hidden.has(u.id),
-        crowding: battle.crowding.get(u.id) ?? 'organized',
+        broken: now.broken,
+        hidden: now.hidden,
+        crowding: now.crowding,
+        // How old his word of them is (minutes), and when he last had any.
+        ...(r ? { word: wordOf(r, battle.turn) } : {}),
+        ...(road ? { rider: riderOf(road, battle.turn, namer(game, side)) } : {}),
         // The officer who carries your orders to this unit.
         // A unit can have none: it has yet to earn one.
         officer: !u.officer ? null
@@ -775,12 +824,12 @@ function createBattleStore({ dir = null, ai = null, now = () => Date.now() } = {
             : { name: u.officer.name, grade: gradeOf(u.officer), personality: u.officer.personality, loyalty: loyaltyBand(u.officer) },
         // Missile troops: how far they shoot, and whether they are holding fire.
         shootsTo: missileRangeMetres(u) || null,
-        holdingFire: Boolean(battle.orderBook.get(u.id)?.holdFire),
-        order: battle.broken.has(u.id)
+        holdingFire: Boolean(now.order?.holdFire),
+        order: now.broken
           ? 'broken and fleeing'
-          : describeOrder(battle.orderBook.get(u.id), game.spec.standingOrders?.[side], namer(game, side)) +
-            (battle.rallied?.has(u.id) ? (state && state.morale <= 25 ? ' (rallied, at breaking point)' : ' (rallied)') : ''),
-        target: battle.orderBook.get(u.id)?.target ?? null,
+          : describeOrder(now.order, game.spec.standingOrders?.[side], namer(game, side)) +
+            (now.rallied ? (now.morale !== null && now.morale <= 25 ? ' (rallied, at breaking point)' : ' (rallied)') : ''),
+        target: now.order?.target ?? null,
         // He may ride over to them (command/commander.js, canRide).
         ...(ride(u) ? { canRide: true } : {})
       }
@@ -792,6 +841,8 @@ function createBattleStore({ dir = null, ai = null, now = () => Date.now() } = {
     const fallen = [...battle.world.units.filter(u => u.side === side && u.strength <= 0),
       ...battle.fledUnits.filter(u => u.side === side)]
       .filter(u => !held || fellAt(u.id) < takenAt || (u.strength <= 0 && held.seen.has(u.id)))
+      // With his army: those word of whose end has reached him.
+      .filter(u => !word || word.units[u.id]?.gone)
       .map(u => ({ id: u.id, name: unitName(u), fled: u.strength > 0 }))
 
     // Held: the enemy as it can be seen from where he is held, and nothing
@@ -799,7 +850,7 @@ function createBattleStore({ dir = null, ai = null, now = () => Date.now() } = {
     const intel = held
       ? battle.world.units.filter(u => u.side !== side && u.strength > 0 && held.seen.has(u.id))
         .map(u => ({ id: u.id, status: 'visible', position: { ...u.position }, strength: u.strength, seenOnTurn: battle.turn }))
-      : sv.intel
+      : word ? knownEnemies(word) : sv.intel
     const enemies = intel.map(e => {
       const unit = battle.world.units.find(u => u.id === e.id) ?? battle.fledUnits.find(u => u.id === e.id)
       return {
@@ -873,6 +924,18 @@ function createBattleStore({ dir = null, ai = null, now = () => Date.now() } = {
 
   // ── Orders ────────────────────────────────────────
 
+  // How old his word of a unit is, in the app's words (narrator/words.js).
+  function wordOf(r, turn) {
+    const minutesAgo = Math.max(0, (turn - r.heard) * 10)
+    return { live: r.live, minutesAgo, heardAt: r.heard * 10, cutOff: r.cutOff, said: r.cutOff ? RIDER.cutOff(r.heard * 10) : RIDER.age(minutesAgo) }
+  }
+  // An order of his still on the road to a unit.
+  function riderOf(road, turn, name) {
+    const inMinutes = Math.max(0, (road.arrives - turn) * 10)
+    const order = describeOrder(road.order, null, name)
+    return { order, inMinutes, said: RIDER.onTheRoad(order, inMinutes) }
+  }
+
   // The Commander on the field, as his own side sees him: the unit he
   // rides with; or that he is held, by whom and where, the units he could
   // offer for his freedom, and how the table stands.
@@ -886,6 +949,8 @@ function createBattleStore({ dir = null, ai = null, now = () => Date.now() } = {
     const named = (ids) => ids.map(id => ({ id, name: name(id) }))
     return {
       status: c.status,
+      // How far round him an order arrives at once, and he sees for himself.
+      immediate: T.COMMAND.IMMEDIATE,
       unitId: c.status === 'free' ? c.unitId : null,
       with: c.status === 'free' ? name(c.unitId) : null,
       heldBy: held ? name(c.heldBy) : null,
@@ -914,7 +979,9 @@ function createBattleStore({ dir = null, ai = null, now = () => Date.now() } = {
     if (!captive) return null
     const name = namer(game, side)
     const t = game.parley?.[captive]
-    const seen = sideView(game, side).intel
+    // (What he has heard of, when his own Commander is with his army.)
+    const word = game.battle.commanders?.[side]?.status === 'free' ? game.word?.[side] : null
+    const seen = word ? knownEnemies(word) : sideView(game, side).intel
     return {
       heldBy: name(game.battle.commanders[captive].heldBy),
       offer: t?.offer ? { id: t.offer.id, units: t.offer.units.map(id => ({ id, name: name(id) })) } : null,
@@ -1076,7 +1143,10 @@ function createBattleStore({ dir = null, ai = null, now = () => Date.now() } = {
     // Solo: the computer's side answers at once, with the orders it thinks
     // best from what it has seen (opponent/planner.js).
     if (result.status === 'waiting' && entry.auto && result.waitingOn.includes(entry.auto)) {
-      result = submitOrders(game, entry.auto, planTurn(game, entry.auto))
+      // Its orders go by rider from its best unit, as a Commander's do
+      // from his (engine/command/messengers.js); what it knows is not
+      // delayed.
+      result = submitOrders(game, entry.auto, byCommandPost(planTurn(game, entry.auto)))
     }
 
     if (result.status !== 'waiting') {
@@ -1232,7 +1302,38 @@ function createBattleStore({ dir = null, ai = null, now = () => Date.now() } = {
       }
       // The plain account: what this side could know, most important first,
       // the fighting told unit by unit.
-      const lines = report(turn).map(l => l.charAt(0).toUpperCase() + l.slice(1))
+      let lines = report(turn).map(l => l.charAt(0).toUpperCase() + l.slice(1))
+      // With his army on the field, he is told what has reached him by the
+      // turn's end: word from about him at once, from beyond by rider, each
+      // with how old it is (engine/orchestrator/word.js). The battle's end
+      // tells all.
+      const word = !captivity && !game.outcome.decided ? game.word?.[side] ?? null : null
+      if (word) {
+        const to = turnEntry.ticks.at(-1)?.battleTurn ?? game.battle.turn
+        const from = (turnEntry.ticks[0]?.battleTurn ?? to + 1) - 1
+        const news = newsBetween(game, side, from, to)
+        const knownIds = new Set(knownEnemies(word).map(e => e.id))
+        const told = (evs) => report({ ...turn, events: evs, seenEnemyIds: knownIds, whereIs: (id) => word.units[id]?.position ?? null })
+          .map(l => l.charAt(0).toUpperCase() + l.slice(1))
+        const late = new Map()
+        // (Marching told late is only noise: the map shows where word put
+        // each unit.)
+        const QUIET = ['move', 'arrived', 'halted', 'crowding']
+        for (const n of news.filter(n => n.arrived > n.event.turn && !QUIET.includes(n.event.type))) {
+          const age = (to - n.event.turn) * 10
+          if (!late.has(age)) late.set(age, [])
+          late.get(age).push(n.event)
+        }
+        // News from far off first, newest first: it is what he could not
+        // see for himself.
+        lines = [
+          ...[...late.keys()].sort((a, b) => a - b).flatMap(age => told(late.get(age)).map(l => `${RIDER.from(age)}: ${l}`)),
+          ...told(news.filter(n => n.arrived === n.event.turn).map(n => n.event))
+        ]
+        turn.events = news.map(n => n.event)
+        turn.seenEnemyIds = knownIds
+        turn.whereIs = (id) => word.units[id]?.position ?? null
+      }
       if (captivity?.captor) {
         lines.unshift(`You are held by ${name(captivity.captor.id)} ${where(captivity.captor.position)}, and hear the reports as they come in to your captors`)
       }

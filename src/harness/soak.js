@@ -104,6 +104,7 @@ for (const field of fields) for (const name of Object.keys(SCENARIOS)) for (cons
 // all.
 const { fieldFactions, FACTIONS } = require('../engine/army/factions')
 const { leadUnit } = require('../engine/command/company')
+const { byCommandPost } = require('../engine/command/messengers')
 const armies = { games: 0, finished: 0, turns: 0, stuck: [] }
 const factionKeys = Object.keys(FACTIONS)
 fields.forEach((field, m) => factionKeys.forEach((red, i) => {
@@ -116,7 +117,9 @@ fields.forEach((field, m) => factionKeys.forEach((red, i) => {
     let turns = 0
     while (!game.outcome.decided && turns < MAX_PLAYER_TURNS) {
       const r = orders(game)
-      const b = planTurn(game, 'blue')
+      // As in the app: red's orders and news go by rider from his
+      // Commander, blue's orders from its best unit (command/messengers.js).
+      const b = byCommandPost(planTurn(game, 'blue'))
       submitOrders(game, 'red', r)
       submitOrders(game, 'blue', b)
       turns++

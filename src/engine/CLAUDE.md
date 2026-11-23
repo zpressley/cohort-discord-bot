@@ -34,3 +34,9 @@ to change combat; if you did, say so and show before and after.
 The Commander on the field is in `command/commander.js`; officers and how
 much of an order they keep in `command/officers.js`; the company that goes
 from battle to battle in `command/company.js`.
+
+Orders and news by rider (`docs/design/point-of-view-and-messengers.md`):
+the rider's path and the queue of orders on the road in
+`command/messengers.js`; what each Commander on the field knows, and when,
+in `orchestrator/word.js` (`game.word`). A side with no Commander on the
+field has neither.

@@ -1916,3 +1916,176 @@ go on.
    before they reach another player?
 6. A Commander whose elite is given in a deal: raised again from nothing
    (built), or does he lose his elite?
+
+### How the Commander's point of view and messengers were built (Claude's choices, open to change)
+
+Built from the rulings of November 23 ("POV is limited to what the
+commander can see ... Commands take longer to reach troops farther away
+... you are delayed in hearing back from distant troops ... maybe even
+troops behind enemy lines can't communicate"; "Go with the proposed
+pov/messenger ranges"), to the specification
+`docs/design/point-of-view-and-messengers.md`, in its three steps. The
+code: `engine/command/messengers.js` (the rider), `engine/battle/battle.js`
+(orders on the road), `engine/orchestrator/word.js` (what each Commander
+knows, and when), `engine/orchestrator/orchestrator.js` (turns that stop
+on news), `web/battles.js` (the tent, the read-back, the dispatch),
+`web/public/map.js` and `app.js`, the words in `narrator/words.js`
+(`RIDER`). The numbers are `tables.COMMAND`: immediate range 6 tiles, a
+rider's pace 10 (move cost) a ten minutes, no rider within 1 tile of an
+enemy. Everything applies only to a side with a Commander on the field,
+and to the computer's orders when they come marked (below): a battle with
+neither runs exactly as before, event for event
+(`harness/tests/messengers-unchanged.test.js`), and so does a battle saved
+before riders (below, question 5).
+
+**The rider's path.** One search (Dijkstra) over the whole field from the
+Commander's tile, at the same cost per tile a unit pays (road 0.5, open 1,
+hill and ford 1.5, wood 2, marsh 3, river impassable), gives every unit's
+delay at once: the cost over 10, rounded up to whole ten minutes, at least
+ten. Within 6 tiles (the eight-way count, as riding with a unit is
+counted) it is at once, whatever the ground. "Within 1 of an enemy unit"
+is every tile in the 3 by 3 round an enemy he could see: on the field, not
+broken, not hidden. He may set out from such a tile and ride into one (the
+unit he carries the order to, in a fight), but not on through it. News
+comes back by the same search, read the other way. It is cheap: one cost
+table per map, a heap of numbers; the soak took 60 s before riders and 59 s
+after all three steps (step 1, before the search was made fast, took 66 s).
+
+**Orders on the road** (step 1). `battle.riders`, a queue in battle state
+filled by `stepTurn` as orders are given, so a saved battle rebuilds it by
+playing back. Each order to a unit beyond the range waits there with the
+battle turn it arrives; as each tick opens, those due are given, oldest
+first, and only then the new ones. A newer order to a unit arrives no
+sooner than the one before it on the road (so an order that would arrive
+at once waits for the older one, and is given after it). What an officer
+keeps of a deep order, and his loyalty's part in it, is rolled as the
+rider arrives. A unit broken or gone by then never gets it. No path: the
+order is not sent, and `riderBlocked` says so in the dispatch. Each sent
+order is `riderSent` (with its minutes), which only his side hears of. A
+unit with an order on the road is not yet "done" for the turn's stop.
+
+**The read-back** says, after each line, "A rider reaches them in about 20
+minutes" (or "Riders reach them in 10 to 30 minutes" for several, or "No
+rider can get through to Horse: the order is not sent"). It is judged
+from where he believes each unit stands and the enemy he knows of, never
+the truth: so it may say 20 minutes and the rider find the way shut (the
+dispatch then says so). Nothing is said for an order that arrives at
+once. If he rides over to another unit in the same orders, the time is
+counted from there (within one reading of the orders).
+
+**What he knows** (step 2). `game.word[side]`, filled in by the
+orchestrator after every tick. Every ten minutes each of his units sends a
+report: where it is, its men, heart and wind, broken or hidden, its
+order, and every enemy it can see; and once more as it is destroyed or
+leaves the field. A report reaches him when the rider would. The map, the
+Army tab, the enemy list, the units the order reader knows by name and
+place, and the captor's list of what to ask for are all read from it, so
+the browser is sent no more than has reached him. Units within the range
+are live (they and what they see); the rest are shown where word last put
+them, faded and dashed, with "20 min ago"; an enemy known only by report
+is shown at the place and time of that report. He may still order a unit
+he last heard of as broken (it may have rallied): the rider finds out,
+and the turn never waits on his orders being unreadable.
+
+**The dispatch** tells what reached him in the turn: what he heard at
+once, as before, and news by rider grouped by age, newest first, each line
+"Word from 20 min ago: ...". The marching of distant units is left out of
+it (the map shows where they are). A piece of news about one of his units
+comes with that unit's first report sent at or after it; news of the
+enemy alone with the report of a unit that saw every enemy in it. The
+battle's end, ground changing hands, and what befalls him himself he
+knows at once. The verdict tells all, and the replay (only of a finished
+battle) shows all, as before.
+
+**Turns that stop on news.** In a battle with a Commander on the field, a
+turn stops when news worth stopping for reaches a Commander: a fight,
+shooting, a rout, a sighting (an enemy he had no word of, or one come into
+his own sight), his orders carried out, a rally; and, as before, ground
+changing hands, a Commander taken or freed, the verdict, and a tick in
+which no one moved. A side with no Commander (the computer) no longer
+stops the turn for itself: otherwise every contact anywhere would stop
+the player's turn and tell him something had happened. News more than 200
+minutes old does not stop a turn. A turn still ends after an hour.
+
+**Held, and freed.** While he is held no rider reaches him and his ledger
+stands still; what he hears is his captors' (as built before: their
+side's reports, his map what the unit holding him sees), and the turn
+stops for him when it would for his captors. Free again he brings out
+where every enemy stood (as `learnFromCaptivity` does for his side), and
+his own riders' news starts again from then: what his army did while he
+was held is not told again by rider.
+
+**Cut off** (step 3). A unit no rider can reach sends no word: it is
+shown where it last was, with "Cut off. No word of them since 1 h 10 min
+into the battle", and a cross on the map. He is told once when a unit is
+cut off and once when riders get through again (`cutOff`, `inTouch`, only
+his side hears of them). Guessed: that he knows at once his riders cannot
+get through; the other reading is that he notices only when word stops
+coming. It fights on with the orders it has; an order already on the road
+to it when it was cut off still arrives.
+
+**The computer** (step 3). It has no Commander on the field. Its orders,
+in the app, come marked as from a command post (`byCommandPost`, in the
+order log, so saved battles replay them, and a battle saved before replays
+as played), and go by rider by the same rule from its best unit (best
+quality, then most men, not broken). Its knowledge is not delayed: it
+plans from everything its side has seen. That is its next step.
+
+**Measured** (`node src/harness/messenger-league.js`; 400 battles, each
+with its own seed, the twenty factions in turn on every map; red is the
+player with his Commander on the field with his elite and officers as a
+new Commander has them; blue the computer). Red played two ways: as the
+planner plays (the nearest thing to a thinking player the harness has),
+and sending everyone in every turn. "Planner, on word" is the planner
+told of the enemy only what has reached his Commander. Red's wins, before
+the change and after each step, on the same seeds:
+
+| | before | step 1 | step 2 | step 3 |
+|---|---|---|---|---|
+| Planner | 53% (210) | 52% (209) | 52% (209) | 51% (205) |
+| Planner, on word | | | 52% (208) | 51% (205) |
+| Everyone in | 43% (170) | 43% (171) | 44% (174) | 44% (177) |
+| Player turns (planner) | 15.1 | 15.1 | 14.6 | 14.5 |
+| Battle minutes (planner) | 230 | 231 | 232 | 230 |
+
+- Orders: 85% arrive at once (an army forms up within 6 tiles of its
+  Commander, and mostly stays near him); 12% go by rider; 2 to 4% cannot
+  be sent. By rider: half take 10 minutes, three in four 20 or less; the
+  longest an hour (10 min: 1414, 20: 657, 30: 292, 40: 182, 50: 43, 60: 8,
+  planner, step 3).
+- Cut off: some unit of red's was cut off at some point in 35% of battles
+  (planner; 41% sending everyone in), 2 to 3% of unit-turns; mostly a
+  unit in a fight with the enemy round it, or the Commander's own unit
+  pressed.
+- The computer's orders: about 2,000 by rider over the 400 battles,
+  median 10 minutes, the longest 50; 300 not sent.
+- So far the player is not clearly weaker: the planner's win rate fell 2
+  points over the three steps, inside the noise of 400 battles, and the
+  side that sends everyone in did no worse. The planner reads its own
+  units as they stand even "on word", so a real player, who sees his far
+  units late, will feel it more than this shows.
+
+**Guessed at:**
+- The path rule above (the 3 by 3 round an enemy; hidden enemies do not
+  block; ride into a fight but not through it).
+- That the computer, with no Commander, no longer stops a turn for
+  itself in a battle with one.
+- Grouping late news by age in the dispatch, and leaving out its marching.
+- That reports carry morale, wind and the unit's order: what an officer
+  would send back. (Reports saying more as an officer rises is not built.)
+
+**For Zach:**
+1. Should a turn stop for the computer's own news, as it did? (It now
+   stops only for the player's, so that the turn's length tells him
+   nothing he has not heard.)
+2. Should he know at once that a unit is cut off, or only notice when no
+   word comes?
+3. Should an order already on the road still reach a unit cut off after
+   it left?
+4. Armies form up inside the immediate range, so riders matter only once
+   a battle spreads. Is 6 tiles right, given that?
+5. Battles saved before this was built play back, and go on, without
+   riders: the server marks each battle it saves as played with them
+   (`riders`), and one without the mark is rebuilt with
+   `spec.messengers: false`. Should those battles take up riders from
+   their next turn instead?
