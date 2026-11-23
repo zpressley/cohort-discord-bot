@@ -552,9 +552,11 @@ const SKIRMISH = {
   SPENT: 0.4,
   // Men who come on after skirmishers they cannot catch lose this share of
   // their kit's wind a round (ARMOR, SHIELD, MOUNT staminaDrain) each tick
-  // of the chase: heavy armour and a light shield 12.5 a round, so 6 a tick
-  // at 0.5. Sphacteria and Carrhae: armoured men worn out chasing light ones.
-  CHASE: 0.5,
+  // of the chase: heavy armour and a light shield 12.5, mail and a medium
+  // shield 4, light armour and a light shield 1.5. Sphacteria and Carrhae:
+  // armoured men worn out chasing light ones. Measured (part 6): at 0.5
+  // heavy infantry won 64% against the other classic armies, at 1 60%.
+  CHASE: 1,
   // Foot that gave ground this tick shoot at this share (ruled 2026-11-21:
   // missile troops on foot shoot only standing; this is the exception the
   // proposal asks for, and 0 would keep that ruling whole). Horse archers

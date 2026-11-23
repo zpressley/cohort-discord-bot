@@ -179,11 +179,18 @@ function stepTurn(state, sideOrders = {}, { sameTurn = false } = {}) {
     const enemyAt = (tile) => enemies.some(e => samePosition(e.position, tile))
     return fallBack(unit, enemies, { map, engagementRange, stamina, enemyAt })
   }
-  // The first place on the way to a target from which a unit can shoot at it.
+  // The first place on the way to an enemy in sight from which a unit can
+  // shoot at it (in reach of its weapon, and of its own sight). Not for a
+  // place an enemy was last seen, and not where it already stands: there,
+  // with no shot, it must go on, or it would wait for ever.
   const withinShot = (unit, target) => {
+    const inSight = livingUnits(world).some(e => e.side !== unit.side && samePosition(e.position, target) &&
+      seenAtStart.get(unit.side)?.has(e.id))
+    if (!inSight) return target
     const path = findPath(map, unit.position, target)
-    const reach = ranged.missileRange(unit)
-    return path?.find(tile => tileDistance(tile, target) <= reach) ?? target
+    const reach = Math.min(ranged.missileRange(unit), visionRange(unit, map))
+    const stop = path?.find(tile => tileDistance(tile, target) <= reach)
+    return stop && !samePosition(stop, unit.position) ? stop : target
   }
   const standingFor = (unit) => {
     const standing = spec.standingOrders?.[unit.side]

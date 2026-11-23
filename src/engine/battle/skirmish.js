@@ -23,6 +23,7 @@
 const T = require('../combat/tables')
 const { missileRange } = require('../combat/ranged')
 const { tileDistance } = require('../world')
+const { visionRange } = require('../map/sight')
 
 /** Is this unit's kit a skirmisher's: a missile weapon, and light enough to run? */
 function canSkirmish(unit) {
@@ -98,7 +99,8 @@ function fallBack(unit, enemies, { map, engagementRange = 1, stamina = 1, enemyA
   if (threats.some(e => !outruns(unit, e))) return null
 
   const margin = (tile) => Math.min(...threats.map(e => tileDistance(tile, e.position) - reachOf(e, engagementRange)))
-  const range = missileRange(unit)
+  // In reach of its weapon, and of its own sight (map/sight.js).
+  const range = Math.min(missileRange(unit), visionRange(unit, map))
   const canShoot = (tile) => threats.some(e => tileDistance(tile, e.position) <= range)
   let best = null
   for (const { tile, steps } of reachable(unit, map, enemyAt)) {

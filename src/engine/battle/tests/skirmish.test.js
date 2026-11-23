@@ -150,10 +150,11 @@ test('with the edge of the field at their backs they have nowhere to go, and sta
 test('skirmishers told to press close to shooting distance, not to blows', () => {
   const state = battle([slingers({ position: { x: 10, y: 18 } }), foe({ position: { x: 10, y: 2 } })])
   stepTurn(state, { red: [{ unitRef: 'slingers', action: 'advance' }] })
-  for (let i = 0; i < 5; i++) stepTurn(state, {})
+  for (let i = 0; i < 8; i++) stepTurn(state, {})
   const gap = get(state, 'slingers').position.y - get(state, 'foe').position.y
-  assert.ok(gap >= ranged.missileRange(slingers()) - 1, `they stop ${gap} tiles off`)
+  assert.ok(gap >= 4, `they stop ${gap} tiles off`)
   assert.equal(of(state, 'contact').length, 0)
+  assert.ok(of(state, 'volley').filter(v => v.by === 'slingers').length >= 2)
 })
 
 test('a battle with no skirmisher in it has no giving ground', () => {
