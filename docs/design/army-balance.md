@@ -754,9 +754,16 @@ without A, that line merges by hand.
 - Numbers from 64 to 128 battles carry about 5 to 6 points of noise; I
   have not claimed differences smaller than about 10.
 
-## Commits on this branch
+## Where the commits are
 
-| Commit | What |
+On `main`: this report and the study scripts only. Nothing on `main`
+changes a rule. The two proposals are **not merged**; they are on the branch
+`army-balance-proposals`, under the commit names below, waiting on Zach's
+word. That branch was cut before the twenty factions, the roster and the
+messengers went in, so a proposal that is taken gets brought up to `main`
+and measured again first.
+
+| Commit (on `army-balance-proposals`) | What |
 |---|---|
 | `a559b88`, `f306d91`, `8796ae6`, `c151dd8`, `1764249`, `ce5d0e4` | The study: `src/harness/army-study/` (scripts only; `npm test` 637 of 637 on `a559b88`; the later ones touch only these scripts) |
 | `c40a656` + `b811834` | **PROPOSAL, Recommendation A** (take both) |
