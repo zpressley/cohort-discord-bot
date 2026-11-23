@@ -35,6 +35,9 @@ const STEP_SETS = {
   stand: [{ from: 4, fight: 0, stand: 0.15 }, { from: 8, fight: 0, stand: 0.3 }, { from: 13, fight: 0, stand: 0.45 }, { from: 20, fight: 0, stand: 0.6 }],
   fight: [{ from: 4, fight: 0.5, stand: 0 }, { from: 8, fight: 1, stand: 0 }, { from: 13, fight: 1.5, stand: 0 }, { from: 20, fight: 2, stand: 0 }],
   mix: [{ from: 4, fight: 0.5, stand: 0.05 }, { from: 8, fight: 1, stand: 0.1 }, { from: 13, fight: 1.5, stand: 0.15 }, { from: 20, fight: 2, stand: 0.2 }],
+  survive: [{ from: 4, survive: 0.05 }, { from: 8, survive: 0.1 }, { from: 13, survive: 0.15 }, { from: 20, survive: 0.2 }],
+  'survive+stand': [{ from: 4, survive: 0.05, stand: 0.05 }, { from: 8, survive: 0.1, stand: 0.1 }, { from: 13, survive: 0.15, stand: 0.15 }, { from: 20, survive: 0.2, stand: 0.2 }],
+  'survive+fight': [{ from: 4, survive: 0.05, fight: 0.25 }, { from: 8, survive: 0.1, fight: 0.5 }, { from: 13, survive: 0.15, fight: 0.75 }, { from: 20, survive: 0.2, fight: 1 }],
   half: [{ from: 4, fight: 0.25, stand: 0.05 }, { from: 8, fight: 0.5, stand: 0.1 }, { from: 13, fight: 0.75, stand: 0.15 }, { from: 20, fight: 1, stand: 0.2 }]
 }
 
