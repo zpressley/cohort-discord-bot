@@ -44,6 +44,8 @@ const { createCommanders, stepCommanders, canRide } = require('../command/comman
 const { byRider, riders } = require('../command/messengers')
 const { canSee, visionRange } = require('../map/sight')
 const { coverFor } = require('./hiding')
+const { canSkirmish, fallBack } = require('./skirmish')
+const R = require('../combat/ratings')
 
 const DEFAULT_MAX_TURNS = 20
 
@@ -164,6 +166,25 @@ function stepTurn(state, sideOrders = {}, { sameTurn = false } = {}) {
   const standsOff = (unit) => ranged.missileRange(unit) > 0 && !meleeLastTurn.has(unit.id) &&
     !state.orderBook.get(unit.id)?.holdFire &&
     livingUnits(world).some(e => canShootAt(unit, e, seenAtStart))
+  // Who could come at a skirmisher: enemies its side sees, formed and not
+  // already fighting.
+  const skirmishing = new Map()
+  const skirmishFrom = (unit) => {
+    if (!canSkirmish(unit)) return null
+    const seen = seenAtStart.get(unit.side) ?? new Set()
+    const enemies = livingUnits(world).filter(e => e.side !== unit.side && !broken.has(e.id) &&
+      seen.has(e.id) && !meleeLastTurn.has(e.id))
+    const pool = R.staminaPool(unit)
+    const stamina = pool > 0 ? (resolver.getState(unit.id)?.stamina ?? pool) / pool : 1
+    const enemyAt = (tile) => enemies.some(e => samePosition(e.position, tile))
+    return fallBack(unit, enemies, { map, engagementRange, stamina, enemyAt })
+  }
+  // The first place on the way to a target from which a unit can shoot at it.
+  const withinShot = (unit, target) => {
+    const path = findPath(map, unit.position, target)
+    const reach = ranged.missileRange(unit)
+    return path?.find(tile => tileDistance(tile, target) <= reach) ?? target
+  }
   const standingFor = (unit) => {
     const standing = spec.standingOrders?.[unit.side]
     return shaken(unit) ? null : standing
@@ -492,9 +513,19 @@ function stepTurn(state, sideOrders = {}, { sameTurn = false } = {}) {
       // close until they can shoot, and stand there shooting.
       const pressing = order ? order.action === 'advance' : standingFor(unit) === 'advance'
       if (pressing && standsOff(unit)) {
+        // Light men give ground before slower men coming at them, and
+        // shoot as they go (skirmish.js; a proposal, not yet ruled).
+        const back = skirmishFrom(unit)
+        if (back) {
+          skirmishing.set(unit.id, back.from)
+          orders.push({ unitId: unit.id, target: back.to, seeking: false })
+          continue
+        }
         orders.push({ unitId: unit.id, target: 'hold', seeking: true })
         continue
       }
+      // Skirmishers close to shooting distance, not to blows.
+      if (pressing && move && move.target !== 'hold' && canSkirmish(unit)) move = { ...move, target: withinShot(unit, move.target) }
       if (move) {
         const held = state.orderBook.get(unit.id)
         orders.push({
@@ -575,6 +606,24 @@ function stepTurn(state, sideOrders = {}, { sameTurn = false } = {}) {
   for (const move of movement) {
     if (move.tilesMoved > 0) reveal(move.unitId, 'moved')
     if (move.stumbledOn) reveal(move.stumbledOn, 'stumbled on', move.unitId)
+  }
+
+  // Men who gave ground are winded by it, and the log says so (only those
+  // that moved: a skirmisher hemmed in stands where it is).
+  for (const [id, from] of [...skirmishing].sort(([x], [y]) => x.localeCompare(y))) {
+    const move = movement.find(m => m.unitId === id)
+    if (!(move?.tilesMoved > 0)) { skirmishing.delete(id); continue }
+    const unit = getUnit(world, id)
+    resolver.tire(unit, T.SKIRMISH.WIND)
+    log.emit('gaveGround', turn, { unitId: id, from, to: { ...unit.position } })
+  }
+  // And men who came on after skirmishers they could not catch are winded by
+  // the chase, the more the heavier their kit: once a tick, however many ran.
+  const chasers = new Set([...skirmishing.values()].flat())
+  for (const id of [...chasers].sort()) {
+    const unit = getUnit(world, id)
+    if (!unit || unit.strength <= 0 || !(movement.find(m => m.unitId === id)?.tilesMoved > 0)) continue
+    resolver.tire(unit, T.SKIRMISH.CHASE * (R.staminaDrainPerRound(unit) - T.STAMINA.BASE_DRAIN))
   }
 
   // ── Leaving a fight ─────────────────────────────
@@ -746,7 +795,7 @@ function stepTurn(state, sideOrders = {}, { sameTurn = false } = {}) {
     const order = state.orderBook.get(shooter.id)
     if (order?.holdFire || order?.action === 'hide' || order?.action === 'ambush') continue
     const moved = movedFar.has(shooter.id)
-    if (moved && !shooter.mounted) continue
+    if (moved && !shooter.mounted && !skirmishing.has(shooter.id)) continue
 
     // (An attack on a named enemy shoots at that enemy first.)
     const first = order?.against ?? null

@@ -11,7 +11,7 @@
 const { featuresAt, detectFeatures } = require('../engine/map/features')
 const { distance } = require('../engine/map/labels')
 const { compassWord, TILE_METRES } = require('../engine/map/places')
-const { orderWords, moraleWords, ORDER, RIDER } = require('./words')
+const { orderWords, moraleWords, ORDER, RIDER, SKIRMISH_WORDS } = require('./words')
 const { gridLabel } = require('../engine/map/grid')
 
 // Where a tile is, in words: the feature it is part of, or the nearest
@@ -265,6 +265,7 @@ function plainFact(map, event) {
     case 'objective': return event.side
       ? `${capital(event.side)} took ${event.name}`
       : `${event.name} was no longer held${event.was ? ` by ${capital(event.was)}` : ''}`
+    case 'gaveGround': return SKIRMISH_WORDS.gaveGround(event.unitId, listOf(event.from))
     case 'disengage': return `${event.unitId} broke off the fight` +
       (event.orderly ? ' in good order' : '') +
       (event.killed ? `, losing ${event.killed} men to the parting blows` : ' cleanly')
@@ -304,7 +305,7 @@ const WEIGHT = {
   victory: 0, commanderKilled: 0, commanderTaken: 0, commanderFreed: 0, commanderMoved: 1, destroyed: 1, rout: 1, fled: 1, rallied: 1, pursuit: 2, ambush: 1, surprise: 2, objective: 2,
   volley: 3, lostThread: 1, reacted: 2, quarryGone: 2, ownCommand: 1, officerYielded: 0, deserted: 1, commanderRode: 1, riderBlocked: 2, riderSent: 6, cutOff: 1, inTouch: 3,
   heartened: 5,
-  revealed: 3, exchange: 3, standoff: 3, push: 4, crush: 4, disengage: 4, contact: 4,
+  revealed: 3, exchange: 3, standoff: 3, push: 4, crush: 4, disengage: 4, gaveGround: 4, contact: 4,
   hidden: 5, hideFailed: 5, checked: 5, ambushHeld: 5, crowding: 6, arrived: 6, halted: 6, move: 7
 }
 const weight = (event) => WEIGHT[event.type] ?? 5

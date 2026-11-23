@@ -240,6 +240,7 @@ function wordEvent(event) {
       return event.side
         ? `${event.side.toUpperCase()} takes ${event.name}`
         : `${event.name} is no longer held${event.was ? ` by ${event.was}` : ''}`
+    case 'gaveGround': return `${event.unitId} falls back before ${event.from.join(', ')}, keeping out of reach`
     case 'disengage':
       return `${event.unitId} breaks off from ${event.from.join(', ')}` +
         (event.orderly ? ' in good order' : '') +
