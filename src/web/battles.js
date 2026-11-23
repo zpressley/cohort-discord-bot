@@ -30,7 +30,7 @@ const { interpretText } = require('../interpreter/orders')
 const { lyingInWait } = require('../interpreter/resolve')
 const { assignOfficers } = require('../engine/command/roster')
 const { planTurn } = require('../opponent/planner')
-const { musterOfficers, settleBattle, ridesWith } = require('../engine/command/company')
+const { musterOfficers, settleBattle, ridesWith, createCompany } = require('../engine/command/company')
 const { bargainChips } = require('../engine/command/commander')
 const { createCommanderStore } = require('./commanders')
 const { digest, summarise } = require('../narrator/turnNarrator')
@@ -178,6 +178,7 @@ function createBattleStore({ dir = null, ai = null, now = () => Date.now() } = {
       // said turn by turn (for his officers' memory), and whether the
       // battle has been written into the companies.
       commanders: entry.commanders ?? {},
+      joining: entry.joining ?? null,
       said: entry.said ?? {},
       settled: Boolean(entry.settled),
       record: gameRecord(entry.game)
@@ -194,6 +195,20 @@ function createBattleStore({ dir = null, ai = null, now = () => Date.now() } = {
       const entry = { ...data, game: replayGame(data.record) }
       delete entry.record
       register(entry)
+    }
+    // What a server that stopped half way left undone: a battle decided
+    // but not yet written into its companies; an army whose Commander does
+    // not know it is in the field.
+    for (const entry of battles.values()) {
+      if (entry.game.outcome.decided && !entry.settled) {
+        settle(entry)
+        save(entry)
+      }
+      if (entry.settled) continue
+      for (const id of Object.values(entry.commanders ?? {})) {
+        const commander = commanders.byId(id)
+        if (commander && !commander.ended && commander.battle !== entry.id && !fighting(commander)) commanders.setBattle(commander, entry.id)
+      }
     }
   }
 
@@ -245,17 +260,12 @@ function createBattleStore({ dir = null, ai = null, now = () => Date.now() } = {
     // The mustering Commander's own officers lead his side. His army can
     // fight one battle at a time (ruled 2026-11-22).
     const commander = m.commander ? commanders.get(m.commander) : null
-    if (commander?.ended) {
-      throw Object.assign(new Error(`Commander ${commander.name} ${commander.ended.how === 'killed' ? 'was killed' : 'was lost'} at ${commander.ended.at}. Muster with a new Commander.`), { status: 409 })
-    }
+    let company = null   // his company with this battle's officers given out
     if (commander) {
-      const busy = fighting(commander)
-      if (busy) {
-        throw Object.assign(new Error(`${commander.name ?? 'This Commander'}'s army is in the field (${busy.title}). An army fights one battle at a time.`), { status: 409 })
-      }
+      mayLead(commander)
       const mine = spec.units.filter(u => u.side === side).map(u => ({ ...u, kind: unitName(u).toLowerCase() }))
       const led = musterOfficers(commander.company, mine, seed)
-      commanders.setCompany(commander, led.company)
+      company = led.company
       const officerOf = new Map(led.units.map(u => [u.id, u.officer]))
       // He is on the field himself, riding with his best unit (his
       // veteran's): there he can be taken, or killed.
@@ -265,7 +275,15 @@ function createBattleStore({ dir = null, ai = null, now = () => Date.now() } = {
         commanders: { [side]: { unitId: ridesWith(led.units) } }
       }
     }
-    const game = createGame(spec, { seed })
+    let game
+    try {
+      game = createGame(spec, { seed })
+    } catch (error) {
+      // Ground to hold that is not on this field, and the like: the
+      // player's to put right, not a fault of the server's.
+      const named = String(error.message).match(/no feature named "([^"]+)"/)
+      throw Object.assign(new Error(named ? `There is no "${named[1]}" on this field to hold.` : 'That battle cannot be mustered.'), { status: 400 })
+    }
     const entry = {
       id: crypto.randomBytes(6).toString('hex'),
       scenario,
@@ -279,20 +297,99 @@ function createBattleStore({ dir = null, ai = null, now = () => Date.now() } = {
       // turn runs: so a commander can see and change it.
       pending: {},
       commanders: commander ? { [side]: commander.id } : {},
+      // The friend's seat, until they choose who leads it (see join).
+      joining: solo ? null : other,
       said: {},
       settled: false,
       game
     }
     register(entry)
+    // The battle is saved before the company is touched: a battle that could
+    // not be made changes nothing, and load() mends a stop in between.
     save(entry)
-    if (commander) commanders.setBattle(commander, entry.id)
+    if (commander) {
+      commanders.setCompany(commander, company)
+      commanders.setBattle(commander, entry.id)
+    }
     return { id: entry.id, seats: Object.fromEntries(Object.entries(entry.seats).filter(([, t]) => t)) }
   }
 
   // The unfinished battle a Commander's army is in, if any.
   function fighting(commander) {
+    // In the field until the battle is written into his company, not just
+    // until it is decided: the last dispatch is written in between.
     const entry = commander.battle ? battles.get(commander.battle) : null
-    return entry && !entry.game.outcome.decided ? entry : null
+    return entry && !entry.settled ? entry : null
+  }
+
+  // A Commander who has fallen, or whose army is in the field, cannot lead.
+  function mayLead(commander) {
+    if (commander.ended) {
+      throw Object.assign(new Error(`Commander ${commander.name} ${commander.ended.how === 'killed' ? 'was killed' : 'was lost'} at ${commander.ended.at}. Muster with a new Commander.`), { status: 409 })
+    }
+    const busy = fighting(commander)
+    if (busy) {
+      throw Object.assign(new Error(`${commander.name ?? 'This Commander'}'s army is in the field (${busy.title}). An army fights one battle at a time.`), { status: 409 })
+    }
+  }
+
+  // ── The friend who joins by link ──────────────────
+
+  // Whether this seat has still to choose who leads it: the friend's seat,
+  // until they choose or the first turn has run.
+  function choosing(entry, side) {
+    return entry.joining === side && entry.game.playerTurn === 0 && !entry.game.outcome.decided
+  }
+
+  /**
+   * The friend chooses who leads their side, as the mustering player does at
+   * the muster: one of their Commanders (his company's officers lead their
+   * units, he rides with their best unit, the battle is written into his
+   * company), or none. With none they fight as a new Commander would, with
+   * a veteran on their best unit and a Commander on the field, and nothing
+   * is kept.
+   *
+   * The officers and the Commander are in the spec, and a battle is its
+   * spec, seed and order log. No turn has run yet, so the game is made again
+   * from the new spec and the order log so far (the mustering player's
+   * first orders, if sent) played back into it: the saved battle is then
+   * one spec and one log, as every battle is.
+   *
+   * @param {string} token           the friend's seat
+   * @param {string|null} commander  their Commander's token, or null for none
+   */
+  function join(token, commanderToken = null) {
+    const seat = seatOf(token)
+    if (!seat) return null
+    const { entry, side } = seat
+    if (!choosing(entry, side)) {
+      throw Object.assign(new Error('Who leads this side is settled: the battle has begun.'), { status: 409 })
+    }
+    const commander = commanderToken ? commanders.get(commanderToken) : null
+    if (commanderToken && !commander) throw Object.assign(new Error('no such commander'), { status: 404 })
+    if (commander) mayLead(commander)
+
+    const record = gameRecord(entry.game)
+    const mine = record.spec.units.filter(u => u.side === side).map(u => ({ ...u, kind: unitName(u).toLowerCase() }))
+    // A seed of the side's own, so the two sides' first veterans are not
+    // drawn alike.
+    const led = musterOfficers(commander ? commander.company : createCompany(), mine, (Math.imul(record.seed, 31) + 17) >>> 0)
+    const officerOf = new Map(led.units.map(u => [u.id, u.officer]))
+    const spec = {
+      ...record.spec,
+      units: record.spec.units.map(u => (officerOf.has(u.id) ? { ...u, officer: officerOf.get(u.id) } : u)),
+      commanders: { ...(record.spec.commanders ?? {}), [side]: { unitId: ridesWith(led.units) } }
+    }
+    entry.game = replayGame({ ...record, spec })
+    entry.joining = null
+    if (commander) {
+      commanders.setCompany(commander, led.company)
+      entry.commanders = { ...(entry.commanders ?? {}), [side]: commander.id }
+    }
+    entry.updatedAt = now()
+    save(entry)
+    if (commander) commanders.setBattle(commander, entry.id)
+    return { status: 'joined', commander: commander ? commander.name : null }
   }
 
   /** A Commander's company, and the battle his army is in (with his seat). */
@@ -445,6 +542,8 @@ function createBattleStore({ dir = null, ai = null, now = () => Date.now() } = {
       enemies,
       objectives,
       pending: entry.pending[side] ?? null,
+      // The friend has yet to choose who leads (join).
+      choosing: !atGame && choosing(entry, side),
       commander: commanderView_(game, side, atGame),
       dispatches: [...entry.dispatches[side]].reverse(),
       verdict: game.outcome.decided && !atGame
@@ -512,17 +611,46 @@ function createBattleStore({ dir = null, ai = null, now = () => Date.now() } = {
     }
     submitOrders(game, side, { bargain: unitId })
     entry.pending = {}
+    await finishTurn(entry)
+    return { status: 'finished' }
+  }
+
+  // A turn has run. The battle is saved first, then its dispatches written
+  // (which may wait on the AI), then a finished battle is written into its
+  // companies, and saved again. A server that stops in between loses at
+  // most a dispatch: load() does the rest.
+  async function finishTurn(entry) {
+    entry.updatedAt = now()
+    save(entry)
     await writeDispatches(entry)
     settle(entry)
     entry.updatedAt = now()
     save(entry)
-    return { status: 'finished' }
+  }
+
+  // One thing at a time for each battle: orders read by the AI take a
+  // moment, and a second request in that moment must not run a turn of its
+  // own or finish the battle underneath the first.
+  const lines = new Map()   // battle id -> the last request made of it
+  function inTurn(token, work) {
+    const seat = seatOf(token)
+    if (!seat) return Promise.resolve(null)
+    const last = lines.get(seat.entry.id) ?? Promise.resolve()
+    const mine = last.then(work)
+    lines.set(seat.entry.id, mine.catch(() => {}))
+    return mine
+  }
+
+  // The friend's first orders wait on their choice of who leads.
+  function mustHaveChosen(entry, side) {
+    if (choosing(entry, side)) throw Object.assign(new Error('Choose who leads your side first.'), { status: 409 })
   }
 
   /** Read orders back without sending them. */
   async function readBack(token, text) {
     const seat = seatOf(token)
     if (!seat) return null
+    mustHaveChosen(seat.entry, seat.side)
     const read = await interpretText(String(text ?? ''), context(seat.entry, seat.side), { ai })
     const name = namer(seat.entry.game, seat.side)
     return {
@@ -544,6 +672,7 @@ function createBattleStore({ dir = null, ai = null, now = () => Date.now() } = {
     const { entry, side } = seat
     const game = entry.game
     if (game.outcome.decided) return { status: 'finished' }
+    mustHaveChosen(entry, side)
 
     // A Commander in the enemy's hands sends no orders: he waits, and the
     // turn runs on the orders his units have. (He may still yield.)
@@ -575,11 +704,11 @@ function createBattleStore({ dir = null, ai = null, now = () => Date.now() } = {
 
     if (result.status !== 'waiting') {
       entry.pending = {}
-      await writeDispatches(entry)
-      settle(entry)
+      await finishTurn(entry)
+    } else {
+      entry.updatedAt = now()
+      save(entry)
     }
-    entry.updatedAt = now()
-    save(entry)
     return { status: result.status === 'waiting' ? 'waiting' : 'turn-ran', understood, notes }
   }
 
@@ -662,12 +791,13 @@ function createBattleStore({ dir = null, ai = null, now = () => Date.now() } = {
 
   return {
     muster,
+    join,
     summary,
     view,
     replay,
     readBack,
-    submit,
-    bargain,
+    submit: (token, text, options) => inTurn(token, () => submit(token, text, options)),
+    bargain: (token, unitId) => inTurn(token, () => bargain(token, unitId)),
     seatOf,
     commanders,
     commanderView,

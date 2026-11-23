@@ -43,7 +43,7 @@ test('the same officer leads the same men in the next battle, a battle older', (
   assert.equal(two.units[2].officer.experience, one.units[2].officer.experience + 1)
   assert.equal(after.battles, 1)
   assert.deepEqual(after.officers[0].record[0], { battle: 'b1', title: 'Battle 1', result: 'victory', unit: 'elite', fate: 'unhurt', deeds: 'held the ford', orders: ['hold'] })
-  assert.deepEqual(createCompany(), { officers: [], units: {}, fallen: [], battles: 0, nextId: 1 }, 'nothing is changed in place')
+  assert.deepEqual(createCompany(), { officers: [], units: {}, fallen: [], battles: 0, settled: [], nextId: 1 }, 'nothing is changed in place')
 })
 
 test('a unit earns its officer: none for two battles, one by the fourth, named and seasoned', () => {
@@ -149,3 +149,12 @@ test('the Commander rides with his most experienced officer; with none on the fi
   assert.ok(two.units.every(u => u.officer.headless), 'his veteran is wounded: no officer on the field')
   assert.equal(ridesWith(two.units), 'red_elite')
 })
+
+test('a battle written into the company twice counts once', () => {
+  const one = musterOfficers(createCompany(), units(), 7)
+  const fates = one.units.map(u => fate(u))
+  const once = settleBattle(one.company, battle(1), fates)
+  assert.deepEqual(settleBattle(once, battle(1), fates), once)
+  assert.equal(settleBattle(once, battle(2), fates).battles, 2, 'another battle still counts')
+})
+

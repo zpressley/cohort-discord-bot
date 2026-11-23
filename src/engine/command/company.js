@@ -21,6 +21,8 @@
 //   fallen    those killed or taken, as a roll: the company keeps its dead,
 //             but not what they knew
 //   battles   how many the company has fought
+//   settled   the ids of the battles already written in, so that writing
+//             one in twice (a server that stopped half way) changes nothing
 
 const { createRng } = require('../rng')
 const { PERSONALITIES, EARNED_AT } = require('./officers')
@@ -29,10 +31,10 @@ const { NAMES, PLAIN } = require('../../data/officers')
 const { QUALITY_ORDER } = require('../combat/tables')
 
 function createCompany() {
-  return { officers: [], units: {}, fallen: [], battles: 0, nextId: 1 }
+  return { officers: [], units: {}, fallen: [], battles: 0, settled: [], nextId: 1 }
 }
 
-const copy = (company) => ({ units: {}, ...JSON.parse(JSON.stringify(company)) })
+const copy = (company) => ({ units: {}, settled: [], ...JSON.parse(JSON.stringify(company)) })
 
 // What a unit with no officer takes into battle: no one.
 const HEADLESS = { headless: true, name: null, experience: 0, personality: 'steady' }
@@ -153,6 +155,8 @@ function musterOfficers(company, units, seed) {
  */
 function settleBattle(company, battle, fates) {
   const next = copy(company)
+  // Already written in: nothing changes.
+  if (battle.id != null && next.settled.includes(battle.id)) return next
   const fought = new Set(fates.map(f => f.officerId).filter(Boolean))
   const random = createRng((Math.imul((battle.seed ?? next.battles) + 1, 48271) + next.nextId) >>> 0)
   // A wounded man who sat this one out is fit again.
@@ -202,6 +206,7 @@ function settleBattle(company, battle, fates) {
     officer.status = f.fate === 'wounded' ? 'wounded' : 'fit'
   }
   next.battles += 1
+  if (battle.id != null) next.settled.push(battle.id)
   return next
 }
 

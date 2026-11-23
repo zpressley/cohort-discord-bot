@@ -165,15 +165,28 @@ test('two players by link, on desktops: the turn waits for both, then both read 
     await red.waitForSelector('#map-scroll svg')
 
     const blue = await page(browser, errors, { width: 1440, height: 900 })
-    await blue.goto(link)
-    await blue.waitForSelector('#map-scroll svg')
-    assert.match(await blue.textContent('.bar-title'), /Blue/)
-
+    // Red sends orders before the friend has even opened the link.
     await red.fill('#orders', 'everyone hold')
     await red.click('#send')
     await red.waitForSelector('.calm')
+
+    // The friend's first screen: who leads? A new Commander, in one tap.
+    await blue.goto(link)
+    await blue.waitForSelector('#who-leads')
+    assert.match(await blue.textContent('#who-leads h1'), /Who leads\?/)
+    assert.equal(await blue.locator('[data-lead]').count(), 2, 'no Commanders yet in this browser: a new one, or none')
+    if (process.env.SHOT) await blue.screenshot({ path: process.env.SHOT.replace('.png', '-who-leads-desktop.png'), fullPage: true })
+    await blue.click('[data-lead="new"]')
+    await blue.waitForSelector('#map-scroll svg')
+    assert.match(await blue.textContent('.bar-title'), /Blue/)
+    assert.equal((await blue.evaluate(() => JSON.parse(localStorage.getItem('cohort.commanders')))).length, 1, 'his link is kept in this browser')
+    await blue.click('[data-tab="army"]')
+    assert.match(await blue.textContent('#panel-body'), /You ride with them/)
+    assert.match(await blue.textContent('#panel-body'), /veteran/)
+    assert.match(await blue.textContent('#panel-body'), /No officer yet/)
     assert.match(await red.textContent('.calm'), /with the army/)
 
+    await blue.click('[data-tab="orders"]')
     await blue.fill('#orders', 'everyone advance')
     await blue.click('#send')
     await blue.waitForSelector('.dispatch')
@@ -189,6 +202,15 @@ test('two players by link, on desktops: the turn waits for both, then both read 
     // The friend's browser now lists the battle too.
     await blue.goto(base + '/battles')
     await blue.waitForSelector('.battle-link')
+    // And his Commander, whose army is in the field.
+    await blue.goto(base + '/officers')
+    await blue.waitForSelector('.commander')
+    assert.match(await blue.textContent('main'), /His army is in the field/)
+
+    // Choosing is the friend's alone, and only once: the link opens the tent now.
+    await blue.goto(link)
+    await blue.waitForSelector('#map-scroll svg')
+    assert.equal(await blue.locator('#who-leads').count(), 0)
   })
 })
 

@@ -79,6 +79,7 @@ test('two players by link: the turn waits for both, and orders can change until 
     assert.match((await app.api('GET', `/api/seat/${seats.red}`)).body.pending.text, /hold/)
 
     await app.api('POST', `/api/seat/${seats.red}/orders`, { text: 'everyone advance' })
+    await app.api('POST', `/api/seat/${seats.blue}/join`, { commander: null })
     const blue = (await app.api('POST', `/api/seat/${seats.blue}/orders`, { text: 'everyone hold' })).body
     assert.equal(blue.status, 'turn-ran')
     red = (await app.api('GET', `/api/seat/${seats.red}/summary`)).body
@@ -547,3 +548,316 @@ test('held, the Commander can still yield the battle; a body that is not an obje
   } finally { await app.close() }
 })
 
+
+// ── The friend brings a Commander too ──────────────────
+
+// A two-player battle: the mustering player's Commander on red, the
+// friend's (made here) waiting to be chosen for blue.
+async function twoCommanders(app, seed = 3) {
+  const red = (await app.api('POST', '/api/commanders')).body
+  const blue = (await app.api('POST', '/api/commanders')).body
+  const seats = (await app.api('POST', '/api/battles', { opponent: 'friend', side: 'red', seed, commander: red.token })).body.seats
+  return { red, blue, seats }
+}
+
+// Both sides send orders until the battle ends.
+async function fightBoth(app, seats) {
+  let tent
+  for (let i = 0; i < 80; i++) {
+    await app.api('POST', `/api/seat/${seats.red}/orders`, { text: i === 0 ? 'everyone advance' : '' })
+    await app.api('POST', `/api/seat/${seats.blue}/orders`, { text: i === 0 ? 'everyone advance' : '' })
+    tent = (await app.api('GET', `/api/seat/${seats.blue}`)).body
+    if (tent.battle.status === 'finished') break
+  }
+  assert.equal(tent.battle.status, 'finished')
+  return tent
+}
+
+test('the friend chooses who leads before their first orders: their company\'s officers lead their side, and their Commander rides with their best unit', async () => {
+  const app = await start()
+  try {
+    const { blue, seats } = await twoCommanders(app)
+    const before = (await app.api('GET', `/api/seat/${seats.blue}`)).body
+    assert.equal(before.choosing, true)
+    assert.equal(before.commander, null, 'no one leads yet')
+    assert.equal((await app.api('GET', `/api/seat/${seats.red}`)).body.choosing, false, 'the mustering player chose at the muster')
+    assert.equal((await app.api('POST', `/api/seat/${seats.blue}/orders`, { text: 'everyone advance' })).status, 409, 'no orders before the choice')
+    assert.equal((await app.api('POST', `/api/seat/${seats.blue}/read`, { text: 'everyone advance' })).status, 409)
+
+    const joined = await app.api('POST', `/api/seat/${seats.blue}/join`, { commander: blue.token })
+    assert.deepEqual(joined.body, { status: 'joined', commander: blue.name })
+    const tent = (await app.api('GET', `/api/seat/${seats.blue}`)).body
+    const company = (await app.api('GET', `/api/commander/${blue.token}`)).body
+    assert.equal(tent.choosing, false)
+    assert.deepEqual(company.officers.map(o => [o.leads, o.grade]), [['spears', 'veteran']], 'a new Commander\'s one veteran, with the best unit')
+    assert.equal(tent.own[0].officer.name, company.officers[0].name)
+    assert.deepEqual(tent.own.slice(1).map(u => u.officer), [{ headless: true }, { headless: true }, { headless: true }])
+    assert.deepEqual(tent.commander, { status: 'free', unitId: tent.own[0].id, with: 'Spears', heldBy: null, chips: [] })
+    assert.deepEqual(company.battle, { title: 'Crownhill: the meeting battle', seat: seats.blue }, 'his army is in the field')
+    assert.equal((await app.api('POST', `/api/seat/${seats.blue}/orders`, { text: 'everyone advance' })).status, 200)
+  } finally { await app.close() }
+})
+
+test('a Commander who has fallen, or whose army is in the field, cannot be chosen to lead the friend\'s side', async () => {
+  const store = createBattleStore({})
+  const app = await start(store)
+  try {
+    const { red, blue, seats } = await twoCommanders(app)
+    const busy = await app.api('POST', `/api/seat/${seats.blue}/join`, { commander: red.token })
+    assert.equal(busy.status, 409, 'red\'s army is in this very battle')
+    assert.match(busy.body.error, /army is in the field/)
+    store.commanders.end(store.commanders.get(blue.token), { how: 'killed', at: 'Ashford' })
+    const fallen = await app.api('POST', `/api/seat/${seats.blue}/join`, { commander: blue.token })
+    assert.equal(fallen.status, 409)
+    assert.match(fallen.body.error, /was killed at Ashford/)
+    assert.equal((await app.api('POST', `/api/seat/${seats.blue}/join`, { commander: 'not-a-real-token' })).status, 404)
+    assert.equal((await app.api('GET', `/api/seat/${seats.blue}`)).body.choosing, true, 'still theirs to choose')
+    assert.equal((await app.api('POST', `/api/seat/${seats.red}/join`, { commander: null })).status, 409, 'the mustering seat chose at the muster')
+  } finally { await app.close() }
+})
+
+test('the friend\'s army is in the field until the battle ends, and the battle is written into both companies', async () => {
+  const app = await start()
+  try {
+    const { red, blue, seats } = await twoCommanders(app)
+    await app.api('POST', `/api/seat/${seats.blue}/join`, { commander: blue.token })
+    const elsewhere = await app.api('POST', '/api/battles', { opponent: 'standing', side: 'red', seed: 4, commander: blue.token })
+    assert.equal(elsewhere.status, 409, 'an army fights one battle at a time')
+
+    const tent = await fightBoth(app, seats)
+    assert.equal(tent.verdict.company, true)
+    for (const c of [red, blue]) {
+      const company = (await app.api('GET', `/api/commander/${c.token}`)).body
+      assert.equal(company.battles, 1, `${c.name}'s company fought it`)
+      assert.equal(company.battle, null, 'and his army is home')
+      const veteran = company.officers.find(o => o.leads === 'spears')
+      if (veteran) assert.equal(veteran.record[0].title, 'Crownhill: the meeting battle')
+      else assert.ok(company.fallen.some(f => f.led === 'spears') || company.ended)
+    }
+    const redTent = (await app.api('GET', `/api/seat/${seats.red}`)).body
+    assert.ok(tent.verdict.commander && redTent.verdict.commander, 'each seat\'s verdict tells its own Commander\'s fate')
+    const again = await app.api('POST', '/api/battles', { opponent: 'standing', side: 'red', seed: 5, commander: blue.token })
+    assert.equal(again.status, (await app.api('GET', `/api/commander/${blue.token}`)).body.ended ? 409 : 201, 'home again, he can muster')
+  } finally { await app.close() }
+})
+
+test('a battle joined after the mustering player sent orders replays identically after a restart', async () => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'cohort-web-'))
+  let app
+  try {
+    app = await start(createBattleStore({ dir }))
+    const { blue, seats } = await twoCommanders(app, 9)
+    assert.equal((await app.api('POST', `/api/seat/${seats.red}/orders`, { text: 'everyone advance' })).body.status, 'waiting')
+    await app.api('POST', `/api/seat/${seats.blue}/join`, { commander: blue.token })
+    assert.match((await app.api('GET', `/api/seat/${seats.red}`)).body.pending.text, /advance/, 'the orders sent before are still in')
+    assert.equal((await app.api('POST', `/api/seat/${seats.blue}/orders`, { text: 'everyone hold' })).body.status, 'turn-ran')
+    const first = (await app.api('GET', `/api/seat/${seats.red}`)).body
+    assert.ok(first.own.every(u => /advancing/.test(u.order)), 'red\'s first orders were carried into the new game')
+    for (let i = 0; i < 3; i++) {
+      await app.api('POST', `/api/seat/${seats.red}/orders`, { text: '' })
+      await app.api('POST', `/api/seat/${seats.blue}/orders`, { text: '' })
+    }
+    const before = { red: (await app.api('GET', `/api/seat/${seats.red}`)).body, blue: (await app.api('GET', `/api/seat/${seats.blue}`)).body }
+    await app.close()
+
+    app = await start(createBattleStore({ dir }))
+    const after = { red: (await app.api('GET', `/api/seat/${seats.red}`)).body, blue: (await app.api('GET', `/api/seat/${seats.blue}`)).body }
+    assert.deepEqual(after, before, 'the same battle, rebuilt from one spec and one order log')
+  } finally {
+    await app?.close()
+    fs.rmSync(dir, { recursive: true, force: true })
+  }
+})
+
+test('the choice of who leads is closed once the first turn has run', async () => {
+  const app = await start()
+  try {
+    const { blue, seats } = await twoCommanders(app)
+    await app.api('POST', `/api/seat/${seats.blue}/join`, { commander: null })
+    assert.equal((await app.api('POST', `/api/seat/${seats.blue}/join`, { commander: blue.token })).status, 409, 'chosen once')
+    await app.api('POST', `/api/seat/${seats.red}/orders`, { text: 'everyone hold' })
+    await app.api('POST', `/api/seat/${seats.blue}/orders`, { text: 'everyone hold' })
+    assert.equal((await app.api('POST', `/api/seat/${seats.blue}/join`, { commander: blue.token })).status, 409)
+
+    // The mustering player yields before the friend has chosen: the battle
+    // is over, and there is nothing left to choose.
+    const other = await twoCommanders(app)
+    await app.api('POST', `/api/seat/${other.seats.red}/orders`, { text: 'yield' })
+    const late = await app.api('POST', `/api/seat/${other.seats.blue}/join`, { commander: other.blue.token })
+    assert.equal(late.status, 409)
+    assert.equal((await app.api('GET', `/api/seat/${other.seats.blue}`)).body.choosing, false)
+    assert.equal((await app.api('GET', `/api/commander/${other.blue.token}`)).body.battle, null, 'his army never took the field')
+  } finally { await app.close() }
+})
+
+test('a seat with no Commander fights as a new Commander would, and nothing is kept', async () => {
+  const app = await start()
+  try {
+    const { seats } = await twoCommanders(app)
+    assert.deepEqual((await app.api('POST', `/api/seat/${seats.blue}/join`, { commander: null })).body, { status: 'joined', commander: null })
+    const tent = (await app.api('GET', `/api/seat/${seats.blue}`)).body
+    assert.equal(tent.own[0].officer.grade, 'veteran')
+    assert.deepEqual(tent.own.slice(1).map(u => u.officer), [{ headless: true }, { headless: true }, { headless: true }])
+    assert.equal(tent.commander.status, 'free', 'and a Commander on the field, who can fall as the other can')
+    const ended = await fightBoth(app, seats)
+    assert.equal(ended.verdict.company, false)
+  } finally { await app.close() }
+})
+
+test('a seat never receives the other side\'s company or Commander', async () => {
+  const app = await start()
+  try {
+    const { red, blue, seats } = await twoCommanders(app, 5)
+    await app.api('POST', `/api/seat/${seats.blue}/join`, { commander: blue.token })
+    const names = async (c) => {
+      const company = (await app.api('GET', `/api/commander/${c.token}`)).body
+      return [c.name, ...company.officers.map(o => o.name)]
+    }
+    const redNames = await names(red)
+    const blueNames = await names(blue)
+    const check = async () => {
+      const r = JSON.stringify((await app.api('GET', `/api/seat/${seats.red}`)).body)
+      const b = JSON.stringify((await app.api('GET', `/api/seat/${seats.blue}`)).body)
+      for (const n of blueNames.filter(n => !redNames.includes(n))) assert.equal(r.includes(n), false, `red is never told of ${n}`)
+      for (const n of redNames.filter(n => !blueNames.includes(n))) assert.equal(b.includes(n), false, `blue is never told of ${n}`)
+      assert.equal(r.includes(blue.token) || b.includes(red.token), false, 'nor the other Commander\'s link')
+    }
+    await check()
+    await fightBoth(app, seats)
+    await check()
+  } finally { await app.close() }
+})
+
+test('both Commanders killed: a draw, each side told its own fate, and both companies end', async () => {
+  const store = createBattleStore({})
+  const app = await start(store)
+  try {
+    const { red, blue, seats } = await twoCommanders(app)
+    await app.api('POST', `/api/seat/${seats.blue}/join`, { commander: blue.token })
+    const game = store.seatOf(seats.red).entry.game
+    game.battle.commanders.red.status = 'killed'
+    game.battle.commanders.blue.status = 'killed'
+    await app.api('POST', `/api/seat/${seats.red}/orders`, { text: '' })
+    await app.api('POST', `/api/seat/${seats.blue}/orders`, { text: '' })
+    for (const [side, c] of [['red', red], ['blue', blue]]) {
+      const tent = (await app.api('GET', `/api/seat/${seats[side]}`)).body
+      assert.deepEqual([tent.battle.outcome.winner, tent.battle.outcome.reason], ['draw', 'both commanders killed'])
+      assert.deepEqual(tent.verdict.commander, { fate: 'killed', price: null })
+      assert.deepEqual((await app.api('GET', `/api/commander/${c.token}`)).body.ended, { how: 'killed', at: 'Crownhill: the meeting battle' })
+    }
+  } finally { await app.close() }
+})
+
+test('a server that stops between a battle ending and its being written down loses nothing and counts nothing twice', async () => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'cohort-web-'))
+  let app
+  try {
+    app = await start(createBattleStore({ dir }))
+    const commander = (await app.api('POST', '/api/commanders')).body.token
+    const seat = (await app.api('POST', '/api/battles', { opponent: 'standing', side: 'red', seed: 3, commander })).body.seats.red
+    await fight(app, seat)
+    const after = (await app.api('GET', `/api/commander/${commander}`)).body
+    assert.equal(after.battles, 1)
+    await app.close()
+    app = null
+
+    // As if it had stopped with the battle saved, decided, but not yet
+    // marked as written into the company (which it had been).
+    const file = fs.readdirSync(dir).filter(n => n.endsWith('.json')).map(n => path.join(dir, n))[0]
+    fs.writeFileSync(file, JSON.stringify({ ...JSON.parse(fs.readFileSync(file, 'utf8')), settled: false }))
+    app = await start(createBattleStore({ dir }))
+    assert.deepEqual((await app.api('GET', `/api/commander/${commander}`)).body, after, 'written in once, not twice')
+    assert.equal(JSON.parse(fs.readFileSync(file, 'utf8')).settled, true, 'and the battle knows it now')
+    await app.close()
+    app = null
+
+    // As if it had stopped with the company not yet written at all.
+    const commanderFile = path.join(dir, 'commanders', fs.readdirSync(path.join(dir, 'commanders'))[0])
+    const saved = JSON.parse(fs.readFileSync(commanderFile, 'utf8'))
+    const untouched = { ...saved, battle: JSON.parse(fs.readFileSync(file, 'utf8')).id, company: { ...saved.company, battles: 0, settled: [], officers: saved.company.officers.map(o => ({ ...o, record: [] })) } }
+    fs.writeFileSync(commanderFile, JSON.stringify(untouched))
+    fs.writeFileSync(file, JSON.stringify({ ...JSON.parse(fs.readFileSync(file, 'utf8')), settled: false }))
+    app = await start(createBattleStore({ dir }))
+    const mended = (await app.api('GET', `/api/commander/${commander}`)).body
+    assert.equal(mended.battles, 1, 'the battle is written in as the server comes up')
+    assert.equal(mended.battle, null, 'and his army is home')
+  } finally {
+    await app?.close()
+    fs.rmSync(dir, { recursive: true, force: true })
+  }
+})
+
+test('an army in a battle the server forgot to tell its Commander of is still in the field after a restart', async () => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'cohort-web-'))
+  let app
+  try {
+    app = await start(createBattleStore({ dir }))
+    const commander = (await app.api('POST', '/api/commanders')).body.token
+    await app.api('POST', '/api/battles', { opponent: 'standing', side: 'red', seed: 3, commander })
+    await app.close()
+    app = null
+    const commanderFile = path.join(dir, 'commanders', fs.readdirSync(path.join(dir, 'commanders'))[0])
+    fs.writeFileSync(commanderFile, JSON.stringify({ ...JSON.parse(fs.readFileSync(commanderFile, 'utf8')), battle: null }))
+
+    app = await start(createBattleStore({ dir }))
+    assert.equal((await app.api('POST', '/api/battles', { opponent: 'standing', side: 'red', seed: 4, commander })).status, 409)
+  } finally {
+    await app?.close()
+    fs.rmSync(dir, { recursive: true, force: true })
+  }
+})
+
+test('a Commander cannot muster again while his last battle is still being written down, nor after dying in it', async () => {
+  // An AI that takes its time over the last dispatch.
+  const ai = { configured: true, complete: () => new Promise(resolve => setTimeout(() => resolve({ ok: false }), 200)) }
+  const store = createBattleStore({ ai })
+  const app = await start(store)
+  try {
+    const commander = (await app.api('POST', '/api/commanders')).body.token
+    const seat = (await app.api('POST', '/api/battles', { opponent: 'standing', side: 'red', seed: 3, commander })).body.seats.red
+    store.seatOf(seat).entry.game.battle.commanders.red.status = 'killed'
+    const lastTurn = app.api('POST', `/api/seat/${seat}/orders`, { text: '' })
+    await new Promise(resolve => setTimeout(resolve, 50))
+    assert.equal((await app.api('GET', `/api/seat/${seat}/summary`)).body.status, 'finished', 'the battle is decided')
+    const during = await app.api('POST', '/api/battles', { opponent: 'standing', side: 'red', seed: 4, commander })
+    assert.equal(during.status, 409, 'but not yet written down: his army is not home')
+    await lastTurn
+    const afterwards = await app.api('POST', '/api/battles', { opponent: 'standing', side: 'red', seed: 4, commander })
+    assert.equal(afterwards.status, 409)
+    assert.match(afterwards.body.error, /was killed/)
+  } finally { await app.close() }
+})
+
+test('a battle that cannot be mustered leaves the company as it was', async () => {
+  const app = await start()
+  try {
+    const commander = (await app.api('POST', '/api/commanders')).body.token
+    const before = (await app.api('GET', `/api/commander/${commander}`)).body
+    const refused = await app.api('POST', '/api/battles', { opponent: 'standing', side: 'red', seed: 3, commander, objectives: ['nowhere at all'] })
+    assert.equal(refused.status, 400)
+    assert.equal(refused.body.error, 'There is no "nowhere at all" on this field to hold.')
+    assert.deepEqual((await app.api('GET', `/api/commander/${commander}`)).body, before)
+  } finally { await app.close() }
+})
+
+test('two requests at once for one battle run one after the other, never a turn each underneath the other', async () => {
+  const ai = { configured: true, complete: () => new Promise(resolve => setTimeout(() => resolve({ ok: false }), 100)) }
+  const store = createBattleStore({ ai })
+  const app = await start(store)
+  try {
+    const commander = (await app.api('POST', '/api/commanders')).body.token
+    const seat = (await app.api('POST', '/api/battles', { opponent: 'standing', side: 'red', seed: 3, commander })).body.seats.red
+    Object.assign(store.seatOf(seat).entry.game.battle.commanders.red, { status: 'held', heldBy: 'blue_swords' })
+    const spears = (await app.api('GET', `/api/seat/${seat}`)).body.commander.chips.find(c => c.name === 'Spears').id
+    // He waits, and bargains before the wait's dispatch is written.
+    const [waited, bargained] = await Promise.all([
+      app.api('POST', `/api/seat/${seat}/orders`, { text: '' }),
+      app.api('POST', `/api/seat/${seat}/bargain`, { unit: spears })
+    ])
+    assert.equal(waited.body.status, 'turn-ran')
+    assert.equal(bargained.body.status, 'finished')
+    const tent = (await app.api('GET', `/api/seat/${seat}`)).body
+    assert.deepEqual(tent.dispatches.map(d => d.turn), [...new Set(tent.dispatches.map(d => d.turn))], 'each turn told once')
+    assert.equal((await app.api('GET', `/api/commander/${commander}`)).body.battles, 1)
+  } finally { await app.close() }
+})
