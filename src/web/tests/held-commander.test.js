@@ -30,11 +30,11 @@ async function start(store = createBattleStore({})) {
 
 // A battle between two players in which red's Commander is taken in the
 // fighting, not by hand, so that the saved battle holds it: Macedon on
-// red, seed 7, both sides sending everyone in; he is taken with the battle
+// red, seed 646, both sides sending everyone in; he is taken with the battle
 // still on, and is held a turn later (found by search).
 async function takenInBattle(app) {
   const red = (await app.api('POST', '/api/commanders', { faction: 'macedon' })).body
-  const seats = (await app.api('POST', '/api/battles', { opponent: 'friend', side: 'red', seed: 7, commander: red.token, faction: 'macedon' })).body.seats
+  const seats = (await app.api('POST', '/api/battles', { opponent: 'friend', side: 'red', seed: 646, commander: red.token, faction: 'macedon' })).body.seats
   // Blue brings a Commander of Rome, so that both armies are fixed and the
   // battle is the same one whatever faction the lot would have given him.
   const blue = (await app.api('POST', '/api/commanders', { faction: 'rome' })).body

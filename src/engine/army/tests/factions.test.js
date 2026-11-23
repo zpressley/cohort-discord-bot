@@ -1,9 +1,10 @@
 // src/engine/army/tests/factions.test.js
 //
-// Factions at the muster: each faction's default army is bought within its
-// culture's budget and kit through the builder, its elite unit is its own
-// and free, its units have names a player can type, and it forms up on
-// every map.
+// Factions at the muster: every faction in the owner's doc
+// (docs/Context/final_20_cultures_complete.txt) has an entry with the doc's
+// elite unit; each default army is bought within its culture's budget and
+// kit through the builder, its elite unit is its own and free, its units
+// have names a player can type, and it forms up on every map.
 
 const { test } = require('node:test')
 const assert = require('node:assert/strict')
@@ -17,8 +18,56 @@ const { leadUnit, musterOfficers, ridesWith, createCompany } = require('../../co
 const { loadScenario, SCENARIOS, mapChoices } = require('../../../adapters/hotseat/scenarios')
 const { resolveUnitReference } = require('../../movement/unitResolver')
 const { createGame } = require('../../orchestrator')
+const { NAMES } = require('../../../data/officers')
+const fs = require('node:fs')
+const path = require('node:path')
 
 const keys = Object.keys(FACTIONS)
+
+// The doc's cultures: "### **1. ROMAN REPUBLIC**", then the elite as
+// "**PRAETORIAN GUARD** (80 elite legionnaires)".
+const DOC = fs.readFileSync(path.resolve(__dirname, '../../../../docs/Context/final_20_cultures_complete.txt'), 'utf8')
+const docCultures = DOC.split(/^### \*\*\d+\. /m).slice(1).map(part => {
+  const elite = part.match(/\*\*([^*]+)\*\* \((\d+)/)
+  return { heading: part.split('**')[0].trim(), elite: elite[1], size: Number(elite[2]) }
+})
+const words = (text) => text.toLowerCase().replace(/[^a-z]+/g, ' ').trim().split(' ').map(w => w.replace(/s$/, ''))
+// A faction's elite is the doc's when every word of its name is in the doc's.
+const isDocElite = (name, doc) => words(name).every(w => words(doc.elite).includes(w))
+
+test('every faction in the owner\'s doc has an entry, with the doc\'s elite unit at the doc\'s size', () => {
+  assert.equal(docCultures.length, 20)
+  assert.equal(keys.length, 20)
+  for (const doc of docCultures) {
+    const matched = keys.filter(k => isDocElite(FACTIONS[k].elite.name, doc))
+    assert.equal(matched.length, 1, `${doc.heading}: one faction with the ${doc.elite}`)
+    assert.equal(FACTIONS[matched[0]].elite.size, doc.size, `${doc.heading}: ${doc.size} men`)
+    assert.ok(FACTIONS[matched[0]].fights && FACTIONS[matched[0]].title, doc.heading)
+  }
+})
+
+test('Macedon\'s elite is the Silver Shields, on foot', () => {
+  const elite = factionUnits('macedon', 'red').find(u => u.quality === 'elite')
+  assert.equal(elite.id, 'red_silver_shields')
+  assert.equal(elite.mounted, false)
+})
+
+test('the builder has every faction\'s culture: its budget as the doc gives it, and officers\' names for it', () => {
+  for (const key of keys) {
+    const culture = FACTIONS[key].culture
+    assert.ok(culture in D.SP_BUDGETS, `${culture} has a budget`)
+    const names = NAMES[culture]
+    assert.ok(names && names.length >= 12, `${culture} has officers' names`)
+    assert.equal(new Set(names).size, names.length, `${culture}: no two names alike`)
+    assert.ok(names.every(n => /^[A-Z][a-z]+$/.test(n)), `${culture}: one plain word each`)
+  }
+  // "Begin with 25 SP instead of 30", "only 26 SP", "32 total vs 30 standard".
+  assert.equal(D.SP_BUDGETS['Silla Kingdom'], 25)
+  assert.equal(D.SP_BUDGETS['Tibetan Kingdoms'], 25)
+  assert.equal(D.SP_BUDGETS['Samnite Federation'], 26)
+  assert.equal(D.SP_BUDGETS['Carthaginian Empire'], 32)
+  assert.equal(D.SP_BUDGETS['Spartan City-State'], 25)
+})
 
 test('every faction\'s default army is legal under the builder: its budget, and only kit its culture may field', () => {
   assert.ok(keys.length >= 3)
@@ -63,7 +112,8 @@ test('the elite unit is free and is the faction\'s own: one per army, raised at 
     assert.equal(elite.primaryWeapon, kit.weapon)
     assert.equal(elite.armor, kit.armor)
     assert.equal(elite.mounted, Boolean(kit.mounted))
-    assert.equal(elite.strength, T.QUALITY_TIERS.elite.size)
+    assert.equal(elite.strength, kit.size ?? T.QUALITY_TIERS.elite.size)
+    assert.equal(elite.maxStrength, elite.strength)
     assert.equal(elite.culture, FACTIONS[key].culture)
     // Free: the bill is the bought units' alone.
     const bill = buildArmy({ culture: FACTIONS[key].culture, units: FACTIONS[key].army }).army.usedSP
@@ -97,7 +147,7 @@ test('unit names are distinct; two of a kind are numbered, and the name alone or
   const macedon = factionUnits('macedon', 'red')
   assert.deepEqual(macedon.filter(u => u.id.startsWith('red_sarissa_foot')).map(u => u.id), ['red_sarissa_foot_1', 'red_sarissa_foot_2'])
   assert.deepEqual(resolveUnitReference('sarissa foot', macedon).units.map(u => u.id), ['red_sarissa_foot_1', 'red_sarissa_foot_2'])
-  assert.deepEqual(resolveUnitReference('companions', macedon).units.map(u => u.id), ['red_companions'])
+  assert.deepEqual(resolveUnitReference('silver shields', macedon).units.map(u => u.id), ['red_silver_shields'])
 })
 
 test('built units are sorted by the computer as it expects: horse are mounted, missile troops shoot', () => {
@@ -105,17 +155,23 @@ test('built units are sorted by the computer as it expects: horse are mounted, m
   assert.ok(sarmatia.filter(u => u.id.includes('horse_archers')).every(u => u.mounted && missileRange(u) > 0 && u.movementRange === 5))
   const han = factionUnits('han', 'red')
   assert.ok(han.filter(u => u.id.includes('crossbows')).every(u => !u.mounted && missileRange(u) > 0 && u.role === 'archers'))
-  const companions = factionUnits('macedon', 'red').find(u => u.quality === 'elite')
-  assert.equal(companions.mounted, true)
-  assert.equal(companions.role, 'cavalry')
+  const riders = factionUnits('sarmatia', 'red').find(u => u.quality === 'elite')
+  assert.equal(riders.mounted, true)
+  assert.equal(riders.role, 'cavalry')
+  assert.ok(factionUnits('sarmatia', 'red').every(u => u.mounted), 'no foot for the Sarmatians')
+  const bows = factionUnits('kush', 'red').find(u => u.quality === 'elite')
+  assert.ok(!bows.mounted && missileRange(bows) > 0 && bows.role === 'archers', 'the Golden Bows shoot')
   assert.equal(factionUnits('rome', 'red').find(u => u.quality === 'elite').role, 'heavy_infantry')
 })
 
 test('faction armies form up on every map, where the scenario puts each side, and a game can be made', () => {
-  for (const map of mapChoices().map(m => m.id)) {
+  // Every faction, on each side in turn: the factions two by two.
+  const pairs = keys.filter((_, i) => i % 2 === 0).map((k, i) => [k, keys[2 * i + 1]])
+  mapChoices().map(m => m.id).forEach((map, m) => {
     for (const scenario of Object.keys(SCENARIOS)) {
       const base = loadScenario(scenario, { map, deploy: true })
-      for (const [red, blue] of [['rome', 'sarmatia'], ['macedon', 'han']]) {
+      for (const [a, b] of pairs) {
+        const [red, blue] = m % 2 ? [b, a] : [a, b]
         const spec = fieldFactions(base, { red, blue })
         const at = new Set(spec.units.map(u => `${u.position.x},${u.position.y}`))
         assert.equal(at.size, spec.units.length, `${map}: no two units on one tile`)
@@ -128,7 +184,7 @@ test('faction armies form up on every map, where the scenario puts each side, an
         assert.doesNotThrow(() => createGame(spec, { seed: 1 }))
       }
     }
-  }
+  })
 })
 
 test('changing one side\'s faction leaves the other side\'s army where it stands', () => {
@@ -145,6 +201,6 @@ test('the enemy\'s faction, when none is chosen, is another faction, the same fo
       assert.equal(enemyFaction(key, seed), enemyFaction(key, seed))
     }
   }
-  const drawn = new Set(Array.from({ length: 60 }, (_, s) => enemyFaction('rome', s + 1)))
+  const drawn = new Set(Array.from({ length: 300 }, (_, s) => enemyFaction('rome', s + 1)))
   assert.equal(drawn.size, keys.length - 1, 'each of the others comes up')
 })

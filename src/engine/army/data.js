@@ -35,7 +35,22 @@ const SP_BUDGETS = {
   'Kingdom of Kush': 30,
   'Berber Confederations': 30,
   'Sarmatian Confederations': 30,
-  'Han Dynasty': 30
+  'Han Dynasty': 30,
+  // The twenty cultures (docs/Context/final_20_cultures_complete.txt): the
+  // doc's own numbers where it gives one ("begin with 25 SP instead of 30",
+  // "only 26 SP"), the standard 30 where it gives none.
+  'Mauryan Empire': 30,
+  'Silla Kingdom': 25,
+  'Achaemenid Persian': 30,
+  'Parthian Empire': 30,
+  'Germanic Tribes': 30,
+  'Thracian Odrysians': 30,
+  'Samnite Federation': 26,
+  'Tibetan Kingdoms': 25,
+  'Pre-Genghis Mongolia': 30,
+  'Celtic Tribes': 30,
+  'Bactrian Greeks': 30,
+  'Yayoi Period Japan': 30
 }
 const DEFAULT_SP_BUDGET = 30
 
@@ -48,7 +63,10 @@ const TRIBAL_CULTURES = [
   'Germanic Tribes',
   'Berber Confederations',
   'Sarmatian Confederations',
-  'Thracian Odrysians'
+  'Thracian Odrysians',
+  // The twenty cultures doc: the Mongols before Genghis were a confederation
+  // of tribes, as the Sarmatians and Berbers are here.
+  'Pre-Genghis Mongolia'
 ]
 
 // [salvage] armyData weapon costs and permissions, all 39, verbatim.
@@ -72,7 +90,8 @@ const WEAPONS = {
   battle_axe: { sp: 2, stacking: 'primary', cavalryCompatible: false, cultures: 'all' },
   mace: { sp: 2, stacking: 'primary', cultures: 'all' },
   sword_standard: { sp: 2, stacking: 'primary', cultures: 'all' },
-  roman_gladius: { sp: 2, stacking: 'primary', cavalryCompatible: false, cultures: ['Roman Republic'] },
+  // The twenty cultures doc arms the Samnites' elite with "short swords (gladii)".
+  roman_gladius: { sp: 2, stacking: 'primary', cavalryCompatible: false, cultures: ['Roman Republic', 'Samnite Federation'] },
   greek_xiphos: { sp: 2, stacking: 'primary', cavalryCompatible: false, cultures: ['Spartan City-State', 'Macedonian Kingdoms'] },
   chinese_dao: { sp: 2, stacking: 'primary', cultures: ['Han Dynasty'] },
   celtic_longsword: { sp: 2, stacking: 'primary', cultures: ['Celtic Tribes'] },
@@ -81,12 +100,14 @@ const WEAPONS = {
   two_handed_spear: { sp: 3, stacking: 'two_handed', minQuality: 'professional', shieldRestriction: 'no_shield', cavalryCompatible: false, cultures: 'all' },
   heavy_mace: { sp: 3, stacking: 'two_handed', minQuality: 'professional', shieldRestriction: 'no_shield', cavalryCompatible: false, cultures: 'all' },
   great_axe: { sp: 3, stacking: 'two_handed', minQuality: 'professional', shieldRestriction: 'no_shield', cavalryCompatible: false, cultures: 'all' },
-  macedonian_sarissa: { sp: 3, stacking: 'two_handed', shieldRestriction: 'no_shield', cavalryCompatible: false, cultures: ['Macedonian Kingdoms'] },
+  // The twenty cultures doc: the Bactrian Greeks field "Greek phalanx gear" and cataphracts.
+  macedonian_sarissa: { sp: 3, stacking: 'two_handed', shieldRestriction: 'no_shield', cavalryCompatible: false, cultures: ['Macedonian Kingdoms', 'Bactrian Greeks'] },
   thracian_rhomphaia: { sp: 3, stacking: 'two_handed', shieldRestriction: 'no_shield', cavalryCompatible: false, cultures: ['Thracian Odrysians'] },
   celtic_champions_sword: { sp: 3, stacking: 'two_handed', shieldRestriction: 'no_shield', cavalryCompatible: false, cultures: ['Celtic Tribes'] },
   chinese_chang_dao: { sp: 3, stacking: 'two_handed', shieldRestriction: 'no_shield', cavalryCompatible: false, cultures: ['Han Dynasty'] },
   germanic_framea: { sp: 3, stacking: 'two_handed', shieldRestriction: 'no_shield', cavalryCompatible: false, cultures: ['Germanic Tribes'] },
-  persian_kontos: { sp: 3, stacking: 'two_handed', shieldRestriction: 'no_shield', cultures: ['Achaemenid Persian', 'Parthian Empire'] },
+  // The twenty cultures doc gives the Sarmatians' elite "Kontos lances".
+  persian_kontos: { sp: 3, stacking: 'two_handed', shieldRestriction: 'no_shield', cultures: ['Achaemenid Persian', 'Parthian Empire', 'Sarmatian Confederations', 'Bactrian Greeks'] },
 
   sling: { sp: 1, stacking: 'stackable_ranged', cultures: 'all' },
   self_bow_basic: { sp: 1, stacking: 'primary_ranged', shieldRestriction: 'secondary_melee_only', cultures: 'all' },
@@ -111,7 +132,8 @@ const SHIELD_SP = { no_shield: 0, light_shield: 0, medium_shield: 1, heavy_shiel
 // [salvage] MOUNT_OPTIONS: 3 SP standard, 2 for the horse cultures.
 const MOUNT_SP = 3
 const MOUNT_SP_DISCOUNTED = 2
-const HORSE_CULTURES = ['Sarmatian Confederations', 'Parthian Empire']
+// The twenty cultures doc's steppe peoples: Sarmatians, Parthians, Mongols.
+const HORSE_CULTURES = ['Sarmatian Confederations', 'Parthian Empire', 'Pre-Genghis Mongolia']
 
 module.exports = {
   SP_BUDGETS,

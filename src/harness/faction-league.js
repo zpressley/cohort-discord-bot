@@ -8,6 +8,11 @@
 //
 //   node src/harness/faction-league.js               20 seeds, every map
 //   node src/harness/faction-league.js --seeds 5 --maps crownhill,ashford
+//   node src/harness/faction-league.js --factions rome,han,celts
+//
+// With twenty factions there are 190 pairings: every map at 20 seeds is
+// 30,400 battles. Ten seeds on two maps (7,600) takes about a quarter of
+// an hour.
 
 const { createGame, submitOrders, commanderOf } = require('../engine/orchestrator')
 const { planTurn } = require('../opponent/planner')
@@ -54,6 +59,8 @@ function playFactions(red, blue, { map = 'crownhill', seed = 1, scenario = 'meet
 
 function league({ seeds = 20, maps = mapChoices().map(m => m.id), factions = Object.keys(FACTIONS) } = {}) {
   const pairs = {}
+  // Each faction's own record, over all its battles.
+  const record = Object.fromEntries(factions.map(f => [f, { battles: 0, wins: 0, losses: 0, draws: 0 }]))
   const all = { battles: 0, stuck: [], turns: 0, minutes: 0, commanders: 0, taken: 0, killed: 0, notWithElite: 0 }
   for (const a of factions) for (const b of factions) {
     if (a === b) continue
@@ -71,6 +78,12 @@ function league({ seeds = 20, maps = mapChoices().map(m => m.id), factions = Obj
       const winner = r.winner === 'red' ? a : r.winner === 'blue' ? b : null
       if (winner) p.wins[winner] = (p.wins[winner] ?? 0) + 1
       else p.draws++
+      for (const f of [a, b]) {
+        record[f].battles++
+        if (!winner) record[f].draws++
+        else if (winner === f) record[f].wins++
+        else record[f].losses++
+      }
       if (!r.ridesWithElite) all.notWithElite++
       for (const side of ['red', 'blue']) {
         all.commanders++
@@ -79,27 +92,41 @@ function league({ seeds = 20, maps = mapChoices().map(m => m.id), factions = Obj
       }
     }
   }
-  return { pairs, all }
+  return { pairs, record, all }
 }
 
 if (require.main === module) {
   const arg = (name) => { const i = process.argv.indexOf(name); return i > -1 ? process.argv[i + 1] : null }
   const seeds = Number(arg('--seeds') ?? 20)
   const maps = arg('--maps') ? arg('--maps').split(',') : mapChoices().map(m => m.id)
-  const { pairs, all } = league({ seeds, maps })
+  const factions = arg('--factions') ? arg('--factions').split(',') : Object.keys(FACTIONS)
+  const { pairs, record, all } = league({ seeds, maps, factions })
   const pct = (n, d) => `${Math.round(100 * n / Math.max(1, d))}%`
-  console.log(`${all.battles} battles: ${seeds} seeds, each pair both ways round, on ${maps.join(', ')}\n`)
+  console.log(`${all.battles} battles: ${factions.length} factions, ${seeds} seeds, each pair both ways round, on ${maps.join(', ')}\n`)
+  // Each faction over all its battles; a faction that wins or loses more
+  // than 65% of them is marked.
+  console.log('| Faction | Won | Lost | Drawn |')
+  console.log('|---|---|---|---|')
+  for (const [f, r] of Object.entries(record).sort((x, y) => y[1].wins / y[1].battles - x[1].wins / x[1].battles)) {
+    const mark = r.wins / r.battles > 0.65 || r.losses / r.battles > 0.65 ? ' **(over 65%)**' : ''
+    console.log(`| ${FACTIONS[f].title}${mark} | ${pct(r.wins, r.battles)} | ${pct(r.losses, r.battles)} | ${pct(r.draws, r.battles)} |`)
+  }
+  // The pairings, worst first; with many factions only those past 75/25.
+  const worst = (p) => Math.max(p.wins[p.a] ?? 0, p.wins[p.b] ?? 0) / Math.max(1, p.battles)
+  const listed = Object.values(pairs).sort((x, y) => worst(y) - worst(x))
+    .filter(p => factions.length <= 6 || worst(p) > 0.75)
+  console.log(`\n${listed.length === Object.keys(pairs).length ? 'Every pairing' : `Pairings worse than 75/25: ${listed.length} of ${Object.keys(pairs).length}`}\n`)
   console.log('| Pairing | Wins | Draws | Player turns |')
   console.log('|---|---|---|---|')
-  for (const p of Object.values(pairs)) {
+  for (const p of listed) {
     const wa = p.wins[p.a] ?? 0
     const wb = p.wins[p.b] ?? 0
-    const lopsided = Math.max(wa, wb) / Math.max(1, wa + wb) > 0.7 ? ' **(over 70/30)**' : ''
+    const lopsided = Math.max(wa, wb) / Math.max(1, p.battles) > 0.75 ? ' **(over 75/25)**' : ''
     console.log(`| ${FACTIONS[p.a].title} v ${FACTIONS[p.b].title} | ${FACTIONS[p.a].title} ${pct(wa, p.battles)}, ${FACTIONS[p.b].title} ${pct(wb, p.battles)}${lopsided} | ${pct(p.draws, p.battles)} | ${(p.turns / Math.max(1, p.battles)).toFixed(1)} |`)
   }
   const done = all.battles - all.stuck.length
   console.log(`\nEnded: ${done} of ${all.battles}. Average ${(all.turns / Math.max(1, done)).toFixed(1)} player turns, ${Math.round(all.minutes / Math.max(1, done))} battle minutes.`)
-  console.log(`Commanders on the field: ${all.commanders}; taken in ${all.taken} (1 in ${(all.commanders / Math.max(1, all.taken)).toFixed(0)}), killed in ${all.killed} (1 in ${(all.commanders / Math.max(1, all.killed)).toFixed(0)}).`)
+  console.log(`Commanders on the field: ${all.commanders}; taken in ${all.taken}${all.taken ? ` (1 in ${(all.commanders / all.taken).toFixed(0)})` : ''}, killed in ${all.killed}${all.killed ? ` (1 in ${(all.commanders / all.killed).toFixed(0)})` : ''}.`)
   if (all.notWithElite) console.log(`  ${all.notWithElite} battles where a Commander did not ride with the elite`)
   for (const s of all.stuck.slice(0, 10)) console.log(`  stuck: ${s}`)
   if (all.stuck.length) process.exitCode = 1

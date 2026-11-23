@@ -1533,3 +1533,240 @@ Zach, on four questions the negotiation raised:
   So whom a Commander has made his senior officer decides how a captivity
   ends.
 
+
+### How the twenty factions were built (Claude's choices, open to change)
+
+Builds ruling 2 of November 23 ("I have a doc for factions and elite units
+for 20 factions"): every culture in `docs/Context/final_20_cultures_complete.txt`
+is now a faction in `src/data/factions.js`, with the doc's elite unit, free,
+at the doc's size, and one default army (the computer's army, and a
+ready-made choice for a player). The shape of an entry and what
+`engine/army/factions.js` exports are as they were; an elite now carries a
+`size`, and the army is raised with it. The doc's perks and restrictions
+are not built (table below).
+
+**The factions and their elites.** The elite's kit is as near the doc as
+the builder's kit allows; the army is bought within the culture's budget.
+
+| Faction | Elite, free (men: kit) | Default army: SP of budget |
+|---|---|---|
+| Rome | praetorian guard, 80: gladius, heavy armour, big shield, foot | legionaries (professional, gladius), hastati (militia, gladius), velites (levy, javelins): 26 of 30 |
+| Macedon | silver shields, 80: spear, heavy armour, medium shield, foot | 2 sarissa foot (professional pikes, no armour), peltasts (professional, javelins): 28 of 30 |
+| Sparta | lacedaimonian guards, 40: spear, heavy armour, big shield, foot | hoplites (professional), skirmishers (levy, javelins), helots (levy, spears): 20 of 25 |
+| Carthage | sacred band, 100: spear, heavy armour, big shield, foot | numidian horse (militia, javelins), gauls and iberians (militia, swords), slingers (levy): 28 of 32 |
+| Kush | golden bows, 80: professional bow, light armour, foot | 2 spearmen (professional), slingers (levy): 26 of 30 |
+| Berbers | blue men, 80: heavy javelin, light armour, light shield, horse | riders (tribal, javelins, horse), 2 swordsmen (tribal), slingers (levy): 29 of 30 |
+| Sarmatia | iron scale riders, 80: kontos, heavy armour, horse | horse archers, 2 light riders (all tribal, all horse): 24 of 30 |
+| Han | yulin guard, 100: dao, heavy armour, foot | crossbows (professional), swords (militia): 16 of 30 |
+| Maurya | gaja vahini, 60: mace, heavy armour, foot | bowmen (professional), horsemen (militia), 2 levies: 29 of 30 |
+| Silla | hwarang, 80: sword, heavy armour, medium shield, foot | spearmen (professional), archers, levies (militia): 24 of 25 |
+| Persia | immortals, 100: spear, medium armour, medium shield, foot | archers (professional, recurve bow), sparabara, spearmen (militia), slingers (levy): 28 of 30 |
+| Parthia | savaran, 80: kontos, heavy armour, horse | horse archers (professional, horse bow), light horse (militia, bows), 2 levy spears: 29 of 30 |
+| Germania | comitatus, 80: framea, medium armour, foot | warriors, axemen, spearmen (framea), skirmishers (all tribal): 27 of 30 |
+| Thrace | peltast guard, 60: heavy javelin, light armour, light shield, foot | 2 rhomphaia men, javelin men, spearmen (all tribal, no armour above light): 28 of 30 |
+| Samnium | sacred spring warriors, 80: gladius, medium armour, big shield, foot | swordsmen (militia), veterans (professional), slingers (levy): 25 of 26 |
+| Tibet | snow lion guard, 80: two-handed spear, medium armour, foot | pikemen (professional), 2 spearmen (militia): 25 of 25 |
+| Mongolia | eternal sky riders, 100: professional bow, medium armour, horse | horse archers, 2 armoured riders (all tribal, all horse): 28 of 30 |
+| Celts | fianna, 80: longsword, medium armour, medium shield, foot | warriors (tribal), horsemen (tribal), slingers, 2 levies: 30 of 30 |
+| Bactria | indo hellenic guard, 80: sarissa, heavy armour, foot | cataphracts (professional, kontos), archers (militia), peltasts (levy): 25 of 30 |
+| Yayoi | yamatai warriors, 80: spear, medium armour, medium shield, foot | spearmen (militia), clansmen (professional), archers (militia): 25 of 30 |
+
+**The four that existed, against the doc.** Macedon's elite was the
+Companions (horse); the doc's is the Silver Shields (80 phalangites), on
+foot, now built (the design doc's "fighting-age elite regulars"). Rome's
+praetorians are renamed "praetorian guard", as the doc names them; kit
+unchanged. Sarmatia's Iron Scale Riders now carry the kontos the doc gives
+them (they had swords, because the builder let only Persia and Parthia
+field it). Han's Yulin guard are 100 men, as the doc says, and carry no
+shield (the doc names none; they had a medium shield). Every elite's size
+is now the doc's: Sparta 40, Thrace and Maurya 60, Carthage, Han, Persia
+and Mongolia 100, the rest 80.
+
+**Stand-ins: kit the doc names that the builder does not have.** No combat
+rule was added or changed; each is the nearest kit the engine has.
+- **One weapon each.** A unit carries one weapon here, so the doc's second
+  weapon is dropped: the Iron Scale Riders' composite bows, the Hwarang's
+  composite bows, the Yamatai Warriors' bows, the Immortals' akinakes, the
+  Peltast Guard's curved swords, the Sacred Spring Warriors' javelins, the
+  Comitatus' pattern-welded swords and round shields (the framea takes both
+  hands in the builder), the Yulin guard's jian.
+- **Elephants.** None in the game. Maurya's Gaja Vahini (60 men and 6
+  elephants) are heavily armoured foot with maces: slow and crushing. As
+  heavy horse they rode ahead of the line and were cut off (the faction won
+  about one battle in four; on foot, about half). Carthage's war elephants
+  are not represented at all.
+- **Mixed units.** The doc's "100 elite mixed troops" (Sacred Band), "mixed
+  cavalry/infantry" (Yulin guard), "40 cataphracts + 40 horse archers"
+  (Savaran) and "fusion warriors" (Indo-Hellenic Guard) are one kind each:
+  heavy spearmen; swordsmen on foot; kontos-armed heavy horse; armoured
+  sarissa phalangites.
+- **Silver Shields** take the spear and keep their shields (a sarissa takes
+  both hands); they cannot change weapons in battle. "Bronze armour" is
+  heavy armour.
+- **Blue Men**: "light spears" from horseback. A spear cannot be used
+  mounted in the builder, so the heavy javelin (with the light javelin they
+  won one battle in five).
+- **Golden Bows**: the six-foot Nubian bow is the professional bow; **Eternal
+  Sky Riders**: composite bows are the professional bow (the builder's
+  composite bows are Greek and Parthian).
+- **Weapons named for another people**: the Samnites' gladii are the
+  builder's `roman_gladius`; the Bactrians' phalanx gear is the
+  `macedonian_sarissa`; the Sarmatian and Bactrian lance is the
+  `persian_kontos`.
+- **Armour**: scale, lamellar, cuirass, mail and hide are mapped to light,
+  medium or heavy: "light mail" (Fianna) and "yak-hide" (Snow Lion Guard)
+  medium; "scale armour" (Immortals) medium; leather light.
+- **Horse-archer elites** (the Eternal Sky Riders) are raised at the doc's
+  100; bought horse archers are fewer (`HORSE_ARCHER_NUMBERS`), and the
+  elite is not.
+- Unit names in the default armies are plain words for what they carry
+  ("velites", "sparabara", "numidian horse" name kit, not rules).
+
+**Added to the builder's culture tables** (`engine/army/data.js`):
+- Budgets for the eleven new cultures: 30, except Silla and Tibet 25 ("begin
+  with 25 SP instead of 30") and Samnium 26 ("only 26 SP"). Carthage's 32
+  and Sparta's 25 were there (Sparta's 25 is from the old data; the doc
+  gives Sparta no number).
+- Tribal warriors: the Mongols (pre-Genghis tribes, a confederation as the
+  Sarmatians and Berbers are here).
+- Horse cultures (cheaper horses): the Mongols, with the doc's other steppe
+  peoples, Sarmatia and Parthia.
+- Weapons: `roman_gladius` for the Samnites; `macedonian_sarissa` for the
+  Bactrians; `persian_kontos` for the Sarmatians and Bactrians.
+- Culture names follow the builder where it had one ("Han Dynasty",
+  "Achaemenid Persian", "Germanic Tribes"), the doc's otherwise ("Mauryan
+  Empire", "Pre-Genghis Mongolia", "Yayoi Period Japan").
+
+**Officers' names**: twelve given names for each of the thirteen new
+cultures in `src/data/officers.js` (Carthage, Kush, the Berbers, Sarmatia,
+Han, Maurya, Silla, Thrace, Samnium, Tibet, Mongolia, Bactria, Yayoi), no
+two alike in a list, given names only. Many are names real men bore (kings
+of Kush and Thrace, Bactrian kings); none is a famous man's full name.
+
+**The doc's perks and restrictions.** None was built. What the builder
+already does, what only the default army keeps to (nothing stops a player
+breaking it, once he buys his own), and what is not built at all. No supply
+trains, siege engineers, fortifications or campaigns of conquest exist yet,
+so most adaptation perks have nothing to act on.
+
+| Faction | The builder enforces | The default army keeps to, not enforced | Not built |
+|---|---|---|---|
+| Rome | pilum and plumbatae are Roman; the gladius Roman and Samnite | at least half heavy foot (3 of 4) | engineering; professional discipline; veteran auxiliaries; units without officers waver faster |
+| Macedon | sarissa, xiphos, Greek bow are Macedonian | no militia (all professional) | 10-battle veteran Silver Shields; sarissa or spear in battle; companion integration; higher unit costs |
+| Sparta | budget 25 (old data) | no mercenaries | fight on to 50% losses; better perioeci; allied Greeks; supply staff +2 |
+| Carthage | merchant wealth: 32 SP | at most 2 SP of professionals (none) | war elephants; mercenaries mid-battle; hired men break first |
+| Kush | | no heavy foot | desert mastery; archer and horse together; Forgers of Meroë |
+| Berbers | tribal warriors | | desert navigation; small-unit bonuses; master raiders; slowed in forest and swamp |
+| Sarmatia | tribal warriors; cheaper horses; kontos | no foot; all horse | switch lance and bow; feigned retreat; unlock a unit from each defeated culture |
+| Han | crossbows are Han only | spends no more than 28, leaving 2 for administrators (spends 16) | cloud ladders and catapults; units 20% larger; assimilation; administrators and losing them |
+| Maurya | | three kinds of unit at least | elephants that break formations; wootz steel; diplomatic gifts; may not pursue the routed |
+| Silla | budget 25 | | veteran leadership from the first battle; mountain bonuses; treaties with the defeated; 10 SP for allies only |
+| Persia | recurve bow, akinakes, kontos | | supply train replaced; better support staff; satrap troops; satrap and reorganising penalties |
+| Parthia | cheaper horses; horse bow, kontos | at least 10 SP of levy (10); at least half horse | plains bonus; Parthian shot; feudal levies |
+| Germania | tribal warriors; framea, throwing axe, war scythe | no siege engineers (none exist) | warband never breaks; forest mobility; champions; champion integration; no complex formations |
+| Thrace | tribal warriors; rhomphaia is Thracian only | nothing heavier than light armour and shields | rhomphaia for any foot; hill defence; veterans from the start; cultural crossroads; no mercenaries |
+| Samnium | budget 26; gladius | no siege engineers | guerrilla bonuses; break at 30% and 40%; capture kit in battle |
+| Tibet | budget 25 | | no cold or mountain penalties; militia as veterans; sanctuary; mercenaries 25% cheaper |
+| Mongolia | tribal warriors; cheaper horses | all horse | full accuracy at speed; endurance; units 20% larger; captured specialists; no free supply train |
+| Celts | tribal warriors; longsword, champion's sword | no professional archers | fear from ambushes; flanking bonuses; woodland mobility; single combat; no mercy |
+| Bactria | sarissa, kontos | heavy foot no more than 30% (the guard, 1 of 4) | fusion army as professionals; noble horse on flanks; synthesis warfare; supply lines |
+| Yayoi | | at most one horse unit (none); light and medium armour only | archer and spear bonuses; rapid fortification; cultural exchange |
+
+**How the armies were set.** The first armies, written from the doc, were
+far apart: in a first league Carthage won 88% and Macedon 84%, Kush 1% and
+Samnium 10%. Each faction was given a pool of plain, legal units in its
+own kit (kept to the restrictions in the table, with no more than two of
+a kind, no more than two missile units, and the faction's own troops in
+it: crossbows for Han, pikes for Macedon), and in three rounds the army
+nearest to winning half its battles against the rest of the field was
+kept (each candidate played every other faction, both ways round, on two
+maps). A last pass by hand on the six still outside 35 to 65%. Findings:
+- **Not every army spends its budget**, as before. Han's crossbows and 100
+  heavy swordsmen were too strong with anything more than two units (16 of
+  30 SP); Macedon's pikes win with no armour on.
+- **A mounted elite in a mostly foot army loses**: it rides ahead and is
+  cut off (Maurya, the Berbers). In an army all on horse (Sarmatia,
+  Mongolia, Parthia) it does not.
+- **Light horse with javelins is weak** for its price for a people who pay
+  full price for horses; the Berbers win most on foot.
+
+**Measured** (`node src/harness/faction-league.js --seeds 10 --maps
+crownhill,thornwood`): all twenty factions, every pairing both ways round,
+10 seeds, on Crownhill and Thornwood (one map the armies were set on and
+one they were not), 7,600 battles, the computer on both sides, each with a
+Commander riding with his elite. **Every battle ended**; average 13.7
+player turns, 164 battle minutes.
+
+| Faction | Won | Lost |
+|---|---|---|
+| Persia | 64% | 36% |
+| Samnium | 57% | 43% |
+| Han | 56% | 44% |
+| Bactria | 56% | 44% |
+| Carthage | 55% | 45% |
+| Sparta | 53% | 47% |
+| Silla | 53% | 48% |
+| Macedon | 52% | 48% |
+| Yayoi | 51% | 49% |
+| Thrace | 50% | 50% |
+| Sarmatia | 50% | 50% |
+| Germania | 50% | 50% |
+| Celts | 49% | 51% |
+| Parthia | 48% | 53% |
+| Maurya | 46% | 54% |
+| Rome | 45% | 55% |
+| Kush | 44% | 56% |
+| Tibet | 43% | 57% |
+| Mongolia | 43% | 58% |
+| Berbers | 38% | 62% |
+
+No draws. **No faction wins or loses more than 65% of its battles**
+(before the adjustment: Han 70%, Macedon 68%; Tibet, Kush and the Berbers
+lost 74 to 76%). **51 of the 190 pairings are worse than 75/25**: with
+twenty armies this different, many are matchups. The worst:
+Sparta beat Mongolia in all 40; Parthia beat Rome, Yayoi the Berbers and
+Mongolia Samnium 98 to 3; horse armies beat Han 95 to 5 (Sarmatia,
+Parthia, Mongolia: the crossbows cannot catch them); Persia beat the
+Berbers 95 to 5, Bactria beat Mongolia 95 to 5. The whole list is the
+league's output. Commanders: 15,200 on the field, taken in 1 battle in 41,
+killed in 1 in 362; the Commander's dice are seeded from the battle's seed
+alone (20 seeds here), so read nothing into the deaths. Combat was not
+retuned: `npm run balance` is unchanged.
+
+**The soak** plays every faction as red on every map, each time against a
+different enemy, so each is blue as often (240 battles, each with a seed
+of its own), instead of every pairing on every map (4,560 with twenty
+factions). All end. The league plays them all.
+
+**Guessed.**
+- "Its size where the doc gives one" was read as the elite's men on the
+  field. The Q6 ruling had one elite size (80); the other reading keeps 80
+  for all and treats the doc's numbers as flavour.
+- Where the doc's restrictions are cheap to honour the default armies keep
+  them (Sarmatia and Mongolia all on horse, Macedon no militia, Yayoi no
+  horse). Read as the doc's intent for these armies, though not built as
+  rules.
+- The Mongols as tribal (cheaper, steadier warriors) and as a horse
+  culture: the doc calls them a confederation and "100% mounted" but does
+  not say tribal.
+- Han's "+2 administrator SP" was read as leaving 2 SP unspent.
+- Unit names: the doc's elite names, shortened where a player would not
+  say them ("golden bows" for Children of the Golden Bow, "savaran",
+  "hwarang", "comitatus").
+
+**Open, for Zach.**
+1. Elite sizes: the doc's 40 to 100, or one size for all (Q6)?
+2. Elephants (Maurya, Carthage, and the doc's Bactrian perk): a kind of unit
+   of their own, or the stand-in (heavy foot with maces) for now?
+3. Should a unit carry a second weapon (bow and lance, spear and sword), as
+   so many of the doc's elites do?
+4. Which restrictions should the builder enforce when a player buys his own
+   army? The cheap ones are counts (all horse, at most one horse unit,
+   half heavy foot, no militia); they would stop a Sarmatian buying foot.
+5. Which perks come first? Most need things not built yet (supply trains,
+   siege engineers, fortifications, the campaign between battles).
+6. Pairings: 51 of 190 are worse than 75/25 between two computer
+   commanders. Is a lopsided matchup acceptable (Han's crossbows against
+   horse armies), so long as no faction is weak overall?
+7. The Berbers have no horse-culture discount; the doc does not give them
+   one, but their elite is "desert cavalry". Should they?
