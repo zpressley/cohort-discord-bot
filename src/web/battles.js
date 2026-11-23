@@ -32,7 +32,7 @@ const { assignOfficers } = require('../engine/command/roster')
 const { planTurn } = require('../opponent/planner')
 const { musterOfficers, settleBattle, ridesWith, createCompany } = require('../engine/command/company')
 const { bargainChips, canRide, heldSight, sightFrom } = require('../engine/command/commander')
-const { orderDelays } = require('../engine/command/messengers')
+const { orderDelays, byCommandPost } = require('../engine/command/messengers')
 const { knownEnemies, newsBetween } = require('../engine/orchestrator/word')
 const { captorAnswer } = require('../opponent/captor')
 const { createCommanderStore } = require('./commanders')
@@ -1023,7 +1023,10 @@ function createBattleStore({ dir = null, ai = null, now = () => Date.now() } = {
     // Solo: the computer's side answers at once, with the orders it thinks
     // best from what it has seen (opponent/planner.js).
     if (result.status === 'waiting' && entry.auto && result.waitingOn.includes(entry.auto)) {
-      result = submitOrders(game, entry.auto, planTurn(game, entry.auto))
+      // Its orders go by rider from its best unit, as a Commander's do
+      // from his (engine/command/messengers.js); what it knows is not
+      // delayed.
+      result = submitOrders(game, entry.auto, byCommandPost(planTurn(game, entry.auto)))
     }
 
     if (result.status !== 'waiting') {

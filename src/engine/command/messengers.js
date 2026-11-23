@@ -23,12 +23,15 @@
 //     ride on through it. No such path: no rider can get through.
 //   - News comes back by the same way at the same pace (the one search,
 //     from the Commander's tile, serves both).
+//   - The computer's side, which has no Commander on the field, sends its
+//     orders the same way from its best unit, when they come marked so
+//     (byCommandPost). What it knows is not delayed.
 //
 // One search over the whole field (Dijkstra, a binary heap, ties broken by
 // tile index so it is the same every time) gives every unit's delay at
 // once; on a 40 by 40 field it is a few thousand steps.
 
-const { COMMAND } = require('../combat/tables')
+const { COMMAND, QUALITY_ORDER } = require('../combat/tables')
 
 const tilesApart = (a, b) => Math.max(Math.abs(a.x - b.x), Math.abs(a.y - b.y))
 
@@ -136,13 +139,33 @@ function riderCosts({ map, world, broken = new Set(), hidden = new Map(), side, 
  */
 function commandPost(state, side) {
   const c = state.commanders?.[side]
+  if (!c && state.posts?.has(side)) {
+    // The computer's side has no Commander on the field: its orders go out
+    // from its best unit, as its command post (step 3 of the design).
+    const best = state.world.units
+      .filter(u => u.side === side && u.strength > 0 && !state.broken.has(u.id))
+      .sort((a, b) => QUALITY_ORDER.indexOf(b.quality) - QUALITY_ORDER.indexOf(a.quality) || b.strength - a.strength || a.id.localeCompare(b.id))[0]
+    return best ? { unitId: best.id, position: { ...best.position } } : null
+  }
   if (!c || c.status !== 'free') return null
   const unit = state.world.units.find(u => u.id === c.unitId && u.strength > 0)
   return unit ? { unitId: unit.id, position: { ...unit.position } } : null
 }
 
-/** Does this side send its orders, and hear its news, by rider? */
-const byRider = (state, side) => Boolean(state.commanders?.[side])
+/**
+ * Does this side send its orders by rider? A side with a Commander on the
+ * field does; so does a side whose orders came marked as from a command
+ * post (the computer's, in the app: byCommandPost).
+ */
+const byRider = (state, side) => Boolean(state.commanders?.[side]) || Boolean(state.posts?.has(side))
+
+/**
+ * Orders marked to go out by rider from the side's best unit, as the
+ * computer's do in the app (it has no Commander on the field). The mark
+ * goes into the order log, so a saved battle replays it, and a battle
+ * saved before it replays as it was played.
+ */
+const byCommandPost = (orders) => (Array.isArray(orders) ? orders.map(o => ({ ...o, fromPost: true })) : orders)
 
 /**
  * How long a rider takes from a side's command post to each of its units,
@@ -198,4 +221,4 @@ function orderDelays(state, side, unitIds, { from = null, word = null } = {}) {
   return out
 }
 
-module.exports = { riderCosts, commandPost, byRider, riders, orderDelays, tilesApart }
+module.exports = { riderCosts, commandPost, byRider, byCommandPost, riders, orderDelays, tilesApart }

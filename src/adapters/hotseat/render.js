@@ -226,6 +226,8 @@ function wordEvent(event) {
     case 'commanderRode': return `The Commander rides over from ${event.from} to ${event.unitId}`
     case 'riderSent': return `A rider sets out for ${event.unitId}: ${event.minutes} minutes`
     case 'riderBlocked': return `No rider can get through to ${event.unitId}`
+    case 'cutOff': return `${event.unitId} is CUT OFF: no rider can get through`
+    case 'inTouch': return `Riders get through to ${event.unitId} again`
     case 'grasp': return null
     case 'rallied': return `${event.unitId} RALLIES at ${where(event.at)} with ${event.strength} men`
     case 'heartened': return `${event.unitId} takes heart as ${event.by} breaks`

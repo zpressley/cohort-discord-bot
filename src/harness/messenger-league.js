@@ -18,6 +18,7 @@
 //
 //   node src/harness/messenger-league.js --battles 336 --policy planner
 //   node src/harness/messenger-league.js --root /path/to/an/older/src ...
+//   --computer instant   blue's orders at once (as before step 3), not by rider
 //
 // The rider counts are read from the battle's events (riderSent,
 // riderBlocked); a build before them has none. Units cut off are counted
@@ -35,6 +36,9 @@ const { fieldFactions, FACTIONS } = need('engine/army/factions')
 const { leadUnit } = need('engine/command/company')
 const { assignOfficers } = need('engine/command/roster')
 const { riders } = require('../engine/command/messengers')
+let byCommandPost = null
+try { ({ byCommandPost } = need('engine/command/messengers')) } catch { /* a build before riders */ }
+const COMPUTER = arg('--computer', 'rider')
 
 const MAX_PLAYER_TURNS = 150
 
@@ -68,7 +72,10 @@ function play(red, blue, { map, seed, policy }) {
       : planTurn(knowing, 'red')
     if (battle.commanders.red.status === 'free') r.orders += orders.filter(o => !o.ride).length
     submitOrders(game, 'red', orders)
-    submitOrders(game, 'blue', planTurn(game, 'blue'))
+    // Blue's orders by rider from its best unit, as in the app (step 3);
+    // --computer instant for its orders at once, as before.
+    const blueOrders = planTurn(game, 'blue')
+    submitOrders(game, 'blue', COMPUTER === 'rider' && byCommandPost ? byCommandPost(blueOrders) : blueOrders)
     turns++
   }
   const events = game.battle.log.all()
@@ -80,6 +87,8 @@ function play(red, blue, { map, seed, policy }) {
     orders: r.orders,
     delays: events.filter(e => e.type === 'riderSent' && e.side === 'red').map(e => e.minutes),
     blocked: events.filter(e => e.type === 'riderBlocked' && e.side === 'red').length,
+    blueDelays: events.filter(e => e.type === 'riderSent' && e.side === 'blue').map(e => e.minutes),
+    blueBlocked: events.filter(e => e.type === 'riderBlocked' && e.side === 'blue').length,
     cutOff: r.cutOffUnits.size,
     cutOffTurns: r.cutOffTurns,
     unitTurns: r.unitTurns
@@ -91,7 +100,7 @@ function league({ battles = 336, policy = 'planner' } = {}) {
   const factions = Object.keys(FACTIONS)
   const pairs = []
   for (const a of factions) for (const b of factions) if (a !== b) for (const map of maps) pairs.push([a, b, map])
-  const all = { battles: 0, stuck: 0, wins: 0, losses: 0, draws: 0, turns: 0, minutes: 0, orders: 0, delays: [], blocked: 0, battlesCutOff: 0, cutOffTurns: 0, unitTurns: 0 }
+  const all = { battles: 0, stuck: 0, wins: 0, losses: 0, draws: 0, turns: 0, minutes: 0, orders: 0, delays: [], blocked: 0, blueDelays: [], blueBlocked: 0, battlesCutOff: 0, cutOffTurns: 0, unitTurns: 0 }
   for (let i = 0; i < battles; i++) {
     const [a, b, map] = pairs[i % pairs.length]
     const r = play(a, b, { map, seed: 1000 + i * 7919, policy })
@@ -105,6 +114,8 @@ function league({ battles = 336, policy = 'planner' } = {}) {
     all.orders += r.orders
     all.delays.push(...r.delays)
     all.blocked += r.blocked
+    all.blueDelays.push(...r.blueDelays)
+    all.blueBlocked += r.blueBlocked
     if (r.cutOff > 0) all.battlesCutOff++
     all.cutOffTurns += r.cutOffTurns
     all.unitTurns += r.unitTurns
@@ -131,6 +142,10 @@ if (require.main === module) {
     for (const m of d) spread[m] = (spread[m] ?? 0) + 1
     console.log(`by rider, minutes: median ${at(0.5)}, quarter ${at(0.25)} to ${at(0.75)}, longest ${d.at(-1)}; ` +
       Object.entries(spread).map(([m, n]) => `${m}: ${n}`).join(', '))
+  }
+  if (all.blueDelays.length || all.blueBlocked) {
+    const b = [...all.blueDelays].sort((x, y) => x - y)
+    console.log(`the computer's orders by rider: ${b.length}, median ${b[Math.floor(b.length / 2)] ?? 0} min, longest ${b.at(-1) ?? 0}; not sent ${all.blueBlocked}`)
   }
   console.log(`a unit cut off at some turn's start in ${all.battlesCutOff} battles (${pct(all.battlesCutOff, done)}); ${pct(all.cutOffTurns, all.unitTurns)} of unit-turns cut off`)
 }

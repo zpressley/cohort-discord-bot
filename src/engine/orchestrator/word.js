@@ -115,7 +115,13 @@ function updateWord(game, side) {
     const ticks = road ? road.ticks(unit) : Infinity
     const arrives = ticks === Infinity ? Infinity : turn + ticks
     ;(word.sent[unit.id] ??= []).push([turn, arrives])
-    if (word.units[unit.id]) word.units[unit.id].cutOff = free && ticks === Infinity
+    // Cut off, or in touch again: he knows when his riders cannot get
+    // through (an event only his side hears of).
+    const known = word.units[unit.id]
+    if (free && known && !gone && !known.gone && known.cutOff !== (ticks === Infinity)) {
+      known.cutOff = ticks === Infinity
+      battle.log.emit(known.cutOff ? 'cutOff' : 'inTouch', turn, { side, unitId: unit.id })
+    }
     if (arrives === Infinity) continue
     word.road.push({
       unitId: unit.id, sent: turn, arrives, live: ticks === 0,
@@ -192,7 +198,7 @@ function arrivalOf(game, side, event) {
   if (!word) return event.turn
   if (event.type === 'victory' || event.type === 'objective' || event.type === 'officerYielded') return event.turn
   if (event.side === side && event.type.startsWith('commander')) return event.turn
-  if (event.type.startsWith('rider') && event.side === side) return event.turn
+  if ((event.type.startsWith('rider') || event.type === 'cutOff' || event.type === 'inTouch') && event.side === side) return event.turn
   if (event.turn < word.since) return Infinity
   const mine = (id) => Boolean(word.units[id])
   const ids = involved(event)

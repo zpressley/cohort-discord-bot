@@ -9,6 +9,7 @@ const assert = require('node:assert/strict')
 const { createServer } = require('../server')
 const { createBattleStore } = require('../battles')
 const { orderDelays } = require('../../engine/command/messengers')
+const { gameRecord, replayGame } = require('../../engine/orchestrator')
 
 async function start(store = createBattleStore({})) {
   const server = createServer(store)
@@ -108,5 +109,20 @@ test('the dispatch tells news from far off with how old it is', async () => {
       if (!found && tent.battle.status !== 'finished') await app.api('POST', `/api/seat/${seat}/orders`, { text: '' })
     }
     assert.ok(found, 'a line of news by rider, with how old it is')
+  } finally { await app.close() }
+})
+
+test('the computer\'s orders go out by rider from its best unit, and a saved battle plays them back', async () => {
+  const store = createBattleStore({})
+  const app = await start(store)
+  try {
+    const seat = await solo(app)
+    await app.api('POST', `/api/seat/${seat}/orders`, { text: 'everyone advance' })
+    const game = store.seatOf(seat).entry.game
+    const theirs = game.orderLog.filter(e => e.side === 'blue')
+    assert.ok(theirs.length > 0 && theirs.every(e => e.orders.every(o => o.fromPost === true)), 'each of its orders marked as from its command post')
+    assert.ok(game.battle.posts.has('blue'))
+    const again = replayGame(JSON.parse(JSON.stringify(gameRecord(game))))
+    assert.deepEqual(again.battle.log.all(), game.battle.log.all())
   } finally { await app.close() }
 })

@@ -10,7 +10,7 @@ const assert = require('node:assert/strict')
 
 const { createBattleState, stepTurn } = require('../../battle/battle')
 const { createGame, submitOrders, gameRecord, replayGame } = require('../../orchestrator/orchestrator')
-const { riders, riderCosts, orderDelays } = require('../messengers')
+const { riders, riderCosts, orderDelays, byCommandPost, commandPost } = require('../messengers')
 const { COMMAND } = require('../../combat/tables')
 
 const MAP = { name: 'plain-40', width: 40, height: 20, terrain: {} }
@@ -146,4 +146,43 @@ test('a side with no Commander on the field gives every order at once, however f
   stepTurn(state, { red: [north(state, 'far')] })
   assert.ok(at(state, 'far').y < 10)
   assert.equal(state.riders, undefined)
+})
+
+// ── The computer's side (step 3) ──────────────────────
+
+test('the computer\'s orders, marked as from its command post, go by rider from its best unit', () => {
+  const blue = [
+    unit({ id: 'b_elite', side: 'blue', quality: 'elite', position: { x: 37, y: 18 } }),
+    unit({ id: 'b_near', side: 'blue', position: { x: 35, y: 16 } }),
+    unit({ id: 'b_far', side: 'blue', position: { x: 37, y: 1 } })
+  ]
+  const state = createBattleState({ ...spec(blue.concat([unit({ id: 'guard', position: { x: 2, y: 10 } })])) })
+  stepTurn(state, { blue: byCommandPost([{ unitRef: 'b_near', action: 'hold' }, { unitRef: 'b_far', target: { x: 30, y: 1 } }]) })
+  assert.equal(commandPost(state, 'blue').unitId, 'b_elite', 'its best unit is its command post')
+  assert.equal(state.orderBook.get('b_near').action, 'hold', 'within its immediate range: at once')
+  assert.equal(state.orderBook.get('b_near').fromPost, undefined, 'the mark is not part of the order')
+  const sent = state.log.all().filter(e => e.type === 'riderSent')
+  assert.deepEqual(sent.map(e => [e.side, e.unitId, e.minutes]), [['blue', 'b_far', 20]], '17 tiles: twenty minutes')
+})
+
+test('the computer\'s orders unmarked go at once, however far, as before', () => {
+  const state = createBattleState({ ...spec(army()), commanders: undefined })
+  stepTurn(state, { blue: [{ unitRef: 'foe', target: { x: 30, y: 1 } }] })
+  assert.equal(state.orderBook.get('foe').action, 'move')
+  assert.equal(state.posts, undefined)
+})
+
+test('a unit cut off is told to its Commander once, and so is its coming back in touch', () => {
+  const wall = Array.from({ length: 10 }, (_, i) => unit({ id: `wall${i}`, side: 'blue', position: { x: 20, y: i * 2 + 1 } }))
+  const game = createGame({ ...spec([...army(), ...wall]), standingOrders: {} }, { seed: 1 })
+  submitOrders(game, 'red', [])
+  submitOrders(game, 'blue', wall.map(w => ({ unitRef: w.id, action: 'hold' })))
+  const told = (type) => game.battle.log.all().filter(e => e.type === type).map(e => e.unitId)
+  assert.deepEqual(told('cutOff'), ['far'])
+  // The wall goes; riders get through again.
+  for (const w of wall) game.battle.world.units.find(u => u.id === w.id).position = { x: 39, y: w.position.y }
+  submitOrders(game, 'red', [])
+  submitOrders(game, 'blue', [])
+  assert.deepEqual(told('inTouch'), ['far'])
+  assert.deepEqual(told('cutOff'), ['far'], 'told once')
 })

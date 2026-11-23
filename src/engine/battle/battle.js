@@ -411,7 +411,8 @@ function stepTurn(state, sideOrders = {}, { sameTurn = false } = {}) {
     // Orders given this turn replace each unit's standing order.
     // What its officer keeps of an order with more than one thing in it is
     // rolled here, once, as the order reaches him.
-    const give = (order) => {
+    const give = (sent) => {
+      const { fromPost, ...order } = sent
       let given = normalizeOrder(order)
       const officer = getUnit(world, order.unitId)?.officer
       if (officer) {
@@ -422,6 +423,9 @@ function stepTurn(state, sideOrders = {}, { sameTurn = false } = {}) {
       state.orderBook.set(order.unitId, given)
       freshThisTurn.add(order.unitId)
     }
+    // Orders marked as from a command post (the computer's, in the app)
+    // go by rider from then on.
+    if (given.some(o => o?.fromPost)) (state.posts ??= new Set()).add(side)
     if (!byRider(state, side)) {
       for (const order of expanded) give(order)
     } else {

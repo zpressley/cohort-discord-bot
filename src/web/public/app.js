@@ -875,7 +875,7 @@ async function tent(token) {
       <div class="unit-card" aria-pressed="${u.id === state.picked}">
         <header><h3>${esc(u.name)}</h3><span class="where">${esc(u.at)} · ${esc(terrainWords(v, u.position.x, u.position.y))}</span></header>
         <span class="note">${esc([u.quality, u.role].filter(Boolean).join(' ').replace(/_/g, ' '))}, ${u.strength} of ${u.maxStrength} men</span>
-        ${u.word && !u.word.live ? `<p class="unit-order word${u.word.cutOff ? ' cut-off' : ''}"><strong>${u.word.cutOff ? 'Cut off.' : 'By rider:'}</strong> ${esc(u.word.cutOff ? u.word.said.replace(/^cut off: /, '') : `as they were ${u.word.said}`)}</p>` : ''}
+        ${u.word && !u.word.live ? `<p class="unit-order word${u.word.cutOff ? ' cut-off' : ''}"><strong>${u.word.cutOff ? 'Cut off.' : 'By rider:'}</strong> ${esc(u.word.cutOff ? u.word.said.replace(/^cut off: n/, 'N') : `as they were ${u.word.said}`)}</p>` : ''}
         ${u.rider ? `<p class="unit-order"><strong>On the road:</strong> ${esc(u.rider.said)}</p>` : ''}
         ${v.commander?.unitId === u.id ? '<p class="unit-order"><strong>You ride with them.</strong> If they are cut to half and still in the fight, you can be taken or killed.</p>' : ''}
         <div class="bars">${meter('Men', u.strength, u.maxStrength)}${meter('Morale', u.morale, 100)}${meter('Wind', u.stamina, u.staminaPool)}</div>

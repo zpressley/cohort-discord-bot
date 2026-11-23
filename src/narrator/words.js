@@ -167,6 +167,9 @@ const RIDER = {
   // A dispatch line for an order that could not be sent.
   blocked: (unit) => `no rider could get through to ${unit}: your order did not reach them`,
   sent: (unit, minutes) => `a rider set out for ${unit}, ${minutes} minutes' ride away`,
+  // A unit cut off, and back in touch (the dispatch).
+  lostTouch: (unit) => `no rider can get through to ${unit} now: you will hear nothing of them, and they nothing of you, until the way is open`,
+  backInTouch: (unit) => `riders get through to ${unit} again`,
   // How old word of a unit is, on the map and the Army tab.
   age: (minutes) => (minutes <= 0 ? 'now' : `${clock(minutes)} ago`),
   // A unit no rider can get through to.

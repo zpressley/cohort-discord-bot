@@ -123,6 +123,13 @@ Where the build stands:
   Commander, his immediate range, and his units known by rider, faded with
   their age). Cut-off units already show "no word since" here, as the
   path rule blocks news as it blocks orders.
+- **Step 3 is built.** A unit cut off, and back in touch, is told to its
+  Commander (`cutOff`, `inTouch`), marked on the map with a cross and on
+  the Army tab. The computer's orders, marked as from its command post
+  (`byCommandPost`, in `web/battles.js` and the soak), go by rider from its
+  best unit; what it knows is not delayed. That is the next step for it.
+
+All three steps are built. Not built: everything under "What comes after".
 
 ## What comes after, not in this build
 
