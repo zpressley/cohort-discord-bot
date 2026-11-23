@@ -117,10 +117,10 @@ test('a battle: a Commander with a beaten unit is taken or killed in time, and a
   assert.ok(taken + killed < battles * 0.6, 'and often neither, even for a remnant left in the fight: the odds are low')
 })
 
-test('held, he gives no orders, and his units carry on with the ones they have', () => {
+test('held, he gives no orders: a steady officer carries on with the one he has', () => {
   const state = createBattleState(spec([
     unit({ id: 'guard', position: { x: 2, y: 2 } }),
-    unit({ id: 'line', position: { x: 2, y: 18 } }),
+    unit({ id: 'line', position: { x: 2, y: 18 }, officer: { name: 'Varro', experience: 3, personality: 'steady' } }),
     unit({ id: 'foe', side: 'blue', position: { x: 18, y: 2 } })
   ]))
   stepTurn(state, { red: [{ unitRef: 'line', target: { x: 12, y: 18 } }] })
@@ -131,7 +131,7 @@ test('held, he gives no orders, and his units carry on with the ones they have',
   assert.deepEqual(where(), { x: 8, y: 18 }, 'still marching east: the new order never reached them')
 })
 
-test('held, he can give up a unit still on the field and leave it: the battle is lost, he is free', () => {
+test('a battle saved with the old bargain (one unit, always taken) plays back as it was played', () => {
   const game = createGame(spec([
     unit({ id: 'guard', position: { x: 2, y: 2 } }),
     unit({ id: 'line', quality: 'elite', position: { x: 2, y: 18 } }),
@@ -152,20 +152,21 @@ test('held, he can give up a unit still on the field and leave it: the battle is
   const result = submitOrders(game, 'red', { bargain: 'guard' })
   assert.equal(result.status, 'finished')
   assert.deepEqual([game.outcome.winner, game.outcome.reason], ['blue', 'enemy commander bargained'])
-  assert.deepEqual(commanderOf(game, 'red'), { fate: 'ransomed', price: 'guard' })
+  assert.deepEqual(commanderOf(game, 'red'), { fate: 'ransomed', price: 'guard', prices: ['guard'] })
   assert.equal(commanderOf(game, 'blue'), null, 'that side has no Commander on the field')
 })
 
-test('when the battle ends: freed by a victory, ransomed for his best unit, or lost with nothing left', () => {
+test('when the battle ends held: freed by a victory; otherwise free, alive, a commander of none, whatever he has left', () => {
   const held = { red: { unitId: 'guard', status: 'held', heldBy: 'foe' } }
   const field = world([unit({ id: 'guard', strength: 10 }), unit({ id: 'line', quality: 'elite', strength: 40 })])
   const lost = { decided: true, winner: 'blue', reason: 'enemy army broken' }
-  assert.deepEqual(commanderFate({ commanders: held, world: field, outcome: { ...lost, winner: 'red' } }, 'red'), { fate: 'freed', price: null })
-  assert.deepEqual(commanderFate({ commanders: held, world: field, outcome: lost }, 'red'), { fate: 'ransomed', price: 'line' })
-  assert.deepEqual(commanderFate({ commanders: held, world: world([unit({ id: 'guard', strength: 0 })]), outcome: lost }, 'red'), { fate: 'lost', price: null },
-    'nothing to bargain with')
-  assert.deepEqual(commanderFate({ commanders: { red: { unitId: 'guard', status: 'free' } }, world: field, outcome: lost }, 'red'), { fate: 'free', price: null })
-  assert.deepEqual(commanderFate({ commanders: { red: { unitId: 'guard', status: 'killed' } }, world: field, outcome: lost }, 'red'), { fate: 'killed', price: null })
+  assert.deepEqual(commanderFate({ commanders: held, world: field, outcome: { ...lost, winner: 'red' } }, 'red'), { fate: 'freed', price: null, prices: [] })
+  assert.deepEqual(commanderFate({ commanders: held, world: field, outcome: lost }, 'red'), { fate: 'stripped', price: null, prices: [] },
+    'no unit is taken as a price')
+  assert.deepEqual(commanderFate({ commanders: held, world: world([unit({ id: 'guard', strength: 0 })]), outcome: lost }, 'red'), { fate: 'stripped', price: null, prices: [] },
+    'nothing left on the field, and still he is not lost')
+  assert.deepEqual(commanderFate({ commanders: { red: { unitId: 'guard', status: 'free' } }, world: field, outcome: lost }, 'red'), { fate: 'free', price: null, prices: [] })
+  assert.deepEqual(commanderFate({ commanders: { red: { unitId: 'guard', status: 'killed' } }, world: field, outcome: lost }, 'red'), { fate: 'killed', price: null, prices: [] })
 })
 
 test('a battle with no Commanders on the field runs as it always did', () => {

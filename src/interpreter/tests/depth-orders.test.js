@@ -20,8 +20,8 @@ const officer = (name, experience, personality) => ({ name, experience, personal
 const world = createWorld({
   units: [
     { id: 'red_spears', side: 'red', role: 'spearmen', position: 'E7', strength: 100, officer: officer('Marcus', 0, 'bold') },
-    { id: 'red_swords', side: 'red', role: 'swordsmen', position: 'E8', strength: 100, officer: officer('Quintus', 8, 'steady') },
-    { id: 'red_horse', side: 'red', role: 'cavalry', mounted: true, position: 'E9', strength: 100, officer: officer('Titus', 3, 'cautious') }
+    { id: 'red_swords', side: 'red', role: 'swordsmen', position: 'E8', strength: 100, officer: officer('Quintus', 14, 'steady') },
+    { id: 'red_horse', side: 'red', role: 'cavalry', mounted: true, position: 'E9', strength: 100, officer: officer('Titus', 9, 'cautious') }
   ]
 })
 const context = { map, units: world.units, enemies: [] }

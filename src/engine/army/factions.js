@@ -143,4 +143,4 @@ function factionChoices() {
   return Object.entries(FACTIONS).map(([id, f]) => ({ id, title: f.title, culture: f.culture, fights: f.fights, elite: f.elite.name }))
 }
 
-module.exports = { FACTIONS, buildFaction, factionUnits, fieldFactions, enemyFaction, factionChoices }
+module.exports = { FACTIONS, buildFaction, factionUnits, fieldFactions, enemyFaction, factionChoices, formUp }

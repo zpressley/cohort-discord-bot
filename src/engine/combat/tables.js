@@ -561,6 +561,30 @@ const HEART = {
   MORALE: 8
 }
 
+// The end of the day (ruled 2026-11-23: "add a cap to the battle at end of
+// day like 40 turns"): a battle mustered from the app is over after this
+// many player turns, and the side that lost the smaller share of its men
+// has it.
+const DAY = { TURNS: 40 }
+
+// A unit's veterancy (veterans/veterancy.js; ruled 2026-11-23: the newest
+// men fall first). The experience the fallen take with them, as a share of
+// the unit's average: at 1 they die evenly; at 0.5 the men who fall have on
+// average half the unit's experience. Starting value.
+const VETERANCY = { FALLEN_SHARE: 0.5 }
+
+// Training (command/company.js; ruled 2026-11-23: "Good perk for 30 is
+// training, each battle fought increase the level of the unit. A 30
+// officer over militia can have them eventually at professional level over
+// time"). Every so many battles a unit comes through under an officer of
+// the greatest experience, it rises one level of quality, up this ladder
+// and no further. Tribal warriors rise to professionals; the elite are the
+// elite already. Starting values.
+const TRAINING = {
+  BATTLES_PER_LEVEL: 5,
+  LADDER: ['levy', 'militia', 'professional', 'veteran_mercenary']
+}
+
 // The Commander on the field (command/commander.js; ruled 2026-11-22: "low
 // odds and not possible till a threshold"). The threshold is half because
 // units here break at about half strength: with the first, generic armies a
@@ -581,6 +605,52 @@ const COMMANDER = {
   CHANCE: 0.04,        // each tick it is struck while under the threshold
   OVERRUN: 0.3,        // the tick it is destroyed around him
   KILLED_SHARE: 0.12   // of those who fall, killed; the rest are taken
+}
+
+// A Commander in the enemy's hands, and the computer as his captor
+// (command/commander.js, opponent/captor.js; ruled 2026-11-23: "Computers
+// are worse than humans naturally ... Unpredictable but probably risky to
+// bank your future on ... you can also surrender the field in return for
+// freedom which some opponents would accept since it saves their manpower
+// as well"). Starting values, Claude's: measured in docs/DECISIONS.md ("How
+// the held Commander's negotiation ... were built").
+//
+// The computer accepts an offer on one seeded roll, with the chance
+//   BASE + GIFT * (men offered / its own men at the start)
+//        + HURT * (share of its own men out of the fight)
+// held between FLOOR and CEILING. A roll that misses by less than
+// COUNTER_BAND asks for more instead (the captive's strongest unit it has
+// seen, on top of what was offered); a wider miss is refused.
+const PARLEY = {
+  BASE: 0.08,          // the field alone, from a captor who has lost no one
+  GIFT: 1.0,           // per share of its own army handed to it
+  HURT: 0.35,          // per share of its own men dead, fled or broken
+  FLOOR: 0.05,
+  CEILING: 0.7,        // never a sure thing
+  COUNTER_BAND: 0.25,
+  COUNTER_LASTS: 1     // player turns after the one it is made in that a counter stands
+}
+
+// An officer's loyalty, while his Commander is held (ruled 2026-11-23:
+// "Desertion can be another part of a disloyal officer as his men abandon
+// the unit by a % every round after the commander is captured. Loyal
+// officers rally men and fight for their captured commander trying to free
+// him."). Loyalty itself is not built yet: an officer may carry
+// `loyalty`, 0 to 100, and one without it is NEUTRAL. Starting values,
+// Claude's.
+const LOYALTY = {
+  NEUTRAL: 50,         // an officer with no loyalty yet, or no officer at all
+  DISLOYAL: 30,        // at or under: his men desert while the Commander is held
+  LOYAL: 70,           // at or over: he goes for the men who hold him
+  DESERTION: 0.03,     // of the unit's men, each tick (ten minutes) he is held
+  RALLY_MORALE: 15     // a loyal officer's shaken men take this much heart, once
+}
+
+// Riding with another unit (ruled 2026-11-23: "a commander needed to be
+// adjacent to another unit to switch. Always start with elite though").
+// Adjacent: within one tile, as the eight tiles round a tile are.
+const RIDE = {
+  REACH: 1
 }
 
 // ── Morale ─────────────────────────────────────────────
@@ -703,6 +773,12 @@ module.exports = {
   RALLY,
   HEART,
   COMMANDER,
+  TRAINING,
+  DAY,
+  VETERANCY,
+  PARLEY,
+  LOYALTY,
+  RIDE,
   MORALE,
   DAMAGE,
   CHARGE,

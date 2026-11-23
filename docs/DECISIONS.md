@@ -977,3 +977,465 @@ Built at once: **5** (a Commander who falls can be killed only when his
 unit is at a quarter of its strength or less, or destroyed; above that he
 is taken: `COMMANDER.DEATH_THRESHOLD`) and **7**.
 
+## Rulings, November 23, 2026 (factions and the battle)
+
+Zach, on the four questions the factions work raised:
+
+1. **Buying the army.** "They should buy standard army with a set budget,
+   use the army builder that the original discord app ran."
+2. **The factions.** "I have a doc for factions and elite units for 20
+   factions." It is `docs/Context/final_20_cultures_complete.txt`.
+3. **Whose faction.** Asked whether a friend's own faction should override
+   the mustering player's choice of enemy: "No, your faction is just the
+   starting place, it can be the same (Romans fought Romans all the time)."
+   Read as: each player brings his own faction, the mustering player does
+   not choose a friend's, and both sides may be the same faction.
+4. **The kind of battle.** "One type right now, a deathmatch. Victory
+   condition is surrendering the field, army loss, or commander death."
+
+## Rulings, November 23, 2026 (officer levels; the captive's end)
+
+1. **Officer levels.** "Nameless 0-4, Green 4-8, Seasoned 8-12, Vet 13+.
+   What other perks can we tie into the progression as 30 is the goal for
+   maximum veterancy? Being able to carry out long missions would be a
+   great feature for legendary 20+."
+   Built as: a unit has no officer for its first three battles; at its
+   fourth a green officer comes forward with a name (this replaces "after
+   3 or 4 battles, arriving seasoned"); seasoned at 8, veteran at 13,
+   legendary at 20; 30 is the most that counts (`GRADES`, `EARNED_AT`,
+   `MAX_EXPERIENCE` in `command/officers.js`). A new Commander's one
+   officer starts a veteran, at 13 to 16. A legendary officer never loses
+   any part of an order. Long missions, and the other perks of each level,
+   are not built: see the proposal put to Zach the same day.
+2. **A captive is not killed.** "Honor binds a commander from killing his
+   foe, but if he won't surrender the field to save his men then he leaves
+   a commander of none. Desertion can be another part of a disloyal
+   officer as his men abandon the unit by a % every round after the
+   commander is captured. Loyal officers rally men and fight for their
+   captured commander trying to free him."
+   Being built with the negotiation: a Commander held when the battle ends,
+   not won, with no deal, goes free with nothing (his company is gone; he
+   is not); the only total loss is death in the fighting.
+3. **The point of view and messenger ranges.** Put to Zach: orders arrive
+   at once within 6 tiles of the Commander; beyond that a rider carries
+   them, and each ten minutes of riding is ten minutes of delay; reports
+   come back the same way; a rider cannot cross ground the enemy holds, so
+   a cut-off unit hears nothing and reports nothing; the map shows what
+   the Commander sees now and everything else as last reported, with its
+   age. His answer: "Go with the proposed pov/messenger ranges." The
+   specification is `docs/design/point-of-view-and-messengers.md`.
+
+## Rulings, November 23, 2026 (officer perks)
+
+Asked what else might come with each level, Zach, on the ideas put to him:
+
+> "The second perk is too powerful and the unreliable officers could make
+> the game a bit too hard early on, I would say additional details as
+> progression happens but never incorrect details. The other perk is lower
+> odds of death as they progress, I like the 30 getting a green officer but
+> I would say if the unit itself provides the officer so the veteran status
+> of the unit, its average level determine the officers starting spot. A 30
+> officer in charge of a 24 unit gets a legendary successor."
+
+So:
+- **Not wanted:** an officer of 30 battles as a "second" near whom orders
+  arrive at once.
+- **Reports:** more detail as an officer rises, never a wrong detail. To
+  be built with news by rider (`docs/design/point-of-view-and-messengers.md`).
+- **Death:** an officer's odds of being killed fall as he rises.
+- **Successors:** the unit provides its officer, and the unit's own
+  veterancy sets where he starts.
+- **Long missions for legendary officers** (his own, earlier the same
+  day): not built.
+
+### How death odds and successors were built (Claude's choices, open to change)
+
+- **Death odds** (`DEATH_ODDS` in `command/officers.js`): a seasoned
+  officer runs 85% of a green one's chance of being killed in a battle, a
+  veteran 70%, a legend 50%. Capture and wounds are unchanged.
+- **A unit's veterancy** is the average experience of its men, by the
+  engine's veterancy rules from the old design (`veterans/veterancy.js`):
+  every man who comes through a battle banks one, the fallen take theirs
+  with them, and the unit is made up to strength with recruits who know
+  nothing. A unit kept whole for 24 battles has a veterancy of 24; one
+  that loses forty men in a hundred each time never rises above about 2.
+  This is where "survival" pays.
+- **Who comes forward.** A unit with no officer and at least 4 battles
+  behind it finds one in its ranks after a battle, starting at the unit's
+  veterancy and never below green. For a unit's first officer that is
+  green. So a unit that loses its officer fights its next battle without
+  one, and then has a successor at its own level: he has the unit's skill,
+  and none of the dead man's memory. This replaces "must earn another from
+  nothing".
+- **An officer of 30 battles has his successor ready at once**: no battle
+  without an officer. Over a unit of 24, a legend; over a unit bled white,
+  a green one.
+- A unit destroyed, or given to the enemy, starts again from nothing.
+- **Claude's reading, the other being open:** "the 30 getting a green
+  officer" was read as the level-30 perk being the immediate successor,
+  and the unit's level setting where every successor starts. The other
+  reading is that only a level-30 officer's unit gets a successor at its
+  own level, and every other unit starts again from nothing.
+- Not built: a unit's veterancy helping it stand in battle. The engine has
+  the rule (`veteranResistance`) and the web app does not pass it in.
+
+
+
+### How buying the army and the one kind of battle were built (Claude's choices, open to change)
+
+Builds rulings 1, 3 and 4 of November 23 (factions and the battle).
+
+**Buying the army (ruling 1).**
+- **The army screen** (`/army/<Commander's link>`, `armyScreen` in
+  `app.js`) carries the Discord builder over to a phone: the elite at the
+  top, free and "not for sale"; the bought units as cards (name, kit, men,
+  price, officer or battles toward one; Change, Dismiss); a sticky bar of
+  supply points spent and left; "Buy a unit" opens the steps the Discord
+  builder had (the men, on foot or on horse, weapon in two groups, armour,
+  shield), each choice a button with its price. A choice the builder
+  refuses is struck through; tapping it says why, in the builder's own
+  reason put in plain words ("Heavy shield: the crossbow allows at most a
+  medium shield", "Levy troops cannot bear heavy armour", "The army would
+  cost 31 supply points against a budget of 30"). Only the culture's own
+  weapons are listed. "Keep this army" and "Take the usual army of Rome"
+  are at the foot.
+- **The server judges everything** (`src/web/armies.js`, on the engine's
+  `buildUnit`/`buildArmy` and `engine/army/standard.js`):
+  `POST /api/factions/:id/appraise` prices a list and every choice of the
+  unit being bought; `POST /api/commander/:token/army` keeps an army after
+  checking it again (budget, kit, names), or `{ usual: true }`. A choice is
+  refused only for what it would add (a reason the unit has not already,
+  or overspending where it was not), so a player is never stuck: what
+  stands in the way is named, and he changes that first.
+- **Kept with the Commander** (`commander.army`), bought after his faction
+  when he is made (the muster's "Make your Commander, and buy his army"),
+  changed between battles from the muster or Your officers, and refused
+  (409) while his army is in the field. A muster never waits on it: with
+  none bought he brings his faction's usual army, built exactly as
+  before (tested equal to `fieldFactions`). The default armies in
+  `src/data/factions.js` stay the computer's and the one-tap usual army.
+- **The friend who joins** brings his own Commander's army (bought or
+  usual); a new Commander on "Who leads?" may join with the usual army in
+  one tap, or buy his first and come back.
+- **The elite** is never in the list: a unit of elite quality is refused
+  with the builder's own reason ("elite troops cannot be bought"), its name
+  cannot be taken, and it comes with every army.
+
+**Names.** A unit's name is its own while it is kept, given by the game
+from its kit, never typed: "spears", "slingers", "horse archers",
+"riders", "lancers", or the faction's own name for that weapon where its
+usual army has one ("legionaries", then "hastati", for Roman swordsmen on
+foot; "sarissa foot" for Macedonian pikes). A second of a name is numbered
+("slingers 2") and the first keeps its bare name, so no unit's name
+changes when another is bought. Where every unit of a name is numbered (the
+usual armies' "sarissa foot 1" and "2") the bare name orders them all, as
+before. The server takes only names the game would give that kit (so none
+says "everyone" or "the enemy"), distinct, and never the elite's. Changing
+a unit's kit keeps its name if its kind of weapon is the same; a new kind
+of weapon is a new name. Tested: every unit of five armies a player might
+buy, in every faction, is found by the order reader by its name.
+
+**Officers when the army changes** (`armyChanged` in
+`engine/command/company.js`): a unit is known by its name. A unit kept
+(its kit changed or not) is the same men: its officer, or its count of
+battles toward one, stays. A unit dismissed takes its count with it (men
+raised again start from nothing); its officer stays in the company, a man
+and not a unit, and at the next muster leads a unit that has none, as an
+officer whose men are not on the field already did. A new unit has no
+officer and no battles. So changing the army moves officers but never
+makes one: they are still earned in battle (tested).
+
+**One kind of battle (ruling 4).** The muster asks only: the field, the
+opponent, the Commander (or a new one and his faction), his army, the
+enemy's faction (against the computer only) and the side. "The kind of
+battle", "When the day ends" and "Ground to hold" are gone from the form;
+the API still takes `scenario`, `timeLimitMinutes` and `objectives`, and
+the tests use them. The scenario (always the meeting battle from the app)
+still supplies the map's deployment; bought armies of up to eight units
+form up on every map (tested). With no time limit and no ground to hold,
+a battle from the app ends only as the ruling says: the enemy yields the
+field (or gives up a unit to go free, which is leaving the field), its
+army breaks or is destroyed, or its Commander is killed; or both at once,
+a draw. The verdict words for "yielded" now say "yielded the field".
+Tested over app-style battles; in 1,280 league battles the endings were
+army broken 1,241, collapsed 34, Commander killed 5.
+
+**The same faction on both sides (ruling 3).** Against the computer, its
+faction is chosen from every faction (the player's own among them) or
+drawn by lot from all of them (`anyFaction`, a new seeded draw; the old
+`enemyFaction` is left as it was). Against a friend the form does not ask:
+the muster gives his side a faction by lot until he joins, and his
+Commander's own army replaces it ("Rome against Rome" is a title).
+
+**Measured** (`node src/harness/bought-league.js`): five armies per
+faction against every faction's default army played by the computer, both
+sides played by the computer's planner (so it measures the army, not the
+player), the bought side with its Commander on the elite, on all four
+maps, both ways round, two seeds, every battle its own seed: 1,280
+battles, all ended, 13.9 player turns on average.
+
+| Army bought (each spends what it can) | Rome | Macedon | Sarmatia | Han |
+|---|---|---|---|---|
+| the usual army (yardstick) | 47% | 45% | 45% | 47% |
+| all levy spears (7 units) | 3% | 0% | 0% | 3% |
+| all levy slingers (7 units) | **97%** | 72% | 70% | 83% |
+| veteran mercenaries, best kit (2 units) | 44% | 36% | 48% | 61% |
+| all horse (3 units) | 16% | 13% | 33% | 17% |
+
+**Close to unbeatable: seven units of levy slingers** (4 points each). They
+win 70 to 97% against every default army, 100% against some. The faction
+work found slingers the strongest buy for the price; a bought army makes
+it the whole army. **Helpless: all cheap spears** (0 to 3%), and all horse
+(13 to 33%): three units of horse against four of foot. Combat was not
+retuned (the balance table is unchanged). The planner plays both sides,
+so a player who closes fast on slingers may do better against them.
+
+**Guessed.**
+- "Use the army builder" was read as the builder's rules and the Discord
+  builder's steps, not its other parts: no secondary weapon, ranged
+  weapon added to a melee one, or support specialists (the engine's
+  builder has one weapon per unit and no support).
+- Names come from the kit and cannot be typed. The other reading is that a
+  player names his units; that needs a guard on names the order reader
+  would misread.
+- The friend's side gets a placeholder faction by lot at the muster (the
+  battle needs both armies before he joins); it is replaced when he joins
+  with a Commander of another faction or with a bought army.
+- No time limit at all from the app. Between two friends who both only
+  hold, a battle could stand for ever; either can yield.
+
+**Open, for Zach.**
+1. Seven levy slingers beat everything. Should the price of slingers (or
+   of missile troops) go up, the budget favour mixed armies, or a cap on
+   units of one kind, or is that for players to find and counter?
+2. Should a player name his own units?
+3. When a unit is dismissed, should its officer stay (built), or go with
+   his men?
+4. Should a battle from the app have any end of day at all, for two
+   players who both hold?
+5. Secondary and ranged weapons on one unit, and support (engineers,
+   baggage), as the Discord builder had them: wanted?
+
+Also changed: `formUp` is exported from `engine/army/factions.js` (one
+word; the faction data there and in `src/data/factions.js` are untouched);
+kit words are in `narrator/words.js` (`KIT`); the soak plays the bought
+armies, mirror matches among them, on every map.
+
+## Ruling, November 23, 2026 (the perk of thirty battles)
+
+"Good perk for 30 is training, each battle fought increase the level of the
+unit. A 30 officer over militia can have them eventually at professional
+level over time."
+
+### How training was built (Claude's choices, open to change)
+
+- A unit that comes through a battle under an officer of 30 battles is
+  drilled by him. **Every 5 such battles its quality rises one level**
+  (`tables.TRAINING`): levy, militia, professional, veteran mercenaries,
+  and no further. Tribal warriors become professionals. The elite are the
+  elite already.
+- The rise costs nothing and is over and above what was bought: the army
+  screen and its budget still show the unit as it was raised, and the
+  field shows it as it is now.
+- Numbers stay as raised: training makes better men, not more of them.
+- It belongs to the unit. A unit dismissed, destroyed or given to the
+  enemy loses it; an officer who moves to other men starts on them from
+  nothing.
+- An officer of thirty battles now has two perks: this, and a successor
+  ready at once.
+
+## Rulings, November 23, 2026 (the army, and veterans)
+
+Zach, on the five questions buying the army raised:
+
+1. **Balance.** "This is a balance issue overall we have not dove into.
+   That would be a good job for an agent to dig through and recommend a fun
+   way to keep things worth it but balance the army builder options.
+   Secondary, offer a new better system that stays true to the current
+   version and history for the game."
+2. **Names.** "You can name units after they get an officer."
+3. **The roster.** "You don't have to deploy every unit every game. But you
+   cannot field an army over the supply threshold. Additional units from
+   capture and other avenues exist. You can transfer officers."
+4. **The end of the day.** "So add a cap to the battle at end of day like
+   40 turns. We can consider spam blocking and idle games another time."
+5. **Secondary weapons.** "Eventually yes, secondary weapons were for
+   ranged units to have options."
+
+And on veterans dying less: the newest men falling first, "I like this
+since it's realistic." Of veteran units taking fewer casualties in the
+fight: "Isn't this the case anyways? Or are veterans just stubborn about
+routing?" (As the engine stands: a unit's earned veterancy only makes it
+harder to break, and the web app does not yet pass even that in. Put back
+to Zach.)
+
+Built at once:
+- **The end of the day** (`tables.DAY`): a battle mustered from the app is
+  over after 40 player turns, decided as a time limit always was: the side
+  that lost the smaller share of its men has it, and an equal share is a
+  draw.
+- **The newest men fall first** (`tables.VETERANCY.FALLEN_SHARE`): the men
+  who fall carry, on average, half the unit's experience, so a unit's
+  veterancy wears away more slowly than its numbers. Who wins a battle is
+  untouched.
+
+Zach's answer, the same day: "The idea that veterans would not fight
+better seems off, but it would need to be balanced into the game." Not
+built yet: how earned veterancy should make a unit fight better, and by
+how much, is part of the army balance study (`docs/design/army-balance.md`
+when it reports), because it changes who wins. What was measured first:
+the engine's one old rule for it (harder to break) at its old top
+strength takes a side from 53% of its battles to 83%, while it loses
+hardly fewer men.
+
+
+
+### How the held Commander's negotiation, his officers' own command, his view and riding were built (Claude's choices, open to change)
+
+Built from rulings 1, 2, 3 and 6 above, and from three more given the same
+day while it was being built: "Honor binds a commander from killing his
+foe, but if he won't surrender the field to save his men then he leaves a
+commander of none. Desertion can be another part of a disloyal officer as
+his men abandon the unit by a % every round after the commander is
+captured. Loyal officers rally men and fight for their captured commander
+trying to free him." The code: `command/commander.js`, `command/officers.js`
+(`ownCommand`, `loyaltyOf`), `battle/battle.js` (the orders phase),
+`orchestrator/orchestrator.js` (the table: `makeOffer`, `answerOffer`),
+`opponent/captor.js` (the computer's answers), `web/battles.js` (`offer`,
+`answer`, `commanderView_`, `captiveView`, `view`, `heldThrough`,
+`settle`), `narrator/turnNarrator.js` (`fromCaptivity`) and the app. The
+numbers are in `tables.PARLEY`, `tables.LOYALTY` and `tables.RIDE`.
+
+**The table (rulings 1 and 2).** The automatic bargain is gone.
+- Each player turn the held Commander may put one offer down: any of his
+  units still on the field, from none to all. **Every deal gives the field:**
+  the battle is lost as his yield, so "the field alone" is an offer of no
+  units, and the other offers are the field and those units. (Read from
+  "an accepted offer ends the battle"; the other reading, units without
+  yielding the battle, is open.) A new offer replaces the one before.
+- The captor need not answer. A friend who holds him sees the offer above
+  his orders box and may Accept, Refuse, Ask for more (tick boxes: what was
+  offered and the enemy units his side has seen; nothing else), or send his
+  orders and fight on. An answered offer is off the table.
+- **A counter binds the captor:** if the captive's next offer gives all
+  that was asked, the deal is struck at once. It stands for the turn it is
+  made and one more (`PARLEY.COUNTER_LASTS`). The captive sees it with
+  those units ticked ready.
+- A deal: the battle ends ("enemy commander bargained"), he is free, each
+  unit given goes with its officer ('given up'), and a unit with no officer
+  starts its count toward one again. The field alone costs no unit.
+- Held, he cannot yield by his own word (ruled the same day): `{ surrender }`
+  while held is read as no orders, in the engine, and the button is gone.
+- Everything goes through `submitOrders` as `{ offer }` and `{ answer }`,
+  neither of which is a side's orders for the turn. A battle saved with the
+  old `{ bargain }` still plays back.
+- **Fog:** the captor's screen names only the units offered and the units
+  his side has seen; he may ask only for those (refused otherwise). A
+  page waiting on the turn, or at the table, looks again when an offer or an
+  answer comes.
+
+**The computer as captor (`opponent/captor.js`).** One roll for each offer,
+from a stream seeded by the battle's seed and the offer's number, so the
+same battle always gets the same answer (and it is in the log besides). It
+accepts with chance `0.08 + 1.0 × (men offered / its own men at the start)
++ 0.35 × (share of its own men dead, fled or broken)`, held between 5% and
+70%. A roll that misses by under 0.25 asks for more: what was offered and
+the strongest of his units it has seen; a wider miss is refused. It counts
+a unit it has never seen as one of the average size of those it has. So the
+field alone, from a captor that has lost no one, is an 8% chance; a captor
+that has bled will take less; it is never a sure thing.
+
+**At the end, held, no deal (ruled the same day).** "A commander of none":
+he goes free and alive; every officer leaves his company (those who sat the
+battle out too, kept on the roll of the fallen as 'left') and every unit's
+count toward an officer starts again; his name, faction and battles go on,
+and he may muster again with no officer at all, not even a new veteran.
+It is `heldWhenTheBattleEnds` in `commander.js` and `commanderOfNone` in
+`company.js`. The old price (his best unit) and the fate 'lost' are gone:
+the only total loss is death in the fighting.
+
+**His officers run their own units (ruling 1).** As each player turn opens
+while he is held (`ownCommand`): the bold go at the enemy if their side can
+see one, else carry on; the steady carry on with the order they have; the
+cautious halt and hold; a unit with no officer holds where it stands. Each
+decision is an event (`ownCommand`) his own side is told of, once, when it
+changes. Over nature stands loyalty: **loyalty does not exist yet**; an
+officer may carry `loyalty`, 0 to 100, and one without it is 50, neutral
+(`loyaltyOf`), so today every officer goes by his nature. When loyalty is
+built it plugs in there, on the officer the company gives the unit
+(`musterOfficers`). At 70 or over he goes for the unit holding his
+Commander, whatever his nature, and if his men are shaken they take 15
+morale of heart, once; at 30 or under, 3% of his men desert each ten
+minutes his Commander is held (an event, `deserted`, his side is told of;
+deserters are counted among the fallen in the tally). A unit with no
+officer is neutral. When he is free it all stops: his units keep what they
+were doing until he orders them. Nothing of it happens in a battle in which
+no Commander is held (tested; `npm run balance` unchanged).
+
+**What a held Commander sees (ruling 3).** "The captors' point of view" is
+taken as **what the unit holding him can see and takes part in**, not his
+captors' whole side's knowledge. His map and Army tab: his own units in
+that unit's sight, with where they are and about how many men (no morale,
+no orders); the rest named, with their officer, and "out of your sight";
+the enemy as that unit sees it now, nothing his side knew before or has
+learned since; the units he lost before he was taken, and those he can see
+lying where they fell. His dispatch for a turn he was held all through
+opens "You are held by ... at ...: this is what could be seen and heard
+from where you sit", and tells only events every unit of which was in that
+unit's sight at the turn's end, the verdict, ground changing hands, and
+what befell him. A turn in which he was taken he spent with his army, and
+hears of as before. Free again, or the battle over, he has his side's view.
+He cannot have orders read back while held.
+
+**Riding with another unit (ruling 6).** "I ride with the horse",
+"commander to the companions", "ride with the spears", or "Ride with them"
+on a unit's card (shown only where it is allowed): within one tile of the
+unit he is with (the eight round it), not broken, not while held. Read by
+the grammar, never the AI; the read-back is "You: ride with Horse", or why
+not ("Companions are 6 tiles (about 150 m) from Spears, whom you ride
+with: you can ride over only to a unit beside them..."). It goes through
+`submitOrders` and is an event (`commanderRode`) only his side hears of.
+
+**Measured** (`node src/harness/captive-league.js`): 3000 battles of the
+four factions against each other on every map, each battle with a seed of
+its own; red sends everyone in every turn, blue is the computer.
+- Red's Commander was taken in 131 (1 in 23).
+- Offering (the field alone first, then the field and his weakest unit,
+  one more each turn; meeting any counter he can): 240 offers, 1.8 a
+  captivity; 38% of offers accepted; 70% of captivities ended in a deal
+  (31 for the field alone, 61 with units, 94 units given in all); 46
+  counters, 29 met. 21 got free when their captors broke; 18 (14%) were
+  still held when the battle was lost and went home commanders of none.
+- Waiting, no offers: 75 of 131 (57%) went home commanders of none; 55 got
+  free when their captors broke; 1 was freed by his army's victory.
+- How his army fares with its officers running their own units: of
+  captivities with no deal, the army won 33 of 131 (25%), against 35 of
+  129 (27%) on the same seeds with the code before this change, where
+  units carried on with their orders. (A new Commander's units but the
+  elite have no officer, and now hold where they stand.) The two runs
+  differ by two captivities because the computer's own Commander is
+  sometimes taken first, and its officers now run its units.
+
+**Guessed at:**
+- That every deal yields the field (above).
+- That a counter binds the captor for a turn; the other reading is that a
+  captive who meets it must still wait for an acceptance.
+- "Captors' point of view" as the one unit holding him, not the whole
+  enemy side.
+- The computer's rule and its numbers, and that it answers at once.
+- "Rallies if it is shaken" as a shaken unit taking heart, not a broken
+  unit rallying.
+- The friend's page polls for offers every 30 seconds while at the table.
+
+**For Zach:**
+1. Should a deal be able to keep the battle going (units given without
+   yielding the field)?
+2. Is "the captors' point of view" the unit holding him, or everything his
+   captors' side knows?
+3. Is 70% of captivities ending in a deal, for a captive who keeps
+   offering, risky enough? The field alone from an unhurt computer is 8%.
+4. Should the computer, as a captive, make offers of its own? (Today its
+   Commander, when a player takes him, waits.)
+5. Should deserters count as fallen, as fled, or as a count of their own?
+6. A commander of none musters with no veteran at all: is that the intent,
+   or should he get the new Commander's one veteran back?

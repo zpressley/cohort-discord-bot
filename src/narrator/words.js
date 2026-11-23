@@ -80,4 +80,54 @@ function moraleWords(morale) {
   return 'firm'
 }
 
-module.exports = { orderWords, moraleWords, ORDER, OWN_EDGE, HOLD_THERE }
+// ── Kit, for buying an army ────────────────────────────
+// The builder's keys (engine/army/data.js) in the words the army screen
+// uses, and what a unit bought with a weapon is called ("spears"). "Supply
+// points" is the budget's unit (the builder's "SP").
+const KIT = {
+  quality: {
+    levy: 'levy', militia: 'militia', tribal_warriors: 'tribal warriors',
+    professional: 'professionals', veteran_mercenary: 'veteran mercenaries', elite: 'elite'
+  },
+  weapon: {
+    clubs: 'clubs', daggers: 'daggers', spear_basic: 'spear', sickle: 'sickle',
+    light_javelin: 'light javelins', germanic_war_scythe: 'war scythe', chinese_quarterstaff: 'quarterstaff',
+    roman_pugio: 'pugio', spear_professional: 'fine spear', battle_axe: 'battle axe', mace: 'mace',
+    sword_standard: 'sword', roman_gladius: 'gladius', greek_xiphos: 'xiphos', chinese_dao: 'dao',
+    celtic_longsword: 'longsword', persian_akinakes: 'akinakes', two_handed_spear: 'pike',
+    heavy_mace: 'great mace', great_axe: 'great axe', macedonian_sarissa: 'sarissa',
+    thracian_rhomphaia: 'rhomphaia', celtic_champions_sword: 'champion\'s sword', chinese_chang_dao: 'chang dao',
+    germanic_framea: 'framea', persian_kontos: 'kontos', sling: 'sling', self_bow_basic: 'bow',
+    throwing_spear: 'throwing spears', roman_plumbatae: 'plumbatae', germanic_throwing_axe: 'throwing axes',
+    self_bow_professional: 'war bow', javelin_heavy: 'heavy javelins', sling_professional: 'war sling',
+    roman_pilum: 'pilum', greek_composite_bow: 'composite bow', persian_recurve_bow: 'recurve bow',
+    han_chinese_crossbow: 'crossbow', parthian_horse_bow: 'horse bow'
+  },
+  armor: { no_armor: 'no armour', light_armor: 'light armour', medium_armor: 'medium armour', heavy_armor: 'heavy armour' },
+  shield: { no_shield: 'no shield', light_shield: 'light shield', medium_shield: 'medium shield', heavy_shield: 'heavy shield' },
+  mounted: { false: 'on foot', true: 'on horse' },
+  // What a unit is called for its weapon, on foot. On horse: "horse" and
+  // this, for those who shoot or throw ("horse archers"); "riders" for the
+  // rest; "lancers" with the kontos.
+  unit: {
+    clubs: 'clubmen', daggers: 'knifemen', spear_basic: 'spears', sickle: 'sicklemen',
+    light_javelin: 'javelins', germanic_war_scythe: 'scythes', chinese_quarterstaff: 'staves',
+    roman_pugio: 'knifemen', spear_professional: 'spears', battle_axe: 'axes', mace: 'maces',
+    sword_standard: 'swords', roman_gladius: 'swords', greek_xiphos: 'swords', chinese_dao: 'swords',
+    celtic_longsword: 'longswords', persian_akinakes: 'swords', two_handed_spear: 'pikes',
+    heavy_mace: 'great maces', great_axe: 'great axes', macedonian_sarissa: 'pikes',
+    thracian_rhomphaia: 'blades', celtic_champions_sword: 'champions', chinese_chang_dao: 'blades',
+    germanic_framea: 'long spears', persian_kontos: 'lancers', sling: 'slingers', self_bow_basic: 'archers',
+    throwing_spear: 'javelins', roman_plumbatae: 'darts', germanic_throwing_axe: 'axe throwers',
+    self_bow_professional: 'archers', javelin_heavy: 'javelins', sling_professional: 'slingers',
+    roman_pilum: 'javelins', greek_composite_bow: 'archers', persian_recurve_bow: 'archers',
+    han_chinese_crossbow: 'crossbows', parthian_horse_bow: 'archers'
+  },
+  points: 'supply points'
+}
+
+// The Commander himself going over to another of his units ("I ride with
+// the horse"): what he is read back, and what the Army tab says.
+const RIDE_WITH = { say: 'ride with', doing: 'riding with', did: 'rode over to' }
+
+module.exports = { orderWords, moraleWords, ORDER, OWN_EDGE, HOLD_THERE, KIT, RIDE_WITH }

@@ -15,6 +15,7 @@ const { createServer } = require('../server')
 const { createBattleStore } = require('../battles')
 const { FACTIONS } = require('../../data/factions')
 const { loadScenario } = require('../../adapters/hotseat/scenarios')
+const { fieldFactions } = require('../../engine/army/factions')
 
 async function start(store = createBattleStore({})) {
   const server = createServer(store)
@@ -111,12 +112,12 @@ test('the order reader finds every unit of every faction by the name it is shown
   } finally { await app.close() }
 })
 
-test('the enemy is another faction by lot, or the one chosen; the armies, not the scenario\'s, take the field', async () => {
+test('the enemy is any faction by lot (his own among them), or the one chosen; the armies, not the scenario\'s, take the field', async () => {
   const store = createBattleStore({})
   const app = await start(store)
   try {
     const drawn = (await app.api('POST', '/api/battles', { opponent: 'standing', side: 'red', faction: 'rome', seed: 8, map: 'thornwood' })).body
-    assert.match(drawn.title, /^Thornwood.*: Rome against (Macedon|Sarmatia|Han)$/)
+    assert.match(drawn.title, /^Thornwood.*: Rome against (Rome|Macedon|Sarmatia|Han)$/)
     const chosen = (await app.api('POST', '/api/battles', { opponent: 'standing', side: 'red', faction: 'rome', enemyFaction: 'sarmatia', seed: 8 })).body
     assert.equal(chosen.title, 'Crownhill: Rome against Sarmatia')
     const spec = store.seatOf(chosen.seats.red).entry.game.spec
@@ -136,6 +137,12 @@ test('a muster with no Commander and no faction is unchanged: the scenario\'s ow
     assert.deepEqual(spec.units.map(u => [u.id, u.position]), scenario.units.map(u => [u.id, u.position]))
     assert.equal(spec.commanders, undefined, 'no Commander on the field')
     assert.ok(spec.units.every(u => !u.faction))
+    // With factions named and no Commander, each side brings its faction's usual army, as before.
+    const named = (await app.api('POST', '/api/battles', { opponent: 'standing', side: 'red', seed: 3, map: 'ashford', faction: 'han', enemyFaction: 'macedon' })).body
+    const fielded = store.seatOf(named.seats.red).entry.game.spec
+    const usual = fieldFactions(loadScenario('meeting-battle', { map: 'ashford', deploy: true }), { red: 'han', blue: 'macedon' })
+    assert.deepEqual(fielded.units.map(u => [u.id, u.position]), usual.units.map(u => [u.id, u.position]))
+    assert.equal(fielded.commanders, undefined)
   } finally { await app.close() }
 })
 

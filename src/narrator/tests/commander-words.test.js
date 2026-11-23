@@ -19,7 +19,7 @@ const side = (own, seen) => report({ map, ownIds: new Set(own), seenEnemyIds: ne
 
 test('his own side reads it as "you"', () => {
   assert.deepEqual(side(['red_spears', 'red_horse', 'red_swords'], ['blue_swords', 'blue_horse']), [
-    'You were taken by blue_swords. You can send no orders; your officers fight on with the ones they have',
+    'You were taken by blue_swords. You can send no orders; each of your officers now leads his own unit as he sees fit',
     'blue_swords broke, and you got free and reached red_horse',
     'You were killed in the fight with blue_horse',
     'With red_horse gone you got away to red_swords'
@@ -42,7 +42,7 @@ test('with a Commander on each side, each hears his own fate as "you" and the ot
   ]
   const tell = (own, seen) => report({ map, ownIds: new Set(own), seenEnemyIds: new Set(seen), events: both })
   assert.deepEqual(tell(['red_spears', 'red_horse'], ['blue_swords', 'blue_horse', 'blue_spears']), [
-    'You were taken by blue_swords. You can send no orders; your officers fight on with the ones they have',
+    'You were taken by blue_swords. You can send no orders; each of your officers now leads his own unit as he sees fit',
     'red_horse killed the enemy Commander'
   ])
   assert.deepEqual(tell(['blue_swords', 'blue_horse', 'blue_spears'], ['red_spears', 'red_horse']), [

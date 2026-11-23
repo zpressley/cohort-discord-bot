@@ -42,7 +42,7 @@ function involved(event) {
 
 // Events only the unit's own side knows of: its hiding, its search, an
 // ambush it held back, how packed its ranks are.
-const PRIVATE = new Set(['hidden', 'hideFailed', 'ambushHeld', 'checked', 'crowding', 'heartened', 'reacted', 'lostThread', 'commanderMoved', 'quarryGone'])
+const PRIVATE = new Set(['hidden', 'hideFailed', 'ambushHeld', 'checked', 'crowding', 'heartened', 'reacted', 'lostThread', 'commanderMoved', 'quarryGone', 'ownCommand', 'deserted', 'commanderRode'])
 // The engine's own record of a roll, which no commander is told of.
 const UNTOLD = new Set(['grasp'])
 
@@ -62,6 +62,31 @@ function visibleEvents(events, { ownIds, seenEnemyIds }) {
     }
     const ids = involved(e)
     return ids.some(id => ownIds.has(id)) || (ids.length > 0 && ids.every(id => seenEnemyIds.has(id)))
+  })
+}
+
+/**
+ * What a Commander held by the enemy hears of a turn (ruled 2026-11-23:
+ * "You get updates from the captors' point of view... as if you are sitting
+ * nearby as reports come in"): what the unit holding him could see and
+ * hear, and no more. An event is told only if every unit in it was in that
+ * unit's sight at the end of the turn; and the verdict, the ground changing
+ * hands, and what befell him. The enemy's own doings that only its side
+ * knows (its hiding, its orders), and his own army's beyond that sight, do
+ * not reach him. Run before `report`, which applies the side's own fog on
+ * top.
+ *
+ * @param {Array} events
+ * @param {{ seen: Set<string>, side: string }} where  seen: the unit holding
+ *   him and every unit it could see (command/commander.js, sightFrom)
+ */
+function fromCaptivity(events, { seen, side }) {
+  return events.filter(e => {
+    if (UNTOLD.has(e.type)) return false
+    if (e.type === 'victory' || e.type === 'objective') return true
+    if (e.type.startsWith('commander') && e.type !== 'commanderRode') return e.side === side
+    const ids = involved(e)
+    return ids.length > 0 && ids.every(id => seen.has(id))
   })
 }
 
@@ -221,6 +246,9 @@ function plainFact(map, event) {
     case 'commanderKilled': return `the Commander riding with ${event.unitId} was killed in the fight with ${event.by}`
     case 'commanderFreed': return `the Commander held by ${event.by} got free and reached ${event.unitId}`
     case 'commanderMoved': return `the Commander got away from ${event.from} to ${event.unitId}`
+    case 'commanderRode': return `the Commander rode over from ${event.from} to ${event.unitId}`
+    case 'ownCommand': return ownCommandWords(event)
+    case 'deserted': return `${men(event.men)} of ${event.unitId} slipped away${event.officer ? `, ${event.officer} unable or unwilling to hold them` : ''}; ${event.strength} left`
     case 'fled': return `${event.unitId} left the field with ${men(event.strength)}`
     case 'rallied': return `${event.unitId} rallied ${whereAt(map, event.at)} with ${event.strength} men` +
       (moraleWords(event.morale) === 'at breaking point' ? ', at breaking point: it will not stand long without a success near it' : '')
@@ -254,10 +282,22 @@ function plainFact(map, event) {
   }
 }
 
+// What an officer did with his unit while his Commander was held (ruled
+// 2026-11-23: "each commander is running his own unit at that point").
+function ownCommandWords(event) {
+  const who = event.headless ? `${event.unitId}, with no officer to lead them,` : `${event.officer ?? 'The officer'} of ${event.unitId}${event.nature ? `, ${event.nature},` : ''}`
+  switch (event.did) {
+    case 'rescue': return `${who} went for ${event.on ?? 'the men who hold you'} to free you` + (event.morale !== undefined ? ', and his shaken men took heart' : '')
+    case 'advance': return `${who} led them at the enemy`
+    case 'hold': return event.headless ? `${who} held where they stood` : `${who} halted and held where they stood`
+    default: return `${who} kept to the orders they had`
+  }
+}
+
 // How much a commander needs to hear of each kind of event: lower is sooner.
 const WEIGHT = {
   victory: 0, commanderKilled: 0, commanderTaken: 0, commanderFreed: 0, commanderMoved: 1, destroyed: 1, rout: 1, fled: 1, rallied: 1, pursuit: 2, ambush: 1, surprise: 2, objective: 2,
-  volley: 3, lostThread: 1, reacted: 2, quarryGone: 2,
+  volley: 3, lostThread: 1, reacted: 2, quarryGone: 2, ownCommand: 1, deserted: 1, commanderRode: 1,
   heartened: 5,
   revealed: 3, exchange: 3, standoff: 3, push: 4, crush: 4, disengage: 4, contact: 4,
   hidden: 5, hideFailed: 5, checked: 5, ambushHeld: 5, crowding: 6, arrived: 6, halted: 6, move: 7
@@ -377,13 +417,14 @@ function toTheCommander(event, ownIds) {
   const mine = event.type === 'commanderFreed' ? !ownIds.has(event.by) : ownIds.has(event.unitId)
   switch (event.type) {
     case 'commanderTaken': return mine
-      ? `You were taken by ${event.by}. You can send no orders; your officers fight on with the ones they have`
+      ? `You were taken by ${event.by}. You can send no orders; each of your officers now leads his own unit as he sees fit`
       : `${event.by} took the enemy Commander`
     case 'commanderKilled': return mine ? `You were killed in the fight with ${event.by}` : `${event.by} killed the enemy Commander`
     case 'commanderFreed': return mine
       ? `${event.by} broke, and you got free and reached ${event.unitId}`
       : `the enemy Commander got free of ${event.by}`
     case 'commanderMoved': return `With ${event.from} gone you got away to ${event.unitId}`
+    case 'commanderRode': return `You rode over from ${event.from} to ${event.unitId}, and ride with them now`
     default: return null
   }
 }
@@ -477,4 +518,4 @@ async function narrateTurn(ai, turn) {
   return { text: reply.text.trim().replace(/\s*\n+\s*/g, ' ').replace(/[\u2010\u2011]/g, '-'), source: 'ai' }
 }
 
-module.exports = { narrateTurn, report, digest, visibleEvents, publicEvents, summarise, maskNames, placeName, fact, system, VOICES, PRIVATE }
+module.exports = { narrateTurn, report, digest, visibleEvents, fromCaptivity, publicEvents, summarise, maskNames, placeName, fact, system, VOICES, PRIVATE }
