@@ -766,3 +766,134 @@ the read-back").
   battles fingerprinted against the code before the change
   (`harness/tests/attack-named-unchanged.test.js`). The balance matrix is
   unchanged; the soak ends every game.
+
+### How factions at the muster were built (Claude's choices, open to change)
+
+Builds ruling 2 of November 23 ("The elite unit is the unique unit of the
+faction, you get it for free") and ruling 4 of November 22 (the new
+Commander's veteran is with the elite unit). The ten kinds of commander,
+glory or survival, and the tutorial are not built (ruled: later).
+
+**What it is.**
+- **A Commander belongs to a faction**, chosen when he is made and his for
+  life (`commanders.js`: `create({ faction })`, `setFaction`, which refuses a
+  change). A Commander made before factions takes one at his first muster
+  that names one, and keeps it. His army is always his faction's.
+- **The army** is the faction's elite unit, free, plus a standard army
+  bought within the culture's budget, defined as data in
+  `src/data/factions.js` and built through `engine/army/builder.js` by
+  `engine/army/factions.js`, so the budget and permitted kit are checked
+  on every muster. The elite is not bought, but its kit is checked as if
+  bought by the best troops that can be (so it carries only what its
+  culture may field); it is raised at the elite's one size (80). Adding a
+  faction is adding an entry; a test fails if it breaks the builder's
+  rules.
+- **The muster** asks: the field, the kind of battle, the opponent, which
+  Commander leads (or a new one, with his faction), and the enemy's
+  faction (by default another, drawn from the battle's seed; or chosen,
+  for either opponent). The scenario still decides the map, each side's
+  home edge and deployment ground, objectives and the time limit: each
+  army is formed up (foot in a line with a foot elite at its centre,
+  missile foot a step behind, horse on the wings) and set down by
+  `map/deploy.js` as the scenario's own armies are. The battle is titled
+  "Crownhill: Macedon against Rome".
+- **The friend who joins by link** brings his own Commander's faction's
+  army (the side's units are replaced before the first turn, through the
+  same rebuild `join` already does); a new Commander chooses his faction
+  on the "Who leads?" screen, the army the muster gave that side first;
+  with no Commander, the muster's army stands. Both paths give out
+  officers through one helper, `leadSide` in `battles.js`.
+- **Names.** Each unit's id carries the name a player would say
+  (`red_sarissa_foot_2` is "Sarissa foot 2"). Two of a kind are numbered;
+  the bare name orders both. Every unit answers to its full name.
+- **A muster with no Commander and no faction is unchanged**: the
+  scenario's own armies, as before (tested). The existing tests that
+  muster without a faction run exactly as they did.
+
+**The four factions, and why these.** Three that fight differently and one
+with its own flavour, from cultures the builder already prices:
+
+| Faction | Standard army (SP) | Elite, free | Plays as |
+|---|---|---|---|
+| Rome | legionaries (professional, gladius, medium armour, big shield), hastati (militia, same kit), slingers (levy): 26 of 30 | praetorians: gladius, heavy armour, big shield, on foot | heavy foot |
+| Macedon | two sarissa foot (professional pikes), hypaspists (professional spears): 30 of 30 | companions: sword, medium armour, mounted | pike line and a horse guard |
+| Sarmatia | two horse archer units (tribal, bows), raiders (tribal horse, swords), spears (levy foot): 30 of 30 | scale riders: sword, heavy armour, mounted | horse and bow |
+| Han | crossbows (professional), spears, swords (militia): 25 of 30 | Yulin guard: dao, heavy armour, on foot | crossbows that pierce armour |
+
+The elites follow the old per-culture design
+(`docs/Context/Old Context/elite_units_warp_format.js`) where the builder
+allows: the builder gives the kontos only to Persia and Parthia, so the
+scale riders carry swords; Macedon's elite there was the Silver Shields on
+foot, and the Companions were taken instead to give Macedon horse.
+
+**How the armies were chosen.** The first set (each spending its whole
+budget, Han with two crossbow units) was lopsided: Han won 88 to 96% of
+its pairings, Rome beat Macedon 98 to 3. Four candidate armies per faction,
+all legal, were played pairwise (8 seeds, two maps, both ways round) and
+the set whose worst pairing was nearest even was kept. Not every army
+spends its budget: spending Han's last SP on slingers made it win four
+battles in five. Slingers (300 m) are the strongest buy for their price.
+
+**Measured** (`node src/harness/faction-league.js`): every faction against
+every other, both sides played by the computer, each side with a Commander
+riding with its elite unit, 20 seeds, both ways round, on all four maps,
+960 battles. Every battle ended.
+
+| Pairing | Wins | Draws | Player turns |
+|---|---|---|---|
+| Macedon v Rome | Macedon 45%, Rome 55% | 0% | 13.9 |
+| Rome v Sarmatia | Rome 43%, Sarmatia 57% | 0% | 14.1 |
+| Han v Rome | Han 60%, Rome 40% | 0% | 19.2 |
+| Macedon v Sarmatia | Macedon 63%, Sarmatia 38% | 0% | 13.5 |
+| Han v Macedon | Han 52%, Macedon 48% | 0% | 14.2 |
+| Han v Sarmatia | Han 53%, Sarmatia 48% | 0% | 14.6 |
+
+No pairing is worse than 63/37. Average 14.9 player turns, 258 battle
+minutes.
+
+**The Commander with his elite unit** is taken in 1 battle in 16 and killed
+in 1 in 32 (1,920 Commanders). Measured the same way (computer against
+computer, both sides with a Commander) the generic armies, where he rides
+with the best unit, give 1 in 24 and 1 in 44 (960). The `COMMANDER` note's
+1 in 30 and 1 in 150 were against three kinds of player, not the computer
+on both sides. So the elite unit is somewhat more dangerous to ride with:
+it is in the line, and fights longest. By faction: with the Companions
+(mounted) 1 in 14 taken and 1 in 23 killed; praetorians 1 in 17 and 1 in
+40; scale riders 1 in 18 and 1 in 40; Yulin guard 1 in 15 and 1 in 32.
+Combat was not retuned (the balance matrix is unchanged).
+
+**Also changed.**
+- `interpreter/resolve.js`: "spears and archers hold" ordered only the
+  archers (the whole phrase matched one unit by its kind before it was
+  split on "and"). Names joined by "and" are now split first. It showed
+  with the generic armies too.
+- The order reader is given a unit's own aliases as well as its shown
+  name (`context` in `battles.js`).
+- The soak plays every faction's army against every other on every map
+  (288 battles). A standoff found on the way, not reachable in the app:
+  with both sides given a Commander, a computer side whose Commander was
+  taken sends no orders, and against a player who sends none either the
+  battle never ends. The soak now musters as the app does (no Commander
+  for the computer's side). Between two friends the same standoff could
+  happen; the default four-hour day ends it.
+
+**Guessed.** "His army is that faction's" was read as a fixed default army
+per faction until an army screen is asked for; the other reading is that a
+player buys his standard army. "The kind of battle" is still the
+scenario; with armies from the factions the two scenarios differ only in
+their names ("Legions and Celts" no longer says who fights).
+
+**Open, for Zach.**
+1. Should a player buy his standard army (the builder's budget), or is a
+   default army per faction enough for now?
+2. Which factions next, and should each faction's elite be its historical
+   guard (Silver Shields or Companions for Macedon)?
+3. Should the friend who joins choose his own faction even when the
+   mustering player picked the enemy's? (Built: his Commander's faction
+   wins; with no Commander the muster's choice stands.)
+4. Riding with the elite, a Commander falls about 1.5 times as often as
+   with the generic best unit. Is that the risk wanted, or should he be
+   able to ride with another unit?
+5. The two kinds of battle are the same battle now. Should kinds of battle
+   be something else (hold ground, a river crossing), or go from the
+   muster?

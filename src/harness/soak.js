@@ -14,7 +14,8 @@
 //                                seeds on each other map, plus 50 meeting
 //                                battles
 //                                and the computer's side against three kinds
-//                                of commander on every map
+//                                of commander on every map, and every
+//                                faction's army against every other's
 //   npm run soak -- --seeds 50
 
 const { createSession } = require('../adapters/hotseat/session')
@@ -90,6 +91,34 @@ for (const field of fields) for (const name of Object.keys(SCENARIOS)) for (cons
   }
 }
 
+// Faction armies (src/data/factions.js), as the web app musters them: each
+// against each other, on every map, red's Commander on the field with his
+// elite unit, red played by the three kinds of commander above and blue by
+// the computer. (Blue has no Commander, as the computer's side has none in
+// the app: one taken would send no orders, and against a commander who
+// sends none either the two would stand for ever.)
+const { fieldFactions, FACTIONS } = require('../engine/army/factions')
+const { leadUnit } = require('../engine/command/company')
+const armies = { games: 0, finished: 0, turns: 0, stuck: [] }
+for (const field of fields) for (const red of Object.keys(FACTIONS)) for (const blue of Object.keys(FACTIONS)) {
+  if (red === blue) continue
+  for (const [foe, orders] of Object.entries(FOES)) for (let seed = 1; seed <= Math.max(1, Math.round(seeds / 12)); seed++) {
+    const spec = fieldFactions(loadScenario('meeting-battle', { map: field, deploy: true }), { red, blue })
+    const rides = (side) => { const mine = spec.units.filter(u => u.side === side); return { unitId: mine[leadUnit(mine)].id } }
+    const game = createGame({ ...spec, standingOrders: {}, commanders: { red: rides('red') } }, { seed })
+    let turns = 0
+    while (!game.outcome.decided && turns < MAX_PLAYER_TURNS) {
+      const r = orders(game)
+      const b = planTurn(game, 'blue')
+      submitOrders(game, 'red', r)
+      submitOrders(game, 'blue', b)
+      turns++
+    }
+    armies.games++
+    if (game.outcome.decided) { armies.finished++; armies.turns += turns } else armies.stuck.push(`${field} ${red} v ${blue}, red a commander who ${foe}, seed ${seed}`)
+  }
+}
+
 let decided = 0
 let meetingTurns = 0
 for (let seed = 1; seed <= 50; seed++) {
@@ -104,7 +133,10 @@ for (const stuck of result.stuck.slice(0, 10)) console.log(`  stuck: ${stuck}`)
 console.log(`the computer's side: ${thinking.finished} of ${thinking.games} finished, ` +
   `${(thinking.turns / Math.max(1, thinking.finished)).toFixed(1)} player turns on average`)
 for (const stuck of thinking.stuck.slice(0, 10)) console.log(`  stuck: ${stuck}`)
+console.log(`faction armies: ${armies.finished} of ${armies.games} finished, ` +
+  `${(armies.turns / Math.max(1, armies.finished)).toFixed(1)} player turns on average`)
+for (const stuck of armies.stuck.slice(0, 10)) console.log(`  stuck: ${stuck}`)
 console.log(`meeting battle: a verdict in ${decided} of 50, ` +
   `${(meetingTurns / Math.max(1, decided)).toFixed(1)} battle turns on average`)
 
-if (result.stuck.length > 0 || thinking.stuck.length > 0 || decided < 50 || result.unread > 0) process.exitCode = 1
+if (result.stuck.length > 0 || thinking.stuck.length > 0 || armies.stuck.length > 0 || decided < 50 || result.unread > 0) process.exitCode = 1

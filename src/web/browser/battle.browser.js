@@ -57,7 +57,13 @@ test('alone, on a phone: muster, an order written on the map, turns to a verdict
     await p.goto(base + '/')
     await p.waitForSelector('form#muster')
     assert.match(p.url(), /\/muster$/, 'a new browser starts at the muster')
+    // A new Commander chooses his faction; the enemy's is drawn by lot
+    // unless chosen.
+    await p.selectOption('select[name="faction"]', 'macedon')
+    assert.match(await p.textContent('#faction-note'), /Companions, comes free/)
+    await p.selectOption('select[name="enemyFaction"]', 'rome')
     await p.selectOption('select[name="timeLimit"]', '')
+    if (process.env.SHOT) await p.screenshot({ path: process.env.SHOT.replace('.png', '-muster-new.png'), fullPage: true })
     await p.click('button[type="submit"]')
     await p.waitForSelector('#map-scroll svg')
     assert.match(p.url(), /\/b\/[A-Za-z0-9_-]+$/)
@@ -77,21 +83,28 @@ test('alone, on a phone: muster, an order written on the map, turns to a verdict
     assert.equal(await p.locator('.question').count(), 0, 'every example is understood')
     await p.click('#clear')
 
-    // The map gesture: pick the horse in the army panel, then tap a place.
+    // The Army tab: Macedon's army, and you ride with its elite unit.
     await p.click('[data-tab="army"]')
-    await p.click('[data-pick="red_horse"]')
+    assert.match(await p.textContent('.bar-title'), /Macedon against Rome/)
+    const cards = await p.locator('.unit-card h3').allTextContents()
+    assert.deepEqual(cards, ['Sarissa foot 1', 'Sarissa foot 2', 'Hypaspists', 'Companions'])
+    assert.match(await p.locator('.unit-card', { hasText: 'Companions' }).textContent(), /You ride with them[\s\S]*Officer:.*veteran/)
+    if (process.env.SHOT) await p.screenshot({ path: process.env.SHOT.replace('.png', '-army.png'), fullPage: true })
+
+    // The map gesture: pick the Companions in the army panel, then tap a place.
+    await p.click('[data-pick="red_companions"]')
     const svg = p.locator('#map-scroll svg')
     const box = await svg.boundingBox()
     await svg.click({ position: { x: Math.min(box.width - 5, 260), y: 120 } })
     const draft = await p.inputValue('#orders')
-    assert.match(draft, /^Horse to [A-J]\d{1,2}-(NW|NE|SW|SE)$/, `the map wrote "${draft}"`)
+    assert.match(draft, /^Companions to [A-J]\d{1,2}-(NW|NE|SW|SE)$/, `the map wrote "${draft}"`)
 
     // Read back, then send; alone, each turn runs at once.
     await p.click('#read-back')
     await p.waitForSelector('.readback')
 
     // An unclear place comes with choices; picking one rewrites the order.
-    await p.fill('#orders', 'spears to the ford')
+    await p.fill('#orders', 'sarissa foot 1 to the ford')
     await p.click('#read-back')
     await p.waitForSelector('[data-choice]')
     await p.click('[data-choice] >> nth=0')
@@ -131,7 +144,7 @@ test('alone, on a phone: muster, an order written on the map, turns to a verdict
       await p.locator('.officer summary').first().click()
       assert.match(await p.locator('.officer li').first().textContent(), /a victory|a defeat|a draw/)
     }
-    assert.match(await p.textContent('main'), /Commander \w+/)
+    assert.match(await p.textContent('main'), /Commander \w+ of Macedon/)
     assert.match(await p.textContent('main'), /ready to muster/)
     if (process.env.SHOT) await p.screenshot({ path: process.env.SHOT, fullPage: true })
 
@@ -140,6 +153,10 @@ test('alone, on a phone: muster, an order written on the map, turns to a verdict
     await p.goto(base + '/muster')
     await p.waitForSelector('select[name="commander"]')
     assert.match(await p.locator('select[name="commander"] option:checked').textContent(), /1 battle fought/)
+    // His faction is his: it is shown, not asked again.
+    assert.equal(await p.locator('#faction-field').isHidden(), true)
+    assert.match(await p.textContent('#faction-note'), /you fight for Macedon/)
+    if (process.env.SHOT) await p.screenshot({ path: process.env.SHOT.replace('.png', '-muster-his.png'), fullPage: true })
     await p.click('button[type="submit"]')
     await p.waitForSelector('#orders')
     await p.goto(base + '/muster')
@@ -175,6 +192,9 @@ test('two players by link, on desktops: the turn waits for both, then both read 
     await blue.waitForSelector('#who-leads')
     assert.match(await blue.textContent('#who-leads h1'), /Who leads\?/)
     assert.equal(await blue.locator('[data-lead]').count(), 2, 'no Commanders yet in this browser: a new one, or none')
+    // A new Commander's faction, for life: the army the muster gave this side first.
+    assert.equal(await blue.locator('select[name="faction"]').count(), 1)
+    await blue.selectOption('select[name="faction"]', 'sarmatia')
     if (process.env.SHOT) await blue.screenshot({ path: process.env.SHOT.replace('.png', '-who-leads-desktop.png'), fullPage: true })
     await blue.click('[data-lead="new"]')
     await blue.waitForSelector('#map-scroll svg')
@@ -182,6 +202,7 @@ test('two players by link, on desktops: the turn waits for both, then both read 
     assert.equal((await blue.evaluate(() => JSON.parse(localStorage.getItem('cohort.commanders')))).length, 1, 'his link is kept in this browser')
     await blue.click('[data-tab="army"]')
     assert.match(await blue.textContent('#panel-body'), /You ride with them/)
+    assert.match(await blue.locator('.unit-card', { hasText: 'You ride with them' }).textContent(), /Scale riders/)
     assert.match(await blue.textContent('#panel-body'), /veteran/)
     assert.match(await blue.textContent('#panel-body'), /No officer yet/)
     assert.match(await red.textContent('.calm'), /with the army/)

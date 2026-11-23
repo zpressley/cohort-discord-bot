@@ -39,6 +39,7 @@ const { narrateTurn, report } = require('../narrator/turnNarrator')
 const { orderWords } = require('../narrator/words')
 const { loadScenario, SCENARIOS, mapChoices } = require('../adapters/hotseat/scenarios')
 const { MAPS } = require('../data/maps')
+const { FACTIONS, fieldFactions, enemyFaction, factionChoices } = require('../engine/army/factions')
 
 const TERRAIN_CODES = {
   plains: 'p', road: 'r', hill: 'h', forest: 'f', marsh: 'm', river: 'w', ford: 'd', bridge: 'b'
@@ -234,6 +235,11 @@ function createBattleStore({ dir = null, ai = null, now = () => Date.now() } = {
    *   commander   the mustering player's Commander token: his company's
    *               officers lead his side, and the battle is written into
    *               the company when it ends
+   *   faction     the mustering side's faction (src/data/factions.js), for a
+   *               Commander who has none yet, or a battle with no Commander;
+   *               a Commander's own faction is his for life
+   *   enemyFaction  the other side's; else another faction, drawn from the
+   *               seed. With no faction at all the scenario's armies fight.
    * @returns {{ id, seats: { [side]: token } }} only the seats for people
    */
   function muster(m = {}) {
@@ -254,27 +260,27 @@ function createBattleStore({ dir = null, ai = null, now = () => Date.now() } = {
       : { id: `objective-${i + 1}`, feature: ground })
     if (objectives.length) spec = { ...spec, objectives }
 
+    const seed = m.seed ?? crypto.randomInt(1, 1_000_000)
+    const commander = m.commander ? commanders.get(m.commander) : null
+    // The armies are the factions' (src/data/factions.js): the mustering
+    // Commander's, and the enemy's. With no faction named, and no Commander
+    // who has one, the scenario's own armies fight, as before factions.
+    const faction = musterFaction(commander, m.faction)
+    const enemy = faction ? (FACTIONS[m.enemyFaction] ? m.enemyFaction : enemyFaction(faction, seed)) : null
+    if (faction) spec = fieldFactions(spec, { [side]: faction, [other]: enemy })
     // Every unit gets an officer to carry the Commander's orders: a name,
     // his experience and his nature, drawn from the battle's seed.
-    const seed = m.seed ?? crypto.randomInt(1, 1_000_000)
     spec = { ...spec, units: assignOfficers(spec.units, seed) }
     // The mustering Commander's own officers lead his side. His army can
     // fight one battle at a time (ruled 2026-11-22).
-    const commander = m.commander ? commanders.get(m.commander) : null
     let company = null   // his company with this battle's officers given out
     if (commander) {
       mayLead(commander)
-      const mine = spec.units.filter(u => u.side === side).map(u => ({ ...u, kind: unitName(u).toLowerCase() }))
-      const led = musterOfficers(commander.company, mine, seed)
+      const led = leadSide(spec, side, commander.company, seed)
       company = led.company
-      const officerOf = new Map(led.units.map(u => [u.id, u.officer]))
       // He is on the field himself, riding with his best unit (his
       // veteran's): there he can be taken, or killed.
-      spec = {
-        ...spec,
-        units: spec.units.map(u => (officerOf.has(u.id) ? { ...u, officer: officerOf.get(u.id) } : u)),
-        commanders: { [side]: { unitId: ridesWith(led.units) } }
-      }
+      spec = led.spec
     }
     let game
     try {
@@ -288,7 +294,7 @@ function createBattleStore({ dir = null, ai = null, now = () => Date.now() } = {
     const entry = {
       id: crypto.randomBytes(6).toString('hex'),
       scenario,
-      title: `${MAPS[mapName].title ?? mapName}: ${SCENARIO_TITLES[scenario] ?? scenario}`,
+      title: faction ? factionTitle(spec, side) : `${MAPS[mapName].title ?? mapName}: ${SCENARIO_TITLES[scenario] ?? scenario}`,
       createdAt: now(),
       updatedAt: now(),
       seats: { [side]: newToken(), [other]: solo ? null : newToken() },
@@ -309,10 +315,47 @@ function createBattleStore({ dir = null, ai = null, now = () => Date.now() } = {
     // not be made changes nothing, and load() mends a stop in between.
     save(entry)
     if (commander) {
+      if (faction && !commander.faction) commanders.setFaction(commander, faction)
       commanders.setCompany(commander, company)
       commanders.setBattle(commander, entry.id)
     }
-    return { id: entry.id, seats: Object.fromEntries(Object.entries(entry.seats).filter(([, t]) => t)) }
+    return { id: entry.id, title: entry.title, seats: Object.fromEntries(Object.entries(entry.seats).filter(([, t]) => t)) }
+  }
+
+  // "Ashford Vale: Macedon against Han", the mustering side first.
+  function factionTitle(spec, first) {
+    const second = Object.keys(spec.sides).find(s => s !== first)
+    const title = (s) => FACTIONS[sideFaction(spec, s)]?.title ?? sideName(s)
+    return `${MAPS[spec.map]?.title ?? spec.map}: ${title(first)} against ${title(second)}`
+  }
+  const sideFaction = (spec, side) => spec.units.find(u => u.side === side)?.faction ?? null
+  const sideName = (side) => side.charAt(0).toUpperCase() + side.slice(1)
+
+  // A side's officers from a company, and the Commander on the field with
+  // the unit his most experienced officer leads (a new Commander's veteran
+  // is with the elite unit). For the muster and for the friend who joins.
+  function leadSide(spec, side, company, seed) {
+    const mine = spec.units.filter(u => u.side === side).map(u => ({ ...u, kind: unitName(u).toLowerCase() }))
+    const led = musterOfficers(company, mine, seed)
+    const officerOf = new Map(led.units.map(u => [u.id, u.officer]))
+    return {
+      company: led.company,
+      spec: {
+        ...spec,
+        units: spec.units.map(u => (officerOf.has(u.id) ? { ...u, officer: officerOf.get(u.id) } : u)),
+        commanders: { ...(spec.commanders ?? {}), [side]: { unitId: ridesWith(led.units) } }
+      }
+    }
+  }
+
+  // The faction whose army a side brings: its Commander's for life; for one
+  // with none yet, the one named now (made his when he leads it).
+  function musterFaction(commander, asked) {
+    if (asked && !FACTIONS[asked]) throw Object.assign(new Error(`There is no faction "${asked}".`), { status: 400 })
+    if (commander?.faction && asked && asked !== commander.faction) {
+      throw Object.assign(new Error(`${commander.name} fights for ${FACTIONS[commander.faction].title}, and always will.`), { status: 409 })
+    }
+    return commander?.faction ?? asked ?? null
   }
 
   // The unfinished battle a Commander's army is in, if any.
@@ -356,10 +399,15 @@ function createBattleStore({ dir = null, ai = null, now = () => Date.now() } = {
    * first orders, if sent) played back into it: the saved battle is then
    * one spec and one log, as every battle is.
    *
+   * Their army is their Commander's faction's. A new Commander (or one
+   * from before factions) takes the faction named, else the one the muster
+   * gave this side, and keeps it for life.
+   *
    * @param {string} token           the friend's seat
    * @param {string|null} commander  their Commander's token, or null for none
+   * @param {string|null} faction    for a Commander with none yet
    */
-  function join(token, commanderToken = null) {
+  function join(token, commanderToken = null, asked = null) {
     const seat = seatOf(token)
     if (!seat) return null
     const { entry, side } = seat
@@ -371,19 +419,19 @@ function createBattleStore({ dir = null, ai = null, now = () => Date.now() } = {
     if (commander) mayLead(commander)
 
     const record = gameRecord(entry.game)
-    const mine = record.spec.units.filter(u => u.side === side).map(u => ({ ...u, kind: unitName(u).toLowerCase() }))
+    // Their faction's army, where the muster gave this side another.
+    const mustered = sideFaction(record.spec, side)
+    const faction = mustered ? musterFaction(commander, asked) ?? mustered : null
+    let spec = faction && faction !== mustered ? fieldFactions(record.spec, { [side]: faction }) : record.spec
     // A seed of the side's own, so the two sides' first veterans are not
     // drawn alike.
-    const led = musterOfficers(commander ? commander.company : createCompany(), mine, (Math.imul(record.seed, 31) + 17) >>> 0)
-    const officerOf = new Map(led.units.map(u => [u.id, u.officer]))
-    const spec = {
-      ...record.spec,
-      units: record.spec.units.map(u => (officerOf.has(u.id) ? { ...u, officer: officerOf.get(u.id) } : u)),
-      commanders: { ...(record.spec.commanders ?? {}), [side]: { unitId: ridesWith(led.units) } }
-    }
+    const led = leadSide(spec, side, commander ? commander.company : createCompany(), (Math.imul(record.seed, 31) + 17) >>> 0)
+    spec = led.spec
     entry.game = replayGame({ ...record, spec })
     entry.joining = null
+    if (faction !== mustered) entry.title = factionTitle(spec, Object.keys(spec.sides).find(s => s !== side))
     if (commander) {
+      if (faction && !commander.faction) commanders.setFaction(commander, faction)
       commanders.setCompany(commander, led.company)
       entry.commanders = { ...(entry.commanders ?? {}), [side]: commander.id }
     }
@@ -443,7 +491,7 @@ function createBattleStore({ dir = null, ai = null, now = () => Date.now() } = {
     return {
       map: game.battle.map,
       units: game.battle.world.units.filter(u => u.side === side && u.strength > 0 && !game.battle.broken.has(u.id))
-        .map(u => ({ ...u, aliases: [unitName(u).toLowerCase()] })),
+        .map(u => ({ ...u, aliases: [unitName(u).toLowerCase(), ...(u.aliases ?? [])] })),
       enemies: sideView(game, side).intel,
       // Where "fall back" takes a unit, for the read-back.
       homeEdge: game.spec.sides?.[side]?.homeEdge,
@@ -547,6 +595,8 @@ function createBattleStore({ dir = null, ai = null, now = () => Date.now() } = {
       pending: entry.pending[side] ?? null,
       // The friend has yet to choose who leads (join).
       choosing: !atGame && choosing(entry, side),
+      // Whose army this side is (a faction of src/data/factions.js), if any.
+      faction: sideFaction(game.spec, side),
       commander: commanderView_(game, side, atGame),
       dispatches: [...entry.dispatches[side]].reverse(),
       verdict: game.outcome.decided && !atGame
@@ -805,7 +855,8 @@ function createBattleStore({ dir = null, ai = null, now = () => Date.now() } = {
     commanders,
     commanderView,
     scenarios: () => Object.keys(SCENARIOS).map(id => ({ id, title: SCENARIO_TITLES[id] ?? id })),
-    maps: () => mapChoices()
+    maps: () => mapChoices(),
+    factions: () => factionChoices()
   }
 }
 
