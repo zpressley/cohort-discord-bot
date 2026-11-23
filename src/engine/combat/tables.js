@@ -35,18 +35,18 @@
 const QUALITY_TIERS = {
   levy: {
     name: 'Levy',
-    cost: 2,                 // PROPOSAL (docs/design/army-balance.md): was 3 [salvage]
+    cost: 3,                 // [salvage] armyData TROOP_QUALITY
     size: 100,               // [Q6] was 400
     attack: 1,               // [salvage]
     defense: 1,              // [salvage]
-    morale: 1,               // PROPOSAL: was 0 [salvage]; at 0 levy broke at a look
+    morale: 1,               // PROPOSAL (docs/design/army-balance.md): was 0 [salvage]; at 0 levy broke at a look
     push: 1,                 // [derived] push has no legacy table
     staminaPool: 60,         // [notebook] better training = more stamina
     restrictions: ['heavy_weapons', 'heavy_armor', 'heavy_shield']
   },
   militia: {
     name: 'Militia',
-    cost: 4,                 // PROPOSAL: was 5
+    cost: 5,
     size: 100,
     attack: 2,
     defense: 2,
@@ -57,7 +57,7 @@ const QUALITY_TIERS = {
   },
   tribal_warriors: {
     name: 'Tribal Warriors',
-    cost: 4,                 // [Q7] equal to militia (PROPOSAL: 4, as militia now is)
+    cost: 5,                 // [Q7] was 4 — equalized to militia
     size: 100,
     attack: 2,               // [Q7] was 3 — equalized to militia
     defense: 2,              // [Q7] was 2 — unchanged
