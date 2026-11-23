@@ -9,6 +9,12 @@
 // computer by its command post, on two maps, two seeds each, with the
 // number of player turns. If one changes, the rulings changed a battle they
 // should not touch.
+//
+// Retaken when combat and the usual armies changed on purpose (the army
+// balance: docs/design/army-balance.md, Recommendation A and part 5). The
+// same battles under the old rules were 2f842b7 17, 5350ea95 18, 645c3e91 17,
+// 558dd4b1 19 (everyone asked) and ec82c3c2 17, 1765942a 18, 1690181b 18,
+// 5c67514a 20 (no Commander).
 
 const { test } = require('node:test')
 const assert = require('node:assert/strict')
@@ -47,18 +53,18 @@ function play(extra, { commander }) {
 
 test('a battle saved before the riders rulings (marked everyoneAsked) plays back exactly as it was played, event for event', () => {
   assert.deepEqual(play({ everyoneAsked: true }, { commander: true }), {
-    'crownhill 1': '2f842b7 17',
-    'crownhill 2': '5350ea95 18',
-    'ashford 1': '645c3e91 17',
-    'ashford 2': '558dd4b1 19'
+    'crownhill 1': 'fdb72ba5 22',
+    'crownhill 2': '5c62ed49 30',
+    'ashford 1': '10fbde01 34',
+    'ashford 2': '976d3898 35'
   })
 })
 
 test('a battle with no Commander on the field runs exactly as before the riders rulings, event for event', () => {
   assert.deepEqual(play({}, { commander: false }), {
-    'crownhill 1': 'ec82c3c2 17',
-    'crownhill 2': '1765942a 18',
-    'ashford 1': '1690181b 18',
-    'ashford 2': '5c67514a 20'
+    'crownhill 1': '1fb30748 22',
+    'crownhill 2': 'abc6d6db 30',
+    'ashford 1': '9b2d3801 31',
+    'ashford 2': '551c795d 37'
   })
 })

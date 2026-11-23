@@ -31,9 +31,10 @@ async function start(store = createBattleStore({})) {
 
 // Two Commanders by link: red's army sent far across the field, blue's to
 // stand. Turns are run, each side giving orders only when asked, until the
-// battle has stopped for one and not the other.
+// battle has stopped for one and not the other. (Seeds 5 to 10 found one
+// until combat changed with the army balance; the search goes further now.)
 async function twoCommanders(app, store) {
-  for (const seed of [5, 6, 7, 8, 9, 10]) {
+  for (let seed = 5; seed <= 40; seed++) {
     const red = (await app.api('POST', '/api/commanders', { faction: 'rome' })).body.token
     const blue = (await app.api('POST', '/api/commanders', { faction: 'han' })).body.token
     const seats = (await app.api('POST', '/api/battles', { opponent: 'friend', side: 'red', seed, commander: red })).body.seats
