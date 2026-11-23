@@ -99,8 +99,8 @@ const FACTIONS = {
     army: [
       { name: 'numidian horse', quality: 'militia', weapon: 'sword_standard', armor: 'light_armor', shield: 'light_shield', mounted: true },
       { name: 'gauls', quality: 'militia', weapon: 'sword_standard', armor: 'light_armor', shield: 'medium_shield' },
-      { name: 'slingers', quality: 'levy', weapon: 'sling', armor: 'no_armor', shield: 'no_shield' },
-      { name: 'iberians', quality: 'militia', weapon: 'sword_standard', armor: 'light_armor', shield: 'light_shield' }
+      { name: 'iberians', quality: 'militia', weapon: 'sword_standard', armor: 'light_armor', shield: 'light_shield' },
+      { name: 'libyans', quality: 'militia', weapon: 'spear_basic', armor: 'light_armor', shield: 'medium_shield' }
     ]
   },
 
@@ -114,9 +114,9 @@ const FACTIONS = {
       weapon: 'self_bow_professional', armor: 'light_armor', shield: 'no_shield'
     },
     army: [
-      { name: 'spearmen', quality: 'professional', weapon: 'spear_professional', armor: 'light_armor', shield: 'medium_shield' },
-      { name: 'spearmen', quality: 'professional', weapon: 'spear_professional', armor: 'light_armor', shield: 'medium_shield' },
-      { name: 'spears', quality: 'militia', weapon: 'spear_basic', armor: 'light_armor', shield: 'medium_shield' }
+      { name: 'spearmen', quality: 'professional', weapon: 'spear_professional', armor: 'medium_armor', shield: 'medium_shield' },
+      { name: 'spearmen', quality: 'professional', weapon: 'spear_professional', armor: 'medium_armor', shield: 'medium_shield' },
+      { name: 'spears', quality: 'militia', weapon: 'spear_basic', armor: 'light_armor', shield: 'light_shield' }
     ]
   },
 
@@ -188,7 +188,7 @@ const FACTIONS = {
       { name: 'bowmen', quality: 'professional', weapon: 'self_bow_professional', armor: 'light_armor', shield: 'no_shield' },
       { name: 'horsemen', quality: 'militia', weapon: 'sword_standard', armor: 'light_armor', shield: 'light_shield', mounted: true },
       { name: 'levies', quality: 'levy', weapon: 'spear_basic', armor: 'light_armor', shield: 'medium_shield' },
-      { name: 'levies', quality: 'levy', weapon: 'spear_basic', armor: 'light_armor', shield: 'medium_shield' }
+      { name: 'spearmen', quality: 'militia', weapon: 'spear_basic', armor: 'light_armor', shield: 'medium_shield' }
     ]
   },
 
@@ -238,7 +238,7 @@ const FACTIONS = {
     },
     army: [
       { name: 'horse archers', quality: 'professional', weapon: 'parthian_horse_bow', armor: 'light_armor', shield: 'no_shield', mounted: true },
-      { name: 'light horse', quality: 'militia', weapon: 'self_bow_basic', armor: 'light_armor', shield: 'no_shield', mounted: true },
+      { name: 'light horse', quality: 'levy', weapon: 'self_bow_basic', armor: 'light_armor', shield: 'no_shield', mounted: true },
       { name: 'levy spears', quality: 'levy', weapon: 'spear_basic', armor: 'light_armor', shield: 'medium_shield' },
       { name: 'levy spears', quality: 'levy', weapon: 'spear_basic', armor: 'light_armor', shield: 'medium_shield' }
     ]
@@ -258,7 +258,7 @@ const FACTIONS = {
       { name: 'warriors', quality: 'tribal_warriors', weapon: 'spear_basic', armor: 'light_armor', shield: 'medium_shield' },
       { name: 'axemen', quality: 'tribal_warriors', weapon: 'battle_axe', armor: 'light_armor', shield: 'light_shield' },
       { name: 'spearmen', quality: 'tribal_warriors', weapon: 'germanic_framea', armor: 'light_armor', shield: 'no_shield' },
-      { name: 'skirmishers', quality: 'tribal_warriors', weapon: 'sling', armor: 'light_armor', shield: 'light_shield' }
+      { name: 'skirmishers', quality: 'levy', weapon: 'sling', armor: 'no_armor', shield: 'no_shield' }
     ]
   },
 
@@ -290,9 +290,9 @@ const FACTIONS = {
       weapon: 'roman_gladius', armor: 'medium_armor', shield: 'heavy_shield'
     },
     army: [
-      { name: 'swordsmen', quality: 'militia', weapon: 'roman_gladius', armor: 'light_armor', shield: 'heavy_shield' },
-      { name: 'slingers', quality: 'levy', weapon: 'sling', armor: 'no_armor', shield: 'no_shield' },
-      { name: 'veterans', quality: 'professional', weapon: 'roman_gladius', armor: 'light_armor', shield: 'heavy_shield' }
+      { name: 'veterans', quality: 'professional', weapon: 'roman_gladius', armor: 'light_armor', shield: 'heavy_shield' },
+      { name: 'veterans', quality: 'professional', weapon: 'roman_gladius', armor: 'light_armor', shield: 'heavy_shield' },
+      { name: 'archers', quality: 'levy', weapon: 'self_bow_basic', armor: 'light_armor', shield: 'no_shield' }
     ]
   },
 
@@ -360,9 +360,10 @@ const FACTIONS = {
       weapon: 'macedonian_sarissa', armor: 'heavy_armor', shield: 'no_shield'
     },
     army: [
-      { name: 'cataphracts', quality: 'militia', weapon: 'persian_kontos', armor: 'heavy_armor', shield: 'no_shield', mounted: true },
+      { name: 'cataphracts', quality: 'militia', weapon: 'persian_kontos', armor: 'medium_armor', shield: 'no_shield', mounted: true },
       { name: 'slingers', quality: 'levy', weapon: 'sling', armor: 'light_armor', shield: 'light_shield' },
-      { name: 'archers', quality: 'militia', weapon: 'self_bow_basic', armor: 'light_armor', shield: 'no_shield' }
+      { name: 'archers', quality: 'militia', weapon: 'self_bow_basic', armor: 'light_armor', shield: 'no_shield' },
+      { name: 'levy spears', quality: 'levy', weapon: 'spear_basic', armor: 'light_armor', shield: 'light_shield' }
     ]
   },
 
@@ -379,7 +380,7 @@ const FACTIONS = {
     army: [
       { name: 'spearmen', quality: 'militia', weapon: 'spear_professional', armor: 'light_armor', shield: 'medium_shield' },
       { name: 'archers', quality: 'militia', weapon: 'self_bow_basic', armor: 'light_armor', shield: 'light_shield' },
-      { name: 'clansmen', quality: 'professional', weapon: 'spear_professional', armor: 'medium_armor', shield: 'medium_shield' }
+      { name: 'clansmen', quality: 'professional', weapon: 'spear_professional', armor: 'light_armor', shield: 'medium_shield' }
     ]
   }
 }
