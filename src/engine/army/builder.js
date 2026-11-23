@@ -87,6 +87,19 @@ function buildUnit(pick, culture) {
         (shield === 'medium_shield' || shield === 'heavy_shield')) {
       errors.push(`${weapon} needs a free hand — light shield at most`)
     }
+    // PROPOSAL (docs/design/army-balance.md): missile troops are light
+    // troops; a crossbowman may be armoured to medium.
+    if (weaponData.armorMax && (armor in D.ARMOR_SP) &&
+        Object.keys(D.ARMOR_SP).indexOf(armor) > Object.keys(D.ARMOR_SP).indexOf(weaponData.armorMax)) {
+      errors.push(`${weapon} is carried by men in ${weaponData.armorMax.replace('_armor', '')} armor at most`)
+    }
+    // PROPOSAL: a sidearm or a thrown weapon is carried beside another
+    // weapon, and this builder has one weapon to a unit; until there are
+    // second weapons it is not sold alone.
+    if (weaponData.stacking === 'secondary' ||
+        (weaponData.stacking === 'stackable_ranged' && (T.WEAPONS[weapon]?.range ?? 0) < T.MISSILES.MIN_RANGE_M)) {
+      errors.push(`${weapon} is carried beside another weapon, not alone`)
+    }
   }
 
   // Tier restrictions ([salvage] the quality ladder's own denials).

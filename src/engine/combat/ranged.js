@@ -44,7 +44,7 @@ function volley(shooter, target, { distance, targetTerrain = 'plains', moved = f
 
   let felled = shooter.strength * M.RATE *
     (R.resolveWeapon(shooter).damage / M.NORMAL_DAMAGE) *
-    R.effectivenessAgainst(shooter, target) *
+    R.missileEffectiveness(shooter, target) *
     (M.SHIELD[target.shield] ?? 1)
   if (distance > reach / 2) felled *= M.LONG_SHOT
   if (targetTerrain === 'forest') felled *= M.IN_WOODS

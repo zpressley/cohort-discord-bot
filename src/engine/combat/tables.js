@@ -35,29 +35,29 @@
 const QUALITY_TIERS = {
   levy: {
     name: 'Levy',
-    cost: 3,                 // [salvage] armyData TROOP_QUALITY
+    cost: 2,                 // PROPOSAL (docs/design/army-balance.md): was 3 [salvage]
     size: 100,               // [Q6] was 400
     attack: 1,               // [salvage]
     defense: 1,              // [salvage]
-    morale: 0,               // [salvage]
+    morale: 1,               // PROPOSAL: was 0 [salvage]; at 0 levy broke at a look
     push: 1,                 // [derived] push has no legacy table
     staminaPool: 60,         // [notebook] better training = more stamina
     restrictions: ['heavy_weapons', 'heavy_armor', 'heavy_shield']
   },
   militia: {
     name: 'Militia',
-    cost: 5,
+    cost: 4,                 // PROPOSAL: was 5
     size: 100,
     attack: 2,
     defense: 2,
-    morale: 1,
+    morale: 2,               // PROPOSAL: was 1
     push: 2,
     staminaPool: 75,
     restrictions: []
   },
   tribal_warriors: {
     name: 'Tribal Warriors',
-    cost: 5,                 // [Q7] was 4 — equalized to militia
+    cost: 4,                 // [Q7] equal to militia (PROPOSAL: 4, as militia now is)
     size: 100,
     attack: 2,               // [Q7] was 3 — equalized to militia
     defense: 2,              // [Q7] was 2 — unchanged
@@ -201,14 +201,16 @@ const WEAPONS = {
 
   // Ranged — ranges in metres. Archers cannot use these while engaged in melee
   // (notebook), so in phase 2 they contribute melee damage only.
-  sling:                   { damage: 8,  effectiveness: { light: 85, medium: 45, heavy: 25, cavalry: 90 }, range: 300 },
+  // PROPOSAL (docs/design/army-balance.md): sling range 300 -> 200, war
+  // sling 350 -> 250: a sling outranged every bow, at a third of the price.
+  sling:                   { damage: 8,  effectiveness: { light: 85, medium: 45, heavy: 25, cavalry: 90 }, range: 200 },
   self_bow_basic:          { damage: 6,  effectiveness: { light: 70, medium: 35, heavy: 15, cavalry: 65 }, range: 125 },
   throwing_spear:          { damage: 6,  effectiveness: { light: 75, medium: 45, heavy: 25, cavalry: 70 }, range: 25 },
   roman_plumbatae:         { damage: 5,  effectiveness: { light: 65, medium: 40, heavy: 20, cavalry: 45 }, range: 15 },
   germanic_throwing_axe:   { damage: 6,  effectiveness: { light: 70, medium: 50, heavy: 30, cavalry: 40 }, range: 20 },
   self_bow_professional:   { damage: 8,  effectiveness: { light: 75, medium: 45, heavy: 20, cavalry: 60 }, range: 225 },
   javelin_heavy:           { damage: 9,  effectiveness: { light: 85, medium: 65, heavy: 40, cavalry: 75 }, range: 35 },
-  sling_professional:      { damage: 10, effectiveness: { light: 85, medium: 45, heavy: 25, cavalry: 90 }, range: 350 },
+  sling_professional:      { damage: 10, effectiveness: { light: 85, medium: 45, heavy: 25, cavalry: 90 }, range: 250 },
   roman_pilum:             { damage: 9,  effectiveness: { light: 80, medium: 70, heavy: 50, cavalry: 60 }, range: 25 },
   greek_composite_bow:     { damage: 9,  effectiveness: { light: 80, medium: 50, heavy: 25, cavalry: 65 }, range: 200 },
   persian_recurve_bow:     { damage: 9,  effectiveness: { light: 80, medium: 50, heavy: 25, cavalry: 70 }, range: 200 },
@@ -504,7 +506,17 @@ const MISSILES = {
   // in fights". They shoot without having to stand, which is the limit on
   // everyone else, so a mounted missile unit is raised at this share of
   // its quality tier's men (army/builder.js). A starting value.
-  HORSE_ARCHER_NUMBERS: 0.6
+  HORSE_ARCHER_NUMBERS: 0.6,
+  // PROPOSAL (docs/design/army-balance.md): how hard men felled by a volley shake a unit, as a share of
+  // the same men felled hand to hand (was 1). Missile fire wears a unit;
+  // the melee breaks it.
+  SHOCK: 0.67,
+  // PROPOSAL: the weapon a missile unit fights with hand to hand (a key of
+  // WEAPONS): its knife, not its sling or bow (the notebook: "engaged
+  // archers fight (poorly) in melee"). null: its missile weapon's numbers,
+  // as before, when a sling was swung as hard as a sword and braced
+  // against horse like a spear.
+  SIDEARM: 'daggers'
 }
 
 // ── Pace ───────────────────────────────────────────────

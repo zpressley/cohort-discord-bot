@@ -371,7 +371,7 @@ function createCombatResolver(options = {}) {
   resolveCombat.volley = (target, felled, turn = null) => {
     const state = stateFor(target)
     const killed = takeCasualties(state, felled, target.strength)
-    const loss = D.moraleDamage(target, { killed: felled }).total
+    const loss = D.moraleDamage(target, { killed: felled }).total * T.MISSILES.SHOCK
     state.morale = Math.max(0, state.morale - loss)
     state.moraleDamageTaken += loss
     const broke = !state.routed && state.morale <= T.MORALE.ROUT_THRESHOLD
