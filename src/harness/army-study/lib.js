@@ -34,6 +34,25 @@ const { FACTIONS } = require('../../data/factions')
 const { leadUnit } = require('../../engine/command/company')
 const { nextName, checkArmy } = require('../../web/armies')
 
+// `--set data.ARMOR_SP.heavy_armor=3` or `--set tables.MISSILES.SHOCK=0.5`
+// on any study script's command line changes that number, in memory, for
+// the run (and in search.js's workers too): to try a change without
+// editing the engine.
+function applySets(argv = process.argv) {
+  const roots = { data: D, tables: require('../../engine/combat/tables'), factions: FACTIONS }
+  const sets = []
+  argv.forEach((a, i) => { if (a === '--set') sets.push(argv[i + 1]) })
+  for (const set of sets) {
+    const [path, raw] = set.split('=')
+    const keys = path.split('.')
+    let obj = roots[keys.shift()]
+    while (keys.length > 1) obj = obj[keys.shift()]
+    obj[keys[0]] = isNaN(Number(raw)) ? raw : Number(raw)
+  }
+  return sets
+}
+const SETS = applySets()
+
 const MAX_PLAYER_TURNS = 60
 const DAY_TURNS = 40
 const MAPS = mapChoices().map(m => m.id)
@@ -185,5 +204,6 @@ const USUAL = Object.fromEntries(Object.keys(FACTIONS).map(k => [k, usual(k)]))
 const pct = (x) => `${Math.round(100 * x)}%`
 
 module.exports = {
+  SETS,
   battle, evaluate, seedFor, POLICIES, MAPS, USUAL, usual, named, mono, legal, costOf, budgetOf, pct, withTuning
 }
