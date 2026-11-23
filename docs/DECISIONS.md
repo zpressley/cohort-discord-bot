@@ -2445,6 +2445,24 @@ What the numbers say:
   Zach wants a veteran to win more often against the computer too, the cap
   could be lower (green), or the match a share of his average.
 
+**Measured again on the rebalanced armies** (the same script after the
+army balance above was merged in: all twenty factions' usual armies now
+pass the builder; `--seeds 2`, 320 battles a row):
+
+| His units carry | Without the match: won, his men lost, the computer's | With it: the computer carries | won, his men lost, the computer's |
+|---|---|---|---|
+| none | 55%, 38.0%, 41.5% | none | 55%, 38.0%, 41.5% |
+| green (4) | 59%, 36.1%, 42.5% | 4 | 54%, 36.7%, 40.4% |
+| seasoned (8) | 61%, 35.1%, 43.0% | 8 | 56%, 35.3%, 39.1% |
+| veteran (13) | 65%, 33.7%, 43.5% | 8 | 59%, 34.0%, 40.1% |
+| legendary (20) | 68%, 32.0%, 43.8% | 8 | 62%, 32.5%, 40.9% |
+| thirty battles (30) | 68%, 32.0%, 43.8% | 8 | 62%, 32.5%, 40.9% |
+
+The same shape, a little wider: without the match legendary veterans win
+13 points more than a new army; with it, 7 points more past the cap and
+nothing below it. (With no veterancy on either side he wins 55% in this script, not 50%,
+though the armies are met both ways round; why was not looked into.)
+
 **Guessed at.**
 - **The average weighs units equally and counts the elite** (as
   recommended). The other reading: weigh by men (a big unit of recruits

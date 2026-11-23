@@ -181,7 +181,7 @@ test('a unit given in a deal between two players goes to the captor\'s roster wi
     assert.equal(hastati.words, 'militia, gladius, medium armour, heavy shield, on foot', 'their kit as it was raised, though Macedon forges no gladius')
     assert.equal(hastati.from.commander, red.name)
     assert.equal(hastati.marches, false, 'a unit taken waits at home until he chooses it')
-    assert.deepEqual(theirs.units.find(u => u.kind === 'hastati'), { kind: 'hastati', battles: 7, veterancy: theirs.units.find(u => u.kind === 'hastati').veterancy, trained: 1 })
+    assert.deepEqual(theirs.units.find(u => u.kind === 'hastati'), { kind: 'hastati', battles: 7, veterancy: theirs.units.find(u => u.kind === 'hastati').veterancy, level: 'green', trained: 1 })
     assert.ok(theirs.units.find(u => u.kind === 'hastati').veterancy > 5, 'their veterancy came with them')
     const tullus = theirs.officers.find(o => o.name === 'Tullus')
     assert.equal(tullus.leads, 'hastati')
