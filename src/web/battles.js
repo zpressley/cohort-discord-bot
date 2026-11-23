@@ -29,6 +29,7 @@ const { createRng } = require('../engine/rng')
 const { interpretText } = require('../interpreter/orders')
 const { lyingInWait } = require('../interpreter/resolve')
 const { assignOfficers } = require('../engine/command/roster')
+const { planTurn } = require('../opponent/planner')
 const { gradeOf } = require('../engine/command/officers')
 const { narrateTurn, report } = require('../narrator/turnNarrator')
 const { orderWords } = require('../narrator/words')
@@ -441,9 +442,10 @@ function createBattleStore({ dir = null, ai = null, now = () => Date.now() } = {
     const notes = [...(read.notes ?? []), ...read.questions.map(q => `Not sent: ${q}`)].map(name)
     entry.pending[side] = { text: String(text ?? ''), understood, notes, at: now() }
     let result = submitOrders(game, side, read.surrender ? { surrender: true } : read.orders)
-    // Solo: the standing orders answer at once.
+    // Solo: the computer's side answers at once, with the orders it thinks
+    // best from what it has seen (opponent/planner.js).
     if (result.status === 'waiting' && entry.auto && result.waitingOn.includes(entry.auto)) {
-      result = submitOrders(game, entry.auto, [])
+      result = submitOrders(game, entry.auto, planTurn(game, entry.auto))
     }
 
     if (result.status !== 'waiting') {

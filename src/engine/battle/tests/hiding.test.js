@@ -108,6 +108,9 @@ test('an enemy looking for a fight walks right past a hidden unit', () => {
   ])
   stepTurn(state, { red: [{ unitRef: 'lurker', action: 'hide' }, { unitRef: 'bait', target: 'hold' }] })
   assert.equal(state.hidden.has('lurker'), true)
+  // Blue knows where the bait was last seen (a unit goes at what its side
+  // has seen, not at what no one has).
+  state.lastSeen.set('blue', new Map([['bait', at(4, 1)]]))
   for (let i = 0; i < 2; i++) stepTurn(state, { blue: [{ unitRef: 'hunter', action: 'advance' }] })
   const hunter = state.world.units.find(u => u.id === 'hunter')
   assert.ok(hunter.position.y < 7, 'it went on past the trees')

@@ -378,3 +378,56 @@ field" or "left the field"; an army that lost four men in five had
 "collapsed" (now "was destroyed", as a unit is); the computer opponent was
 "the standing orders". "Steady" is kept for an officer's nature, so morale
 uses "firm".
+
+### How the thinking opponent was built (Claude's choices, open to change)
+
+L3, L5 and L12 of the November review. The code is `src/opponent/planner.js`
+and, for what "advance" knows, `src/engine/battle/battle.js`.
+
+**What "advance" knows (the engine, so it holds for a Commander's units
+too).** A unit told to press the enemy used to know where every enemy
+stood. Now:
+- It makes for the nearest enemy its side can see; failing that, the
+  nearest place its side last saw one; and it gives a place up once it has
+  stood there and found no one.
+- With nothing known it goes and looks: straight ahead to the enemy's side
+  of the field, then the ground no one has looked over, nearest first.
+  Ground is looked over when a unit could see an enemy standing on it, so
+  a wood has to be walked.
+- Men who are shot at know where it came from, though they cannot see the
+  archers.
+
+**The computer's side.** Each player turn it gives its units orders, the
+same orders a Commander can give, from what its side has seen. No AI model
+is asked anything; the same battle always gets the same opponent.
+- **Hold, or come on.** If there is good ground ahead of where it formed up
+  (an objective; else a crossing or a hill, within 16 tiles ahead and 9 to
+  a side), it holds it about two battles in three, by the battle's seed. A
+  crossing is held from the near bank, a hill from the top.
+- **Patience.** A side that holds waits 90 to 180 minutes of battle (by
+  the seed), then goes to find the enemy. It also stops holding once blows
+  have been struck.
+- **The line.** Foot abreast, a tile apart, the best in the middle; archers
+  two tiles behind; horse off one flank (which, by the seed). Each on its
+  own dry ground, so the army no longer piles onto one tile (L5).
+- **Going in.** With the enemy within 7 tiles the foot go in together and
+  the archers stand off and shoot. Coming on, it forms up 5 tiles short of
+  the enemy first.
+- **Horse** go for archers they have seen within 10 tiles.
+- **A unit near breaking** (morale 30 or under) is pulled out of the fight
+  if a steadier one is within 2 tiles to cover, and kept out while any
+  steadier unit remains.
+- **No reserve.** Keeping the best unit behind the line was tried and
+  dropped: it lost more often.
+
+**How good it is.** Over 384 battles on all four maps, both scenarios and
+both sides, it beat the old opponent (every unit straight at the enemy) in
+235 and lost 149. Holding good ground is what does it: made to hold always
+it won 62% of 384, made never to hold it won no more than the charge. It
+beats a commander who gives no orders about nine times in ten, and against
+itself the two sides come out even (31 to 33 in 64).
+
+**What it cost.** A silent side that falls back into a big wood now has to
+be searched for, so the soak's cap went from 60 player turns to 150. The
+soak also plays the computer's side against three kinds of commander on
+every map.

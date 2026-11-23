@@ -260,10 +260,11 @@ test('archers shoot: the order is read, the Army tab says how far, and the dispa
     assert.equal(before.own.find(u => u.name === 'Archers').shootsTo, 200)
     assert.equal(before.own.find(u => u.name === 'Spears').shootsTo, null)
 
-    // Hold the line and let them come: the archers shoot as they close.
+    // Go and find them (the computer may be holding its ground): the
+    // archers close until they can shoot, and shoot.
     let tent
-    for (let i = 0; i < 8; i++) {
-      await app.api('POST', `/api/seat/${token}/orders`, { text: i === 0 ? 'archers shoot the horse' : '' })
+    for (let i = 0; i < 14; i++) {
+      await app.api('POST', `/api/seat/${token}/orders`, { text: i === 0 ? 'everyone advance' : '' })
       tent = (await app.api('GET', `/api/seat/${token}`)).body
       if (tent.dispatches.some(d => d.lines.some(l => /^Archers: .*shot at enemy/.test(l)))) break
     }
