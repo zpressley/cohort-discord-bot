@@ -524,3 +524,26 @@ test('held when the battle is lost: the enemy takes his best unit left on the fi
     assert.deepEqual(nothingLeft.company.ended, { how: 'lost', at: 'Crownhill: the meeting battle' })
   } finally { await app.close() }
 })
+
+// ── From the review of November 23 ─────────────────────
+
+test('held, the Commander can still yield the battle; a body that is not an object is no body', async () => {
+  const store = createBattleStore({})
+  const app = await start(store)
+  try {
+    const commander = (await app.api('POST', '/api/commanders')).body.token
+    const seat = (await app.api('POST', '/api/battles', { opponent: 'standing', side: 'red', seed: 3, commander })).body.seats.red
+    Object.assign(store.seatOf(seat).entry.game.battle.commanders.red, { status: 'held', heldBy: 'blue_swords' })
+
+    for (const url of [`/api/seat/${seat}/bargain`, '/api/battles']) {
+      const res = await fetch(app.base + url, { method: 'POST', body: 'null', headers: { 'Content-Type': 'application/json' } })
+      assert.notEqual(res.status, 500, `${url} with a null body`)
+    }
+
+    await app.api('POST', `/api/seat/${seat}/orders`, { text: 'I yield' })
+    const tent = (await app.api('GET', `/api/seat/${seat}`)).body
+    assert.deepEqual([tent.battle.status, tent.battle.outcome.reason], ['finished', 'enemy surrendered'])
+    assert.equal(tent.verdict.commander.fate, 'ransomed', 'still in their hands at the end: a unit is the price')
+  } finally { await app.close() }
+})
+

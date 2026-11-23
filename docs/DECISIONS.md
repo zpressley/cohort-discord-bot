@@ -404,7 +404,7 @@ is asked anything; the same battle always gets the same opponent.
   (an objective; else a crossing or a hill, within 16 tiles ahead and 9 to
   a side), it holds it about two battles in three, by the battle's seed. A
   crossing is held from the near bank, a hill from the top.
-- **Patience.** A side that holds waits 90 to 180 minutes of battle (by
+- **Patience.** A side that holds waits 90 to 170 minutes of battle (by
   the seed), then goes to find the enemy. It also stops holding once blows
   have been struck.
 - **The line.** Foot abreast, a tile apart, the best in the middle; archers

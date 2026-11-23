@@ -6,7 +6,7 @@
 const { test } = require('node:test')
 const assert = require('node:assert/strict')
 
-const { createCompany, musterOfficers, settleBattle, HEADLESS } = require('../company')
+const { createCompany, musterOfficers, settleBattle, ridesWith, HEADLESS } = require('../company')
 const { gradeOf, grasp, EARNED_AT } = require('../officers')
 
 const units = () => [
@@ -124,4 +124,28 @@ test('on a different field an officer without his own kind of unit takes what th
   const two = musterOfficers(after, other, 3)
   assert.equal(two.units[0].officer.id, after.officers[0].id, 'the veteran, not no one')
   assert.equal(two.company.officers.length, 1)
+})
+
+// ── From the review of November 23 ─────────────────────
+
+test('on a strange field the veteran takes its best unit, and the Commander rides with him', () => {
+  const after = through(createCompany(), 1)
+  const legion = [
+    { id: 'red_unit_1', side: 'red', kind: 'heavy infantry 1', quality: 'professional' },
+    { id: 'red_unit_2', side: 'red', kind: 'heavy infantry 2', quality: 'professional' },
+    { id: 'red_elite', side: 'red', kind: 'praetorians', quality: 'elite' }
+  ]
+  const two = musterOfficers(after, legion, 3)
+  assert.equal(two.units[2].officer.id, after.officers[0].id, 'not the first unit listed: the elite')
+  assert.deepEqual([two.units[0].officer, two.units[1].officer], [HEADLESS, HEADLESS])
+  assert.equal(ridesWith(two.units), 'red_elite')
+})
+
+test('the Commander rides with his most experienced officer; with none on the field, his best unit', () => {
+  const one = musterOfficers(createCompany(), units(), 7)
+  assert.equal(ridesWith(one.units), 'red_elite')
+  const hurt = settleBattle(one.company, battle(1), [fate(one.units[0]), fate(one.units[1]), fate(one.units[2], 'wounded')])
+  const two = musterOfficers(hurt, units(), 8)
+  assert.ok(two.units.every(u => u.officer.headless), 'his veteran is wounded: no officer on the field')
+  assert.equal(ridesWith(two.units), 'red_elite')
 })

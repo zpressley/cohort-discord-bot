@@ -30,7 +30,7 @@ const { interpretText } = require('../interpreter/orders')
 const { lyingInWait } = require('../interpreter/resolve')
 const { assignOfficers } = require('../engine/command/roster')
 const { planTurn } = require('../opponent/planner')
-const { musterOfficers, settleBattle, leadUnit } = require('../engine/command/company')
+const { musterOfficers, settleBattle, ridesWith } = require('../engine/command/company')
 const { bargainChips } = require('../engine/command/commander')
 const { createCommanderStore } = require('./commanders')
 const { digest, summarise } = require('../narrator/turnNarrator')
@@ -262,7 +262,7 @@ function createBattleStore({ dir = null, ai = null, now = () => Date.now() } = {
       spec = {
         ...spec,
         units: spec.units.map(u => (officerOf.has(u.id) ? { ...u, officer: officerOf.get(u.id) } : u)),
-        commanders: { [side]: { unitId: mine[leadUnit(mine)].id } }
+        commanders: { [side]: { unitId: ridesWith(led.units) } }
       }
     }
     const game = createGame(spec, { seed })
@@ -549,7 +549,7 @@ function createBattleStore({ dir = null, ai = null, now = () => Date.now() } = {
     // turn runs on the orders his units have. (He may still yield.)
     const held = game.battle.commanders?.[side]?.status === 'held'
     const said = String(text ?? '')
-    const read = await interpretText(held && !/^\s*(i\s+)?(yield|surrender)\s*$/i.test(said) ? '' : said, context(entry, side), { ai })
+    const read = await interpretText(!held ? said : /^\s*(i\s+)?(yield|surrender)\s*$/i.test(said) ? 'yield' : '', context(entry, side), { ai })
     const name = namer(game, side)
     const understood = read.understood.map(name)
     if (read.questions.length > 0 && !(sendClear && read.orders.length > 0)) {

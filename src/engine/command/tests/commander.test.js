@@ -174,3 +174,18 @@ test('a battle with no Commanders on the field runs as it always did', () => {
   const shared = Math.min(withOne.length, without.length) - 1
   assert.deepEqual(withOne.slice(0, shared), without.slice(0, shared))
 })
+
+test('a Commander who only gets away to another unit does not stop the turn for the enemy to notice', () => {
+  // Red's guard is destroyed by hand as the turn opens; red's Commander
+  // comes through it and gets away to the line. Nothing else happens.
+  const game = createGame(spec([
+    unit({ id: 'guard', position: { x: 2, y: 2 } }),
+    unit({ id: 'line', position: { x: 2, y: 18 } }),
+    unit({ id: 'foe', side: 'blue', position: { x: 18, y: 18 } })
+  ]), { seed: 5 })
+  game.battle.world.units.find(u => u.id === 'guard').strength = 0
+  submitOrders(game, 'red', [])
+  submitOrders(game, 'blue', [])
+  assert.ok(game.battle.log.all().some(e => e.type === 'commanderMoved'), 'he moved')
+  assert.notEqual(game.history.at(-1).interrupt, 'commander')
+})

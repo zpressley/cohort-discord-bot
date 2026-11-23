@@ -74,7 +74,11 @@ function readBody(req) {
     })
     req.on('end', () => {
       if (chunks.length === 0) return resolve({})
-      try { resolve(JSON.parse(Buffer.concat(chunks).toString('utf8'))) } catch { reject(Object.assign(new Error('bad json'), { status: 400 })) }
+      try {
+        // A body that is JSON but not an object ("null", a number) is no body.
+        const body = JSON.parse(Buffer.concat(chunks).toString('utf8'))
+        resolve(body && typeof body === 'object' && !Array.isArray(body) ? body : {})
+      } catch { reject(Object.assign(new Error('bad json'), { status: 400 })) }
     })
     req.on('error', reject)
   })

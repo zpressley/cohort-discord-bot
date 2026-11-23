@@ -624,7 +624,8 @@ async function tent(token) {
           <div style="display: flex; flex-direction: column; gap: 8px">${v.commander.chips.map(u =>
             `<button class="btn" type="button" data-bargain="${esc(u.id)}">Give up the ${esc(u.name.toLowerCase())}</button>`).join('')}</div>` : '<p class="note">You have no unit left on the field to bargain with.</p>'}
         ${state.readback?.error ? `<p class="error">${esc(state.readback.error)}</p>` : ''}`
-      foot.innerHTML = `<button class="btn btn-main btn-wide" type="button" id="wait"${state.sending ? ' disabled' : ''}>${state.sending ? 'Waiting…' : 'Wait, and let them fight'}</button>`
+      foot.innerHTML = `<button class="btn btn-main btn-wide" type="button" id="wait"${state.sending ? ' disabled' : ''}>${state.sending ? 'Waiting…' : 'Wait, and let them fight'}</button>
+        <button class="btn btn-quiet btn-wide" type="button" id="yield-held">Yield the battle as it stands</button>`
       const act = async (call) => {
         state.sending = true
         renderPanel()
@@ -640,6 +641,7 @@ async function tent(token) {
         watch()
       }
       document.getElementById('wait').addEventListener('click', () => act(() => api('POST', `/api/seat/${token}/orders`, { text: '' })))
+      document.getElementById('yield-held').addEventListener('click', () => act(() => api('POST', `/api/seat/${token}/orders`, { text: 'yield' })))
       body.querySelectorAll('[data-bargain]').forEach(b => b.addEventListener('click', () => act(() => api('POST', `/api/seat/${token}/bargain`, { unit: b.dataset.bargain }))))
       return
     }
