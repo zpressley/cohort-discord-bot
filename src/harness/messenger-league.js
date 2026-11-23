@@ -49,7 +49,7 @@ function play(red, blue, { map, seed, policy }) {
   const elite = mine[leadUnit(mine)].id
   spec = { ...spec, units: spec.units.map(u => u.side !== 'red' ? u : u.id === elite ? u : { ...u, officer: { headless: true } }) }
   const game = createGame({ ...spec, standingOrders: {}, commanders: { red: { unitId: elite } } }, { seed })
-  const r = { orders: 0, cutOffUnits: new Set(), cutOffTurns: 0, unitTurns: 0 }
+  const r = { orders: 0, cutOffUnits: new Set(), cutOffTurns: 0, unitTurns: 0, noWord: 0, noWordCut: 0, noWordGone: 0 }
   let turns = 0
   let stops = 0
   // Each side gives orders only when the battle stops for it (the riders
@@ -70,6 +70,15 @@ function play(red, blue, { map, seed, policy }) {
       for (const u of battle.world.units.filter(u => u.side === 'red' && u.strength > 0)) {
         r.unitTurns++
         if (road.ticks(u) === Infinity) { r.cutOffTurns++; r.cutOffUnits.add(u.id) }
+      }
+      // Units he has noticed no word of (the riders rulings): truly cut
+      // off, gone from the field, or only late.
+      for (const [id, k] of Object.entries(game.word?.red?.units ?? {})) {
+        if (!k.overdue || k.gone) continue
+        r.noWord++
+        const u = battle.world.units.find(x => x.id === id && x.strength > 0)
+        if (!u) r.noWordGone++
+        else if (road.ticks(u) === Infinity) r.noWordCut++
       }
     }
     // planner-word: the planner, told of the enemy only what has reached
@@ -107,6 +116,9 @@ function play(red, blue, { map, seed, policy }) {
     blueBlocked: events.filter(e => e.type === 'riderBlocked' && e.side === 'blue').length,
     cutOff: r.cutOffUnits.size,
     cutOffTurns: r.cutOffTurns,
+    noWord: r.noWord,
+    noWordCut: r.noWordCut,
+    noWordGone: r.noWordGone,
     unitTurns: r.unitTurns
   }
 }
@@ -129,7 +141,7 @@ function league({ battles = 336, policy = 'planner' } = {}) {
   const factions = Object.keys(FACTIONS)
   const pairs = []
   for (const a of factions) for (const b of factions) if (a !== b) for (const map of maps) pairs.push([a, b, map])
-  const all = { stops: 0, waits: [], why: {}, battles: 0, stuck: 0, wins: 0, losses: 0, draws: 0, turns: 0, minutes: 0, orders: 0, delays: [], blocked: 0, blueDelays: [], blueBlocked: 0, battlesCutOff: 0, cutOffTurns: 0, unitTurns: 0 }
+  const all = { noWord: 0, noWordCut: 0, noWordGone: 0, stops: 0, waits: [], why: {}, battles: 0, stuck: 0, wins: 0, losses: 0, draws: 0, turns: 0, minutes: 0, orders: 0, delays: [], blocked: 0, blueDelays: [], blueBlocked: 0, battlesCutOff: 0, cutOffTurns: 0, unitTurns: 0 }
   for (let i = 0; i < battles; i++) {
     const [a, b, map] = pairs[i % pairs.length]
     const r = play(a, b, { map, seed: 1000 + i * 7919, policy })
@@ -150,6 +162,9 @@ function league({ battles = 336, policy = 'planner' } = {}) {
     all.blueBlocked += r.blueBlocked
     if (r.cutOff > 0) all.battlesCutOff++
     all.cutOffTurns += r.cutOffTurns
+    all.noWord += r.noWord
+    all.noWordCut += r.noWordCut
+    all.noWordGone += r.noWordGone
     all.unitTurns += r.unitTurns
   }
   return all
@@ -184,6 +199,7 @@ if (require.main === module) {
     console.log(`the computer's orders by rider: ${b.length}, median ${b[Math.floor(b.length / 2)] ?? 0} min, longest ${b.at(-1) ?? 0}; not sent ${all.blueBlocked}`)
   }
   console.log(`a unit cut off at some turn's start in ${all.battlesCutOff} battles (${pct(all.battlesCutOff, done)}); ${pct(all.cutOffTurns, all.unitTurns)} of unit-turns cut off`)
+  if (all.noWord) console.log(`units marked "no word" as red is asked: ${all.noWord} (${pct(all.noWord, all.unitTurns)} of unit-turns); of those truly cut off ${pct(all.noWordCut, all.noWord)}, gone from the field ${pct(all.noWordGone, all.noWord)}, only late ${pct(all.noWord - all.noWordCut - all.noWordGone, all.noWord)}`)
 }
 
 module.exports = { play, league }
