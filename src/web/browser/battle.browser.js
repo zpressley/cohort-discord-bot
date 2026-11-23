@@ -60,7 +60,7 @@ test('alone, on a phone: muster, an order written on the map, turns to a verdict
     // A new Commander chooses his faction; the enemy's is drawn by lot
     // unless chosen.
     await p.selectOption('select[name="faction"]', 'macedon')
-    assert.match(await p.textContent('#faction-note'), /Companions, comes free/)
+    assert.match(await p.textContent('#faction-note'), /Silver shields, comes free/)
     await p.selectOption('select[name="enemyFaction"]', 'rome')
     // One kind of battle, to the end: no kind, no day's end, no ground to hold to choose.
     assert.equal(await p.locator('select[name="scenario"], select[name="timeLimit"], input[name="objectives"]').count(), 0)
@@ -91,17 +91,17 @@ test('alone, on a phone: muster, an order written on the map, turns to a verdict
     await p.click('[data-tab="army"]')
     assert.match(await p.textContent('.bar-title'), /Macedon against Rome/)
     const cards = await p.locator('.unit-card h3').allTextContents()
-    assert.deepEqual(cards, ['Sarissa foot 1', 'Sarissa foot 2', 'Hypaspists', 'Companions'])
-    assert.match(await p.locator('.unit-card', { hasText: 'Companions' }).textContent(), /You ride with them[\s\S]*Officer:.*veteran/)
+    assert.deepEqual(cards, ['Sarissa foot 1', 'Sarissa foot 2', 'Peltasts', 'Silver shields'])
+    assert.match(await p.locator('.unit-card', { hasText: 'Silver shields' }).textContent(), /You ride with them[\s\S]*Officer:.*veteran/)
     if (process.env.SHOT) await p.screenshot({ path: process.env.SHOT.replace('.png', '-army.png'), fullPage: true })
 
-    // The map gesture: pick the Companions in the army panel, then tap a place.
-    await p.click('[data-pick="red_companions"]')
+    // The map gesture: pick the Silver Shields in the army panel, then tap a place.
+    await p.click('[data-pick="red_silver_shields"]')
     const svg = p.locator('#map-scroll svg')
     const box = await svg.boundingBox()
     await svg.click({ position: { x: Math.min(box.width - 5, 260), y: 120 } })
     const draft = await p.inputValue('#orders')
-    assert.match(draft, /^Companions to [A-J]\d{1,2}-(NW|NE|SW|SE)$/, `the map wrote "${draft}"`)
+    assert.match(draft, /^Silver shields to [A-J]\d{1,2}-(NW|NE|SW|SE)$/, `the map wrote "${draft}"`)
 
     // Read back, then send; alone, each turn runs at once.
     await p.click('#read-back')
@@ -208,7 +208,7 @@ test('two players by link, on desktops: the turn waits for both, then both read 
     assert.equal((await blue.evaluate(() => JSON.parse(localStorage.getItem('cohort.commanders')))).length, 1, 'his link is kept in this browser')
     await blue.click('[data-tab="army"]')
     assert.match(await blue.textContent('#panel-body'), /You ride with them/)
-    assert.match(await blue.locator('.unit-card', { hasText: 'You ride with them' }).textContent(), /Scale riders/)
+    assert.match(await blue.locator('.unit-card', { hasText: 'You ride with them' }).textContent(), /Iron scale riders/)
     assert.match(await blue.textContent('#panel-body'), /veteran/)
     assert.match(await blue.textContent('#panel-body'), /No officer yet/)
     assert.match(await red.textContent('.calm'), /with the army/)
@@ -252,7 +252,7 @@ test('on a phone: a new Commander buys his army, is told why a pick is refused, 
     await p.click('#make-and-buy')
     await p.waitForSelector('#army-screen')
     // He starts from the usual army; the elite is free and not for sale.
-    assert.match(await p.textContent('#budget'), /25 of 30 supply points/)
+    assert.match(await p.textContent('#budget'), /16 of 30 supply points/)
     assert.match(await p.textContent('.buy-unit.elite'), /Yulin guard[\s\S]*Free[\s\S]*Not for sale/)
     assert.equal(await p.locator('.buy-unit.elite [data-dismiss]').count(), 0)
     while (await p.locator('[data-dismiss]').count()) {

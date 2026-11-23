@@ -508,7 +508,7 @@ test('a Commander killed loses the battle and everything with it; his name stays
   } finally { await app.close() }
 })
 
-test('held when the battle is lost with no deal: he goes free, alive, a commander of none; his name goes on and he may muster again', async () => {
+test('held when the battle is lost with no deal: honor lets him go, alive, with whatever the battle left him', async () => {
   const store = createBattleStore({})
   const app = await start(store)
   try {
@@ -533,16 +533,16 @@ test('held when the battle is lost with no deal: he goes free, alive, a commande
     }
     for (const strip of [false, true]) {
       const { made, tent, company } = await run(strip)
-      assert.deepEqual(tent.verdict.commander, { fate: 'stripped', price: null, prices: [] }, 'no unit is taken as his price')
+      assert.deepEqual(tent.verdict.commander, { fate: 'released', price: null, prices: [] }, 'no unit is taken as his price')
       assert.equal(company.ended, null, 'he lives')
       assert.equal(company.name, made.name)
-      assert.deepEqual(company.officers, [], 'every officer has left him, his veteran too')
-      assert.ok(company.fallen.some(f => f.fate === 'left'))
-      assert.ok(company.unled.every(u => u.battles === 0), 'every unit must earn an officer from nothing')
+      // His officers fare as in any battle: no one leaves him for his having been held.
+      const fates = new Map(tent.verdict.officers.map(o => [o.unit.toLowerCase(), o.fate]))
+      const veteranFate = fates.get('spears')
+      assert.equal(company.officers.some(o => o.leads === 'spears'), !['killed', 'captured'].includes(veteranFate), `his veteran was ${veteranFate}`)
+      assert.equal(company.fallen.some(f => f.fate === 'left'), false)
       const again = await app.api('POST', '/api/battles', { opponent: 'standing', side: 'red', seed: 4, commander: made.token })
-      assert.equal(again.status, 201, 'and he may muster again, with nothing')
-      const next = (await app.api('GET', `/api/seat/${again.body.seats.red}`)).body
-      assert.ok(next.own.every(u => u.officer?.headless), 'no officer on any unit, not even a new veteran')
+      assert.equal(again.status, 201, 'and he may muster again, with what he has')
     }
   } finally { await app.close() }
 })
@@ -896,6 +896,25 @@ test('a battle has an end of day: after its last turn the side that lost the sma
     // From the app, the day is forty turns.
     const usual = (await app.api('POST', '/api/battles', { opponent: 'standing', side: 'red', seed: 3 })).body.seats.red
     assert.equal((await app.api('GET', `/api/seat/${usual}`)).body.battle.turnLimit, 40)
+  } finally { await app.close() }
+})
+
+test('an officer holds glory or survival dear, and each battle moves his loyalty: his card and his record say so', async () => {
+  const app = await start()
+  try {
+    const commander = (await app.api('POST', '/api/commanders')).body.token
+    const seat = (await app.api('POST', '/api/battles', { opponent: 'standing', side: 'red', seed: 3, commander })).body.seats.red
+    const before = (await app.api('GET', `/api/commander/${commander}`)).body.officers[0]
+    assert.ok(['glory', 'survival'].includes(before.values))
+    assert.equal(before.loyalty, null, 'neither loyal nor disaffected yet')
+    assert.equal((await app.api('GET', `/api/seat/${seat}`)).body.own[0].officer.loyalty, null)
+    const ended = await fight(app, seat)
+    const fate = ended.verdict.officers.find(o => o.unit === 'Spears').fate
+    const after = (await app.api('GET', `/api/commander/${commander}`)).body.officers.find(o => o.leads === 'spears')
+    if (after && fate !== 'killed' && fate !== 'captured') {
+      assert.equal(typeof after.record[0].loyalty, 'number', 'what this battle did to his loyalty')
+      assert.notEqual(after.record[0].loyalty, 0)
+    }
   } finally { await app.close() }
 })
 

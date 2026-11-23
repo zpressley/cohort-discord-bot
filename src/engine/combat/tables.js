@@ -644,10 +644,46 @@ const LOYALTY = {
   LOYAL: 70,           // at or over: he goes for the men who hold him
   DESERTION: 0.03,     // of the unit's men, each tick (ten minutes) he is held
   RALLY_MORALE: 15,    // a loyal officer's shaken men take this much heart, once
+
+  // How loyalty is earned (ruled 2026-11-23: "Earned through glory or
+  // survival. The theme of the game... sacrificing men for glory will cost
+  // you with those who value survival and win favor with those who value
+  // glory... Win and it's fine, a bloody victory or a boring one cost you
+  // in different ways"). Each officer values one of the two. What a battle
+  // does to his loyalty, by how it ended and what it was for his own unit:
+  //   fought   his unit struck a blow or took one
+  //   light    it lost no more than LIGHT of its men; bloody, BLOODY or more
+  VALUES: ['glory', 'survival'],
+  LIGHT: 0.15,
+  BLOODY: 0.35,
+  MOVES: {
+    glory: {
+      victory: { fought: 6, idle: -4 },    // a boring victory costs
+      draw: { fought: 2, idle: -3 },
+      defeat: { fought: -3, idle: -6 }
+    },
+    survival: {
+      victory: { light: 6, some: 2, bloody: -5 },   // a bloody one costs
+      draw: { light: 1, some: -2, bloody: -6 },
+      defeat: { light: -3, some: -5, bloody: -8 }
+    }
+  },
+  // What it does. A loyal officer learns faster ("maybe 25% faster"),
+  // speaks up more, and holds to his orders when he loses the thread. A
+  // disloyal one's men start a battle in worse heart, and he is likelier to
+  // lose the thread of an order and go by his nature.
+  // His senior officer may yield the field while he is held (ruled
+  // 2026-11-23: "Let's make it so some officers can surrender the field as
+  // well"): one who looks to his men, once this share of the army's men
+  // are dead, fled or broken.
+  YIELD_LOSSES: 0.5,
+  LEARNS: 1.25,          // battles of experience a loyal officer gains from one
+  DISLOYAL_MORALE: -10,  // on his unit's morale as a battle opens
+  DISLOYAL_GRASP: 0.6,   // on his chance to keep each clause of an order
   // An officer given to his captor in a deal for his own Commander's
   // freedom (web/battles.js, settle): he has every reason to hate his new
-  // Commander. Under DISLOYAL, so that it bites when loyalty is built.
-  // Claude's number, a guess; nothing reads it in battle yet.
+  // Commander. Under DISLOYAL, so it bites from his first battle for him.
+  // Claude's number, a guess.
   CAPTURED: 15
 }
 

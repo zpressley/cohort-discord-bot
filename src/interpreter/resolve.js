@@ -18,7 +18,7 @@ const { orderWords, OWN_EDGE, HOLD_THERE, RIDE_WITH: RIDE_WORDS } = require('../
 const { RIDE } = require('../engine/combat/tables')
 const { matchesKind, edgeTarget } = require('../engine/battle/battle')
 const { KINDS } = require('./grammar')
-const { gradeOf, MAX_STEPS } = require('../engine/command/officers')
+const { gradeOf, MAX_STEPS, loyaltyBand } = require('../engine/command/officers')
 const { findPlace, DIRECTIONS, TILE_METRES } = require('../engine/map/places')
 const { isGridRef, gridTarget, gridLabel } = require('../engine/map/grid')
 const { coverFor } = require('../engine/battle/hiding')
@@ -498,7 +498,8 @@ function resolveDepth(intent, { map, units, own, from, target }) {
 // it never tells what the enemy is doing. With no experienced officer on the
 // field, no one speaks.
 function counselFor(ordered, all, { clauses, action, plain, shaken }) {
-  const sage = all.filter(u => u.officer?.name && gradeOf(u.officer) !== 'green')
+  // A loyal officer speaks up whatever his experience.
+  const sage = all.filter(u => u.officer?.name && (gradeOf(u.officer) !== 'green' || loyaltyBand(u.officer) === 'loyal'))
     .sort((a, b) => (b.officer.experience ?? 0) - (a.officer.experience ?? 0) || a.id.localeCompare(b.id))[0]
   if (!sage) return []
   const out = []

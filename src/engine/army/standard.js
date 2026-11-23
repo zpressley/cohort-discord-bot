@@ -147,6 +147,8 @@ function standardUnits(key, units, side, homeEdge = side === 'red' ? 'west' : 'e
   const specs = toBattleUnits(army, { side, positions: names.map(() => 'A1'), eliteWeapon: e.weapon })
   taken.forEach((t, i) => { specs[checked.units.length + i].culture = t.culture })
   Object.assign(specs[specs.length - 1], {
+    // The faction's own number of men for its elite, where it has one.
+    ...(e.size ? { strength: e.size, maxStrength: e.size } : {}),
     armor: e.armor ?? 'no_armor',
     shield: e.shield ?? 'no_shield',
     mounted: Boolean(e.mounted),

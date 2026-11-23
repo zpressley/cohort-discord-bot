@@ -15,7 +15,7 @@ const path = require('path')
 const crypto = require('crypto')
 
 const { createCompany, unitsOf } = require('../engine/command/company')
-const { gradeOf, EARNED_AT } = require('../engine/command/officers')
+const { gradeOf, EARNED_AT, loyaltyBand } = require('../engine/command/officers')
 const { PLAIN } = require('../data/officers')
 const { FACTIONS } = require('../data/factions')
 const { usualArmy } = require('../engine/army/standard')
@@ -138,6 +138,8 @@ function createCommanderStore({ dir = null, now = () => Date.now() } = {}) {
       battles: company.battles,
       officers: company.officers.map(o => ({
         name: o.name, grade: gradeOf(o), experience: o.experience, personality: o.personality,
+        // What he holds dear, and whether he is loyal, disaffected or neither.
+        values: o.values ?? null, loyalty: loyaltyBand(o),
         leads: o.leads, status: o.status,
         record: [...o.record].reverse()
       })),

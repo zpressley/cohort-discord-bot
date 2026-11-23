@@ -7,7 +7,10 @@
 //
 // Pure: a company is plain data, and these functions return a new one.
 //
-//   officers  [{ id, name, experience, personality, leads, status, record }]
+//   officers  [{ id, name, experience, personality, values, loyalty, leads, status, record }]
+//             values   'glory' or 'survival': what he holds dear, and so
+//                      what wins and loses his loyalty (tables.LOYALTY)
+//             loyalty  0 to 100, from NEUTRAL; moved by each battle
 //             leads    the kind of unit he leads ("spears"), so he is given
 //                      the same men next time
 //             status   'fit', or 'wounded' (he sits the next battle out)
@@ -35,10 +38,10 @@
 //             one in twice (a server that stopped half way) changes nothing
 
 const { createRng } = require('../rng')
-const { PERSONALITIES, EARNED_AT, MAX_EXPERIENCE } = require('./officers')
+const { PERSONALITIES, EARNED_AT, MAX_EXPERIENCE, loyaltyOf, loyaltyMove } = require('./officers')
 const { assignOfficers } = require('./roster')
 const { NAMES, PLAIN } = require('../../data/officers')
-const { QUALITY_ORDER, TRAINING, VETERANCY } = require('../combat/tables')
+const { QUALITY_ORDER, TRAINING, VETERANCY, LOYALTY } = require('../combat/tables')
 const { createVeteranState, averageExperience, applyBattle } = require('../veterans/veterancy')
 
 function createCompany() {
@@ -142,6 +145,8 @@ function musterOfficers(company, units, seed, { benched = [] } = {}) {
       name: drawn.name,
       experience: 13 + (drawn.experience % 4),
       personality: drawn.personality,
+      values: LOYALTY.VALUES[drawn.experience % LOYALTY.VALUES.length],
+      loyalty: LOYALTY.NEUTRAL,
       leads: units[at].kind,
       status: 'fit',
       record: []
@@ -171,7 +176,7 @@ function musterOfficers(company, units, seed, { benched = [] } = {}) {
     const officer = lead.get(unit.id)
     if (!officer) return { ...unit, officer: { ...HEADLESS } }
     officer.leads = unit.kind
-    return { ...unit, officer: { id: officer.id, name: officer.name, experience: officer.experience, personality: officer.personality } }
+    return { ...unit, officer: { id: officer.id, name: officer.name, experience: officer.experience, personality: officer.personality, values: officer.values ?? null, loyalty: loyaltyOf(officer) } }
   })
   return { company: next, units: out }
 }
@@ -218,6 +223,8 @@ function settleBattle(company, battle, fates) {
       name: freshName(next, f.culture, random),
       experience: fromTheRanks(state),
       personality: PERSONALITIES[Math.floor(random() * PERSONALITIES.length)],
+      values: LOYALTY.VALUES[Math.floor(random() * LOYALTY.VALUES.length)],
+      loyalty: LOYALTY.NEUTRAL,
       leads: f.unit,
       status: 'fit',
       record: [{ ...entry, fate: 'unhurt', named: true }]
@@ -269,7 +276,17 @@ function settleBattle(company, battle, fates) {
     }
     // An officer of the greatest experience trains his men as they fight.
     if (officer.experience >= MAX_EXPERIENCE && !gone) state.drilled = (state.drilled ?? 0) + 1
-    officer.experience = Math.min(MAX_EXPERIENCE, officer.experience + 1)
+    // A loyal officer learns faster; and the battle moves his loyalty, by
+    // what he holds dear (as he went into it: this battle's lesson comes
+    // at the old loyalty).
+    const loyal = loyaltyOf(officer) >= LOYALTY.LOYAL
+    officer.experience = Math.min(MAX_EXPERIENCE, officer.experience + (loyal ? LOYALTY.LEARNS : 1))
+    if (officer.values) {
+      const losses = f.mustered ? Math.max(0, 1 - (f.survivors ?? f.mustered) / f.mustered) : 0
+      const moved = loyaltyMove(officer.values, { result: battle.result, fought: f.fought ?? losses > 0, losses })
+      officer.loyalty = Math.max(0, Math.min(100, loyaltyOf(officer) + moved))
+      entry.loyalty = moved
+    }
     officer.status = f.fate === 'wounded' ? 'wounded' : 'fit'
   }
   next.battles += 1
@@ -314,26 +331,4 @@ function armyChanged(company, names) {
   return next
 }
 
-/**
- * A Commander left "a commander of none" (ruled 2026-11-23: held when his
- * battle was lost, and no deal struck; command/commander.js,
- * heldWhenTheBattleEnds). Every officer leaves the company, those who sat
- * the battle out too, and every unit starts again from nothing, its
- * veterancy and training with it. The roll of the fallen keeps who they were. Run after the battle
- * is written in (settleBattle).
- */
-function commanderOfNone(company, title) {
-  const next = copy(company)
-  for (const officer of next.officers) {
-    next.fallen.push({
-      name: officer.name, fate: 'left', at: title, led: officer.leads,
-      experience: officer.experience, personality: officer.personality, battles: officer.record.length
-    })
-  }
-  // His army is gone with them: the men he raises next know nothing.
-  next.units = {}
-  next.officers = []
-  return next
-}
-
-module.exports = { createCompany, musterOfficers, settleBattle, commanderOfNone, unitsOf, trainedQuality, leadUnit, ridesWith, armyChanged, HEADLESS }
+module.exports = { createCompany, musterOfficers, settleBattle, unitsOf, trainedQuality, leadUnit, ridesWith, armyChanged, HEADLESS }

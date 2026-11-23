@@ -156,14 +156,14 @@ test('a battle saved with the old bargain (one unit, always taken) plays back as
   assert.equal(commanderOf(game, 'blue'), null, 'that side has no Commander on the field')
 })
 
-test('when the battle ends held: freed by a victory; otherwise free, alive, a commander of none, whatever he has left', () => {
+test('when the battle ends held: freed by a victory; otherwise let go, alive, with whatever the battle left him', () => {
   const held = { red: { unitId: 'guard', status: 'held', heldBy: 'foe' } }
   const field = world([unit({ id: 'guard', strength: 10 }), unit({ id: 'line', quality: 'elite', strength: 40 })])
   const lost = { decided: true, winner: 'blue', reason: 'enemy army broken' }
   assert.deepEqual(commanderFate({ commanders: held, world: field, outcome: { ...lost, winner: 'red' } }, 'red'), { fate: 'freed', price: null, prices: [] })
-  assert.deepEqual(commanderFate({ commanders: held, world: field, outcome: lost }, 'red'), { fate: 'stripped', price: null, prices: [] },
+  assert.deepEqual(commanderFate({ commanders: held, world: field, outcome: lost }, 'red'), { fate: 'released', price: null, prices: [] },
     'no unit is taken as a price')
-  assert.deepEqual(commanderFate({ commanders: held, world: world([unit({ id: 'guard', strength: 0 })]), outcome: lost }, 'red'), { fate: 'stripped', price: null, prices: [] },
+  assert.deepEqual(commanderFate({ commanders: held, world: world([unit({ id: 'guard', strength: 0 })]), outcome: lost }, 'red'), { fate: 'released', price: null, prices: [] },
     'nothing left on the field, and still he is not lost')
   assert.deepEqual(commanderFate({ commanders: { red: { unitId: 'guard', status: 'free' } }, world: field, outcome: lost }, 'red'), { fate: 'free', price: null, prices: [] })
   assert.deepEqual(commanderFate({ commanders: { red: { unitId: 'guard', status: 'killed' } }, world: field, outcome: lost }, 'red'), { fate: 'killed', price: null, prices: [] })
@@ -199,4 +199,50 @@ test('a Commander who only gets away to another unit does not stop the turn for 
   submitOrders(game, 'blue', [])
   assert.ok(game.battle.log.all().some(e => e.type === 'commanderMoved'), 'he moved')
   assert.notEqual(game.history.at(-1).interrupt, 'commander')
+})
+
+// ── Rulings of November 23, on the captive ─────────────
+
+test('held, his senior officer may yield the field to save what is left: one who looks to his men, once half the army is gone', () => {
+  const fieldWith = (officer, strengths = [40, 50]) => {
+    const state = createBattleState(spec([
+      unit({ id: 'guard', position: { x: 2, y: 2 } }),
+      unit({ id: 'line', position: { x: 2, y: 18 }, officer }),
+      unit({ id: 'foe', side: 'blue', position: { x: 18, y: 10 } })
+    ]))
+    Object.assign(state.commanders.red, { status: 'held', heldBy: 'foe' })
+    state.world.units.find(u => u.id === 'guard').strength = strengths[0]
+    state.world.units.find(u => u.id === 'line').strength = strengths[1]
+    stepTurn(state, {})
+    return state
+  }
+  const officer = (more) => ({ name: 'Gaius', experience: 14, personality: 'bold', ...more })
+
+  const yielded = fieldWith(officer({ values: 'survival' }))
+  assert.deepEqual([yielded.outcome.winner, yielded.outcome.reason], ['blue', 'enemy officers yielded'])
+  assert.deepEqual(yielded.log.ofType('officerYielded').map(e => [e.side, e.unitId, e.officer]), [['red', 'line', 'Gaius']])
+
+  assert.equal(fieldWith(officer({ values: 'glory' })).outcome.decided, false, 'one who lives for glory fights on')
+  assert.equal(fieldWith(officer({ values: 'survival' }), [60, 60]).outcome.decided, false, 'not while more than half the army is in hand')
+  assert.equal(fieldWith(officer({ values: 'survival', loyalty: 80 })).outcome.decided, false, 'a loyal one is going for the men who hold his Commander')
+  assert.equal(fieldWith(officer({ personality: 'cautious' })).outcome.decided, true, 'an officer whose values are not known: a cautious one')
+  assert.equal(fieldWith({ headless: true, name: null, experience: 0, personality: 'steady' }).outcome.decided, false, 'men with no officer cannot')
+})
+
+test('freed, he brings out what he heard in the enemy\'s camp: his side knows where every enemy unit stood', () => {
+  const { sideView } = require('../../orchestrator/orchestrator')
+  const game = createGame(spec([
+    unit({ id: 'guard', position: { x: 2, y: 2 } }),
+    unit({ id: 'foe', side: 'blue', position: { x: 4, y: 2 } }),
+    unit({ id: 'far', side: 'blue', position: { x: 36, y: 36 } })
+  ], { map: { name: 'plain-40', width: 40, height: 40, terrain: {} } }), { seed: 5 })
+  assert.equal(sideView(game, 'red').intel.some(e => e.id === 'far'), false, 'no one of his has seen them')
+  Object.assign(game.battle.commanders.red, { status: 'held', heldBy: 'foe' })
+  game.battle.broken.add('foe')   // the men who hold him break
+  submitOrders(game, 'red', [])
+  submitOrders(game, 'blue', [])
+  assert.equal(game.battle.commanders.red.status, 'free')
+  const far = sideView(game, 'red').intel.find(e => e.id === 'far')
+  assert.deepEqual([far.status, far.position], ['ghost', { x: 36, y: 36 }])
+  assert.deepEqual(game.battle.lastSeen.get('red').get('far'), { x: 36, y: 36 }, 'and his units know where to go for them')
 })

@@ -23,6 +23,26 @@ function createIntel() {
 }
 
 /**
+ * What a Commander brings out of the enemy's hands: where each enemy unit
+ * stood as he left, heard in their own camp. Each one his side cannot see
+ * now is known as last seen there, this turn.
+ */
+function learnFromCaptivity(intel, world, side, turn) {
+  for (const enemy of world.units.filter(u => u.side !== side && u.strength > 0)) {
+    if (intel.known[enemy.id]?.status === 'visible') continue
+    intel.known[enemy.id] = {
+      status: 'ghost',
+      position: { ...enemy.position },
+      strength: enemy.strength,
+      seenOnTurn: turn,
+      role: enemy.role ?? null,
+      mounted: Boolean(enemy.mounted),
+      primaryWeapon: enemy.primaryWeapon ?? null
+    }
+  }
+}
+
+/**
  * Update one side's intel from the current world. Mutates the ledger and
  * returns the ids of enemies sighted THIS update that were not visible in the
  * last one — the orchestrator's elastic time interrupts on exactly that.
@@ -84,4 +104,4 @@ function sideView(world, side, intel) {
   }
 }
 
-module.exports = { VISION, visionRange, createIntel, updateIntel, sideView }
+module.exports = { VISION, visionRange, createIntel, updateIntel, sideView, learnFromCaptivity }

@@ -33,7 +33,7 @@ test('an army with kit its culture may not field is refused with the builder\'s 
 
 test('the elite is not for sale: it cannot be bought, its name cannot be taken, and it comes with every army', () => {
   assert.match(checkStandard('rome', [{ name: 'guard', quality: 'elite', weapon: 'roman_gladius' }]).errors[0], /"elite" is not a purchasable troop quality/)
-  assert.match(checkStandard('rome', [{ name: 'praetorians', quality: 'levy', weapon: 'sling' }]).errors[0], /the elite's name/)
+  assert.match(checkStandard('rome', [{ name: 'praetorian guard', quality: 'levy', weapon: 'sling' }]).errors[0], /the elite's name/)
   for (const key of keys) {
     const units = standardUnits(key, slingers(2), 'red')
     assert.equal(units.filter(u => u.quality === 'elite').length, 1, key)
@@ -60,7 +60,7 @@ test('bought units have distinct names; one numbered is told apart, and a name a
   assert.deepEqual(find('slingers 3'), ['red_slingers_3'])
   assert.deepEqual(find('spears 2'), ['red_spears_2'])
   assert.deepEqual(find('spears'), ['red_spears_1', 'red_spears_2'])
-  assert.deepEqual(find('praetorians'), ['red_praetorians'])
+  assert.deepEqual(find('praetorian guard'), ['red_praetorian_guard'])
 })
 
 test('a bought army forms up on every map, where the scenario puts its side, and a game can be made', () => {
@@ -85,12 +85,12 @@ test('the same faction may fight on both sides: each army its own, told apart by
   const spec = fieldArmies(loadScenario('meeting-battle', { map: 'ashford', deploy: true }), { red: { faction: 'rome', units: slingers(2) }, blue: { faction: 'rome', units: null } })
   const ids = spec.units.map(u => u.id)
   assert.equal(new Set(ids).size, ids.length)
-  assert.ok(ids.includes('red_praetorians') && ids.includes('blue_praetorians'))
+  assert.ok(ids.includes('red_praetorian_guard') && ids.includes('blue_praetorian_guard'))
   assert.doesNotThrow(() => createGame(spec, { seed: 3 }))
 })
 
 test('the computer\'s faction by lot is any faction, the player\'s own among them, the same for the same seed', () => {
-  const drawn = new Set(Array.from({ length: 80 }, (_, s) => anyFaction(s + 1)))
+  const drawn = new Set(Array.from({ length: 600 }, (_, s) => anyFaction(s + 1)))
   assert.deepEqual([...drawn].sort(), [...keys].sort())
   assert.equal(anyFaction(17), anyFaction(17))
 })
@@ -100,14 +100,14 @@ test('changing the army keeps a kept unit\'s officer and count, drops a dismisse
     ...createCompany(),
     battles: 3,
     officers: [
-      { id: 'o1', name: 'Gaius', experience: 9, personality: 'steady', leads: 'praetorians', status: 'fit', record: [] },
+      { id: 'o1', name: 'Gaius', experience: 9, personality: 'steady', leads: 'praetorian guard', status: 'fit', record: [] },
       { id: 'o2', name: 'Marcus', experience: 4, personality: 'bold', leads: 'legionaries', status: 'fit', record: [] }
     ],
     units: { hastati: 3, slingers: 2 },
     nextId: 3
   }
   // Kept: legionaries (their kit changed) and slingers. Dismissed: hastati. Bought: spears.
-  const after = armyChanged(company, ['legionaries', 'slingers', 'spears', 'praetorians'])
+  const after = armyChanged(company, ['legionaries', 'slingers', 'spears', 'praetorian guard'])
   assert.deepEqual(unitsOf(after).map(u => [u.kind, u.battles]), [['slingers', 2]], 'the dismissed unit takes its battles with it')
   assert.deepEqual(after.officers, company.officers, 'officers stay with the company')
   const units = standardUnits('rome', [
@@ -117,12 +117,12 @@ test('changing the army keeps a kept unit\'s officer and count, drops a dismisse
   ], 'red').map(u => ({ ...u, kind: u.aliases[0] }))
   const led = musterOfficers(after, units, 5)
   const by = Object.fromEntries(led.units.map(u => [u.kind, u.officer.headless ? null : u.officer.name]))
-  assert.deepEqual(by, { legionaries: 'Marcus', slingers: null, spears: null, praetorians: 'Gaius' })
+  assert.deepEqual(by, { legionaries: 'Marcus', slingers: null, spears: null, 'praetorian guard': 'Gaius' })
   const battlesOf = Object.fromEntries(unitsOf(led.company).map(u => [u.kind, u.battles]))
   assert.deepEqual([battlesOf.slingers, battlesOf.spears], [2, 0], 'the new unit starts from nothing')
 
   // Legionaries dismissed: Marcus stays, and leads the best unit without an officer.
-  const without = armyChanged(company, ['slingers', 'spears', 'praetorians'])
+  const without = armyChanged(company, ['slingers', 'spears', 'praetorian guard'])
   const again = musterOfficers(without, standardUnits('rome', [{ name: 'slingers', quality: 'levy', weapon: 'sling' }, { name: 'spears', quality: 'militia', weapon: 'spear_basic' }], 'red').map(u => ({ ...u, kind: u.aliases[0] })), 5)
   assert.equal(again.units.find(u => u.kind === 'spears').officer.name, 'Marcus')
   assert.equal(again.company.officers.length, 2, 'no officer is made by changing the army')

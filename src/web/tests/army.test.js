@@ -123,7 +123,7 @@ test('an army cannot be changed while it is in the field; once the battle is ove
     const usual = await app.api('POST', `/api/commander/${made.token}/army`, { usual: true })
     assert.equal(usual.status, 200)
     assert.deepEqual(usual.body.army, { own: false, units: (await app.api('GET', `/api/commander/${made.token}`)).body.army.units })
-    assert.deepEqual(usual.body.army.units.map(u => u.name), ['legionaries', 'hastati', 'slingers'])
+    assert.deepEqual(usual.body.army.units.map(u => u.name), ['legionaries', 'hastati', 'velites'])
   } finally { await app.close() }
 })
 
@@ -177,7 +177,7 @@ test('a unit kept keeps its officer, a dismissed unit\'s battles are lost, a new
       ...commander.company,
       battles: 3,
       officers: [
-        { id: 'o1', name: 'Gaius', experience: 9, personality: 'steady', leads: 'praetorians', status: 'fit', record: [] },
+        { id: 'o1', name: 'Gaius', experience: 9, personality: 'steady', leads: 'praetorian guard', status: 'fit', record: [] },
         { id: 'o2', name: 'Marcus', experience: 4, personality: 'bold', leads: 'legionaries', status: 'fit', record: [] }
       ],
       units: { hastati: 2, slingers: 1 },
@@ -187,12 +187,12 @@ test('a unit kept keeps its officer, a dismissed unit\'s battles are lost, a new
     const army = [ROMAN[0], ROMAN[1], ROMAN[3]]
     const kept = (await app.api('POST', `/api/commander/${made.token}/army`, { units: army })).body
     assert.deepEqual(kept.unled, [{ kind: 'slingers', battles: 1 }])
-    assert.deepEqual(kept.officers.map(o => [o.name, o.leads]), [['Gaius', 'praetorians'], ['Marcus', 'legionaries']])
+    assert.deepEqual(kept.officers.map(o => [o.name, o.leads]), [['Gaius', 'praetorian guard'], ['Marcus', 'legionaries']])
     const seat = (await app.api('POST', '/api/battles', { opponent: 'standing', side: 'red', commander: made.token, seed: 5 })).body.seats.red
     const own = (await app.api('GET', `/api/seat/${seat}`)).body.own
     const officer = (name) => own.find(u => u.name === name).officer
     assert.equal(officer('Legionaries').name, 'Marcus')
-    assert.equal(officer('Praetorians').name, 'Gaius')
+    assert.equal(officer('Praetorian guard').name, 'Gaius')
     assert.ok(officer('Slingers').headless && officer('Riders').headless)
     await app.api('POST', `/api/seat/${seat}/orders`, { text: 'yield' })
 
@@ -206,7 +206,7 @@ test('a unit kept keeps its officer, a dismissed unit\'s battles are lost, a new
     assert.equal(again.officers.length, before, 'no officer is made by changing the army')
     const next = (await app.api('POST', '/api/battles', { opponent: 'standing', side: 'red', commander: made.token, seed: 6 })).body.seats.red
     const led = (await app.api('GET', `/api/seat/${next}`)).body.own.filter(u => u.officer && !u.officer.headless).map(u => u.name)
-    assert.ok(led.includes('Praetorians'))
+    assert.ok(led.includes('Praetorian guard'))
     assert.ok(led.length <= before, 'no more units led than there are officers')
   } finally { await app.close() }
 })
@@ -220,10 +220,10 @@ test('the friend who joins brings his own Commander\'s bought army', async () =>
     const { seats } = (await app.api('POST', '/api/battles', { opponent: 'friend', side: 'red', commander: red.token, seed: 5 })).body
     assert.equal((await app.api('POST', `/api/seat/${seats.blue}/join`, { commander: blue.token })).status, 200)
     const tent = (await app.api('GET', `/api/seat/${seats.blue}`)).body
-    assert.deepEqual(tent.own.map(u => u.name), ['Legionaries', 'Slingers', 'Slingers 2', 'Riders', 'Praetorians'])
+    assert.deepEqual(tent.own.map(u => u.name), ['Legionaries', 'Slingers', 'Slingers 2', 'Riders', 'Praetorian guard'])
     assert.equal(tent.battle.title, 'Crownhill: Rome against Rome')
     const reds = (await app.api('GET', `/api/seat/${seats.red}`)).body.own.map(u => u.name)
-    assert.deepEqual(reds, ['Legionaries', 'Hastati', 'Slingers', 'Praetorians'], 'the mustering side brings the usual army')
+    assert.deepEqual(reds, ['Legionaries', 'Hastati', 'Velites', 'Praetorian guard'], 'the mustering side brings the usual army')
   } finally { await app.close() }
 })
 
@@ -234,11 +234,11 @@ test('the same faction may fight on both sides, by choice or by lot, and each si
     const seat = (await app.api('POST', '/api/battles', { opponent: 'standing', side: 'red', commander: made.token, enemyFaction: 'sarmatia', seed: 7 })).body.seats.red
     const tent = (await app.api('GET', `/api/seat/${seat}`)).body
     assert.equal(tent.battle.title, 'Crownhill: Sarmatia against Sarmatia')
-    const read = (await app.api('POST', `/api/seat/${seat}/read`, { text: 'horse archers 1 hold\nscale riders advance' })).body
-    assert.deepEqual(read.understood, ['Horse archers 1: hold', 'Scale riders: advance on the enemy'])
+    const read = (await app.api('POST', `/api/seat/${seat}/read`, { text: 'light riders 1 hold\niron scale riders advance' })).body
+    assert.deepEqual(read.understood, ['Light riders 1: hold', 'Iron scale riders: advance on the enemy'])
     // By lot, over enough seeds, his own faction comes up.
     const titles = new Set()
-    for (let seed = 1; seed <= 24; seed++) {
+    for (let seed = 1; seed <= 160; seed++) {
       titles.add((await app.api('POST', '/api/battles', { opponent: 'standing', side: 'red', faction: 'rome', seed })).body.title)
     }
     assert.ok(titles.has('Crownhill: Rome against Rome'), [...titles].join(', '))
