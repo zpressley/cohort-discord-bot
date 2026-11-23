@@ -331,4 +331,104 @@ function armyChanged(company, names) {
   return next
 }
 
-module.exports = { createCompany, musterOfficers, settleBattle, unitsOf, trainedQuality, leadUnit, ridesWith, armyChanged, HEADLESS }
+/**
+ * A unit given to the enemy in a deal for its Commander's freedom, as it
+ * goes over (ruled 2026-11-23: "Additional units from capture and other
+ * avenues exist"): its own veterancy and training, this battle banked as
+ * for any unit that comes through one, and its officer if he went with it,
+ * his experience and record his own, this battle in it. Read from the
+ * company before the battle is written into it (settleBattle), with the
+ * unit's fate as settleBattle takes it.
+ *
+ * @returns {{ state, officer }} officer null if none went with it. The
+ *   officer has no id: the company that takes him in gives him one.
+ */
+function handOver(company, battle, f) {
+  const next = copy(company)
+  const mustered = f.mustered ?? next.units[f.unit]?.strength ?? 0
+  const state = next.units[f.unit] ?? createVeteranState({ strength: mustered })
+  if (state.strength === 0) state.strength = mustered
+  applyBattle(state, { survivors: f.survivors == null ? null : Math.min(state.strength, Math.max(0, f.survivors)), fallenShare: VETERANCY.FALLEN_SHARE })
+  state.strength = mustered || state.strength
+  const officer = f.fate === 'given up' && f.officerId ? next.officers.find(o => o.id === f.officerId) : null
+  if (!officer) return { state, officer: null }
+  if (officer.experience >= MAX_EXPERIENCE) state.drilled = (state.drilled ?? 0) + 1
+  const { id, ...man } = officer
+  return {
+    state,
+    officer: {
+      ...man,
+      experience: Math.min(MAX_EXPERIENCE, officer.experience + 1),
+      status: f.fate === 'wounded' ? 'wounded' : 'fit',
+      record: [...officer.record, {
+        battle: battle.id, title: battle.title, result: battle.result, unit: f.unit, fate: 'given up', deeds: f.deeds ?? '', orders: (f.orders ?? []).slice(-12)
+      }]
+    }
+  }
+}
+
+/**
+ * A unit taken in (handOver's, from another company), under the name it
+ * bears here. Its officer, if it has one, joins the company leading it,
+ * and with every reason to hate his new Commander: his loyalty is
+ * LOYALTY.CAPTURED, whatever it was. What he holds dear is his own still.
+ *
+ * @param {Object} unit { name, state, officer, from } `from`: the
+ *   Commander he served, and where he was given up, for his card
+ */
+function takeIn(company, { name, state, officer = null, from = null }) {
+  const next = copy(company)
+  next.units[name] = JSON.parse(JSON.stringify(state))
+  if (officer) {
+    next.officers.push({
+      ...JSON.parse(JSON.stringify(officer)),
+      id: `o${next.nextId++}`,
+      leads: name,
+      loyalty: LOYALTY.CAPTURED,
+      ...(from ? { taken: from } : {})
+    })
+  }
+  return next
+}
+
+/**
+ * A Commander moves an officer to another of his units, between battles
+ * (ruled 2026-11-23: "You can transfer officers"): to one that has none,
+ * or in exchange with the officer there, who goes to the men the first one
+ * led. Each officer's experience and record go with him; each unit's
+ * veterancy and training stay with it. A unit left with no officer finds
+ * one in its own ranks as any does (settleBattle).
+ *
+ * @param {string} officerId
+ * @param {string} to         the name of the unit he is to lead
+ * @returns {{ company, swapped }} swapped: the officer who changed places
+ *   with him, if any
+ */
+function moveOfficer(company, officerId, to) {
+  const next = copy(company)
+  const officer = next.officers.find(o => o.id === officerId)
+  if (!officer) throw new Error('there is no such officer in the company')
+  if (officer.leads === to) return { company: next, swapped: null }
+  const there = next.officers.find(o => o.leads === to && o.id !== officerId) ?? null
+  if (there) there.leads = officer.leads
+  officer.leads = to
+  return { company: next, swapped: there ? there.id : null }
+}
+
+/**
+ * A unit given a name by its Commander (ruled 2026-11-23: "You can name
+ * units after they get an officer"): its veterancy and training, and the
+ * officer who leads it, under the new name. The name is checked by the
+ * caller (web/roster.js); the record of battles past keeps the name the
+ * unit bore in them.
+ */
+function renameUnit(company, from, to) {
+  const next = copy(company)
+  if (from in next.units) {
+    next.units = Object.fromEntries(Object.entries(next.units).map(([kind, v]) => [kind === from ? to : kind, v]))
+  }
+  for (const officer of next.officers) if (officer.leads === from) officer.leads = to
+  return next
+}
+
+module.exports = { createCompany, musterOfficers, settleBattle, unitsOf, trainedQuality, leadUnit, ridesWith, armyChanged, handOver, takeIn, moveOfficer, renameUnit, HEADLESS }

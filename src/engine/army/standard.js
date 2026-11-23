@@ -109,12 +109,14 @@ function kitPrice(kit, culture) {
 }
 
 // A unit taken from the enemy, as the builder gives its units: its kit as
-// it was, raised to its own quality's numbers.
-function takenUnit(kit) {
-  const k = kitOf(kit)
+// it was, at the numbers it was raised to (`men`: an elite's are its
+// faction's), else its quality's.
+function takenUnit(unit) {
+  const k = kitOf(unit)
   const tier = T.QUALITY_TIERS[k.quality]
   if (!tier || !D.WEAPONS[k.weapon] || !(k.armor in D.ARMOR_SP) || !(k.shield in D.SHIELD_SP)) return null
-  return { ...k, size: unitSize(tier, k.weapon, k.mounted), cost: 0 }
+  const men = Number.isInteger(unit.men) && unit.men > 0 ? unit.men : unitSize(tier, k.weapon, k.mounted)
+  return { ...k, size: men, cost: 0 }
 }
 
 /**
