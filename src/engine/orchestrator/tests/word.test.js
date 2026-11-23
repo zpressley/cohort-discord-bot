@@ -115,6 +115,16 @@ test('when word comes again from a unit he had no word of, it simply arrives, an
   assert.equal(game.battle.log.all().filter(e => e.type === 'inTouch').length, 0)
 })
 
+test('an order no rider can carry is news to him only when the rider is back, a ride there and back as far as he knows', () => {
+  const game = createGame(spec(wall()), { seed: 1 })
+  submitOrders(game, 'red', [{ unitRef: 'far', target: { x: 28, y: 2 } }])
+  submitOrders(game, 'blue', wall().map(w => ({ unitRef: w.id, action: 'hold' })))
+  const shut = game.battle.log.all().find(e => e.type === 'riderBlocked')
+  assert.equal(shut.unitId, 'far')
+  assert.equal(arrivalOf(game, 'red', shut), shut.turn + 6, 'thirty minutes there, thirty back')
+  assert.deepEqual(game.word.red.blocked, [{ unitId: 'far', sent: shut.turn, arrives: shut.turn + 3, back: shut.turn + 6 }])
+})
+
 test('a battle saved before the riders rulings (everyoneAsked) still tells him at once that a unit is cut off', () => {
   const game = createGame({ ...spec(wall()), everyoneAsked: true }, { seed: 1 })
   submitOrders(game, 'red', [])

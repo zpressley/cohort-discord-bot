@@ -347,6 +347,8 @@ function processPlayerTurn(game) {
     game.history.push({
       playerTurn: game.playerTurn, ticks: [], interrupt: 'surrender'
     })
+    // (Everyone hears of it.)
+    for (const s of sides(battle.world)) { game.calls[s] = (game.calls[s] ?? 0) + 1; game.askedAt[s] = battle.turn }
     return game.history.at(-1)
   }
 

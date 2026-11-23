@@ -29,6 +29,14 @@
 //             the report of a unit that saw it
 //   since     the battle turn from which his own riders bring him news (he
 //             was freed then; while held he hears his captors instead)
+// and, since the riders rulings of 2026-11-23 (not in a battle saved before
+// them, spec.everyoneAsked):
+//   units[id].overdue  no word of it for longer than he should have had
+//             (see overdue); `cutOff` stays false: he is never told
+//   back      [{ unitId, turn }]: word came again from a unit overdue
+//   blocked   [{ unitId, sent, arrives, back }]: an order no rider could
+//             carry, as he knows of it: on the road until `arrives`, and
+//             news to him when the rider is `back`
 //
 // Everything here is rebuilt by playing a battle back: it is filled in by
 // the orchestrator after every tick, from the battle's own state.
@@ -102,6 +110,21 @@ function updateWord(game, side) {
     const options = battle.hidden.has(e.id) ? { seenWithin: battle.hidden.get(e.id).seenWithin } : {}
     return canSee(battle.map, unit, e, options)
   })
+
+  // An order no rider could carry: he learns of it when the rider is back
+  // to tell him, a ride there and back as far as he knows, not at once (a
+  // rider who cannot get through is word of a unit cut off). If he already
+  // thought no rider could get through, the read-back told him so.
+  if (free && !toldCutOff) {
+    const shut = battle.log.forTurn(turn).filter(e => e.type === 'riderBlocked' && e.side === side)
+    if (shut.length > 0) {
+      const delays = orderDelays(battle, side, shut.map(e => e.unitId), { word }) ?? {}
+      for (const e of shut) {
+        const ride = delays[e.unitId] === undefined || delays[e.unitId] === Infinity ? 0 : delays[e.unitId] / 10
+        ;(word.blocked ??= []).push({ unitId: e.unitId, sent: turn, arrives: turn + ride, back: turn + 2 * ride })
+      }
+    }
+  }
 
   // Each unit of his sends word: those still on the field, and once more
   // those that left it this tick (destroyed, or fled).
@@ -227,6 +250,10 @@ function arrivalOf(game, side, event) {
   if (!word) return event.turn
   if (event.type === 'victory' || event.type === 'objective' || event.type === 'officerYielded') return event.turn
   if (event.side === side && event.type.startsWith('commander')) return event.turn
+  if (event.type === 'riderBlocked' && event.side === side && word.blocked) {
+    const shut = word.blocked.find(b => b.unitId === event.unitId && b.sent === event.turn)
+    if (shut) return shut.back
+  }
   if ((event.type.startsWith('rider') || event.type === 'cutOff' || event.type === 'inTouch') && event.side === side) return event.turn
   if (event.turn < word.since) return Infinity
   const mine = (id) => Boolean(word.units[id])
