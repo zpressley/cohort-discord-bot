@@ -59,10 +59,19 @@ test('under the threshold he falls only when his unit is struck, and then only b
     [{ type: 'commanderTaken', fields: { side: 'red', unitId: 'guard', by: 'foe' } }])
   assert.deepEqual(commanders.red, { unitId: 'guard', status: 'held', heldBy: 'foe' })
 
+  // At half strength the worst roll still only sees him taken: death needs
+  // the unit at a quarter or less.
   commanders = fresh()
   assert.deepEqual(tick({ commanders, world: world(units), events: [{ type: 'pursuit', unitId: 'guard', by: 'foe' }], random: rolls([0, 0]) }),
+    [{ type: 'commanderTaken', fields: { side: 'red', unitId: 'guard', by: 'foe' } }])
+  const remnant = [unit({ id: 'guard', strength: 25 }), unit({ id: 'foe', side: 'blue' })]
+  commanders = fresh()
+  assert.deepEqual(tick({ commanders, world: world(remnant), events: [{ type: 'pursuit', unitId: 'guard', by: 'foe' }], random: rolls([0, 0]) }),
     [{ type: 'commanderKilled', fields: { side: 'red', unitId: 'guard', by: 'foe' } }], 'cut down as his unit ran')
   assert.equal(commanders.red.status, 'killed')
+  commanders = fresh()
+  tick({ commanders, world: world([unit({ id: 'guard', strength: 26 }), unit({ id: 'foe', side: 'blue' })]), events: [fight('guard', 'foe')], random: rolls([0, 0]) })
+  assert.equal(commanders.red.status, 'held', 'a man over the quarter, and he lives')
 })
 
 test('his unit destroyed around him, he gets away to another if he comes through it', () => {

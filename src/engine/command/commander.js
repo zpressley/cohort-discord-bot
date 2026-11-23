@@ -20,7 +20,9 @@
 //     while under the threshold of its strength, he may fall: a low chance.
 //     If the unit is destroyed around him the chance is higher; if he comes
 //     through that, he gets away to another of his units.
-//   - When he falls he is taken, or less often killed.
+//   - When he falls he is taken, or less often killed. He can be killed
+//     only when the unit is at a quarter of its strength or less (ruled
+//     2026-11-23: "should be lower for death, quarter or less").
 //   - Killed: the battle is lost, and (in a campaign) everything with it.
 //   - Taken: he gives no orders. His units fight on with the orders they
 //     have. He is free again if the unit that holds him breaks or is
@@ -105,7 +107,10 @@ function stepCommanders({ commanders, world, broken, fledUnits, events, mustered
       const chance = gone ? COMMANDER.OVERRUN : share <= COMMANDER.THRESHOLD ? COMMANDER.CHANCE : 0
       if (chance > 0 && random() < chance) {
         fallen = true
-        if (random() < COMMANDER.KILLED_SHARE) {
+        // Death comes only when the unit is cut to a quarter or less, or
+        // destroyed; above that, a Commander who falls is taken.
+        const mayDie = gone || share <= COMMANDER.DEATH_THRESHOLD
+        if (random() < COMMANDER.KILLED_SHARE && mayDie) {
           c.status = 'killed'
           out.push({ type: 'commanderKilled', fields: { side, unitId: c.unitId, by: strikers[0] } })
         } else {

@@ -577,6 +577,7 @@ const HEART = {
 // Commander whose unit stays out of the fight cannot fall.
 const COMMANDER = {
   THRESHOLD: 0.5,      // his unit at or under this share of its strength
+  DEATH_THRESHOLD: 0.25, // he can be killed only at or under this share (ruled 2026-11-23); above it he is taken
   CHANCE: 0.04,        // each tick it is struck while under the threshold
   OVERRUN: 0.3,        // the tick it is destroyed around him
   KILLED_SHARE: 0.12   // of those who fall, killed; the rest are taken

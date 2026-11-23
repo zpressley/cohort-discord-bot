@@ -354,8 +354,8 @@ async function muster() {
 
 // ── Who leads: the friend's first screen in the tent ───
 // As at the muster: one of your Commanders whose army is free, or a new
-// one (one tap). Without one you fight as a new Commander would, and
-// nothing is kept. Closed once the first turn has run.
+// one (one tap). Every player has a Commander (ruled 2026-11-23). Closed
+// once the first turn has run.
 async function whoLeads(token, view) {
   const b = view.battle
   const [all, factions] = await Promise.all([loadCommanders(), view.faction ? api('GET', '/api/factions') : []])
@@ -375,8 +375,6 @@ async function whoLeads(token, view) {
       ${ready.map(choice).join('')}
       ${factionPick}
       <button class="btn btn-wide${ready.length ? '' : ' btn-main'}" type="button" data-lead="new">A new Commander</button>
-      <button class="btn btn-wide" type="button" data-lead="">Without a Commander</button>
-      <p class="note">Without one, you fight as a new Commander would, and nothing is kept after the battle.</p>
       <div id="who-leads-error"></div>
     </main>`
   for (const button of app.querySelectorAll('[data-lead]')) {

@@ -191,7 +191,7 @@ test('two players by link, on desktops: the turn waits for both, then both read 
     await blue.goto(link)
     await blue.waitForSelector('#who-leads')
     assert.match(await blue.textContent('#who-leads h1'), /Who leads\?/)
-    assert.equal(await blue.locator('[data-lead]').count(), 2, 'no Commanders yet in this browser: a new one, or none')
+    assert.equal(await blue.locator('[data-lead]').count(), 1, 'no Commanders yet in this browser: a new one')
     // A new Commander's faction, for life: the army the muster gave this side first.
     assert.equal(await blue.locator('select[name="faction"]').count(), 1)
     await blue.selectOption('select[name="faction"]', 'sarmatia')
