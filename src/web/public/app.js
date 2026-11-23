@@ -126,6 +126,7 @@ const REASONS = {
   'enemy army collapsed': ['The enemy army was destroyed', 'Your army was destroyed'],
   'enemy surrendered': ['The enemy yielded the field', 'You yielded the field'],
   'enemy commander killed': ['The enemy Commander was killed', 'You were killed'],
+  'enemy officers yielded': ['With their Commander in your hands, the enemy\'s officers yielded the field', 'With you in the enemy\'s hands, your senior officer yielded the field to save what was left'],
   'enemy commander bargained': ['The enemy Commander bargained for his freedom and left the field', 'You bargained for your freedom and left the field'],
   'objectives held': ['You held the field', 'The enemy held the field'],
   'time ran out: fewer losses': ['The day ended, and the enemy lost more', 'The day ended, and you lost more'],
@@ -1035,7 +1036,7 @@ async function tent(token) {
       body.innerHTML = `
         <p class="question" style="margin: 0"><strong>You are taken.</strong> The ${esc(c.heldBy)} hold you${c.heldAt ? ` at ${esc(c.heldAt)}` : ''}.</p>
         <p>You can send no orders. Each of your officers now leads his own unit as he sees fit. You see only what can be seen from where you are held.</p>
-        <p class="note">If your army wins, the enemy must give you up. If the men who hold you break, you are free. If the battle is lost while they hold you and no deal is struck, they let you go a commander of none: every officer leaves you.</p>
+        <p class="note">If your army wins, the enemy must give you up. If the men who hold you break, you are free. If the battle is lost while they hold you and no deal is struck, honor makes them let you go, with whatever of your army is left by then. Your senior officer, if he looks to his men, may yield the field himself when half the army is gone. You hear the reports that come in to your captors.</p>
         ${tableLine}
         <p class="label-caps">Offer a price for your freedom</p>
         ${t.mayOffer === false ? '<p class="note">You have made your offer this turn. Wait for the turn to run.</p>' : `
@@ -1192,10 +1193,10 @@ async function tent(token) {
       ransomed: c.prices?.length
         ? `You went free at a price: ${esc(c.prices.map(p => `the ${p.toLowerCase()}`).join(', ').replace(/, ([^,]*)$/, ' and $1'))} went to the enemy, with their officers.`
         : 'You gave the field for your freedom: the battle is lost, and your men are spared.',
-      stripped: 'The battle was lost with you still in the enemy\'s hands, and no deal struck. They let you go, a commander of none: every officer has left you, and your units must earn new ones. Your name goes on, and you may muster again.',
+      released: 'The battle was lost with you still in the enemy\'s hands, and no deal struck. Honor forbids them your life: they let you go, with whatever of your army came through the day.',
       killed: 'You were killed. Everything ends with you: your officers, their names and all they learned. Muster again with a new Commander.',
     }[c.fate]
-    return words ? `<p class="${c.fate === 'killed' || c.fate === 'stripped' ? 'question' : 'note'}">${words}</p>` : ''
+    return words ? `<p class="${c.fate === 'killed' || c.fate === 'released' ? 'question' : 'note'}">${words}</p>` : ''
   }
 
   function officerLines(officers) {

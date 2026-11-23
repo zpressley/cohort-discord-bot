@@ -20,7 +20,7 @@
 
 const { unitsOnSide, sides } = require('../world')
 const { tileDistance } = require('../world')
-const { checkBattleOutcome, commandersOutcome } = require('../battle/battle')
+const { checkBattleOutcome, commandersOutcome, yieldedOutcome } = require('../battle/battle')
 const { toPosition, positionKey } = require('../map/labels')
 const { parseGridRef } = require('../map/grid')
 const { detectFeatures } = require('../map/features')
@@ -116,6 +116,9 @@ function evaluateVictory(ctx) {
   // A Commander killed loses the battle for his side.
   const fell = commandersOutcome(ctx.commanders, ctx.allSides ?? sides(world))
   if (fell) return fell
+  // His senior officer yielded the field while he was held.
+  const yielded = yieldedOutcome(ctx.yielded, ctx.allSides ?? sides(world))
+  if (yielded) return yielded
 
   const broken_ = checkBattleOutcome(world, broken, ctx.isShaken)
   if (broken_.decided) return broken_

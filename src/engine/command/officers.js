@@ -201,10 +201,22 @@ function loyaltyMove(values, { result, fought, losses }) {
   return losses >= LOYALTY.BLOODY ? table.bloody : losses <= LOYALTY.LIGHT ? table.light : table.some
 }
 
+/**
+ * Would this officer, the senior one on the field, yield it to save his men
+ * while his Commander is held? One who holds survival dear; or, of an
+ * officer whose values are not known, a cautious one. Never a loyal one: he
+ * is going for the men who hold his Commander.
+ */
+function wouldYield(officer) {
+  if (!officer || officer.headless || !officer.name) return false
+  if (loyaltyOf(officer) >= LOYALTY.LOYAL) return false
+  return officer.values ? officer.values === 'survival' : officer.personality === 'cautious'
+}
+
 /** An officer's loyalty, 0 to 100; neutral for one with none yet, or no officer. */
 function loyaltyOf(officer) {
   const n = Number(officer?.loyalty)
   return !officer || officer.headless || !Number.isFinite(n) ? LOYALTY.NEUTRAL : Math.max(0, Math.min(100, n))
 }
 
-module.exports = { GRADES, GRASP, PERSONALITIES, MAX_STEPS, EARNED_AT, MAX_EXPERIENCE, DEATH_ODDS, gradeOf, chanceToKeep, clauses, grasp, losingTheThread, ownCommand, loyaltyOf, loyaltyBand, loyaltyMove }
+module.exports = { GRADES, GRASP, PERSONALITIES, MAX_STEPS, EARNED_AT, MAX_EXPERIENCE, DEATH_ODDS, gradeOf, chanceToKeep, clauses, grasp, losingTheThread, ownCommand, wouldYield, loyaltyOf, loyaltyBand, loyaltyMove }

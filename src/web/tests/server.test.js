@@ -508,7 +508,7 @@ test('a Commander killed loses the battle and everything with it; his name stays
   } finally { await app.close() }
 })
 
-test('held when the battle is lost with no deal: he goes free, alive, a commander of none; his name goes on and he may muster again', async () => {
+test('held when the battle is lost with no deal: honor lets him go, alive, with whatever the battle left him', async () => {
   const store = createBattleStore({})
   const app = await start(store)
   try {
@@ -533,16 +533,16 @@ test('held when the battle is lost with no deal: he goes free, alive, a commande
     }
     for (const strip of [false, true]) {
       const { made, tent, company } = await run(strip)
-      assert.deepEqual(tent.verdict.commander, { fate: 'stripped', price: null, prices: [] }, 'no unit is taken as his price')
+      assert.deepEqual(tent.verdict.commander, { fate: 'released', price: null, prices: [] }, 'no unit is taken as his price')
       assert.equal(company.ended, null, 'he lives')
       assert.equal(company.name, made.name)
-      assert.deepEqual(company.officers, [], 'every officer has left him, his veteran too')
-      assert.ok(company.fallen.some(f => f.fate === 'left'))
-      assert.ok(company.unled.every(u => u.battles === 0), 'every unit must earn an officer from nothing')
+      // His officers fare as in any battle: no one leaves him for his having been held.
+      const fates = new Map(tent.verdict.officers.map(o => [o.unit.toLowerCase(), o.fate]))
+      const veteranFate = fates.get('spears')
+      assert.equal(company.officers.some(o => o.leads === 'spears'), !['killed', 'captured'].includes(veteranFate), `his veteran was ${veteranFate}`)
+      assert.equal(company.fallen.some(f => f.fate === 'left'), false)
       const again = await app.api('POST', '/api/battles', { opponent: 'standing', side: 'red', seed: 4, commander: made.token })
-      assert.equal(again.status, 201, 'and he may muster again, with nothing')
-      const next = (await app.api('GET', `/api/seat/${again.body.seats.red}`)).body
-      assert.ok(next.own.every(u => u.officer?.headless), 'no officer on any unit, not even a new veteran')
+      assert.equal(again.status, 201, 'and he may muster again, with what he has')
     }
   } finally { await app.close() }
 })
