@@ -257,8 +257,10 @@ function createCombatResolver(options = {}) {
         const aMorale = moraleShare(exchange.a.moraleDamage, bShare, aShare) * pace
         const bMorale = moraleShare(exchange.b.moraleDamage, aShare, bShare) * pace
 
-        const aKilled = takeCasualties(aState, exchange.a.detail.raw * bShare * pace, a.strength)
-        const bKilled = takeCasualties(bState, exchange.b.detail.raw * aShare * pace, b.strength)
+        // (A veteran unit loses fewer of the men a blow would fell, but is
+        // shaken as much by it: PROPOSAL, tables.VETERANCY.STEPS `survive`.)
+        const aKilled = takeCasualties(aState, exchange.a.detail.raw * bShare * pace * survives(a), a.strength)
+        const bKilled = takeCasualties(bState, exchange.b.detail.raw * aShare * pace * survives(b), b.strength)
 
         addCasualty(casualties, a.id, aKilled)
         addCasualty(casualties, b.id, bKilled)
@@ -370,7 +372,7 @@ function createCombatResolver(options = {}) {
   // Returns the whole men lost, the morale left, and whether it broke.
   resolveCombat.volley = (target, felled, turn = null) => {
     const state = stateFor(target)
-    const killed = takeCasualties(state, felled, target.strength)
+    const killed = takeCasualties(state, felled * survives(target), target.strength)
     const loss = D.moraleDamage(target, { killed: felled }).total * T.MISSILES.SHOCK
     state.morale = Math.max(0, state.morale - loss)
     state.moraleDamageTaken += loss
@@ -499,6 +501,12 @@ function rout(state, unit, victor, turn, events, routed) {
 // 100-man units almost every difference is smaller than one man — two runs with
 // visibly different chaos rolls produced identical casualties, round after
 // round, which made the seeded RNG decorative.
+// PROPOSAL (docs/design/army-balance.md, part 4): the share of the men a
+// blow would fell that a veteran unit loses (1 for a unit with none).
+function survives(unit) {
+  return 1 - (R.veteranEdge(unit).survive ?? 0)
+}
+
 function takeCasualties(state, raw, available) {
   const owed = state.casualtyRemainder + Math.max(0, raw)
   const killed = Math.min(available, Math.floor(owed))
