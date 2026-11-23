@@ -17,7 +17,7 @@ const fs = require('fs')
 const path = require('path')
 const crypto = require('crypto')
 
-const { createGame, submitOrders, forceProcess, sideView, gameRecord, replayGame } = require('../engine/orchestrator')
+const { createGame, submitOrders, forceProcess, sideView, gameRecord, replayGame, commanderOf } = require('../engine/orchestrator')
 const { sides } = require('../engine/world')
 const { gridLabel } = require('../engine/map/grid')
 const { detectFeatures } = require('../engine/map/features')
@@ -30,7 +30,8 @@ const { interpretText } = require('../interpreter/orders')
 const { lyingInWait } = require('../interpreter/resolve')
 const { assignOfficers } = require('../engine/command/roster')
 const { planTurn } = require('../opponent/planner')
-const { musterOfficers, settleBattle } = require('../engine/command/company')
+const { musterOfficers, settleBattle, leadUnit } = require('../engine/command/company')
+const { bargainChips } = require('../engine/command/commander')
 const { createCommanderStore } = require('./commanders')
 const { digest, summarise } = require('../narrator/turnNarrator')
 const { gradeOf } = require('../engine/command/officers')
@@ -109,6 +110,9 @@ function officerFates(game, side) {
   const units = [...game.spec.units].filter(u => u.side === side)
   const random = createRng((game.seed * 31 + (side === 'red' ? 7 : 13)) >>> 0)
   const now = (id) => game.battle.world.units.find(u => u.id === id) ?? game.battle.fledUnits.find(u => u.id === id)
+  // The unit a Commander in the enemy's hands gave for his freedom: its
+  // officer goes with it.
+  const price = commanderOf(game, side)?.price ?? null
   return units.map(spec => {
     const unit = now(spec.id)
     const losses = 1 - Math.max(0, unit?.strength ?? 0) / (spec.strength || 1)
@@ -120,10 +124,11 @@ function officerFates(game, side) {
     const pWound = perOfficer(chances.wound, units.length)
     // A unit with no officer has no one to lose (the roll is still made,
     // so the others' fates do not depend on it).
-    const fate = spec.officer?.headless ? 'unhurt'
+    const rolled = spec.officer?.headless ? 'unhurt'
       : roll < pKill ? 'killed'
         : roll < pKill + pCapture ? 'captured'
           : roll < pKill + pCapture + pWound ? 'wounded' : 'unhurt'
+    const fate = price === spec.id && !spec.officer?.headless && rolled !== 'killed' && rolled !== 'captured' ? 'given up' : rolled
     return {
       unit: unitName(spec),
       unitId: spec.id,
@@ -239,6 +244,9 @@ function createBattleStore({ dir = null, ai = null, now = () => Date.now() } = {
     // The mustering Commander's own officers lead his side. His army can
     // fight one battle at a time (ruled 2026-11-22).
     const commander = m.commander ? commanders.get(m.commander) : null
+    if (commander?.ended) {
+      throw Object.assign(new Error(`Commander ${commander.name} ${commander.ended.how === 'killed' ? 'was killed' : 'was lost'} at ${commander.ended.at}. Muster with a new Commander.`), { status: 409 })
+    }
     if (commander) {
       const busy = fighting(commander)
       if (busy) {
@@ -248,7 +256,13 @@ function createBattleStore({ dir = null, ai = null, now = () => Date.now() } = {
       const led = musterOfficers(commander.company, mine, seed)
       commanders.setCompany(commander, led.company)
       const officerOf = new Map(led.units.map(u => [u.id, u.officer]))
-      spec = { ...spec, units: spec.units.map(u => (officerOf.has(u.id) ? { ...u, officer: officerOf.get(u.id) } : u)) }
+      // He is on the field himself, riding with his best unit (his
+      // veteran's): there he can be taken, or killed.
+      spec = {
+        ...spec,
+        units: spec.units.map(u => (officerOf.has(u.id) ? { ...u, officer: officerOf.get(u.id) } : u)),
+        commanders: { [side]: { unitId: mine[leadUnit(mine)].id } }
+      }
     }
     const game = createGame(spec, { seed })
     const entry = {
@@ -431,9 +445,10 @@ function createBattleStore({ dir = null, ai = null, now = () => Date.now() } = {
       enemies,
       objectives,
       pending: entry.pending[side] ?? null,
+      commander: commanderView_(game, side, atGame),
       dispatches: [...entry.dispatches[side]].reverse(),
       verdict: game.outcome.decided && !atGame
-        ? { ...tally(game), officers: officerFates(game, side), company: Boolean(entry.commanders?.[side]) }
+        ? { ...tally(game), officers: officerFates(game, side), company: Boolean(entry.commanders?.[side]), commander: commanderEnd(game, side) }
         : null
     }
   }
@@ -459,6 +474,50 @@ function createBattleStore({ dir = null, ai = null, now = () => Date.now() } = {
   }
 
   // ── Orders ────────────────────────────────────────
+
+  // The Commander on the field, as his own side sees him: the unit he
+  // rides with; or that he is held, by whom, and what he could give up to
+  // go free.
+  function commanderView_(game, side, atGame) {
+    const c = game.battle.commanders?.[side]
+    if (!c || atGame) return null
+    const name = namer(game, side)
+    return {
+      status: c.status,
+      unitId: c.status === 'free' ? c.unitId : null,
+      with: c.status === 'free' ? name(c.unitId) : null,
+      heldBy: c.status === 'held' ? name(c.heldBy) : null,
+      chips: c.status === 'held' ? bargainChips(game.battle.world, side).map(u => ({ id: u.id, name: unitName(u) })) : []
+    }
+  }
+  // What became of him, for the verdict.
+  function commanderEnd(game, side) {
+    const end = commanderOf(game, side)
+    return end ? { fate: end.fate, price: end.price ? namer(game, side)(end.price) : null } : null
+  }
+
+  /**
+   * A Commander in the enemy's hands gives up one of his units still on the
+   * field and leaves it: the battle is lost, and he is free.
+   */
+  async function bargain(token, unitId) {
+    const seat = seatOf(token)
+    if (!seat) return null
+    const { entry, side } = seat
+    const game = entry.game
+    if (game.outcome.decided) return { status: 'finished' }
+    const c = game.battle.commanders?.[side]
+    if (c?.status !== 'held' || !bargainChips(game.battle.world, side).some(u => u.id === unitId)) {
+      throw Object.assign(new Error('That is not yours to give.'), { status: 409 })
+    }
+    submitOrders(game, side, { bargain: unitId })
+    entry.pending = {}
+    await writeDispatches(entry)
+    settle(entry)
+    entry.updatedAt = now()
+    save(entry)
+    return { status: 'finished' }
+  }
 
   /** Read orders back without sending them. */
   async function readBack(token, text) {
@@ -486,7 +545,11 @@ function createBattleStore({ dir = null, ai = null, now = () => Date.now() } = {
     const game = entry.game
     if (game.outcome.decided) return { status: 'finished' }
 
-    const read = await interpretText(String(text ?? ''), context(entry, side), { ai })
+    // A Commander in the enemy's hands sends no orders: he waits, and the
+    // turn runs on the orders his units have. (He may still yield.)
+    const held = game.battle.commanders?.[side]?.status === 'held'
+    const said = String(text ?? '')
+    const read = await interpretText(held && !/^\s*(i\s+)?(yield|surrender)\s*$/i.test(said) ? '' : said, context(entry, side), { ai })
     const name = namer(game, side)
     const understood = read.understood.map(name)
     if (read.questions.length > 0 && !(sendClear && read.orders.length > 0)) {
@@ -537,6 +600,7 @@ function createBattleStore({ dir = null, ai = null, now = () => Date.now() } = {
       const fates = officerFates(game, side).filter(f => f.officerId).map(f => {
         const deeds = digest(events, { map: game.battle.map, ownIds: new Set([f.unitId]) })[0]?.text ?? ''
         return {
+          unitId: f.unitId,
           officerId: f.officerId, unit: f.unit.toLowerCase(), fate: f.fate, ...(f.how ? { how: f.how } : {}),
           deeds: name(deeds).replace(/^[^:]+:\s*/, '').replace('BROKE', 'broke'),
           // "Spears, Swords: advance on the enemy" was said to both.
@@ -545,8 +609,12 @@ function createBattleStore({ dir = null, ai = null, now = () => Date.now() } = {
             .map(line => line.replace(/^[^:]+:\s*/, ''))
         }
       })
+      const end = commanderOf(game, side)
       commanders.setCompany(commander, settleBattle(commander.company, { id: entry.id, title: entry.title, result, seed: game.seed }, fates))
       if (commander.battle === entry.id) commanders.setBattle(commander, null)
+      // Killed, or lost in the enemy's hands with nothing to bargain with:
+      // everything ends with him.
+      if (end?.fate === 'killed' || end?.fate === 'lost') commanders.end(commander, { how: end.fate, at: entry.title })
     }
   }
 
@@ -592,6 +660,7 @@ function createBattleStore({ dir = null, ai = null, now = () => Date.now() } = {
     replay,
     readBack,
     submit,
+    bargain,
     seatOf,
     commanders,
     commanderView,

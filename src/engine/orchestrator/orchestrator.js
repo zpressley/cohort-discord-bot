@@ -43,6 +43,7 @@ const { unitsOnSide, sides } = require('../world')
 const { samePosition } = require('../map/labels')
 const { createIntel, updateIntel, sideView: fogSideView } = require('./fogOfWar')
 const { evaluateVictory, objectiveController, objectiveArea, OBJECTIVE_HOLD_MINUTES } = require('./victory')
+const { bargainChips, commanderFate } = require('../command/commander')
 
 const MAX_TICKS_PER_TURN = 6   // one hour of battle time per decision
 const MINUTES_PER_TICK = 10    // locked decision 1
@@ -74,6 +75,9 @@ function createGame(spec, options = {}) {
     minutesElapsed: 0,
     submitted: {},              // side -> orders (this player turn)
     surrendered: null,
+    // { side, unitId } when a Commander in the enemy's hands gave up a unit
+    // to go free and left the field.
+    bargained: null,
     intel: {},
     startingStrength: {},
     objectiveHolds: {},         // objectiveId -> { side, turns }
@@ -98,7 +102,12 @@ function createGame(spec, options = {}) {
  *
  * @param {Object} game
  * @param {string} side
- * @param {Array|Object} orders  [{ unitRef, target }] or { surrender: true }
+ * @param {Array|Object} orders  [{ unitRef, target }] or { surrender: true },
+ *                               or { bargain: unitId }: a Commander held by
+ *                               the enemy gives up that unit and leaves the
+ *                               field (command/commander.js). Refused, as
+ *                               no orders at all, unless he is held and the
+ *                               unit is his and still on the field.
  * @returns {{ status: 'waiting'|'processed'|'finished', outcome? }}
  */
 function submitOrders(game, side, orders) {
@@ -107,6 +116,14 @@ function submitOrders(game, side, orders) {
 
   if (orders && orders.surrender === true) {
     game.surrendered = side
+    game.submitted[side] = []
+  } else if (orders && orders.bargain) {
+    const held = game.battle.commanders?.[side]?.status === 'held'
+    if (held && bargainChips(game.battle.world, side).some(u => u.id === orders.bargain)) {
+      game.surrendered = side
+      game.bargained = { side, unitId: orders.bargain }
+      game.battle.commanders[side].status = 'free'
+    }
     game.submitted[side] = []
   } else {
     game.submitted[side] = orders ?? []
@@ -180,6 +197,8 @@ function processPlayerTurn(game) {
 
     game.outcome = evaluateVictory(victoryContext(game))
     if (game.outcome.decided) { interrupt = 'decided'; break }
+    // A Commander taken, freed or driven to another unit: both sides stop.
+    if (battle.log.forTurn(battle.turn).some(e => e.type.startsWith('commander'))) { interrupt = 'commander'; break }
     if (turnRecord.engagements.length > 0) { interrupt = 'contact'; break }
     if (turnRecord.volleys.length > 0) { interrupt = 'fire'; break }
     if (sightings.length > 0) { interrupt = 'sighting'; break }
@@ -246,6 +265,9 @@ function victoryContext(game) {
     broken: game.battle.broken,
     isShaken: game.battle.isShaken,
     surrendered: game.surrendered,
+    bargained: game.bargained,
+    commanders: game.battle.commanders,
+    allSides: Object.keys(game.startingStrength),
     startingStrength: game.startingStrength,
     objectiveHolds: game.objectiveHolds,
     objectiveCount: game.objectives.length,
@@ -336,8 +358,14 @@ function replayGame(record, { upTo = Infinity } = {}) {
   return game
 }
 
+/** What became of a side's Commander, once the game is decided (or null). */
+function commanderOf(game, side) {
+  return commanderFate({ commanders: game.battle.commanders, world: game.battle.world, outcome: game.outcome, bargained: game.bargained }, side)
+}
+
 module.exports = {
   createGame,
+  commanderOf,
   gameRecord,
   replayGame,
   submitOrders,

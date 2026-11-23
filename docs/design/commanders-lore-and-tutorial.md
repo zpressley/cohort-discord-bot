@@ -24,6 +24,19 @@ men who carry his orders are **officers**.
 4. **A new Commander has one veteran officer, for his unique elite unit.**
    "You meet during the tutorial and win over that officer, the rest you
    earn throughout the game."
+5. **A Commander can fall only when his unit is attacked and under a
+   threshold of its strength, and then at low odds.** He is killed or taken.
+6. **A taken Commander negotiates:** he can bargain units and leave the
+   field, or wait, and his units may yet win and force his release. With
+   no troops left he has little to bargain with.
+7. **New officers are unknown:** no name, as green as their men. They can
+   die early and leave a unit headless. An officer is named after a few
+   battles.
+8. **The ten kinds and glory or survival** introduce the lore and make the
+   name. Every name is unique and lives on in the record books.
+
+The words of each ruling, and how each was built, are in
+`docs/DECISIONS.md` (November 22).
 
 ## What the docs say
 
@@ -68,15 +81,16 @@ from nothing.
 | | Now | To match |
 |---|---|---|
 | Several Commanders, one battle each | Built. A browser keeps its Commanders' private links; the muster asks which one leads, and refuses one whose army is in the field. A cleared browser loses them. | A way to carry a Commander's link to another device. |
-| The Commander dies | He is not on the field, so he cannot. | Put him with a unit; decide what kills him (open, below); then end the company and start anew. |
+| The Commander dies | Built. He rides with his best unit and can fall when it is cut to half and still struck: taken in about 1 battle in 30, killed in about 1 in 150. Killed, or lost in the enemy's hands with nothing to bargain with, he and his company are ended. | A way to choose the unit he rides with. |
+| The Commander taken | Built: no orders while held; freed by a victory or when his captors break; or he gives up a unit and leaves the field; held at a defeat, his best unit left is the price. | Haggling between two players. A Commander for the friend who joins by link. |
 | His officers | One to each unit, from the November design (`officers-memory-delegation.md`). The lore doc has 8 to 12 named officers inside the one elite unit. Taken here as: the November design holds. | |
-| A new Commander's officers | Built to the ruling of November 22: one veteran, with the elite unit (the best unit, where a battle has no elite), the rest green. | The veteran is met and won over in the tutorial, not handed over at the first muster. |
+| A new Commander's officers | Built: one named veteran, with the elite unit (the best unit, where a battle has no elite). Every other officer is unknown, is named when he becomes seasoned, and leaves his unit headless for a battle if he is lost. | The veteran is met and won over in the tutorial, not handed over at the first muster. |
 | The tutorial | None. Any battle can be mustered at once. | Missions 0 to 4 as scenarios, in order, before the open muster. Needs a risk to officers that a scenario can set (none, 5%, standing). |
-| Making a Commander | Nothing is asked. He is given a plain name to tell him from the others. | The two questions and a name from his kind. |
+| Making a Commander | Nothing is asked. He is given a plain name no other Commander on the server has or had. Fallen Commanders are kept. | The two questions and a name from his kind; the record books. |
 
 ## Open
 
-- What kills a Commander in an ordinary battle, and what capture means for
-  him (the same total loss, or something he can come back from).
-- Whether the ten kinds of commander and glory or survival still stand for
-  the web app, and what they change beyond the name.
+- What two players may bargain over when one holds the other's Commander:
+  more than one unit, a refusal, anything besides units.
+- Whether the Commander may choose the unit he rides with.
+- How many battles "a few" is before an officer is named (built as two).

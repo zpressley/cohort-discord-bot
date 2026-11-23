@@ -39,11 +39,17 @@ function createCommanderStore({ dir = null, now = () => Date.now() } = {}) {
   // A name to tell one Commander from another, until how a Commander is
   // made is settled (docs/design/commanders-lore-and-tutorial.md): one no
   // other Commander here bears, while there are any left.
+  // No two Commanders ever share one, living or fallen: each name lives on
+  // in the record (ruled 2026-11-22). When the plain names run out they
+  // come round again as "Garrick II".
+  const NUMERALS = ['', ' II', ' III', ' IV', ' V', ' VI', ' VII', ' VIII', ' IX', ' X']
   function newName() {
     const taken = new Set([...byToken.values()].map(c => c.name))
-    const free = PLAIN.filter(n => !taken.has(n))
-    const pool = free.length ? free : PLAIN
-    return pool[crypto.randomInt(pool.length)]
+    for (let round = 0; ; round++) {
+      const suffix = NUMERALS[round] ?? ` ${round + 1}`
+      const free = PLAIN.map(n => n + suffix).filter(n => !taken.has(n))
+      if (free.length) return free[crypto.randomInt(free.length)]
+    }
   }
 
   /** A new Commander with an empty company. */
@@ -67,6 +73,16 @@ function createCommanderStore({ dir = null, now = () => Date.now() } = {}) {
     commander.company = company
     save(commander)
   }
+  /**
+   * A Commander killed, or lost in the enemy's hands: everything ends with
+   * him (ruled 2026-11-22). He and his company are kept, for the record,
+   * and can never be mustered again.
+   */
+  function end(commander, { how, at }) {
+    commander.ended = { how, at, when: now(), battles: commander.company.battles }
+    commander.battle = null
+    save(commander)
+  }
   /** The battle his army is in (its id), or null when it comes home. */
   function setBattle(commander, battleId) {
     commander.battle = battleId
@@ -80,6 +96,7 @@ function createCommanderStore({ dir = null, now = () => Date.now() } = {}) {
     const { company } = commander
     return {
       name: commander.name ?? 'Your Commander',
+      ended: commander.ended ? { how: commander.ended.how, at: commander.ended.at } : null,
       battles: company.battles,
       officers: company.officers.map(o => ({
         // Until he has a name he is unknown, his nature with him.
@@ -94,7 +111,7 @@ function createCommanderStore({ dir = null, now = () => Date.now() } = {}) {
     }
   }
 
-  return { create, get, byId, setCompany, setBattle, view }
+  return { create, get, byId, setCompany, setBattle, end, view }
 }
 
 module.exports = { createCommanderStore }

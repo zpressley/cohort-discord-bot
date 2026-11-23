@@ -561,6 +561,19 @@ const HEART = {
   MORALE: 8
 }
 
+// The Commander on the field (command/commander.js; ruled 2026-11-22: "low
+// odds and not possible till a threshold"). Starting values. The threshold
+// is half because units here break at about half strength: measured over
+// 160 battles, a Commander's unit was struck under a quarter in 4, under
+// half in 33. Over 720 battles with these numbers he fell in about 1 in 30
+// (nearly always taken and ransomed) and was killed in about 1 in 150.
+const COMMANDER = {
+  THRESHOLD: 0.5,      // his unit at or under this share of its strength
+  CHANCE: 0.10,        // each tick it is struck while under the threshold
+  OVERRUN: 0.5,        // the tick it is destroyed around him
+  KILLED_SHARE: 0.25   // of those who fall, killed; the rest are taken
+}
+
 // ── Morale ─────────────────────────────────────────────
 //
 // [locked decision 5, replaced 2026-11-21] Morale falls in a fight and rises
@@ -680,6 +693,7 @@ module.exports = {
   PACE,
   RALLY,
   HEART,
+  COMMANDER,
   MORALE,
   DAMAGE,
   CHARGE,

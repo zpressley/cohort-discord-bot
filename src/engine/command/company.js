@@ -53,6 +53,12 @@ function freshName(company, culture, random) {
   return `${pool[start]} the Younger`
 }
 
+/** The unit a Commander's veteran leads, and he rides with: the elite, else the best, the first listed. */
+function leadUnit(units) {
+  const rank = (u) => QUALITY_ORDER.indexOf(u.quality)
+  return units.reduce((best, u, i) => (rank(u) > rank(units[best]) ? i : best), 0)
+}
+
 /**
  * Give a battle's units their officers from the company.
  *
@@ -79,9 +85,7 @@ function musterOfficers(company, units, seed) {
   const founding = next.officers.length === 0 && next.fallen.length === 0 && next.battles === 0
   const drawn = assignOfficers(units.map(u => ({ ...u, officer: undefined })), seed)
   const random = createRng((Math.imul(seed, 69069) + 5) >>> 0)
-  // The founding veteran's unit: the elite, else the best, the first listed.
-  const rank = (u) => QUALITY_ORDER.indexOf(u.quality)
-  const veteranAt = founding ? units.reduce((best, u, i) => (rank(u) > rank(units[best]) ? i : best), 0) : -1
+  const veteranAt = founding ? leadUnit(units) : -1
   const taken = new Set()
 
   const out = units.map((unit, i) => {
@@ -170,4 +174,4 @@ function settleBattle(company, battle, fates) {
   return next
 }
 
-module.exports = { createCompany, musterOfficers, settleBattle, HEADLESS }
+module.exports = { createCompany, musterOfficers, settleBattle, leadUnit, HEADLESS }

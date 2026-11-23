@@ -42,7 +42,7 @@ function involved(event) {
 
 // Events only the unit's own side knows of: its hiding, its search, an
 // ambush it held back, how packed its ranks are.
-const PRIVATE = new Set(['hidden', 'hideFailed', 'ambushHeld', 'checked', 'crowding', 'heartened', 'reacted', 'lostThread'])
+const PRIVATE = new Set(['hidden', 'hideFailed', 'ambushHeld', 'checked', 'crowding', 'heartened', 'reacted', 'lostThread', 'commanderMoved'])
 // The engine's own record of a roll, which no commander is told of.
 const UNTOLD = new Set(['grasp'])
 
@@ -216,6 +216,10 @@ function plainFact(map, event) {
     case 'volley': return `${event.by} shot at ${event.unitId}` + (event.killed ? `, felling ${men(event.killed)}` : ', to little effect')
     case 'rout': return `${event.unitId} broke and fled from ${event.by}`
     case 'pursuit': return `${event.by} cut down ${event.killed} of the fleeing ${event.unitId}` + (event.trapped ? ', who were cornered' : '')
+    case 'commanderTaken': return `the Commander riding with ${event.unitId} was taken by ${event.by}`
+    case 'commanderKilled': return `the Commander riding with ${event.unitId} was killed in the fight with ${event.by}`
+    case 'commanderFreed': return `the Commander held by ${event.by} got free and reached ${event.unitId}`
+    case 'commanderMoved': return `the Commander got away from ${event.from} to ${event.unitId}`
     case 'fled': return `${event.unitId} left the field with ${men(event.strength)}`
     case 'rallied': return `${event.unitId} rallied ${whereAt(map, event.at)} with ${event.strength} men` +
       (moraleWords(event.morale) === 'at breaking point' ? ', at breaking point: it will not stand long without a success near it' : '')

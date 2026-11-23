@@ -72,7 +72,11 @@ const FOES = {
 const thinking = { games: 0, finished: 0, turns: 0, stuck: [] }
 for (const field of fields) for (const name of Object.keys(SCENARIOS)) for (const [foe, orders] of Object.entries(FOES)) {
   for (let seed = 1; seed <= Math.max(2, Math.round(seeds / 5)); seed++) {
-    const game = createGame({ ...loadScenario(name, { map: field, deploy: true }), standingOrders: {} }, { seed })
+    // Red has a Commander on the field, as a player in the web app does:
+    // he may be taken (and then sends no orders) or killed.
+    const scenario = loadScenario(name, { map: field, deploy: true })
+    const commanders = { red: { unitId: scenario.units.find(u => u.side === 'red').id } }
+    const game = createGame({ ...scenario, standingOrders: {}, commanders }, { seed })
     let turns = 0
     while (!game.outcome.decided && turns < MAX_PLAYER_TURNS) {
       const red = orders(game)

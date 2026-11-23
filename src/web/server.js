@@ -22,6 +22,8 @@
 //                                           after turn n
 //   POST /api/seat/:token/read   { text }   read orders back, send nothing
 //   POST /api/seat/:token/orders { text }   send orders
+//   POST /api/seat/:token/bargain { unit }  a Commander held by the enemy
+//                                           gives up a unit and leaves the field
 //   POST /api/commanders                    a new Commander -> { token, name }
 //   GET  /api/commander/:token              his company: officers, their
 //                                           records, those lost, and the
@@ -136,6 +138,10 @@ function createServer(store) {
           if (req.method === 'POST' && parts[3] === 'read') {
             const body = await readBody(req)
             return send(res, 200, await store.readBack(token, String(body.text ?? '').slice(0, 4000)))
+          }
+          if (req.method === 'POST' && parts[3] === 'bargain') {
+            const body = await readBody(req)
+            return send(res, 200, await store.bargain(token, String(body.unit ?? '')))
           }
           if (req.method === 'POST' && parts[3] === 'orders') {
             const body = await readBody(req)

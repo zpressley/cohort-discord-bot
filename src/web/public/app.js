@@ -101,6 +101,7 @@ function ago(at) {
 const STATUS = { 'your-orders': 'Your orders', waiting: 'Waiting on the enemy', finished: 'Finished' }
 const WHY = {
   contact: 'blows were struck', sighting: 'the enemy was sighted', time: 'an hour passed',
+  commander: 'a Commander fell into enemy hands, or got out of them',
   stalled: 'all was quiet', ready: 'your orders were carried out', fire: 'there was shooting', rallied: 'a broken unit rallied', objective: 'ground changed hands', decided: 'the battle was decided',
   surrender: 'a commander yielded'
 }
@@ -117,6 +118,8 @@ const REASONS = {
   'enemy army broken': ['The enemy army broke', 'Your army broke'],
   'enemy army collapsed': ['The enemy army was destroyed', 'Your army was destroyed'],
   'enemy surrendered': ['The enemy yielded', 'You yielded'],
+  'enemy commander killed': ['The enemy Commander was killed', 'You were killed'],
+  'enemy commander bargained': ['The enemy Commander gave up a unit to go free', 'You gave up a unit and left the field'],
   'objectives held': ['You held the field', 'The enemy held the field'],
   'time ran out: fewer losses': ['The day ended, and the enemy lost more', 'The day ended, and you lost more'],
   'time ran out: held more objectives': ['The day ended with more ground in your hands', 'The day ended with more ground in the enemy\'s hands']
@@ -125,7 +128,7 @@ function verdictWords(battle) {
   const o = battle.outcome
   if (!o) return null
   if (o.winner === 'draw') {
-    const why = { 'mutual collapse': 'Both armies broke', 'mutual ruin': 'Both armies were ruined', 'time ran out: equal losses': 'The day ended with losses even' }
+    const why = { 'both commanders killed': 'Both Commanders were killed', 'mutual collapse': 'Both armies broke', 'mutual ruin': 'Both armies were ruined', 'time ran out: equal losses': 'The day ended with losses even' }
     return { title: 'A draw', reason: why[o.reason] ?? o.reason }
   }
   const won = o.winner === battle.side
@@ -204,7 +207,7 @@ async function battles() {
 // ── Your officers ──────────────────────────────────────
 const GRADE_WORDS = { unknown: 'unproven', green: 'green', seasoned: 'seasoned', veteran: 'a veteran' }
 const RESULT_WORDS = { victory: 'a victory', defeat: 'a defeat', draw: 'a draw' }
-const FATE_WORDS = { killed: 'killed', captured: 'taken by the enemy' }
+const FATE_WORDS = { killed: 'killed', captured: 'taken by the enemy', 'given up': 'given to the enemy for the Commander\'s freedom' }
 async function officers() {
   const commanders = await loadCommanders()
   const battleLine = (r) => `<li><strong>${esc(r.title)}</strong>, ${esc(RESULT_WORDS[r.result] ?? r.result)}${
@@ -219,7 +222,9 @@ async function officers() {
   const fallen = (f) => `<p class="note">${f.name ? `${esc(f.name)}, who led the ${esc(f.led)}` : `The officer of the ${esc(f.led)}, not yet named`}: ${esc(FATE_WORDS[f.fate] ?? f.fate)} at ${esc(f.at)}, after ${f.battles} battle${f.battles === 1 ? '' : 's'} with you.</p>`
   const company = (c) => `
       <h2 class="commander">Commander ${esc(c.name)}</h2>
-      <p class="note">${c.battles} battle${c.battles === 1 ? '' : 's'} fought. ${c.battle
+      <p class="note">${c.battles} battle${c.battles === 1 ? '' : 's'} fought. ${c.ended
+        ? `${c.ended.how === 'killed' ? 'Killed' : 'Lost in the enemy\'s hands'} at ${esc(c.ended.at)}. His name stays in the record; his company is no more.`
+        : c.battle
         ? `His army is in the field${c.battle.seat ? `: <a href="/b/${esc(c.battle.seat)}" data-link>${esc(c.battle.title)}</a>` : ` (${esc(c.battle.title)})`}.`
         : 'His army is ready to muster.'}</p>
       ${c.officers.map(card).join('')}
@@ -240,6 +245,7 @@ async function officers() {
 async function muster() {
   const [scenarios, maps, commanders] = await Promise.all([api('GET', '/api/scenarios'), api('GET', '/api/maps'), loadCommanders()])
   // The first Commander whose army is not in the field leads; with none, a new one.
+  commanders.splice(0, commanders.length, ...commanders.filter(c => !c.ended))   // the fallen muster no more
   const ready = commanders.find(c => !c.battle)
   const commanderOption = (c) => `<option value="${esc(c.token)}"${c.battle ? ' disabled' : ''}${c === ready ? ' selected' : ''}>${esc(c.name)}${
     c.battle ? ' (army in the field)' : `, ${c.battles} battle${c.battles === 1 ? '' : 's'} fought`}</option>`
@@ -485,6 +491,7 @@ async function tent(token) {
       <div class="unit-card" aria-pressed="${u.id === state.picked}">
         <header><h3>${esc(u.name)}</h3><span class="where">${esc(u.at)} · ${esc(terrainWords(v, u.position.x, u.position.y))}</span></header>
         <span class="note">${esc([u.quality, u.role].filter(Boolean).join(' ').replace(/_/g, ' '))}, ${u.strength} of ${u.maxStrength} men</span>
+        ${v.commander?.unitId === u.id ? '<p class="unit-order"><strong>You ride with them.</strong> If they are cut to half and still in the fight, you can be taken or killed.</p>' : ''}
         <div class="bars">${meter('Men', u.strength, u.maxStrength)}${meter('Morale', u.morale, 100)}${meter('Wind', u.stamina, u.staminaPool)}</div>
         ${!u.officer ? '' : u.officer.headless ? '<p class="unit-order"><strong>No officer:</strong> they will keep a plain order and nothing more</p>'
           : u.officer.name ? `<p class="unit-order"><strong>Officer:</strong> ${esc(u.officer.name)}, ${esc(u.officer.grade)} and ${esc(u.officer.personality)}</p>`
@@ -547,6 +554,37 @@ async function tent(token) {
         state.draft = state.draft || v.pending?.text || ''
         renderPanel()
       })
+      return
+    }
+
+    // In the enemy's hands: no orders. Wait, or give up a unit to go free.
+    if (v.commander?.status === 'held') {
+      body.innerHTML = `
+        <p class="question" style="margin: 0"><strong>You are taken.</strong> The ${esc(v.commander.heldBy)} hold you.</p>
+        <p>You can send no orders. Your officers fight on with the ones they have.</p>
+        <p class="note">If your army wins, the enemy must give you up. If the men who hold you break, you are free. If the battle is lost while you are held, the enemy takes the best unit you have left on the field as your price; with none left, you are lost, and everything with you.</p>
+        ${v.commander.chips.length ? `<p class="label-caps">Or bargain now, and leave the field</p>
+          <p class="note">The battle is lost, the unit and its officer go to the enemy, and you go free.</p>
+          <div style="display: flex; flex-direction: column; gap: 8px">${v.commander.chips.map(u =>
+            `<button class="btn" type="button" data-bargain="${esc(u.id)}">Give up the ${esc(u.name.toLowerCase())}</button>`).join('')}</div>` : '<p class="note">You have no unit left on the field to bargain with.</p>'}
+        ${state.readback?.error ? `<p class="error">${esc(state.readback.error)}</p>` : ''}`
+      foot.innerHTML = `<button class="btn btn-main btn-wide" type="button" id="wait"${state.sending ? ' disabled' : ''}>${state.sending ? 'Waiting…' : 'Wait, and let them fight'}</button>`
+      const act = async (call) => {
+        state.sending = true
+        renderPanel()
+        try {
+          await call()
+          state.readback = null
+          await load()
+          state.tab = state.view.battle.status === 'waiting' ? 'orders' : 'dispatches'
+          if (state.view.battle.status === 'finished') state.tab = 'orders'
+        } catch (error) { state.readback = { understood: [], questions: [], error: error.message } }
+        state.sending = false
+        renderAll()
+        watch()
+      }
+      document.getElementById('wait').addEventListener('click', () => act(() => api('POST', `/api/seat/${token}/orders`, { text: '' })))
+      body.querySelectorAll('[data-bargain]').forEach(b => b.addEventListener('click', () => act(() => api('POST', `/api/seat/${token}/bargain`, { unit: b.dataset.bargain }))))
       return
     }
 
@@ -636,6 +674,7 @@ async function tent(token) {
       ${v ? `<table class="losses"><thead><tr><th scope="col">Side</th><th scope="col">Standing</th><th scope="col">Fled</th><th scope="col">Fallen</th></tr></thead><tbody>
         ${Object.entries(v.sides).map(([s, n]) => `<tr><td>${esc(sideName(s))}${s === state.view.battle.side ? ' (you)' : ''}</td><td>${n.standing}</td><td>${n.fled}</td><td>${n.fallen}</td></tr>`).join('')}
       </tbody></table>` : ''}
+      ${v?.commander ? commanderLine(v.commander) : ''}
       ${v?.officers ? `<p class="label-caps">Your officers</p>${officerLines(v.officers)}` : ''}
       <label class="field" for="replay">Replay the battle, turn by turn
         <input id="replay" type="range" min="0" max="${state.view.battle.turn - 1}" value="${state.shown ? state.shown.turn : state.view.battle.turn - 1}" style="min-height: 44px">
@@ -653,10 +692,22 @@ async function tent(token) {
     })
   }
 
+  // What became of you.
+  function commanderLine(c) {
+    const words = {
+      free: '',
+      freed: 'You were in the enemy\'s hands; your army\'s victory made them give you up.',
+      ransomed: `You went free at a price: the ${esc((c.price ?? 'unit').toLowerCase())} and their officer went to the enemy.`,
+      killed: 'You were killed. Everything ends with you: your officers, their names and all they learned. Muster again with a new Commander.',
+      lost: 'You were in the enemy\'s hands with nothing left to bargain with. Everything ends with you: muster again with a new Commander.'
+    }[c.fate]
+    return words ? `<p class="${c.fate === 'killed' || c.fate === 'lost' ? 'question' : 'note'}">${words}</p>` : ''
+  }
+
   function officerLines(officers) {
     const hurt = officers.filter(o => o.fate !== 'unhurt')
     const lines = hurt.map(o => `<p class="note">${o.officer ? `${esc(o.officer)}, officer` : 'The officer'} of the ${esc(o.unit.toLowerCase())}: ${
-      o.fate === 'killed' ? 'killed' : o.fate === 'captured' ? 'taken by the enemy' : `wounded (${esc(o.how)}), back after the next battle`}.</p>`)
+      o.fate === 'killed' ? 'killed' : o.fate === 'captured' ? 'taken by the enemy' : o.fate === 'given up' ? 'given to the enemy as the price of your freedom' : `wounded (${esc(o.how)}), back after the next battle`}.</p>`)
     lines.push(`<p class="note">${hurt.length ? 'All others came through.' : 'Every officer came through.'}${state.view.verdict?.company ? ' Those who lived go with you to your next battle, the wiser for this one.' : ''}</p>`)
     return lines.join('')
   }
