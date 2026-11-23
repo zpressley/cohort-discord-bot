@@ -88,7 +88,7 @@ test('an ambush order carries its terms to the engine, and the read-back repeats
 test('a careful march reaches the engine as careful', () => {
   const read = interpretLines(['spears march carefully to C2'], context)
   assert.equal(read.orders[0].careful, true)
-  assert.match(read.understood[0], /move carefully/)
+  assert.match(read.understood[0], /march carefully to/)
 })
 
 test('the AI fits the player\'s words to the engine\'s ambush terms', async () => {

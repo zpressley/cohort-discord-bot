@@ -231,6 +231,15 @@ From Zach's answers to `docs/REVIEW-2026-11.md`.
 10. **Horse archers need reduced numbers to be fair in fights.** They are
     the ones who do not have to stop to shoot.
 
+11. **Names.** "The original commander was literally the player's pov and
+    I want a name for that; maybe call commanders officers moving forward."
+    The Commander is the player. The men who carry his orders are officers.
+    - Reading (Claude's): the October 21 ruling "every commander has the
+      same quality ... commanders differ in personality" is about players.
+      Officers differ by experience, as the design says.
+12. **Officers, memory and delegation.** The design is recorded in
+    `docs/design/officers-memory-delegation.md`, with what is built.
+
 ### How the pace rulings were built (Claude's choices, open to change)
 
 The numbers are in `src/engine/combat/tables.js` (`PACE`, `RALLY`, `HEART`),
@@ -313,3 +322,59 @@ and the missile step of `src/engine/battle/battle.js`.
 - **A volley ends the player turn**, like contact.
 - **Not done:** an order to attack or follow a named enemy unit hand to
   hand (the rest of L10 in the review).
+
+### How officers and deeper orders were built (Claude's choices, open to change)
+
+The design is Zach's (`docs/design/officers-memory-delegation.md`); these
+are the particulars it left open, as first built.
+
+- **Grades:** green at 0 to 1 battles, seasoned at 2 to 4, veteran from 5.
+- **What an officer keeps.** The chance he holds the first clause beyond
+  the plain order, the second, and the third or later: green 35%, 10%, 5%;
+  seasoned 90%, 55%, 25%; veteran 100%, 95%, 85%. A condition is the first
+  clause, then each further step. A step lost takes the later steps with
+  it.
+- **Depth:** at most three steps after the first, and one condition.
+- **Personalities:** bold, steady, cautious. Losing the thread, the bold go
+  at the enemy (if one is in sight), the cautious stop and hold, the steady
+  carry on with the order they remember (and hold when nothing is left of
+  it).
+- **Conditions:** sees the enemy or a kind of enemy (anywhere, or within 3
+  tiles of the place the order goes to); attacked or shot at; a named unit
+  of your own breaks. Judged from what that unit can see for itself.
+- **The roll is not shown.** It is in the event log; the Commander learns
+  of it when the moment comes and the officer does something else. Counsel
+  is how he can see it coming.
+- **Counsel** is given by the most experienced officer on the field, and
+  only if one is at least seasoned.
+- **A battle's officers** are drawn from its seed: the elite's is a
+  veteran, the rest run from green to seasoned with now and then a veteran.
+  Names come from the unit's culture (placeholder lists).
+- **Orders are given once per player turn.** The turn loop used to hand
+  the same orders in again every ten-minute tick.
+
+### One vocabulary (asked by Zach, 2026-11-21: "make sure language is consistent throughout the app")
+
+The words the app uses to the Commander are in one place,
+`src/narrator/words.js`, and the read-back, the Army tab, counsel and the
+dispatches all take them from there.
+
+| The thing | The word |
+|---|---|
+| The player | the Commander |
+| The man who carries his orders to a unit | an officer (green, seasoned or veteran; bold, steady or cautious) |
+| The other side's player | your opponent; its forces are the enemy |
+| The side with no player | the computer |
+| The engine's move, hold, advance, attack, withdraw, hide, check, ambush | march, hold, advance on the enemy, attack, fall back, hide, search, lie in ambush |
+| Go somewhere and hold it (the engine's defend) | march to ... and hold it |
+| Missile troops | shoot, hold fire |
+| Morale above 50, 50 or under, 25 or under | firm, wavering, at breaking point |
+| What becomes of a unit | broke, rallied, left the field, destroyed |
+
+Changed to fit: the read-back said "move Miller's Crossing", the Army tab
+"moving to", a dispatch "made for"; a unit at 25 morale was "at breaking
+point" in one place and "badly shaken" in another; a unit "escaped the
+field" or "left the field"; an army that lost four men in five had
+"collapsed" (now "was destroyed", as a unit is); the computer opponent was
+"the standing orders". "Steady" is kept for an officer's nature, so morale
+uses "firm".

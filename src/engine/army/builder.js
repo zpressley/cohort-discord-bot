@@ -186,7 +186,8 @@ function toBattleUnits(army, deployment) {
       armor: unit.armor,
       shield: unit.shield,
       mounted: unit.mounted,
-      role: unit.mounted ? 'cavalry' : roleFor(unit.weapon)
+      role: unit.mounted ? 'cavalry' : roleFor(unit.weapon),
+      ...(army.culture ? { culture: army.culture } : {})
     })
   })
 
@@ -205,6 +206,7 @@ function toBattleUnits(army, deployment) {
     shield: 'medium_shield',
     mounted: false,
     role: 'elite_guard',
+    ...(army.culture ? { culture: army.culture } : {}),
     ...(eliteFields.veteranResistance ? { veteranResistance: eliteFields.veteranResistance } : {})
   })
 

@@ -28,7 +28,10 @@ const { fateChances, perOfficer, woundReason, exposureFromEvents } = require('..
 const { createRng } = require('../engine/rng')
 const { interpretText } = require('../interpreter/orders')
 const { lyingInWait } = require('../interpreter/resolve')
+const { assignOfficers } = require('../engine/command/roster')
+const { gradeOf } = require('../engine/command/officers')
 const { narrateTurn, report } = require('../narrator/turnNarrator')
+const { orderWords } = require('../narrator/words')
 const { loadScenario, SCENARIOS, mapChoices } = require('../adapters/hotseat/scenarios')
 const { MAPS } = require('../data/maps')
 
@@ -55,22 +58,15 @@ function unitName(unit) {
 // side's standing order: to advance (the computer's side), or to hold.
 function describeOrder(order, standing = null) {
   if (!order) return standing === 'advance' ? 'advancing on the enemy (standing orders)' : 'holding (no orders yet)'
-  const at = order.target ? ` ${where(order.target)}` : ''
-  const careful = order.careful ? ', carefully' : ''
+  // The same words the read-back and the dispatches use (narrator/words.js).
+  const doing = orderWords('doing', order, order.target ? where(order.target) : null)
+  const more = order.steps?.length ? `, then ${order.steps.length} more ${order.steps.length === 1 ? 'step' : 'steps'}` : ''
   switch (order.action) {
-    case 'hold': return 'holding'
-    case 'move': return `moving to${at}${careful}` + (order.then === 'hold' ? ', then holding' : '')
-    case 'defend': return `defending${at}${careful}`
-    case 'advance': return `advancing on the enemy${careful}`
-    case 'attack': return `attacking${at}${careful}`
-    case 'withdraw': return `falling back${at}${careful}`
-    case 'hide': return `hiding${at}`
-    case 'check': return `searching the ground${at}`
-    case 'ambush': return `lying in ambush${at}` +
+    case 'ambush': return doing +
       (order.against ? `, for ${order.against}` : '') +
       (order.letPass ? `, letting ${order.letPass} pass` : '') +
-      (order.regardless ? ', whatever happens' : '')
-    default: return order.action
+      (order.regardless ? ', whatever happens' : '') + more
+    default: return doing + more
   }
 }
 
@@ -123,6 +119,7 @@ function officerFates(game, side) {
         : roll < pKill + pCapture + pWound ? 'wounded' : 'unhurt'
     return {
       unit: unitName(spec),
+      officer: spec.officer?.name ?? null,
       fate,
       ...(fate === 'wounded' ? { how: woundReason(exposure) } : {})
     }
@@ -215,7 +212,11 @@ function createBattleStore({ dir = null, ai = null, now = () => Date.now() } = {
       : { id: `objective-${i + 1}`, feature: ground })
     if (objectives.length) spec = { ...spec, objectives }
 
-    const game = createGame(spec, { seed: m.seed ?? crypto.randomInt(1, 1_000_000) })
+    // Every unit gets an officer to carry the Commander's orders: a name,
+    // his experience and his nature, drawn from the battle's seed.
+    const seed = m.seed ?? crypto.randomInt(1, 1_000_000)
+    spec = { ...spec, units: assignOfficers(spec.units, seed) }
+    const game = createGame(spec, { seed })
     const entry = {
       id: crypto.randomBytes(6).toString('hex'),
       scenario,
@@ -278,7 +279,9 @@ function createBattleStore({ dir = null, ai = null, now = () => Date.now() } = {
       units: game.battle.world.units.filter(u => u.side === side && u.strength > 0 && !game.battle.broken.has(u.id))
         .map(u => ({ ...u, aliases: [unitName(u).toLowerCase()] })),
       enemies: sideView(game, side).intel,
-      lyingInWait: lyingInWait(game.battle, side)
+      lyingInWait: lyingInWait(game.battle, side),
+      // For counsel: the units that would break at the first blow.
+      shaken: game.battle.world.units.filter(u => u.side === side && game.battle.isShaken(u)).map(u => u.id)
     }
   }
 
@@ -320,13 +323,15 @@ function createBattleStore({ dir = null, ai = null, now = () => Date.now() } = {
         broken: battle.broken.has(u.id),
         hidden: battle.hidden.has(u.id),
         crowding: battle.crowding.get(u.id) ?? 'organized',
+        // The officer who carries your orders to this unit.
+        officer: u.officer ? { name: u.officer.name, grade: gradeOf(u.officer), personality: u.officer.personality } : null,
         // Missile troops: how far they shoot, and whether they are holding fire.
         shootsTo: missileRangeMetres(u) || null,
         holdingFire: Boolean(battle.orderBook.get(u.id)?.holdFire),
         order: battle.broken.has(u.id)
           ? 'broken and fleeing'
           : describeOrder(battle.orderBook.get(u.id), game.spec.standingOrders?.[side]) +
-            (battle.rallied?.has(u.id) ? (state && state.morale <= 25 ? ' (rallied, badly shaken)' : ' (rallied)') : ''),
+            (battle.rallied?.has(u.id) ? (state && state.morale <= 25 ? ' (rallied, at breaking point)' : ' (rallied)') : ''),
         target: battle.orderBook.get(u.id)?.target ?? null
       }
     })
@@ -404,6 +409,7 @@ function createBattleStore({ dir = null, ai = null, now = () => Date.now() } = {
     const name = namer(seat.entry.game, seat.side)
     return {
       understood: read.understood.map(name), questions: read.questions.map(name), notes: (read.notes ?? []).map(name),
+      counsel: (read.counsel ?? []).map(name),
       choices: (read.choices ?? []).map(c => ({ ...c, question: name(c.question) })), source: read.source, surrender: read.surrender
     }
   }
@@ -426,7 +432,7 @@ function createBattleStore({ dir = null, ai = null, now = () => Date.now() } = {
     const understood = read.understood.map(name)
     if (read.questions.length > 0 && !(sendClear && read.orders.length > 0)) {
       return {
-        status: 'clarify', questions: read.questions.map(name), understood,
+        status: 'clarify', questions: read.questions.map(name), understood, counsel: (read.counsel ?? []).map(name),
         choices: (read.choices ?? []).map(c => ({ ...c, question: name(c.question) })),
         canSendRest: read.orders.length > 0
       }

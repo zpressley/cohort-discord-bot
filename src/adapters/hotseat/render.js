@@ -217,6 +217,9 @@ function wordEvent(event) {
         (event.trapped ? ' — they are cornered' : '')
     case 'fled': return `${event.unitId} escapes the field with ${event.strength} men`
     case 'volley': return `${event.by} shoots at ${event.unitId}: ${event.killed} fall`
+    case 'reacted': return `${event.unitId}: the moment it was warned of has come (${event.when}); it turns to its other order (${event.action})`
+    case 'lostThread': return `${event.officer ?? 'The officer'} of ${event.unitId} has LOST THE THREAD (${event.lost}) and will ${event.did}`
+    case 'grasp': return null
     case 'rallied': return `${event.unitId} RALLIES at ${where(event.at)} with ${event.strength} men`
     case 'heartened': return `${event.unitId} takes heart as ${event.by} breaks`
     case 'destroyed': return `${event.unitId} is wiped out`
