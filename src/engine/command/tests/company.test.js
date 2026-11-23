@@ -7,9 +7,9 @@ const { test } = require('node:test')
 const assert = require('node:assert/strict')
 
 const { createCompany, musterOfficers, settleBattle, unitsOf, trainedQuality, ridesWith, HEADLESS } = require('../company')
-const { TRAINING } = require('../../combat/tables')
+const { TRAINING, LOYALTY } = require('../../combat/tables')
 const { applyBattle, averageExperience } = require('../../veterans/veterancy')
-const { gradeOf, grasp, EARNED_AT, MAX_EXPERIENCE } = require('../officers')
+const { gradeOf, grasp, EARNED_AT, MAX_EXPERIENCE, loyaltyMove, losingTheThread, chanceToKeep } = require('../officers')
 
 const units = () => [
   { id: 'red_spears', side: 'red', kind: 'spears', quality: 'professional' },
@@ -45,7 +45,9 @@ test('the same officer leads the same men in the next battle, a battle older', (
   assert.equal(two.units[2].officer.id, one.units[2].officer.id)
   assert.equal(two.units[2].officer.experience, one.units[2].officer.experience + 1)
   assert.equal(after.battles, 1)
-  assert.deepEqual(after.officers[0].record[0], { battle: 'b1', title: 'Battle 1', result: 'victory', unit: 'elite', fate: 'unhurt', deeds: 'held the ford', orders: ['hold'] })
+  const { loyalty, ...remembered } = after.officers[0].record[0]
+  assert.deepEqual(remembered, { battle: 'b1', title: 'Battle 1', result: 'victory', unit: 'elite', fate: 'unhurt', deeds: 'held the ford', orders: ['hold'] })
+  assert.equal(typeof loyalty, 'number', 'and what it did to his loyalty')
   assert.deepEqual(createCompany(), { officers: [], units: {}, fallen: [], battles: 0, settled: [], nextId: 1 }, 'nothing is changed in place')
 })
 
@@ -75,6 +77,8 @@ test('an officer rises with his battles: seasoned at 8, a veteran at 13, a legen
   const grades = {}
   for (let n = 1; n <= 34; n++) {
     company = through(company, n)
+    // Loyalty kept out of it: a loyal officer learns faster (below).
+    for (const o of company.officers) o.loyalty = LOYALTY.NEUTRAL
     const spears = company.officers.find(o => o.leads === 'spears')
     if (spears) grades[n] = gradeOf(spears)
   }
@@ -253,3 +257,66 @@ test('what training makes of each quality', () => {
   assert.equal(trainedQuality('elite', per * 4), 'elite')
   assert.equal(trainedQuality('militia', per - 1), 'militia')
 })
+
+// ── Loyalty: earned through glory or survival ──────────
+
+test('each officer holds glory or survival dear, and a battle moves his loyalty by which', () => {
+  const m = LOYALTY.MOVES
+  // Glory: a fight won is everything; a battle watched from the rear costs, even won.
+  assert.ok(loyaltyMove('glory', { result: 'victory', fought: true, losses: 0.5 }) > 0, 'a bloody victory is still a victory to him')
+  assert.ok(loyaltyMove('glory', { result: 'victory', fought: false, losses: 0 }) < 0, 'a boring one costs')
+  // Survival: the same bloody victory costs; one that spared his men wins him.
+  assert.ok(loyaltyMove('survival', { result: 'victory', fought: true, losses: 0.5 }) < 0, 'a bloody one costs')
+  assert.ok(loyaltyMove('survival', { result: 'victory', fought: true, losses: 0.05 }) > 0)
+  assert.ok(loyaltyMove('survival', { result: 'victory', fought: false, losses: 0 }) > 0, 'he does not mind being kept out of it')
+  // Defeat costs both, whatever else.
+  for (const values of LOYALTY.VALUES) for (const fought of [true, false]) for (const losses of [0, 0.25, 0.6]) {
+    assert.ok(loyaltyMove(values, { result: 'defeat', fought, losses }) < 0, `${values}, a defeat`)
+  }
+  assert.equal(m.glory.victory.fought, loyaltyMove('glory', { result: 'victory', fought: true, losses: 0 }))
+})
+
+test('his loyalty is kept from battle to battle, between 0 and 100, and written in his record', () => {
+  let company = createCompany()
+  const first = musterOfficers(company, units(), 7)
+  const veteran = first.company.officers[0]
+  assert.ok(LOYALTY.VALUES.includes(veteran.values))
+  assert.equal(veteran.loyalty, LOYALTY.NEUTRAL)
+  const won = (n, c) => {
+    const m = musterOfficers(c, units(), n)
+    return settleBattle(m.company, battle(n), m.units.map(u => ({ ...fate(u), mustered: 100, survivors: 95, fought: true })))
+  }
+  company = won(1, company)
+  const after = company.officers[0]
+  assert.equal(after.loyalty, LOYALTY.NEUTRAL + after.record[0].loyalty)
+  assert.ok(after.record[0].loyalty > 0, 'a victory fought and cheaply won pleases either kind')
+  for (let n = 2; n <= 30; n++) company = won(n, company)
+  assert.equal(company.officers[0].loyalty, 100, 'no higher')
+  assert.equal(musterOfficers(company, units(), 99).units[2].officer.loyalty, 100, 'and he takes it into battle')
+})
+
+test('a loyal officer learns faster: five battles in the time another learns four', () => {
+  const run = (loyalty) => {
+    let company = musterOfficers(createCompany(), units(), 7).company
+    const start = company.officers[0].experience
+    for (let n = 1; n <= 4; n++) {
+      company.officers[0].loyalty = loyalty
+      const m = musterOfficers(company, units(), n)
+      company = settleBattle(m.company, battle(n), m.units.map(u => fate(u)))
+    }
+    return company.officers[0].experience - start
+  }
+  assert.equal(run(LOYALTY.NEUTRAL), 4)
+  assert.equal(run(LOYALTY.LOYAL), 4 * LOYALTY.LEARNS)
+  assert.equal(run(LOYALTY.DISLOYAL), 4, 'a disloyal one learns no slower: he pays in other ways')
+})
+
+test('a loyal officer holds to his orders when he loses the thread; a disloyal one keeps less of them', () => {
+  const bold = (loyalty) => ({ name: 'Marcus', experience: 9, personality: 'bold', loyalty })
+  assert.equal(losingTheThread(bold(LOYALTY.NEUTRAL), 'condition', true), 'advance', 'his nature')
+  assert.equal(losingTheThread(bold(LOYALTY.LOYAL), 'condition', true), 'carry on', 'his orders')
+  assert.equal(losingTheThread(bold(LOYALTY.DISLOYAL), 'condition', true), 'advance')
+  assert.equal(chanceToKeep(bold(LOYALTY.DISLOYAL), 1), chanceToKeep(bold(LOYALTY.NEUTRAL), 1) * LOYALTY.DISLOYAL_GRASP)
+  assert.equal(chanceToKeep(bold(LOYALTY.LOYAL), 1), chanceToKeep(bold(LOYALTY.NEUTRAL), 1), 'loyalty does not make him cleverer')
+})
+

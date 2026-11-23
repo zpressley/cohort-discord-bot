@@ -79,7 +79,9 @@ function gradeOf(officer) {
 function chanceToKeep(officer, nth) {
   if (officer?.headless) return 0
   const table = GRASP[gradeOf(officer)]
-  return table[Math.min(nth, table.length) - 1]
+  const chance = table[Math.min(nth, table.length) - 1]
+  // A disloyal officer listens with half an ear.
+  return loyaltyOf(officer) <= LOYALTY.DISLOYAL ? chance * LOYALTY.DISLOYAL_GRASP : chance
 }
 
 /** How many clauses an order holds beyond the plain order. */
@@ -139,7 +141,9 @@ function grasp(order, officer, random) {
  *             of it, holds
  */
 function losingTheThread(officer, lost, enemyInSight) {
-  const personality = officer?.personality ?? 'steady'
+  // A loyal officer holds to what his Commander last made clear, whatever
+  // his nature (ruled 2026-11-23: they "follow orders without question").
+  const personality = loyaltyOf(officer) >= LOYALTY.LOYAL ? 'steady' : officer?.personality ?? 'steady'
   if (personality === 'bold') return enemyInSight ? 'advance' : 'hold'
   if (personality === 'cautious') return 'hold'
   return lost === 'condition' ? 'carry on' : 'hold'
@@ -176,10 +180,31 @@ function ownCommand(officer, enemyInSight) {
   return 'carry on'
 }
 
+/** 'loyal', 'disloyal' or null (neither), for an officer's loyalty. */
+function loyaltyBand(officer) {
+  const loyalty = loyaltyOf(officer)
+  return loyalty >= LOYALTY.LOYAL ? 'loyal' : loyalty <= LOYALTY.DISLOYAL ? 'disloyal' : null
+}
+
+/**
+ * What a battle does to an officer's loyalty (tables.LOYALTY.MOVES).
+ *
+ * @param {'glory'|'survival'} values  what he holds dear
+ * @param {Object} battle  { result: 'victory'|'draw'|'defeat', fought: boolean,
+ *                           losses: share of his unit's men lost, 0 to 1 }
+ * @returns {number} the change, to add to his loyalty (kept within 0 to 100)
+ */
+function loyaltyMove(values, { result, fought, losses }) {
+  const table = LOYALTY.MOVES[values]?.[result]
+  if (!table) return 0
+  if (values === 'glory') return fought ? table.fought : table.idle
+  return losses >= LOYALTY.BLOODY ? table.bloody : losses <= LOYALTY.LIGHT ? table.light : table.some
+}
+
 /** An officer's loyalty, 0 to 100; neutral for one with none yet, or no officer. */
 function loyaltyOf(officer) {
   const n = Number(officer?.loyalty)
   return !officer || officer.headless || !Number.isFinite(n) ? LOYALTY.NEUTRAL : Math.max(0, Math.min(100, n))
 }
 
-module.exports = { GRADES, GRASP, PERSONALITIES, MAX_STEPS, EARNED_AT, MAX_EXPERIENCE, DEATH_ODDS, gradeOf, chanceToKeep, clauses, grasp, losingTheThread, ownCommand, loyaltyOf }
+module.exports = { GRADES, GRASP, PERSONALITIES, MAX_STEPS, EARNED_AT, MAX_EXPERIENCE, DEATH_ODDS, gradeOf, chanceToKeep, clauses, grasp, losingTheThread, ownCommand, loyaltyOf, loyaltyBand, loyaltyMove }

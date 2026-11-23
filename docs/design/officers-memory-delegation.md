@@ -70,7 +70,7 @@ captured.
 | Quality is depth | Built. An officer's grade comes only from battles come through: green (0 to 1), seasoned (2 to 4), veteran (5 and more). |
 | The seeded roll, in the log | Built: rolled once as the order is given, on a random stream of its own, logged as `grasp`. The Commander is not told the roll; he learns of it when it bites. |
 | Losing the thread | Built for personality: the bold go at the enemy, the cautious stop and hold, the steady carry on with what they remember. Experience weights the roll. |
-| Loyalty | Not built. How it is earned is open. |
+| Loyalty | Built (November 23). Each officer values glory or survival; each battle moves his loyalty by which; the loyal learn faster, hold to their orders and speak up; the disaffected fight in worse heart and keep less of an order (`docs/DECISIONS.md`). |
 | Counsel | Built for two things: an order deeper than its officer can hold, and shaken men sent at the enemy. Given only when a seasoned or veteran officer is on the field. |
 | Memory, callbacks | The record is built: each officer keeps, for every battle with his Commander, how it ended, what his men did, what became of him and what he was told. Nothing reads it yet: what a callback does is open. |
 | Officers persisting across a campaign | Built in the web app. A Commander's company goes with him from battle to battle: survivors gain experience, the wounded sit one battle out, and every unit but the elite must earn its officer by coming through 3 or 4 battles (`docs/DECISIONS.md`). Only the player who musters brings a company. |

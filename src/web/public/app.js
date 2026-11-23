@@ -214,16 +214,20 @@ async function battles() {
 }
 
 // ── Your officers ──────────────────────────────────────
+// As src/narrator/words.js has them.
+const LOYALTY_WORDS = { loyal: 'loyal to you', disloyal: 'disaffected' }
+const VALUES_WORDS = { glory: 'lives for glory', survival: 'looks to his men' }
 const GRADE_WORDS = { green: 'green', seasoned: 'seasoned', veteran: 'a veteran', legendary: 'a legend' }
 const RESULT_WORDS = { victory: 'a victory', defeat: 'a defeat', draw: 'a draw' }
 const FATE_WORDS = { killed: 'killed', captured: 'taken by the enemy', 'given up': 'given to the enemy for the Commander\'s freedom', left: 'left you when the battle left you a commander of none' }
 async function officers() {
   const commanders = await loadCommanders()
   const battleLine = (r) => `<li><strong>${esc(r.title)}</strong>, ${esc(RESULT_WORDS[r.result] ?? r.result)}${
-    r.fate === 'wounded' ? `; wounded${r.how ? ` (${esc(r.how)})` : ''}` : ''}.${r.deeds ? ` His men ${esc(r.deeds)}.` : ''}${r.named ? ' Here he came forward to lead them.' : ''}</li>`
+    r.fate === 'wounded' ? `; wounded${r.how ? ` (${esc(r.how)})` : ''}` : ''}.${r.deeds ? ` His men ${esc(r.deeds)}.` : ''}${r.named ? ' Here he came forward to lead them.' : ''}${r.loyalty > 0 ? ' He thought the better of you for it.' : r.loyalty < 0 ? ' He thought the worse of you for it.' : ''}</li>`
   const card = (o) => `<div class="officer">
       <strong>${esc(o.name)}</strong>
       <span>Leads the ${esc(o.leads)} · ${esc(GRADE_WORDS[o.grade] ?? o.grade)}, ${esc(o.personality)}${o.status === 'wounded' ? ' · wounded, back after the next battle' : ''}</span>
+      ${o.values ? `<span>He ${esc(VALUES_WORDS[o.values] ?? o.values)}${o.loyalty ? `, and is ${esc(LOYALTY_WORDS[o.loyalty])}` : ''}.</span>` : ''}
       ${o.record.length
         ? `<details><summary>${o.record.length} battle${o.record.length === 1 ? '' : 's'} with you</summary><ul>${o.record.map(battleLine).join('')}</ul></details>`
         : '<span>Yet to fight under you.</span>'}
@@ -855,7 +859,7 @@ async function tent(token) {
       u.crowding && u.crowding !== 'organized' ? `<span class="flag flag-warn">${esc(u.crowding)}</span>` : ''
     ].join('')
     const officerLine = (u) => !u.officer ? '' : u.officer.headless ? '<p class="unit-order"><strong>No officer yet:</strong> they keep a plain order and nothing more</p>'
-      : `<p class="unit-order"><strong>Officer:</strong> ${esc(u.officer.name)}, ${esc(u.officer.grade)} and ${esc(u.officer.personality)}</p>`
+      : `<p class="unit-order"><strong>Officer:</strong> ${esc(u.officer.name)}, ${esc(u.officer.grade)} and ${esc(u.officer.personality)}${u.officer.loyalty ? `, ${esc(LOYALTY_WORDS[u.officer.loyalty])}` : ''}</p>`
     // Held: what he can see of his own men from where he is held, and no more.
     const sightCard = (u) => `
       <div class="unit-card">

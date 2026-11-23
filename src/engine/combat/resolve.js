@@ -73,7 +73,10 @@ function createCombatResolver(options = {}) {
     if (!state) {
       state = {
         stamina: R.staminaPool(unit),
-        morale: T.MORALE.START,
+        // The men of an officer who has lost faith in his Commander come to
+        // the field in worse heart (tables.LOYALTY).
+        morale: T.MORALE.START + (unit.officer && !unit.officer.headless &&
+          Number.isFinite(Number(unit.officer.loyalty)) && Number(unit.officer.loyalty) <= T.LOYALTY.DISLOYAL ? T.LOYALTY.DISLOYAL_MORALE : 0),
         // Morale floors at zero, which loses information exactly when it is
         // needed most: two units both at zero look identical to the rout
         // tiebreak. This keeps the undamped running total so "who is worse

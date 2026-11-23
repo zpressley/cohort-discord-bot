@@ -35,7 +35,7 @@ const { bargainChips, canRide, heldSight, sightFrom } = require('../engine/comma
 const { captorAnswer } = require('../opponent/captor')
 const { createCommanderStore } = require('./commanders')
 const { digest, summarise, fromCaptivity } = require('../narrator/turnNarrator')
-const { gradeOf, DEATH_ODDS } = require('../engine/command/officers')
+const { gradeOf, DEATH_ODDS, loyaltyBand } = require('../engine/command/officers')
 const T = require('../engine/combat/tables')
 const { narrateTurn, report } = require('../narrator/turnNarrator')
 const { orderWords } = require('../narrator/words')
@@ -147,6 +147,10 @@ function officerFates(game, side) {
       destroyed: (unit?.strength ?? 0) <= 0,
       // The men it went in with and came out with, for its veterancy.
       mustered: spec.strength, survivors: Math.max(0, unit?.strength ?? 0),
+      // Whether it struck a blow or took one: a battle it only watched is a
+      // different thing to an officer who lives for glory.
+      fought: events.some(e => (e.type === 'exchange' && (e.a.unitId === spec.id || e.b.unitId === spec.id)) ||
+        ((e.type === 'volley' || e.type === 'pursuit') && (e.unitId === spec.id || e.by === spec.id))),
       fate,
       ...(fate === 'wounded' ? { how: woundReason(exposure) } : {})
     }
@@ -618,7 +622,7 @@ function createBattleStore({ dir = null, ai = null, now = () => Date.now() } = {
         return {
           id: u.id, name: unitName(u), role: u.role ?? null, quality: u.quality ?? null, mounted: Boolean(u.mounted),
           outOfSight: true,
-          officer: !u.officer ? null : u.officer.headless ? { headless: true } : { name: u.officer.name, grade: gradeOf(u.officer), personality: u.officer.personality },
+          officer: !u.officer ? null : u.officer.headless ? { headless: true } : { name: u.officer.name, grade: gradeOf(u.officer), personality: u.officer.personality, loyalty: loyaltyBand(u.officer) },
           order: 'out of your sight: their officer leads them as he sees fit'
         }
       }
@@ -630,7 +634,7 @@ function createBattleStore({ dir = null, ai = null, now = () => Date.now() } = {
           inSightOfCaptivity: true,
           position: { ...u.position }, at: where(u.position), strength: u.strength, maxStrength: u.maxStrength,
           broken: battle.broken.has(u.id),
-          officer: !u.officer ? null : u.officer.headless ? { headless: true } : { name: u.officer.name, grade: gradeOf(u.officer), personality: u.officer.personality },
+          officer: !u.officer ? null : u.officer.headless ? { headless: true } : { name: u.officer.name, grade: gradeOf(u.officer), personality: u.officer.personality, loyalty: loyaltyBand(u.officer) },
           order: 'in your sight: their officer leads them as he sees fit'
         }
       }
@@ -655,7 +659,7 @@ function createBattleStore({ dir = null, ai = null, now = () => Date.now() } = {
         // A unit can have none: it has yet to earn one.
         officer: !u.officer ? null
           : u.officer.headless ? { headless: true }
-            : { name: u.officer.name, grade: gradeOf(u.officer), personality: u.officer.personality },
+            : { name: u.officer.name, grade: gradeOf(u.officer), personality: u.officer.personality, loyalty: loyaltyBand(u.officer) },
         // Missile troops: how far they shoot, and whether they are holding fire.
         shootsTo: missileRangeMetres(u) || null,
         holdingFire: Boolean(battle.orderBook.get(u.id)?.holdFire),
@@ -993,7 +997,7 @@ function createBattleStore({ dir = null, ai = null, now = () => Date.now() } = {
         const deeds = digest(events, { map: game.battle.map, ownIds: new Set([f.unitId]) })[0]?.text ?? ''
         return {
           unitId: f.unitId, culture: game.spec.units.find(u => u.id === f.unitId)?.culture ?? null,
-          officerId: f.officerId, unit: f.unit.toLowerCase(), destroyed: f.destroyed, mustered: f.mustered, survivors: f.survivors,
+          officerId: f.officerId, unit: f.unit.toLowerCase(), destroyed: f.destroyed, mustered: f.mustered, survivors: f.survivors, fought: f.fought,
           fate: f.headless && prices.includes(f.unitId) ? 'given up' : f.fate, ...(f.how ? { how: f.how } : {}),
           deeds: name(deeds).replace(/^[^:]+:\s*/, '').replace('BROKE', 'broke'),
           // "Spears, Swords: advance on the enemy" was said to both.
