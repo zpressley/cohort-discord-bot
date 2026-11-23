@@ -309,32 +309,37 @@ async function fight(app, token) {
   return tent
 }
 
-test('a Commander\'s officers go with him from battle to battle: they learn, they remember, and the lost are replaced', async () => {
+test('a Commander\'s officers go with him from battle to battle: they learn, they remember, and a unit that loses one is headless', async () => {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'cohort-web-'))
   let app
   try {
     app = await start(createBattleStore({ dir }))
     const made = (await app.api('POST', '/api/commanders')).body
     const commander = made.token
-    assert.deepEqual((await app.api('GET', `/api/commander/${commander}`)).body, { name: made.name, battles: 0, officers: [], fallen: [], battle: null })
+    assert.deepEqual((await app.api('GET', `/api/commander/${commander}`)).body, { name: made.name, battles: 0, officers: [], headless: [], fallen: [], battle: null })
 
     const first = (await app.api('POST', '/api/battles', { opponent: 'standing', side: 'red', seed: 3, commander })).body.seats.red
     const mustered = (await app.api('GET', `/api/commander/${commander}`)).body
     const tent = (await app.api('GET', `/api/seat/${first}`)).body
-    assert.deepEqual(mustered.officers.map(o => o.name).sort(), tent.own.map(u => u.officer.name).sort(), 'the company leads the army')
-    assert.ok(mustered.officers.every(o => o.record.length === 0 && o.status === 'fit'))
+    // One veteran with a name, with the best unit; the rest unknown.
+    assert.deepEqual(mustered.officers.map(o => [o.leads, o.grade, typeof o.name, o.personality === null]),
+      [['spears', 'veteran', 'string', false], ['swords', 'unknown', 'object', true], ['archers', 'unknown', 'object', true], ['horse', 'unknown', 'object', true]])
+    assert.deepEqual(tent.own.map(u => u.officer.grade), ['veteran', 'unknown', 'unknown', 'unknown'], 'the company leads the army')
+    assert.equal(tent.own[0].officer.name, mustered.officers[0].name)
+    assert.deepEqual(tent.own[1].officer, { name: null, grade: 'unknown', personality: null }, 'no one knows him yet')
 
     const ended = await fight(app, first)
     assert.equal(ended.verdict.company, true)
     const after = (await app.api('GET', `/api/commander/${commander}`)).body
     assert.equal(after.battles, 1)
-    const fates = new Map(ended.verdict.officers.map(o => [o.officer, o.fate]))
+    const fates = new Map(ended.verdict.officers.map(o => [o.unit.toLowerCase(), o.fate]))
     for (const before of mustered.officers) {
-      const fate = fates.get(before.name)
-      const now = after.officers.find(o => o.name === before.name)
+      const fate = fates.get(before.leads)
+      const now = after.officers.find(o => o.leads === before.leads)
       if (fate === 'killed' || fate === 'captured') {
         assert.equal(now, undefined, 'the lost leave the company')
-        assert.ok(after.fallen.some(f => f.name === before.name && f.fate === fate))
+        assert.ok(after.fallen.some(f => f.led === before.leads && f.fate === fate))
+        assert.ok(after.headless.includes(before.leads), 'and their men have no officer')
         continue
       }
       assert.equal(now.experience, before.experience + 1, 'a battle lived through is a battle learned from')
@@ -355,20 +360,27 @@ test('a Commander\'s officers go with him from battle to battle: they learn, the
     assert.deepEqual((await app.api('GET', `/api/commander/${commander}`)).body, after)
     const second = (await app.api('POST', '/api/battles', { opponent: 'standing', side: 'red', seed: 4, commander })).body.seats.red
     const next = (await app.api('GET', `/api/seat/${second}`)).body
-    const fit = after.officers.filter(o => o.status === 'fit')
-    for (const o of fit) {
-      const unit = next.own.find(u => u.officer.name === o.name)
-      assert.ok(unit, `${o.name} is back`)
-      assert.equal(unit.name.toLowerCase(), o.leads, 'with the same men')
-      assert.equal(unit.officer.grade, o.grade)
+    for (const unit of next.own) {
+      const kind = unit.name.toLowerCase()
+      const officer = after.officers.find(o => o.leads === kind)
+      if (officer && officer.status === 'fit') {
+        assert.equal(unit.officer.name, officer.name, 'the same man with the same men')
+        assert.equal(unit.officer.grade, officer.grade)
+      } else {
+        assert.deepEqual(unit.officer, { headless: true }, 'wounded or lost: no officer this battle')
+      }
     }
-    for (const o of after.officers.filter(o => o.status === 'wounded')) {
-      assert.equal(next.own.some(u => u.officer.name === o.name), false, 'the wounded sit one out')
+    assert.equal((await app.api('GET', `/api/commander/${commander}`)).body.officers.length, after.officers.length, 'no one new joins to fill a gap')
+
+    // A second battle come through, and the unknown have earned their names.
+    await fight(app, second)
+    const seasoned = (await app.api('GET', `/api/commander/${commander}`)).body
+    for (const o of seasoned.officers.filter(o => o.experience >= 2)) {
+      assert.equal(typeof o.name, 'string')
+      assert.notEqual(o.grade, 'unknown')
+      assert.ok(o.personality)
     }
-    const company = (await app.api('GET', `/api/commander/${commander}`)).body
-    const fresh = company.officers.filter(o => !after.officers.some(b => b.name === o.name))
-    assert.equal(fresh.length, next.own.length - fit.length, 'new men fill the gaps')
-    assert.ok(fresh.every(o => o.grade === 'green'), 'and they are green')
+    assert.ok(seasoned.officers.some(o => o.record[0].named), 'someone was named in that battle')
   } finally {
     await app?.close()
     fs.rmSync(dir, { recursive: true, force: true })

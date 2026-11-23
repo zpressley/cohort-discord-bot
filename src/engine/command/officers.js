@@ -6,12 +6,20 @@
 // confused with veterans/officers.js, the roster inside an elite unit.)
 //
 // An officer is { name, experience, personality }:
+//   name         null until he has earned one (ruled 2026-11-22: "named
+//                officers come with veterancy"). A new unit's officer is
+//                unknown: as green as his men, and no one yet knows what he
+//                will do when it goes wrong. He is named when he becomes
+//                seasoned.
 //   experience   battles he has come through. It is the only thing that
 //                makes one officer better than another, and what it buys is
 //                depth: how much of an order he can carry.
 //   personality  bold, steady or cautious: what he does when he loses the
 //                thread. Readable, so a failure is one the Commander could
 //                have seen coming.
+//
+// A unit whose officer is lost is headless for a battle: { headless: true }.
+// It has no one to carry more than the plain order.
 //
 // Orders come in depths (docs/design/officers-memory-delegation.md). The
 // plain order is level 1 and every officer carries it. Each thing more is a
@@ -38,6 +46,9 @@ const GRASP = {
 
 const PERSONALITIES = ['bold', 'steady', 'cautious']
 
+// Battles come through before an officer has a name: when he is seasoned.
+const NAMED_AT = GRADES[1].from
+
 // The most an order may hold: steps after the first, and one condition.
 const MAX_STEPS = 3
 
@@ -49,6 +60,7 @@ function gradeOf(officer) {
 }
 
 function chanceToKeep(officer, nth) {
+  if (officer?.headless) return 0
   const table = GRASP[gradeOf(officer)]
   return table[Math.min(nth, table.length) - 1]
 }
@@ -116,4 +128,4 @@ function losingTheThread(officer, lost, enemyInSight) {
   return lost === 'condition' ? 'carry on' : 'hold'
 }
 
-module.exports = { GRADES, GRASP, PERSONALITIES, MAX_STEPS, gradeOf, chanceToKeep, clauses, grasp, losingTheThread }
+module.exports = { GRADES, GRASP, PERSONALITIES, MAX_STEPS, NAMED_AT, gradeOf, chanceToKeep, clauses, grasp, losingTheThread }

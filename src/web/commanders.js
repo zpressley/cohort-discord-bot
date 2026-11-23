@@ -82,10 +82,14 @@ function createCommanderStore({ dir = null, now = () => Date.now() } = {}) {
       name: commander.name ?? 'Your Commander',
       battles: company.battles,
       officers: company.officers.map(o => ({
-        name: o.name, grade: gradeOf(o), experience: o.experience, personality: o.personality,
+        // Until he has a name he is unknown, his nature with him.
+        name: o.name ?? null, grade: o.name ? gradeOf(o) : 'unknown', experience: o.experience,
+        personality: o.name ? o.personality : null,
         leads: o.leads, status: o.status,
         record: [...o.record].reverse()
       })),
+      // Units with no officer for their next battle.
+      headless: [...new Set([...(company.headless ?? []), ...company.officers.filter(o => o.status === 'wounded').map(o => o.leads)])],
       fallen: [...company.fallen].reverse()
     }
   }

@@ -208,7 +208,9 @@ function plainFact(map, event) {
     case 'push': return `${event.by} drove ${event.unitId} back${event.lostHighGround ? ' off the high ground' : ''}`
     case 'crush': return `${event.unitId} was pinned with nowhere to give way`
     case 'reacted': return `${event.unitId} ${REACTED_TO[event.when] ?? 'saw the moment come'}${event.when === 'sees' && event.kind ? ` (${event.kind})` : ''} and, as ordered, ${didWords(map, event)}`
-    case 'lostThread': return `${event.officer ? `${event.officer} of ${event.unitId}` : `the officer of ${event.unitId}`} lost the thread of his orders` +
+    case 'lostThread': return (event.headless
+      ? `${event.unitId}, with no officer, had only the first of their orders`
+      : `${event.officer ? `${event.officer} of ${event.unitId}` : `the officer of ${event.unitId}`} lost the thread of his orders`) +
       (event.lost === 'condition' ? ' when the moment came' : ' once the first part was done') +
       (event.did === 'advance' ? ' and advanced on the enemy' : event.did === 'hold' ? ' and held where he stood' : ' and carried on as he was')
     case 'volley': return `${event.by} shot at ${event.unitId}` + (event.killed ? `, felling ${men(event.killed)}` : ', to little effect')

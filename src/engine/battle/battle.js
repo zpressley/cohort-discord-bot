@@ -303,7 +303,7 @@ function stepTurn(state, sideOrders = {}, { sameTurn = false } = {}) {
   const loseThread = (unit, lost, current) => {
     const inSight = (seenAtStart.get(unit.side)?.size ?? 0) > 0
     const did = losingTheThread(unit.officer, lost, inSight)
-    log.emit('lostThread', turn, { unitId: unit.id, officer: unit.officer?.name ?? null, lost, did })
+    log.emit('lostThread', turn, { unitId: unit.id, officer: unit.officer?.name ?? null, lost, did, ...(unit.officer?.headless ? { headless: true } : {}) })
     if (did === 'advance') return { ...ADVANCE }
     if (did === 'hold') return { ...HOLD }
     const carried = { ...current }

@@ -118,14 +118,18 @@ function officerFates(game, side) {
     const pKill = perOfficer(chances.kill, units.length)
     const pCapture = perOfficer(chances.capture, units.length)
     const pWound = perOfficer(chances.wound, units.length)
-    const fate = roll < pKill ? 'killed'
-      : roll < pKill + pCapture ? 'captured'
-        : roll < pKill + pCapture + pWound ? 'wounded' : 'unhurt'
+    // A unit with no officer has no one to lose (the roll is still made,
+    // so the others' fates do not depend on it).
+    const fate = spec.officer?.headless ? 'unhurt'
+      : roll < pKill ? 'killed'
+        : roll < pKill + pCapture ? 'captured'
+          : roll < pKill + pCapture + pWound ? 'wounded' : 'unhurt'
     return {
       unit: unitName(spec),
       unitId: spec.id,
       officer: spec.officer?.name ?? null,
       officerId: spec.officer?.id ?? null,
+      ...(spec.officer?.headless ? { headless: true } : {}),
       fate,
       ...(fate === 'wounded' ? { how: woundReason(exposure) } : {})
     }
@@ -373,7 +377,11 @@ function createBattleStore({ dir = null, ai = null, now = () => Date.now() } = {
         hidden: battle.hidden.has(u.id),
         crowding: battle.crowding.get(u.id) ?? 'organized',
         // The officer who carries your orders to this unit.
-        officer: u.officer ? { name: u.officer.name, grade: gradeOf(u.officer), personality: u.officer.personality } : null,
+        // One not yet named is unknown; a unit can have none at all.
+        officer: !u.officer ? null
+          : u.officer.headless ? { headless: true }
+            : u.officer.name ? { name: u.officer.name, grade: gradeOf(u.officer), personality: u.officer.personality }
+              : { name: null, grade: 'unknown', personality: null },
         // Missile troops: how far they shoot, and whether they are holding fire.
         shootsTo: missileRangeMetres(u) || null,
         holdingFire: Boolean(battle.orderBook.get(u.id)?.holdFire),
@@ -537,7 +545,7 @@ function createBattleStore({ dir = null, ai = null, now = () => Date.now() } = {
             .map(line => line.replace(/^[^:]+:\s*/, ''))
         }
       })
-      commanders.setCompany(commander, settleBattle(commander.company, { id: entry.id, title: entry.title, result }, fates))
+      commanders.setCompany(commander, settleBattle(commander.company, { id: entry.id, title: entry.title, result, seed: game.seed }, fates))
       if (commander.battle === entry.id) commanders.setBattle(commander, null)
     }
   }
