@@ -38,7 +38,7 @@ const { createRng } = require('../rng')
 const { PERSONALITIES, EARNED_AT, MAX_EXPERIENCE } = require('./officers')
 const { assignOfficers } = require('./roster')
 const { NAMES, PLAIN } = require('../../data/officers')
-const { QUALITY_ORDER, TRAINING } = require('../combat/tables')
+const { QUALITY_ORDER, TRAINING, VETERANCY } = require('../combat/tables')
 const { createVeteranState, averageExperience, applyBattle } = require('../veterans/veterancy')
 
 function createCompany() {
@@ -236,7 +236,8 @@ function settleBattle(company, battle, fates) {
       state = createVeteranState({ strength: mustered })
     } else {
       if (state.strength === 0) state.strength = mustered
-      applyBattle(state, { survivors: f.survivors == null ? null : Math.min(state.strength, Math.max(0, f.survivors)) })
+      // The newest men fall first: the fallen take less than their share.
+      applyBattle(state, { survivors: f.survivors == null ? null : Math.min(state.strength, Math.max(0, f.survivors)), fallenShare: VETERANCY.FALLEN_SHARE })
       state.strength = mustered || state.strength   // made up to strength again
     }
     next.units[f.unit] = state

@@ -245,14 +245,16 @@ test('the same faction may fight on both sides, by choice or by lot, and each si
   } finally { await app.close() }
 })
 
-test('a deathmatch ends only when a side yields the field, loses its army, or loses its Commander, and the app has words for each', async () => {
+test('a deathmatch ends when a side yields the field, loses its army or loses its Commander, or at the end of the day; and the app has words for each', async () => {
   const app = await start()
-  const ENDS = ['enemy surrendered', 'enemy commander bargained', 'enemy army broken', 'enemy army collapsed', 'enemy commander killed', 'both commanders killed', 'mutual collapse', 'mutual ruin']
+  const ENDS = ['enemy surrendered', 'enemy commander bargained', 'enemy army broken', 'enemy army collapsed', 'enemy commander killed', 'both commanders killed', 'mutual collapse', 'mutual ruin',
+    // The end of the day, at forty turns (ruled 2026-11-23).
+    'time ran out: fewer losses', 'time ran out: equal losses']
   try {
     const reasons = new Set()
     for (let seed = 1; seed <= 6; seed++) {
       const made = (await app.api('POST', '/api/commanders', { faction: Object.keys(FACTIONS)[seed % 4] })).body
-      // As the app musters: no time limit, no ground to hold.
+      // As the app musters: a day of forty turns, no ground to hold.
       const seat = (await app.api('POST', '/api/battles', { opponent: 'standing', side: 'red', commander: made.token, seed, map: ['crownhill', 'ashford', 'thornwood'][seed % 3] })).body.seats.red
       let tent = (await app.api('GET', `/api/seat/${seat}`)).body
       assert.equal(tent.battle.timeLimitMinutes, null)
@@ -266,7 +268,7 @@ test('a deathmatch ends only when a side yields the field, loses its army, or lo
     }
     assert.ok(reasons.has('enemy surrendered'))
     assert.ok([...reasons].some(r => /army/.test(r)), [...reasons].join(', '))
-    for (const r of reasons) assert.ok(ENDS.includes(r), `${r} is one of the three ways`)
+    for (const r of reasons) assert.ok(ENDS.includes(r), `${r} is one of the ways a battle ends`)
     // The verdict screen says each in the app's own words.
     const page = fs.readFileSync(path.join(__dirname, '../public/app.js'), 'utf8')
     for (const r of ENDS) assert.ok(page.includes(`'${r}'`), `the verdict has words for "${r}"`)

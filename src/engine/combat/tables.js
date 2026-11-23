@@ -561,6 +561,18 @@ const HEART = {
   MORALE: 8
 }
 
+// The end of the day (ruled 2026-11-23: "add a cap to the battle at end of
+// day like 40 turns"): a battle mustered from the app is over after this
+// many player turns, and the side that lost the smaller share of its men
+// has it.
+const DAY = { TURNS: 40 }
+
+// A unit's veterancy (veterans/veterancy.js; ruled 2026-11-23: the newest
+// men fall first). The experience the fallen take with them, as a share of
+// the unit's average: at 1 they die evenly; at 0.5 the men who fall have on
+// average half the unit's experience. Starting value.
+const VETERANCY = { FALLEN_SHARE: 0.5 }
+
 // Training (command/company.js; ruled 2026-11-23: "Good perk for 30 is
 // training, each battle fought increase the level of the unit. A 30
 // officer over militia can have them eventually at professional level over
@@ -716,6 +728,8 @@ module.exports = {
   HEART,
   COMMANDER,
   TRAINING,
+  DAY,
+  VETERANCY,
   MORALE,
   DAMAGE,
   CHARGE,

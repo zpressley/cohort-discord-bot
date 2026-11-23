@@ -274,7 +274,7 @@ async function muster() {
     <header class="bar"><a href="/battles" data-link>Your battles</a><strong style="font-family: var(--font-display); font-size: 18px">Muster a battle</strong><span></span></header>
     <main class="page">
       <form id="muster" class="page" style="padding: 0">
-        <p class="note">A battle to the end. It is won when the other side yields the field, its army breaks or is destroyed, or its Commander is killed.</p>
+        <p class="note">A battle to the end. It is won when the other side yields the field, its army breaks or is destroyed, or its Commander is killed. The day ends after 40 turns; then the side that lost the smaller share of its men has it.</p>
         <label class="field">The field
           <select name="map">${maps.map(m => `<option value="${esc(m.id)}">${esc(m.title)}</option>`).join('')}</select>
         </label>
@@ -713,7 +713,7 @@ async function tent(token) {
     const chip = b.status === 'your-orders' ? '<span class="chip chip-dark">Your orders</span>' : `<span class="chip">${esc(STATUS[b.status])}</span>`
     document.getElementById('bar').innerHTML = `
       <a href="/battles" data-link>Battles</a>
-      <div class="bar-title"><strong>${esc(b.title)}</strong><span>${esc(sideName(b.side))} · turn ${b.turn} · ${esc(clock(b.minutes))}</span></div>
+      <div class="bar-title"><strong>${esc(b.title)}</strong><span>${esc(sideName(b.side))} · turn ${b.turn}${b.turnLimit ? ` of ${b.turnLimit}` : ''} · ${esc(clock(b.minutes))}</span></div>
       ${chip}`
   }
 

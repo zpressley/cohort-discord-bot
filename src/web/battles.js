@@ -35,6 +35,7 @@ const { bargainChips } = require('../engine/command/commander')
 const { createCommanderStore } = require('./commanders')
 const { digest, summarise } = require('../narrator/turnNarrator')
 const { gradeOf, DEATH_ODDS } = require('../engine/command/officers')
+const T = require('../engine/combat/tables')
 const { narrateTurn, report } = require('../narrator/turnNarrator')
 const { orderWords } = require('../narrator/words')
 const { loadScenario, SCENARIOS, mapChoices } = require('../adapters/hotseat/scenarios')
@@ -265,6 +266,8 @@ function createBattleStore({ dir = null, ai = null, now = () => Date.now() } = {
     // standing order to advance is the computer's side's alone.
     spec = { ...spec, standingOrders: solo && spec.standingOrders?.[other] ? { [other]: spec.standingOrders[other] } : {} }
     if (m.timeLimitMinutes) spec = { ...spec, timeLimitMinutes: Number(m.timeLimitMinutes) }
+    // Every battle has an end of day, so that none stands for ever.
+    spec = { ...spec, turnLimit: Number.isInteger(m.turnLimit) && m.turnLimit > 0 ? m.turnLimit : T.DAY.TURNS }
     const objectives = (m.objectives ?? []).filter(Boolean).map((ground, i) => isGridRef(ground)
       ? { id: `objective-${i + 1}`, square: ground }
       : { id: `objective-${i + 1}`, feature: ground })
@@ -650,8 +653,8 @@ function createBattleStore({ dir = null, ai = null, now = () => Date.now() } = {
     const line = summary(token)
     return {
       battle: atGame
-        ? { ...line, turn: game.playerTurn + 1, minutes: game.minutesElapsed, sides: sides(battle.world), timeLimitMinutes: game.spec.timeLimitMinutes ?? null }
-        : { ...line, sides: sides(battle.world), timeLimitMinutes: game.spec.timeLimitMinutes ?? null },
+        ? { ...line, turn: game.playerTurn + 1, minutes: game.minutesElapsed, sides: sides(battle.world), timeLimitMinutes: game.spec.timeLimitMinutes ?? null, turnLimit: game.spec.turnLimit ?? null }
+        : { ...line, sides: sides(battle.world), timeLimitMinutes: game.spec.timeLimitMinutes ?? null, turnLimit: game.spec.turnLimit ?? null },
       map: { name: map.name, width: map.width, height: map.height, squareTiles: 4, terrain, landmarks },
       own,
       fallen,

@@ -156,7 +156,7 @@ function evaluateVictory(ctx) {
   // Time limit (a testing aid, ruled 2026-10-21): when the clock runs out,
   // the side that lost the larger share of its men loses. Men who fled the
   // field are not casualties. A share exactly equal is a draw.
-  if (timeLimitMinutes && minutesElapsed >= timeLimitMinutes) {
+  if ((timeLimitMinutes && minutesElapsed >= timeLimitMinutes) || ctx.dayOver) {
     // More objectives held decides first (Stage 3 plan F3).
     const heldBy = (side) => holds.filter(h => h.side === side).length
     const byObjectives = sides(world).map(side => ({ side, held: heldBy(side) }))

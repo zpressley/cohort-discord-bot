@@ -1244,3 +1244,38 @@ level over time."
 - An officer of thirty battles now has two perks: this, and a successor
   ready at once.
 
+## Rulings, November 23, 2026 (the army, and veterans)
+
+Zach, on the five questions buying the army raised:
+
+1. **Balance.** "This is a balance issue overall we have not dove into.
+   That would be a good job for an agent to dig through and recommend a fun
+   way to keep things worth it but balance the army builder options.
+   Secondary, offer a new better system that stays true to the current
+   version and history for the game."
+2. **Names.** "You can name units after they get an officer."
+3. **The roster.** "You don't have to deploy every unit every game. But you
+   cannot field an army over the supply threshold. Additional units from
+   capture and other avenues exist. You can transfer officers."
+4. **The end of the day.** "So add a cap to the battle at end of day like
+   40 turns. We can consider spam blocking and idle games another time."
+5. **Secondary weapons.** "Eventually yes, secondary weapons were for
+   ranged units to have options."
+
+And on veterans dying less: the newest men falling first, "I like this
+since it's realistic." Of veteran units taking fewer casualties in the
+fight: "Isn't this the case anyways? Or are veterans just stubborn about
+routing?" (As the engine stands: a unit's earned veterancy only makes it
+harder to break, and the web app does not yet pass even that in. Put back
+to Zach.)
+
+Built at once:
+- **The end of the day** (`tables.DAY`): a battle mustered from the app is
+  over after 40 player turns, decided as a time limit always was: the side
+  that lost the smaller share of its men has it, and an equal share is a
+  draw.
+- **The newest men fall first** (`tables.VETERANCY.FALLEN_SHARE`): the men
+  who fall carry, on average, half the unit's experience, so a unit's
+  veterancy wears away more slowly than its numbers. Who wins a battle is
+  untouched.
+

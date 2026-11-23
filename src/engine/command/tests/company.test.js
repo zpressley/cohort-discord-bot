@@ -8,6 +8,7 @@ const assert = require('node:assert/strict')
 
 const { createCompany, musterOfficers, settleBattle, unitsOf, trainedQuality, ridesWith, HEADLESS } = require('../company')
 const { TRAINING } = require('../../combat/tables')
+const { applyBattle, averageExperience } = require('../../veterans/veterancy')
 const { gradeOf, grasp, EARNED_AT, MAX_EXPERIENCE } = require('../officers')
 
 const units = () => [
@@ -98,7 +99,11 @@ test('a unit\'s veterancy is the experience of its men: survivors bank a battle,
     bled = through(bled, n, f => men(f, 60))
   }
   assert.equal(unit(whole).veterancy, 6, 'no one lost in six battles: every man has six behind him')
-  assert.ok(unit(bled).veterancy < 2, `forty men in a hundred lost each time: ${unit(bled).veterancy}`)
+  assert.ok(unit(bled).veterancy < 3, `forty men in a hundred lost each time: ${unit(bled).veterancy}`)
+  // The newest men fall first: the fallen took less than an even share with them.
+  const even = { strength: 100, totalExperience: 0, battlesParticipated: 0 }
+  for (let n = 1; n <= 6; n++) { applyBattle(even, { survivors: 60 }); even.strength = 100 }
+  assert.ok(unit(bled).veterancy > averageExperience(even), 'more is left than if deaths fell evenly')
   assert.equal(unit(bled).battles, 6, 'the unit has still come through six battles')
 })
 

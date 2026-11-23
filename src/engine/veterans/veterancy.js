@@ -96,8 +96,12 @@ function veteranResistance(state) {
  *
  * @param {Object} state      mutated
  * @param {number} survivors  men standing at the end (defaults to no losses)
+ * @param {number} fallenShare  the experience the fallen carried, as a share
+ *                            of the unit's average: 1 (the old rule) when
+ *                            deaths fall evenly, less when the newest men
+ *                            fall first
  */
-function applyBattle(state, { survivors = null } = {}) {
+function applyBattle(state, { survivors = null, fallenShare = 1 } = {}) {
   const actualSurvivors = survivors ?? state.strength
 
   state.totalExperience += actualSurvivors
@@ -110,7 +114,7 @@ function applyBattle(state, { survivors = null } = {}) {
     const avgBefore = state.strength === 0
       ? 0
       : Math.round(((state.totalExperience - actualSurvivors) / state.strength) * 100) / 100
-    state.totalExperience -= Math.round(casualties * avgBefore)
+    state.totalExperience -= Math.round(casualties * avgBefore * fallenShare)
     state.strength = survivors
   }
 

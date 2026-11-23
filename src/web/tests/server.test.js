@@ -880,3 +880,21 @@ test('two requests at once for one battle run one after the other, never a turn 
     assert.equal((await app.api('GET', `/api/commander/${commander}`)).body.battles, 1)
   } finally { await app.close() }
 })
+
+test('a battle has an end of day: after its last turn the side that lost the smaller share of its men has it', async () => {
+  const app = await start()
+  try {
+    // Neither side ever closes: the computer holds its ground for a while, and the day is three turns.
+    const seat = (await app.api('POST', '/api/battles', { opponent: 'standing', side: 'red', seed: 3, turnLimit: 3 })).body.seats.red
+    let tent = (await app.api('GET', `/api/seat/${seat}`)).body
+    assert.equal(tent.battle.turnLimit, 3)
+    for (let i = 0; i < 3; i++) await app.api('POST', `/api/seat/${seat}/orders`, { text: '' })
+    tent = (await app.api('GET', `/api/seat/${seat}`)).body
+    assert.equal(tent.battle.status, 'finished')
+    assert.match(tent.battle.outcome.reason, /^time ran out/)
+    // From the app, the day is forty turns.
+    const usual = (await app.api('POST', '/api/battles', { opponent: 'standing', side: 'red', seed: 3 })).body.seats.red
+    assert.equal((await app.api('GET', `/api/seat/${usual}`)).body.battle.turnLimit, 40)
+  } finally { await app.close() }
+})
+

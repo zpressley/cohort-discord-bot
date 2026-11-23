@@ -56,6 +56,8 @@ const MINUTES_PER_TICK = 10    // locked decision 1
  *   objectiveHoldMinutes: battle time all objectives must be held to win
  *                        (default 60)
  *   objectiveTurnsToWin: if set, consecutive player turns instead
+ *   turnLimit:           player turns after which the day is over, decided
+ *                        as a time limit is
  *   timeLimitMinutes:    battle time after which the side that lost the
  *                        larger share of its men loses (a testing aid)
  * @param {Object} [options] { seed }
@@ -209,6 +211,13 @@ function processPlayerTurn(game) {
     // A unit back in hand wants orders.
     if (battle.log.forTurn(battle.turn).some(e => e.type === 'rallied')) { interrupt = 'rallied'; break }
     if (nothingMoved(turnRecord)) { interrupt = 'stalled'; break }
+  }
+
+  // The end of the day: after spec.turnLimit player turns the battle is
+  // over, decided as a time limit is (the smaller share of men lost).
+  if (!game.outcome.decided && game.spec.turnLimit && game.playerTurn >= game.spec.turnLimit) {
+    game.outcome = evaluateVictory({ ...victoryContext(game), dayOver: true })
+    interrupt = 'decided'
   }
 
   game.history.push({
