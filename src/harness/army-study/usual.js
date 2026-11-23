@@ -81,6 +81,7 @@ function printLeague(r) {
   const lop = Object.values(r.pairs).filter(p => worst(p) > 0.75).sort((x, y) => worst(y) - worst(x))
   const rates = Object.values(r.record).map(x => x.won / x.battles)
   console.log(`\nFactions over 65% or under 35%: ${rates.filter(x => x > 0.65 || x < 0.35).length}. Pairings worse than 75/25: ${lop.length} of ${Object.keys(r.pairs).length}.`)
+  console.log(`Commanders on the field: ${r.commanders}; taken or killed in ${r.taken} (1 in ${(r.commanders / Math.max(1, r.taken)).toFixed(0)}), killed in ${r.killed}${r.killed ? ` (1 in ${(r.commanders / r.killed).toFixed(0)})` : ''}.`)
   console.log(lop.slice(0, 30).map(p => `${p.a} ${pct((p.wins[p.a] ?? 0) / p.battles)} v ${p.b} ${pct((p.wins[p.b] ?? 0) / p.battles)}`).join('; '))
 }
 
