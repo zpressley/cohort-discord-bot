@@ -1016,4 +1016,12 @@ Zach, on the four questions the factions work raised:
    Being built with the negotiation: a Commander held when the battle ends,
    not won, with no deal, goes free with nothing (his company is gone; he
    is not); the only total loss is death in the fighting.
+3. **The point of view and messenger ranges.** Put to Zach: orders arrive
+   at once within 6 tiles of the Commander; beyond that a rider carries
+   them, and each ten minutes of riding is ten minutes of delay; reports
+   come back the same way; a rider cannot cross ground the enemy holds, so
+   a cut-off unit hears nothing and reports nothing; the map shows what
+   the Commander sees now and everything else as last reported, with its
+   age. His answer: "Go with the proposed pov/messenger ranges." The
+   specification is `docs/design/point-of-view-and-messengers.md`.
 
