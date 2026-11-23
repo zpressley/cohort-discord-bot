@@ -857,7 +857,8 @@ async function tent(token) {
     const flags = (u) => [
       u.broken ? '<span class="flag flag-warn">broken</span>' : '',
       u.hidden ? '<span class="flag">hidden</span>' : '',
-      u.crowding && u.crowding !== 'organized' ? `<span class="flag flag-warn">${esc(u.crowding)}</span>` : ''
+      u.crowding && u.crowding !== 'organized' ? `<span class="flag flag-warn">${esc(u.crowding)}</span>` : '',
+      u.word?.cutOff ? '<span class="flag flag-warn">cut off</span>' : ''
     ].join('')
     const officerLine = (u) => !u.officer ? '' : u.officer.headless ? '<p class="unit-order"><strong>No officer yet:</strong> they keep a plain order and nothing more</p>'
       : `<p class="unit-order"><strong>Officer:</strong> ${esc(u.officer.name)}, ${esc(u.officer.grade)} and ${esc(u.officer.personality)}${u.officer.loyalty ? `, ${esc(LOYALTY_WORDS[u.officer.loyalty])}` : ''}</p>`
@@ -874,6 +875,8 @@ async function tent(token) {
       <div class="unit-card" aria-pressed="${u.id === state.picked}">
         <header><h3>${esc(u.name)}</h3><span class="where">${esc(u.at)} · ${esc(terrainWords(v, u.position.x, u.position.y))}</span></header>
         <span class="note">${esc([u.quality, u.role].filter(Boolean).join(' ').replace(/_/g, ' '))}, ${u.strength} of ${u.maxStrength} men</span>
+        ${u.word && !u.word.live ? `<p class="unit-order word${u.word.cutOff ? ' cut-off' : ''}"><strong>${u.word.cutOff ? 'Cut off.' : 'By rider:'}</strong> ${esc(u.word.cutOff ? u.word.said.replace(/^cut off: /, '') : `as they were ${u.word.said}`)}</p>` : ''}
+        ${u.rider ? `<p class="unit-order"><strong>On the road:</strong> ${esc(u.rider.said)}</p>` : ''}
         ${v.commander?.unitId === u.id ? '<p class="unit-order"><strong>You ride with them.</strong> If they are cut to half and still in the fight, you can be taken or killed.</p>' : ''}
         <div class="bars">${meter('Men', u.strength, u.maxStrength)}${meter('Morale', u.morale, 100)}${meter('Wind', u.stamina, u.staminaPool)}</div>
         ${officerLine(u)}

@@ -25,7 +25,8 @@
 //                   unit beyond his immediate range: a rider carries an
 //                   order; word is what reaches him of a unit, and how old
 //                   it is ("20 min ago"); a unit no rider can get through
-//                   to is cut off ("no word since 1 h 20")
+//                   to is cut off ("no word of them since 1 h 20 min into
+//                   the battle")
 //
 // Presentation only: nothing here decides anything.
 
@@ -141,11 +142,11 @@ const LOYALTY_WORDS = { loyal: 'loyal', disloyal: 'disaffected' }
 const VALUES_WORDS = { glory: 'lives for glory', survival: 'looks to his men' }
 
 // Orders and news by rider (engine/command/messengers.js). Minutes in the
-// battle's own way of telling time ("20 min", "1 h 20").
+// app's own way of telling time ("20 min", "1 h 20 min").
 const clock = (minutes) => {
   const h = Math.floor(minutes / 60)
   const m = minutes % 60
-  return h === 0 ? `${m} min` : m === 0 ? `${h} h` : `${h} h ${String(m).padStart(2, '0')}`
+  return h === 0 ? `${m} min` : m === 0 ? `${h} h` : `${h} h ${m} min`
 }
 const RIDER = {
   // The read-back: how long each order takes. `minutes` per unit named: 0
@@ -169,7 +170,9 @@ const RIDER = {
   // How old word of a unit is, on the map and the Army tab.
   age: (minutes) => (minutes <= 0 ? 'now' : `${clock(minutes)} ago`),
   // A unit no rider can get through to.
-  cutOff: (minutesIntoBattle) => `cut off: no word since ${clock(minutesIntoBattle)} into the battle`,
+  cutOff: (minutesIntoBattle) => `cut off: no word of them since ${minutesIntoBattle ? `${clock(minutesIntoBattle)} into the battle` : 'the battle began'}`,
+  // An order of his still on the road to a unit (the Army tab).
+  onTheRoad: (order, minutes) => `a rider is on the way with new orders (${order}): about ${clock(minutes)} more`,
   // A dispatch's news from far off.
   from: (minutes) => `Word from ${clock(minutes)} ago`,
   clock

@@ -117,6 +117,12 @@ Where the build stands:
   `interpreter/resolve.js`). Measured with
   `node src/harness/messenger-league.js`. See `docs/DECISIONS.md`, "How the
   Commander's point of view and messengers were built".
+- **Step 2 is built** (`engine/orchestrator/word.js`: what each Commander
+  on the field knows and when, `game.word`; the tent, the read-back, the
+  Army tab and the dispatch read it in `web/battles.js`; the map marks the
+  Commander, his immediate range, and his units known by rider, faded with
+  their age). Cut-off units already show "no word since" here, as the
+  path rule blocks news as it blocks orders.
 
 ## What comes after, not in this build
 

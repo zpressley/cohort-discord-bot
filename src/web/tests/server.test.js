@@ -447,7 +447,7 @@ test('the Commander rides with his best unit; taken, he sends no orders, and his
     const commander = (await app.api('POST', '/api/commanders')).body.token
     const seat = (await app.api('POST', '/api/battles', { opponent: 'standing', side: 'red', seed: 3, commander })).body.seats.red
     let tent = (await app.api('GET', `/api/seat/${seat}`)).body
-    assert.deepEqual(tent.commander, { status: 'free', unitId: tent.own[0].id, with: 'Spears', heldBy: null, heldAt: null, chips: [] })
+    assert.deepEqual(tent.commander, { status: 'free', immediate: 6, unitId: tent.own[0].id, with: 'Spears', heldBy: null, heldAt: null, chips: [] })
 
     // Taken (set by hand here; the engine's own rule is tested in
     // engine/command/tests/commander.test.js).
@@ -613,7 +613,7 @@ test('the friend chooses who leads before their first orders: their company\'s o
     assert.deepEqual(company.officers.map(o => [o.leads, o.grade]), [['spears', 'veteran']], 'a new Commander\'s one veteran, with the best unit')
     assert.equal(tent.own[0].officer.name, company.officers[0].name)
     assert.deepEqual(tent.own.slice(1).map(u => u.officer), [{ headless: true }, { headless: true }, { headless: true }])
-    assert.deepEqual(tent.commander, { status: 'free', unitId: tent.own[0].id, with: 'Spears', heldBy: null, heldAt: null, chips: [] })
+    assert.deepEqual(tent.commander, { status: 'free', immediate: 6, unitId: tent.own[0].id, with: 'Spears', heldBy: null, heldAt: null, chips: [] })
     assert.deepEqual(company.battle, { title: 'Crownhill: the meeting battle', seat: seats.blue }, 'his army is in the field')
     assert.equal((await app.api('POST', `/api/seat/${seats.blue}/orders`, { text: 'everyone advance' })).status, 200)
   } finally { await app.close() }

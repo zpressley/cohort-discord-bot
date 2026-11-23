@@ -53,4 +53,7 @@
   --order-arrow: #2B2722;
   --objective: #6E3B1F;
   --clash: #8E2F22;
+  /* The Commander's immediate range: orders at once within it. */
+  --immediate-fill: rgba(110, 59, 31, 0.06);
+  --immediate-edge: rgba(110, 59, 31, 0.55);
 }

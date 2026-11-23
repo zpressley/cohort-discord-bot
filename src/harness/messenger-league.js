@@ -11,6 +11,8 @@
 //   --policy planner   he plans as the computer does (opponent/planner.js),
 //                      from what his side has seen: the nearest thing to a
 //                      thinking player the harness has
+//   --policy planner-word   the same, but planning from what has reached
+//                      his Commander of the enemy (news by rider)
 //   --policy charge    he sends everyone in, every turn
 // Blue is the computer, with no Commander on the field, as in the app.
 //
@@ -55,9 +57,15 @@ function play(red, blue, { map, seed, policy }) {
         if (road.ticks(u) === Infinity) { r.cutOffTurns++; r.cutOffUnits.add(u.id) }
       }
     }
+    // planner-word: the planner, told of the enemy only what has reached
+    // his Commander (game.word, from step 2 on); its own units it still
+    // reads as they stand, so it is kinder than a player's lot.
+    const knowing = policy === 'planner-word' && game.word?.red
+      ? { ...game, intel: { ...game.intel, red: { known: game.word.red.enemies } } }
+      : game
     const orders = policy === 'charge'
-      ? (turns === 0 || turns % 1 === 0 ? battle.world.units.filter(u => u.side === 'red' && u.strength > 0 && !battle.broken.has(u.id)).map(u => ({ unitRef: u.id, action: 'advance' })) : [])
-      : planTurn(game, 'red')
+      ? battle.world.units.filter(u => u.side === 'red' && u.strength > 0 && !battle.broken.has(u.id)).map(u => ({ unitRef: u.id, action: 'advance' }))
+      : planTurn(knowing, 'red')
     if (battle.commanders.red.status === 'free') r.orders += orders.filter(o => !o.ride).length
     submitOrders(game, 'red', orders)
     submitOrders(game, 'blue', planTurn(game, 'blue'))

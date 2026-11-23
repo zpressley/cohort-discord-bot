@@ -42,6 +42,7 @@ const { createBattleState, stepTurn } = require('../battle/battle')
 const { unitsOnSide, sides } = require('../world')
 const { samePosition } = require('../map/labels')
 const { createIntel, updateIntel, learnFromCaptivity, sideView: fogSideView } = require('./fogOfWar')
+const { createWord, updateWord, wordFromCaptivity, arrivalOf } = require('./word')
 const { evaluateVictory, objectiveController, objectiveArea, OBJECTIVE_HOLD_MINUTES } = require('./victory')
 const { bargainChips, commanderFate } = require('../command/commander')
 const { PARLEY } = require('../combat/tables')
@@ -97,6 +98,10 @@ function createGame(spec, options = {}) {
     // Opening intel: you can see whatever is in range from your deployment.
     updateIntel(game.intel[side], battle.world, side, 0, battle.map, battle.hidden)
   }
+  // What each Commander on the field knows, and when (word.js): only for a
+  // side with one. A battle with none has no ledger and runs as before.
+  game.word = {}
+  for (const side of Object.keys(spec.commanders ?? {}).sort()) game.word[side] = createWord(game, side)
 
   return game
 }
@@ -332,8 +337,10 @@ function processPlayerTurn(game) {
     // orders, the enemy's because their next orders may already be reacting
     // and the simultaneity contract says you both decide on equal footing.
     const sightings = []
+    const sightedBy = {}
     for (const side of sides(battle.world)) {
-      sightings.push(...updateIntel(game.intel[side], battle.world, side, battle.turn, battle.map, battle.hidden))
+      sightedBy[side] = updateIntel(game.intel[side], battle.world, side, battle.turn, battle.map, battle.hidden)
+      sightings.push(...sightedBy[side])
     }
 
     // A Commander who got free this tick tells his side where every enemy
@@ -341,7 +348,11 @@ function processPlayerTurn(game) {
     // his units make for): each is known as last seen there.
     for (const freed of battle.log.forTurn(battle.turn).filter(e => e.type === 'commanderFreed')) {
       learnFromCaptivity(game.intel[freed.side], battle.world, freed.side, battle.turn)
+      if (game.word[freed.side]) wordFromCaptivity(game, freed.side)
     }
+    // Word from his units reaches each Commander on the field (word.js).
+    const heard = {}
+    for (const side of Object.keys(game.word)) heard[side] = updateWord(game, side)
 
     const objectiveChanges = updateObjectiveHolds(game)
 
@@ -353,6 +364,15 @@ function processPlayerTurn(game) {
     // who only got away to another of his units is his own side's secret,
     // and a stop would tell the enemy something had happened.)
     if (battle.log.forTurn(battle.turn).some(e => e.type === 'commanderTaken' || e.type === 'commanderFreed')) { interrupt = 'commander'; break }
+    if (Object.keys(game.word).length > 0) {
+      // A battle with a Commander on the field stops when news worth
+      // stopping for reaches a Commander, not when it happens out of his
+      // knowledge (docs/design/point-of-view-and-messengers.md). A side
+      // with none (the computer) does not stop the turn for itself.
+      interrupt = byNews(game, turnRecord, sightedBy, heard, objectiveChanges)
+      if (interrupt) break
+      continue
+    }
     if (turnRecord.engagements.length > 0) { interrupt = 'contact'; break }
     if (turnRecord.volleys.length > 0) { interrupt = 'fire'; break }
     if (sightings.length > 0) { interrupt = 'sighting'; break }
@@ -446,10 +466,48 @@ function victoryContext(game) {
 // told this tick, and none of its units is still on the way somewhere.
 // Standing still and pressing the enemy (advance) never finish, so a side
 // under the standing order to advance never stops the clock this way.
+// How far back (battle turns) news may come from for a turn to stop on its
+// arrival: a ride of over three hours is no news worth stopping for.
+const NEWS_LOOKBACK = 20
+
+// Why the turn stops, judged by what has reached each Commander on the
+// field this tick; or null. A held Commander hears what his captors hear,
+// as soon as they do.
+function byNews(game, turnRecord, sightedBy, heard, objectiveChanges) {
+  const { battle } = game
+  const recent = battle.log.all().filter(e => e.turn > battle.turn - NEWS_LOOKBACK)
+  const reasons = []
+  for (const side of Object.keys(game.word).sort()) {
+    const c = battle.commanders?.[side]
+    if (c?.status === 'held') {
+      const captor = captorOf(game, side)
+      const now = recent.filter(e => e.turn === battle.turn)
+      if (turnRecord.engagements.length > 0) reasons.push('contact')
+      if (turnRecord.volleys.length > 0) reasons.push('fire')
+      if (captor && sightedBy[captor]?.length > 0) reasons.push('sighting')
+      if (now.some(e => e.type === 'rallied')) reasons.push('rallied')
+      continue
+    }
+    if (c?.status !== 'free') continue
+    const arrived = recent.filter(e => arrivalOf(game, side, e) === battle.turn)
+    if (arrived.some(e => e.type === 'contact' || e.type === 'exchange')) reasons.push('contact')
+    if (arrived.some(e => e.type === 'volley')) reasons.push('fire')
+    if (arrived.some(e => e.type === 'rout')) reasons.push('contact')
+    if (heard[side]?.sighted.length > 0) reasons.push('sighting')
+    if (ordersCarriedOut(battle, { side, events: arrived })) reasons.push('ready')
+    if (arrived.some(e => e.type === 'rallied')) reasons.push('rallied')
+  }
+  if (objectiveChanges) reasons.push('objective')
+  const order = ['contact', 'fire', 'sighting', 'objective', 'ready', 'rallied']
+  const why = order.find(r => reasons.includes(r))
+  if (why) return why
+  return nothingMoved(turnRecord) ? 'stalled' : null
+}
+
 const DONE = ['arrived', 'halted', 'hidden', 'checked']
-function ordersCarriedOut(battle) {
+function ordersCarriedOut(battle, { side = null, events = null } = {}) {
   // (A unit arriving at one step of a longer order has not finished.)
-  const done = battle.log.forTurn(battle.turn)
+  const done = (events ?? battle.log.forTurn(battle.turn))
     .filter(e => (DONE.includes(e.type) && !e.more) || (e.type === 'hideFailed' && e.reason === 'no cover'))
   if (done.length === 0) return false
   const doneIds = new Set(done.map(e => e.unitId))
@@ -470,7 +528,8 @@ function ordersCarriedOut(battle) {
     }
   }
   const finishedSides = new Set(battle.world.units.filter(u => doneIds.has(u.id)).map(u => u.side))
-  return [...finishedSides].some(side => !unitsOnSide(battle.world, side).some(working))
+  if (side) return finishedSides.has(side) && !unitsOnSide(battle.world, side).some(working)
+  return [...finishedSides].some(s => !unitsOnSide(battle.world, s).some(working))
 }
 
 function nothingMoved(turnRecord) {

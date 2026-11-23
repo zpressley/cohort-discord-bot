@@ -40,8 +40,9 @@ test('the read-back says how long a rider takes to each unit beyond the Commande
     // (by hand, for the test) to the far north-west of the field.
     const far = game.battle.world.units.find(u => u.side === 'red' && u.id !== game.battle.commanders.red.unitId)
     far.position = { x: 1, y: 1 }
+    game.word.red.units[far.id].position = { x: 1, y: 1 }
     const tent = (await app.api('GET', `/api/seat/${seat}`)).body
-    const minutes = orderDelays(game.battle, 'red', tent.own.map(u => u.id))
+    const minutes = orderDelays(game.battle, 'red', tent.own.map(u => u.id), { word: game.word.red })
     const read = (await app.api('POST', `/api/seat/${seat}/read`, { text: tent.own.map(u => `${u.name.toLowerCase()} hold`).join('\n') })).body
     tent.own.forEach((u, i) => {
       const line = read.understood[i]
@@ -49,5 +50,63 @@ test('the read-back says how long a rider takes to each unit beyond the Commande
       else assert.equal(line, `${u.name}: hold. A rider reaches them in about ${minutes[u.id]} minutes`)
     })
     assert.ok(Object.values(minutes).some(m => m > 0), 'some unit of the army is beyond the immediate range')
+  } finally { await app.close() }
+})
+
+// A battle in which the army goes forward and the Commander stays back
+// with his guard: word of it comes later and later. Turns are run until
+// his side has seen an enemy he has not yet heard of.
+async function aheadOfHim(app, store) {
+  for (const seed of [3, 4, 5, 6, 7]) {
+    const seat = await solo(app, { seed })
+    const game = store.seatOf(seat).entry.game
+    const guard = game.battle.commanders.red.unitId
+    for (let t = 0; t < 12 && !game.outcome.decided; t++) {
+      const tent = (await app.api('GET', `/api/seat/${seat}`)).body
+      const name = tent.own.find(u => u.id === guard).name.toLowerCase()
+      await app.api('POST', `/api/seat/${seat}/orders`, { text: `everyone advance\n${name} hold` })
+      const unheard = Object.keys(game.intel.red.known).filter(id => !game.word.red.enemies[id])
+      const stale = game.battle.world.units.filter(u => u.side === 'red' && u.strength > 0 && game.word.red.units[u.id] && game.word.red.units[u.id].heard < game.battle.turn)
+      if (!game.outcome.decided && unheard.length > 0 && stale.length > 0) return { seat, game, unheard, stale }
+    }
+  }
+  throw new Error('no battle left the Commander behind his news')
+}
+
+test('fog of war by rider: the tent shows a distant unit as word of it last came, and no enemy he has not heard of', async () => {
+  const store = createBattleStore({})
+  const app = await start(store)
+  try {
+    const { seat, game, unheard, stale } = await aheadOfHim(app, store)
+    const tent = (await app.api('GET', `/api/seat/${seat}`)).body
+    const text = JSON.stringify(tent)
+    for (const id of unheard) assert.ok(!text.includes(`"${id}"`), `${id}: seen by his side, not yet heard of by him, is nowhere in the tent`)
+    for (const u of stale) {
+      const shown = tent.own.find(o => o.id === u.id)
+      const word = game.word.red.units[u.id]
+      assert.deepEqual([shown.position, shown.strength, shown.word.minutesAgo], [word.position, word.strength, (game.battle.turn - word.heard) * 10])
+    }
+    for (const e of tent.enemies) assert.deepEqual(e.position, game.word.red.enemies[e.id].position, 'each enemy where he was told it stood')
+    // The status line the list of battles reads says nothing more.
+    const summary = JSON.stringify((await app.api('GET', `/api/seat/${seat}/summary`)).body)
+    for (const id of unheard) assert.ok(!summary.includes(id))
+    // Nor does the read-back: an enemy he has not heard of cannot be named.
+    const read = (await app.api('POST', `/api/seat/${seat}/read`, { text: 'everyone attack the enemy archers' })).body
+    for (const id of unheard) assert.ok(!JSON.stringify(read).includes(id))
+  } finally { await app.close() }
+})
+
+test('the dispatch tells news from far off with how old it is', async () => {
+  const store = createBattleStore({})
+  const app = await start(store)
+  try {
+    const { seat } = await aheadOfHim(app, store)
+    let found = null
+    for (let t = 0; t < 10 && !found; t++) {
+      const tent = (await app.api('GET', `/api/seat/${seat}`)).body
+      found = tent.dispatches.flatMap(d => d.lines).find(l => /^Word from \d+ (min|h)/.test(l))
+      if (!found && tent.battle.status !== 'finished') await app.api('POST', `/api/seat/${seat}/orders`, { text: '' })
+    }
+    assert.ok(found, 'a line of news by rider, with how old it is')
   } finally { await app.close() }
 })

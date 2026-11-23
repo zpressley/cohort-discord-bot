@@ -142,7 +142,8 @@ test('alone, on a phone: muster, an order written on the map, turns to a verdict
 
     // Your officers: those who lived, with the battle in their record.
     await p.click('a[href="/officers"]')
-    await p.waitForSelector('.officer, .label-caps')
+    await p.waitForURL(/\/officers$/)
+    await p.waitForFunction(() => /battle fought|battles fought/.test(document.querySelector('main')?.textContent ?? ''))
     assert.match(await p.textContent('main'), /1 battle fought/)
     if (await p.locator('.officer').count()) {
       await p.locator('.officer summary').first().click()
@@ -419,7 +420,8 @@ test('held, on a phone: an offer made with the tick boxes, the friend who holds 
     assert.match(await blue.textContent('.captive'), /For his freedom he offers the field and enemy horse/)
     assert.equal(await blue.locator('#offer-more').count(), 0, 'his side has seen nothing more to ask for')
     // Blue has seen red's spears and swords (by hand: the turn has not run).
-    for (const id of ['red_spears', 'red_swords']) game.intel.blue.known[id] = { status: 'ghost', strength: 100, position: { x: 1, y: 1 }, seenOnTurn: 0 }
+    // (And word of them has reached blue's Commander: engine/orchestrator/word.js.)
+    for (const id of ['red_spears', 'red_swords']) game.intel.blue.known[id] = game.word.blue.enemies[id] = { status: 'ghost', strength: 100, position: { x: 1, y: 1 }, seenOnTurn: 0 }
     await blue.reload()
     await blue.waitForSelector('#offer-more')
     await blue.locator('.captive').scrollIntoViewIfNeeded()

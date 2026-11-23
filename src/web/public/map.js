@@ -66,12 +66,20 @@ const SCALE = 1.35
 
 // One counter: a square in the side's colour with the role's mark, a
 // strength bar for your own, and (on the top counter of a stack) the name.
-function counter(unit, { side, own, selected, ghost, label, nameAbove = null, shift = 0 }) {
+function counter(unit, { side, own, selected, ghost, aged = false, commander = false, label, nameAbove = null, shift = 0 }) {
   const kind = kindOf(unit)
   const fill = ghost ? 'none' : `var(--side-${side})`
   const ink = ghost ? 'var(--ghost)' : `var(--side-${side}-on)`
-  const dash = ghost || unit.hidden ? ' stroke-dasharray="3 2"' : ''
-  const opacity = ghost ? 0.75 : (unit.broken ? 0.45 : (unit.hidden ? 0.8 : 1))
+  const dash = ghost || aged || unit.hidden ? ' stroke-dasharray="3 2"' : ''
+  // A unit of yours known only by rider is drawn faded, where word last put it.
+  const opacity = ghost ? 0.75 : aged ? (unit.broken ? 0.35 : 0.55) : (unit.broken ? 0.45 : (unit.hidden ? 0.8 : 1))
+  // The Commander's own pennant, over the unit he rides with.
+  const pennant = commander
+    ? '<g aria-hidden="true"><path d="M-6 -8V-19" style="stroke: var(--ink)" stroke-width="1.2"/><path d="M-6 -19L4 -16L-6 -13Z" style="fill: var(--ink)"/></g>'
+    : ''
+  const cut = aged && unit.word?.cutOff
+    ? '<path d="M7 -10L13 -4M13 -10L7 -4" style="stroke: var(--side-red)" stroke-width="1.8" aria-hidden="true"/>'
+    : ''
   const strength = own && unit.maxStrength
     ? `<rect x="-10" y="8.5" width="20" height="2.4" style="fill: var(--paper-edge)"/><rect x="-10" y="8.5" width="${Math.max(0, Math.round(20 * unit.strength / unit.maxStrength))}" height="2.4" style="fill: var(--ink)"/>`
     : ''
@@ -84,6 +92,7 @@ function counter(unit, { side, own, selected, ghost, label, nameAbove = null, sh
         <rect x="-10" y="-7" width="20" height="14" style="fill: ${fill}; stroke: ${ghost ? 'var(--ghost)' : 'var(--ink)'}" stroke-width="1.1"${dash}/>
         <g style="stroke: ${ink}; fill: ${ink}" stroke-width="1.3" stroke-linecap="square">${ghost ? '<text y="4" text-anchor="middle" font-size="11" style="stroke: none">?</text>' : symbol(kind)}</g>
         ${strength}
+        ${pennant}${cut}
       </g>
       ${nameAbove ? `<text y="-19" text-anchor="middle" font-size="11" font-weight="600" class="unit-name" style="fill: var(--ink); font-family: var(--font-ui)">${esc(nameAbove)}</text>` : ''}
       ${label ? `<text y="${own ? 27 : 24}" text-anchor="middle" font-size="10" class="unit-name" style="fill: var(--ink); font-family: var(--font-ui)">${esc(label)}</text>` : ''}
@@ -109,7 +118,14 @@ function clusters(list) {
   return out
 }
 
-function clusterLabel(group, ghost) {
+function clusterLabel(group, ghost, aged = false) {
+  if (aged) {
+    // Your units known by rider: their names, and how old the word is (the
+    // server's words: "20 min ago", or cut off).
+    const oldest = group.reduce((a, b) => ((b.word?.minutesAgo ?? 0) > (a.word?.minutesAgo ?? 0) ? b : a))
+    const when = group.some(u => u.word?.cutOff) ? 'cut off' : oldest.word?.said ?? ''
+    return `${group.length <= 2 ? group.map(g => g.name).join(', ') : `${group.length} units`}, ${when}`
+  }
   if (ghost) {
     const ago = Math.min(...group.map(u => u.minutesAgo ?? 0))
     return `${group.length > 1 ? `${group.length} units, ` : ''}last seen ${ago ? `${ago} min ago` : 'just now'}`
@@ -128,7 +144,7 @@ function drawUnits(list, opts) {
   const labelAt = new Map()
   for (const group of clusters(list)) {
     const lowest = group.reduce((a, b) => (b.position.y > a.position.y || (b.position.y === a.position.y && b.position.x > a.position.x) ? b : a))
-    labelAt.set(`${lowest.position.x},${lowest.position.y}`, clusterLabel(group, opts.ghost))
+    labelAt.set(`${lowest.position.x},${lowest.position.y}`, clusterLabel(group, opts.ghost, opts.aged))
   }
   const out = []
   for (const group of byTile.values()) {
@@ -136,7 +152,7 @@ function drawUnits(list, opts) {
       const top = i === group.length - 1
       const selected = opts.selectedId === u.id
       const label = top ? labelAt.get(`${u.position.x},${u.position.y}`) ?? null : null
-      out.push(counter(u, { ...opts, ghost: opts.ghost, selected, label, nameAbove: selected && !opts.ghost ? u.name : null, shift: i * 5 }))
+      out.push(counter(u, { ...opts, ghost: opts.ghost, commander: opts.commanderId === u.id, selected, label, nameAbove: selected && !opts.ghost ? u.name : null, shift: i * 5 }))
     })
   }
   return out.join('')
@@ -243,11 +259,28 @@ export function drawMap(view, { selectedId = null } = {}) {
     parts.push(`<path d="M${cx(u.position.x)} ${cy(u.position.y)}L${cx(u.target.x)} ${cy(u.target.y)}" fill="none" style="stroke: var(--order-arrow)" stroke-width="1.6" stroke-dasharray="5 4" marker-end="url(#arrow)" opacity="0.8"/>`)
   }
 
-  // Units: enemies as known, then yours on top.
+  // The Commander's immediate range: within it his orders arrive at once
+  // and he sees for himself; beyond it, by rider.
+  const commanderId = view.commander?.status === 'free' ? view.commander.unitId : null
+  const post = commanderId ? view.own.find(u => u.id === commanderId) : null
+  if (post && view.commander.immediate) {
+    const r = view.commander.immediate
+    const x0 = Math.max(0, post.position.x - r)
+    const y0 = Math.max(0, post.position.y - r)
+    const x1 = Math.min(width - 1, post.position.x + r)
+    const y1 = Math.min(height - 1, post.position.y + r)
+    parts.push(`<g aria-hidden="true" class="immediate"><rect x="${MARGIN + x0 * TILE}" y="${MARGIN + y0 * TILE}" width="${(x1 - x0 + 1) * TILE}" height="${(y1 - y0 + 1) * TILE}" rx="8" style="fill: var(--immediate-fill); stroke: var(--immediate-edge)" stroke-width="1.4" stroke-dasharray="7 5"/>
+      <text x="${MARGIN + x0 * TILE + 6}" y="${MARGIN + y0 * TILE + 13}" font-size="10" style="fill: var(--immediate-edge); font-family: var(--font-ui)">orders at once</text></g>`)
+  }
+
+  // Units: enemies as known, then yours on top: those known by rider faded,
+  // where word last put them, then those about you as they are.
   const enemies = view.enemies ?? []
   parts.push(drawUnits(enemies.filter(e => e.status !== 'visible'), { side: enemySide, own: false, ghost: true }))
   parts.push(drawUnits(enemies.filter(e => e.status === 'visible'), { side: enemySide, own: false, ghost: false }))
-  parts.push(drawUnits(view.own, { side, own: true, ghost: false, selectedId }))
+  const aged = (u) => u.word && !u.word.live
+  parts.push(drawUnits(view.own.filter(aged), { side, own: true, ghost: false, aged: true, selectedId, commanderId }))
+  parts.push(drawUnits(view.own.filter(u => !aged(u)), { side, own: true, ghost: false, selectedId, commanderId }))
 
   const seen = (view.enemies ?? []).filter(e => e.status === 'visible').length
   const label = `Map of ${view.map.name}. Your ${view.own.length} units are shown; ${seen} enemy units in sight` +

@@ -32,6 +32,19 @@ const { COMMAND } = require('../combat/tables')
 
 const tilesApart = (a, b) => Math.max(Math.abs(a.x - b.x), Math.abs(a.y - b.y))
 
+// What each tile costs to cross, once for each map.
+const stepsOf = new WeakMap()
+function stepCosts(map) {
+  if (stepsOf.has(map)) return stepsOf.get(map)
+  const step = new Float64Array(map.width * map.height)
+  for (let i = 0; i < step.length; i++) {
+    const p = { x: i % map.width, y: Math.floor(i / map.width) }
+    step[i] = map.passable(p) ? map.moveCost(p) : Infinity
+  }
+  stepsOf.set(map, step)
+  return step
+}
+
 /**
  * What a rider's ride costs from one tile to every tile of the field.
  *
@@ -59,49 +72,47 @@ function riderCosts({ map, world, broken = new Set(), hidden = new Map(), side, 
   if (!from || !map.inBounds(from)) return cost
   const start = from.y * width + from.x
   cost[start] = 0
-  const step = new Float64Array(size)
-  for (let i = 0; i < size; i++) {
-    const p = { x: i % width, y: Math.floor(i / width) }
-    step[i] = map.passable(p) ? map.moveCost(p) : Infinity
-  }
+  const step = stepCosts(map)
 
-  // A binary heap of [cost, index], least cost first, then least index.
+  // A binary heap of numbers: the cost (in half steps, as every tile's cost
+  // is) times the field's size, plus the tile's index. Least cost first,
+  // then least index: the same order every time.
   const heap = []
-  const less = (a, b) => a[0] < b[0] || (a[0] === b[0] && a[1] < b[1])
-  const push = (item) => {
-    heap.push(item)
+  const push = (v) => {
+    heap.push(v)
     let i = heap.length - 1
     while (i > 0) {
       const parent = (i - 1) >> 1
-      if (!less(heap[i], heap[parent])) break
-      ;[heap[i], heap[parent]] = [heap[parent], heap[i]]
+      if (heap[parent] <= v) break
+      heap[i] = heap[parent]
       i = parent
     }
+    heap[i] = v
   }
   const pop = () => {
     const top = heap[0]
     const last = heap.pop()
     if (heap.length > 0) {
-      heap[0] = last
       let i = 0
       for (;;) {
         const l = 2 * i + 1
-        const r = l + 1
-        let m = i
-        if (l < heap.length && less(heap[l], heap[m])) m = l
-        if (r < heap.length && less(heap[r], heap[m])) m = r
-        if (m === i) break
-        ;[heap[i], heap[m]] = [heap[m], heap[i]]
+        if (l >= heap.length) break
+        const m = l + 1 < heap.length && heap[l + 1] < heap[l] ? l + 1 : l
+        if (heap[m] >= last) break
+        heap[i] = heap[m]
         i = m
       }
+      heap[i] = last
     }
     return top
   }
 
-  push([0, start])
+  push(start)
   const done = new Uint8Array(size)
   while (heap.length > 0) {
-    const [c, i] = pop()
+    const v = pop()
+    const i = v % size
+    const c = (v - i) / size / 2
     if (done[i]) continue
     done[i] = 1
     // He rides into ground the enemy holds, but not on through it.
@@ -112,7 +123,7 @@ function riderCosts({ map, world, broken = new Set(), hidden = new Map(), side, 
     for (const j of next) {
       if (j < 0 || done[j] || step[j] === Infinity) continue
       const nc = c + step[j]
-      if (nc < cost[j]) { cost[j] = nc; push([nc, j]) }
+      if (nc < cost[j]) { cost[j] = nc; push(Math.round(nc * 2) * size + j) }
     }
   }
   return cost
@@ -157,17 +168,29 @@ function riders(state, side) {
  * How long an order to each of these units of his would take, if he gave
  * it now, for the read-back: { unitId: minutes } (0 at once), with
  * Infinity for a unit no rider can reach. Null when he sends none.
- * `from` is the unit he will ride with, if he rides over first.
+ * `from` is the unit he will ride with, if he rides over first. `word`, his
+ * knowledge (orchestrator/word.js): judged from where he believes each unit
+ * stands and the enemy he knows of, so the read-back tells him nothing he
+ * could not know (the rider finds out the rest on the road).
  */
-function orderDelays(state, side, unitIds, { from = null } = {}) {
-  const post = from ? state.world.units.find(u => u.id === from && u.side === side && u.strength > 0) : null
+function orderDelays(state, side, unitIds, { from = null, word = null } = {}) {
+  let world = state.world
+  if (word) {
+    const own = state.world.units.filter(u => u.side === side)
+      .map(u => (word.units[u.id] ? { ...u, position: { ...word.units[u.id].position } } : u))
+    const enemies = Object.entries(word.enemies).filter(([, e]) => e.strength > 0)
+      .map(([id, e]) => ({ id, side: null, position: { ...e.position }, strength: e.strength }))
+    world = { ...state.world, units: [...own, ...enemies] }
+  }
+  const known = { ...state, world, broken: word ? new Set() : state.broken, hidden: word ? new Map() : state.hidden }
+  const post = from ? world.units.find(u => u.id === from && u.side === side && u.strength > 0) : null
   const view = post
-    ? riders({ ...state, commanders: { ...state.commanders, [side]: { ...state.commanders[side], unitId: post.id } } }, side)
-    : riders(state, side)
+    ? riders({ ...known, commanders: { ...state.commanders, [side]: { ...state.commanders[side], unitId: post.id } } }, side)
+    : riders(known, side)
   if (!view) return null
   const out = {}
   for (const id of unitIds) {
-    const unit = state.world.units.find(u => u.id === id)
+    const unit = world.units.find(u => u.id === id)
     if (!unit) continue
     const t = view.ticks(unit)
     out[id] = t === Infinity ? Infinity : t * 10
