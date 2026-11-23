@@ -16,6 +16,7 @@
 //                                              the unit stands
 //   everyone advance    / advance           advance on the enemy
 //   swords withdraw     / fall back to C7   withdraw (to a place, or home)
+//   archers fall back 100 m west            withdraw a distance in a compass direction
 //   spears attack the ford / storm C7       attack (go there looking for a fight)
 //   horse attack their archers              attack an enemy unit its side has
 //   spears charge the enemy swords          seen, and follow it (an enemy
@@ -99,6 +100,10 @@ const HOLD = /^(?:(.+?)\s+)?(?:holds?(?:\s+(?:position|positions|the line|your g
 // the unit stands (200 m when no distance is given).
 const COMPASS_WORDS = '(north[- ]?east|north[- ]?west|south[- ]?east|south[- ]?west|north|south|east|west)'
 const GO_DIRECTION = new RegExp(`^(?:(.+?)\\s+)?(?:go|move|march|head|shift|step|ride|walk)\\s+(?:(\\d{1,4})\\s*(?:m|metres?|meters?|paces|yards?)\\s+)?(?:to the\\s+|due\\s+)?${COMPASS_WORDS}$`, 'i')
+
+// "archers fall back 100 metres to the west", "swords pull back south": the
+// same, falling back.
+const FALL_DIRECTION = new RegExp(`^(?:(.+?)\\s+)?(?:withdraw|fall back|retreat|pull back)\\s+(?:(\\d{1,4})\\s*(?:m|metres?|meters?|paces|yards?)\\s+)?(?:to the\\s+|due\\s+)?${COMPASS_WORDS}$`, 'i')
 
 // The Commander riding over to another of his units.
 const RIDE = /^(?:i(?:'ll| will| shall)?|you|the commander|commander)\s+(?:ride|rides|go|goes|join|joins|move|moves|switch|switches)\s+(?:over\s+)?(?:with|to)\s+(.+)$/i
@@ -262,6 +267,9 @@ function readOlder(text, line) {
 
     const go = text.match(GO_DIRECTION)
     if (go) return order(go[1], 'move', `${go[2] ?? 200} m ${go[3].toLowerCase()}`, null)
+
+    const fall = text.match(FALL_DIRECTION)
+    if (fall) return order(fall[1], 'withdraw', `${fall[2] ?? 200} m ${fall[3].toLowerCase()}`, null)
 
     const advance = text.match(ADVANCE)
     if (advance && !/\s(?:to|towards|toward)\s/i.test(text)) return order(advance[1], 'advance', null, null)
