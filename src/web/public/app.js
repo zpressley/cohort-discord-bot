@@ -559,7 +559,7 @@ async function tent(token) {
     if (!list.length) { body.innerHTML = '<p class="note">No dispatches yet. They come in once the first turn runs.</p>'; return }
     body.innerHTML = list.map((d, i) => `
       <article class="dispatch">
-        <header><h3>Turn ${d.turn}</h3><span class="when">${d.plainReport && !d.narrated ? '<span class="flag" title="The AI that tells the story did not answer; this is the plain account.">plain report</span> ' : ''}${esc(clock(d.minutes))} · ${esc(WHY[d.interrupt] ?? d.interrupt)}</span></header>
+        <header><h3>Turn ${d.turn}</h3><span class="when">${d.plainReport && !d.narrated ? '<span class="flag" title="The dispatch could not be written this turn; this is the plain account.">plain report</span> ' : ''}${esc(clock(d.minutes))} · ${esc(WHY[d.interrupt] ?? d.interrupt)}</span></header>
         ${d.narrated ? `<p class="told">${esc(d.narrated)}</p>` : ''}
         ${d.narrated
           ? `<details><summary>The plain account</summary><ul>${d.lines.map(l => `<li>${esc(l)}</li>`).join('')}</ul></details>`

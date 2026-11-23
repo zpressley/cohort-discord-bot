@@ -650,8 +650,9 @@ function createBattleStore({ dir = null, ai = null, now = () => Date.now() } = {
         interrupt: turnEntry.interrupt,
         lines,
         narrated: told.source === 'ai' ? told.text : null,
-        // The AI is on but did not answer: the page says this is the plain account.
-        ...(ai?.configured && told.source !== 'ai' ? { plainReport: true } : {}),
+        // The AI is on and there was something to tell, but it did not
+        // answer: the page says this is the plain account.
+        ...(ai?.configured && told.source !== 'ai' && lines.length > 0 ? { plainReport: true } : {}),
         at: now()
       })
     }
