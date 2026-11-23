@@ -118,12 +118,19 @@ const QUALITY_ORDER = [
 //   staminaDrain  [notebook] kit weight, per locked decision 2. Heavy kit
 //                 protects and hits harder but runs the tank down faster.
 //   push          [derived] mass helps you shove.
+//
+// Heavy armour's drain was 6 and is 12 (army balance, docs/design/
+// army-balance.md part 5): heavy infantry is the best in a stand-up fight,
+// and the price of it is wind. At 6, two professional units in heavy armour
+// won 88% of their battles against the usual armies and 79% against the
+// other classic armies; at 12, 78% and 69%, and pikes on the flat beat them
+// (54%). The notebook: "heavies must win before they gas out".
 
 const ARMOR = {
   no_armor:     { defense: 0, damageClass: 'light',  staminaDrain: 0,   push: 0 },
   light_armor:  { defense: 3, damageClass: 'light',  staminaDrain: 1,   push: 0 },
   medium_armor: { defense: 6, damageClass: 'medium', staminaDrain: 3,   push: 1 },
-  heavy_armor:  { defense: 9, damageClass: 'heavy',  staminaDrain: 6,   push: 2 }
+  heavy_armor:  { defense: 9, damageClass: 'heavy',  staminaDrain: 12,  push: 2 }
 }
 
 // ── Shields ────────────────────────────────────────────

@@ -10,7 +10,9 @@
 //
 // Retaken when combat and the usual armies changed on purpose (the army
 // balance, Recommendation A: docs/design/army-balance.md). Before it they
-// were ec82c3c2 17, 1765942a 18, 1690181b 18, 5c67514a 20.
+// were ec82c3c2 17, 1765942a 18, 1690181b 18, 5c67514a 20; after A and
+// before heavy armour's wind (part 5), f8deabe5 20, 745feb5f 30,
+// f7d6da75 32, 6c59381b 38.
 
 const { test } = require('node:test')
 const assert = require('node:assert/strict')
@@ -28,10 +30,10 @@ function fingerprint(text) {
 }
 
 const BEFORE = {
-  'crownhill 1': 'f8deabe5 20',
-  'crownhill 2': '745feb5f 30',
-  'ashford 1': 'f7d6da75 32',
-  'ashford 2': '6c59381b 38'
+  'crownhill 1': '1fb30748 22',
+  'crownhill 2': 'abc6d6db 30',
+  'ashford 1': '9b2d3801 31',
+  'ashford 2': '551c795d 37'
 }
 
 test('a battle with no Commander on the field runs exactly as before riders, event for event', () => {

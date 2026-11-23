@@ -328,3 +328,21 @@ test('everything is deterministic — same inputs, same numbers', () => {
 
   assert.deepEqual(D.resolveExchange(a, b, ctx, ctx), D.resolveExchange(a, b, ctx, ctx))
 })
+
+test('men in heavy armour are spent soonest: their wind is the price of the best protection', () => {
+  // docs/design/army-balance.md, part 5: heavy armour drains twice what
+  // medium does and more, so a heavy unit must win before it gasses out.
+  const drain = (armor) => R.staminaDrainPerRound(unit({ armor, shield: 'no_shield' }))
+  assert.ok(drain('heavy_armor') - drain('medium_armor') > drain('medium_armor') - drain('no_armor'))
+  // Professionals in heavy armour fall below full effectiveness inside three
+  // rounds of fighting; in light armour they last past five.
+  const rounds = (armor) => {
+    const u = unit({ armor, shield: 'light_shield' })
+    let stamina = R.staminaPool(u)
+    let n = 0
+    while (R.fatigueMultiplier(stamina / R.staminaPool(u)) >= 1 && n < 20) { stamina -= R.staminaDrainPerRound(u); n++ }
+    return n
+  }
+  assert.ok(rounds('heavy_armor') <= 3, `${rounds('heavy_armor')} rounds`)
+  assert.ok(rounds('light_armor') >= 5, `${rounds('light_armor')} rounds`)
+})
