@@ -18,6 +18,7 @@ const { createCompany } = require('../engine/command/company')
 const { gradeOf, EARNED_AT } = require('../engine/command/officers')
 const { PLAIN } = require('../data/officers')
 const { FACTIONS } = require('../data/factions')
+const { usualArmy } = require('../engine/army/standard')
 
 function createCommanderStore({ dir = null, now = () => Date.now() } = {}) {
   const folder = dir ? path.join(dir, 'commanders') : null
@@ -86,6 +87,17 @@ function createCommanderStore({ dir = null, now = () => Date.now() } = {}) {
     save(commander)
   }
 
+  /**
+   * His standard army, bought (a list checked by the caller: battles.js,
+   * setArmy), or null for his faction's usual one. Kept with him, and
+   * changed only between battles.
+   */
+  function setArmy(commander, units) {
+    if (units) commander.army = { units }
+    else delete commander.army
+    save(commander)
+  }
+
   const get = (token) => byToken.get(token) ?? null
   const byId = (id) => [...byToken.values()].find(c => c.id === id) ?? null
   function setCompany(commander, company) {
@@ -118,6 +130,11 @@ function createCommanderStore({ dir = null, now = () => Date.now() } = {}) {
       faction: commander.faction ?? null,
       factionTitle: commander.faction ? FACTIONS[commander.faction]?.title ?? null : null,
       ended: commander.ended ? { how: commander.ended.how, at: commander.ended.at } : null,
+      // The standard army he musters with: his own, or his faction's usual
+      // one while he has bought none. (None without a faction.)
+      ...(commander.faction
+        ? { army: commander.army ? { own: true, units: commander.army.units } : { own: false, units: usualArmy(commander.faction) } }
+        : {}),
       battles: company.battles,
       officers: company.officers.map(o => ({
         name: o.name, grade: gradeOf(o), experience: o.experience, personality: o.personality,
@@ -132,7 +149,7 @@ function createCommanderStore({ dir = null, now = () => Date.now() } = {}) {
     }
   }
 
-  return { create, get, byId, setCompany, setBattle, setFaction, end, view }
+  return { create, get, byId, setCompany, setBattle, setFaction, setArmy, end, view }
 }
 
 module.exports = { createCommanderStore }

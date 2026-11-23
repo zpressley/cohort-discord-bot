@@ -62,7 +62,11 @@ test('alone, on a phone: muster, an order written on the map, turns to a verdict
     await p.selectOption('select[name="faction"]', 'macedon')
     assert.match(await p.textContent('#faction-note'), /Companions, comes free/)
     await p.selectOption('select[name="enemyFaction"]', 'rome')
-    await p.selectOption('select[name="timeLimit"]', '')
+    // One kind of battle, to the end: no kind, no day's end, no ground to hold to choose.
+    assert.equal(await p.locator('select[name="scenario"], select[name="timeLimit"], input[name="objectives"]').count(), 0)
+    assert.match(await p.textContent('form#muster'), /yields the field, its army breaks or is destroyed, or its Commander is killed/)
+    // With no army bought, the usual one.
+    assert.match(await p.textContent('#army-line'), /The usual army of Macedon/)
     if (process.env.SHOT) await p.screenshot({ path: process.env.SHOT.replace('.png', '-muster-new.png'), fullPage: true })
     await p.click('button[type="submit"]')
     await p.waitForSelector('#map-scroll svg')
@@ -175,6 +179,8 @@ test('two players by link, on desktops: the turn waits for both, then both read 
     const red = await page(browser, errors, { width: 1440, height: 900 })
     await red.goto(base + '/muster')
     await red.check('input[name="opponent"][value="friend"]')
+    // Against a friend the enemy's faction is not asked: his Commander brings his own.
+    assert.equal(await red.locator('#enemy-field').isHidden(), true)
     await red.click('button[type="submit"]')
     await red.waitForSelector('#friend-link')
     const link = (await red.textContent('#friend-link')).trim()
@@ -191,7 +197,7 @@ test('two players by link, on desktops: the turn waits for both, then both read 
     await blue.goto(link)
     await blue.waitForSelector('#who-leads')
     assert.match(await blue.textContent('#who-leads h1'), /Who leads\?/)
-    assert.equal(await blue.locator('[data-lead]').count(), 1, 'no Commanders yet in this browser: a new one')
+    assert.equal(await blue.locator('[data-lead]').count(), 2, 'no Commanders yet in this browser: a new one, with the usual army or one he buys first')
     // A new Commander's faction, for life: the army the muster gave this side first.
     assert.equal(await blue.locator('select[name="faction"]').count(), 1)
     await blue.selectOption('select[name="faction"]', 'sarmatia')
@@ -232,6 +238,86 @@ test('two players by link, on desktops: the turn waits for both, then both read 
     await blue.goto(link)
     await blue.waitForSelector('#map-scroll svg')
     assert.equal(await blue.locator('#who-leads').count(), 0)
+  })
+})
+
+test('on a phone: a new Commander buys his army, is told why a pick is refused, keeps it, and musters with it', { skip }, async () => {
+  await withApp(async ({ base, browser, errors }) => {
+    const p = await page(browser, errors, { width: 390, height: 844 })
+    const shot = (name) => process.env.SHOT ? p.screenshot({ path: process.env.SHOT.replace('.png', `-${name}.png`) }) : null
+    const noSideways = async () => assert.ok(await p.evaluate(() => document.documentElement.scrollWidth <= 390), 'no sideways scroll')
+    await p.goto(base + '/muster')
+    await p.waitForSelector('form#muster')
+    await p.selectOption('select[name="faction"]', 'han')
+    await p.click('#make-and-buy')
+    await p.waitForSelector('#army-screen')
+    // He starts from the usual army; the elite is free and not for sale.
+    assert.match(await p.textContent('#budget'), /25 of 30 supply points/)
+    assert.match(await p.textContent('.buy-unit.elite'), /Yulin guard[\s\S]*Free[\s\S]*Not for sale/)
+    assert.equal(await p.locator('.buy-unit.elite [data-dismiss]').count(), 0)
+    while (await p.locator('[data-dismiss]').count()) {
+      const n = await p.locator('[data-dismiss]').count()
+      await p.click('[data-dismiss] >> nth=0')
+      await p.waitForFunction((was) => document.querySelectorAll('[data-dismiss]').length < was, n)
+    }
+    assert.match(await p.textContent('#budget'), /0 of 30 supply points/)
+    assert.equal(await p.locator('#keep').isDisabled(), true, 'an army needs at least one unit')
+    await noSideways()
+    await shot('army-empty')
+
+    // A unit, step by step: professionals with crossbows.
+    await p.click('#add')
+    await p.waitForSelector('#draft')
+    const pick = async (field, value) => {
+      await p.click(`[data-field="${field}"][data-value="${value}"]`)
+      await p.waitForSelector(`[data-field="${field}"][data-value="${value}"][aria-pressed="true"]`)
+    }
+    await pick('quality', 'professional')
+    await pick('weapon', 'han_chinese_crossbow')
+    assert.match(await p.textContent('#draft h3'), /Crossbows/)
+    // Refused: a heavy shield with the crossbow. Tapping it says why, in the builder's words.
+    await p.click('[data-field="shield"][data-value="heavy_shield"]', { force: true })
+    await p.waitForSelector('#refused')
+    assert.match(await p.textContent('#refused'), /Not allowed: Heavy shield: the crossbow allows at most a medium shield/)
+    assert.equal(await p.locator('[data-field="shield"][data-value="heavy_shield"][aria-pressed="true"]').count(), 0)
+    await noSideways()
+    await shot('army-refused')
+    await pick('armor', 'medium_armor')
+    await p.click('#take')
+    await p.waitForSelector('#add')
+    assert.match(await p.textContent('#budget'), /10 of 30 supply points/)
+    await shot('army-part')
+
+    // Slingers until the supply points run out; the last two are numbered.
+    for (let i = 0; i < 6 && !(await p.locator('#add').isDisabled()); i++) {
+      await p.click('#add')
+      await p.waitForSelector('#draft')
+      await pick('weapon', 'sling')
+      await p.click('#take')
+      await p.waitForSelector('#add')
+    }
+    assert.equal(await p.locator('#add').isDisabled(), true)
+    assert.match(await p.textContent('#army-screen'), /the cheapest unit costs 4/)
+    const names = await p.locator('.buy-unit h3').allTextContents()
+    assert.deepEqual(names, ['Yulin guard', 'Crossbows', 'Slingers', 'Slingers 2', 'Slingers 3', 'Slingers 4', 'Slingers 5'])
+    await shot('army-full')
+
+    // Kept: back to the muster, with his own army.
+    await p.click('#keep')
+    await p.waitForSelector('form#muster')
+    assert.match(await p.textContent('#army-line'), /Your own army[\s\S]*Crossbows, Slingers, Slingers 2/)
+    await shot('muster-own-army')
+    await p.click('button[type="submit"]')
+    await p.waitForSelector('#map-scroll svg')
+    await p.click('[data-tab="army"]')
+    assert.deepEqual(await p.locator('.unit-card h3').allTextContents(), ['Crossbows', 'Slingers', 'Slingers 2', 'Slingers 3', 'Slingers 4', 'Slingers 5', 'Yulin guard'])
+
+    // In the field, his army cannot be changed.
+    await p.goto(base + '/officers')
+    await p.click('a[href^="/army/"]')
+    await p.waitForSelector('#army-screen')
+    assert.match(await p.textContent('#army-screen'), /in the field[\s\S]*can be changed when the battle is over/)
+    assert.equal(await p.locator('#keep, #add, [data-dismiss]').count(), 0)
   })
 })
 

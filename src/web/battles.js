@@ -39,7 +39,10 @@ const { narrateTurn, report } = require('../narrator/turnNarrator')
 const { orderWords } = require('../narrator/words')
 const { loadScenario, SCENARIOS, mapChoices } = require('../adapters/hotseat/scenarios')
 const { MAPS } = require('../data/maps')
-const { FACTIONS, fieldFactions, enemyFaction, factionChoices } = require('../engine/army/factions')
+const { FACTIONS, factionChoices } = require('../engine/army/factions')
+const { fieldArmies, anyFaction, usualArmy } = require('../engine/army/standard')
+const { armyChanged } = require('../engine/command/company')
+const { checkArmy, appraise } = require('./armies')
 
 const TERRAIN_CODES = {
   plains: 'p', road: 'r', hill: 'h', forest: 'f', marsh: 'm', river: 'w', ford: 'd', bridge: 'b'
@@ -238,8 +241,12 @@ function createBattleStore({ dir = null, ai = null, now = () => Date.now() } = {
    *   faction     the mustering side's faction (src/data/factions.js), for a
    *               Commander who has none yet, or a battle with no Commander;
    *               a Commander's own faction is his for life
-   *   enemyFaction  the other side's; else another faction, drawn from the
-   *               seed. With no faction at all the scenario's armies fight.
+   *   enemyFaction  the other side's; else any faction (the mustering
+   *               side's own among them), drawn from the seed. Against a
+   *               friend it holds only until he joins with his own. With no
+   *               faction at all the scenario's armies fight.
+   *   The mustering Commander brings the standard army he bought, or with
+   *   none his faction's usual one.
    * @returns {{ id, seats: { [side]: token } }} only the seats for people
    */
   function muster(m = {}) {
@@ -266,8 +273,8 @@ function createBattleStore({ dir = null, ai = null, now = () => Date.now() } = {
     // Commander's, and the enemy's. With no faction named, and no Commander
     // who has one, the scenario's own armies fight, as before factions.
     const faction = musterFaction(commander, m.faction)
-    const enemy = faction ? (FACTIONS[m.enemyFaction] ? m.enemyFaction : enemyFaction(faction, seed)) : null
-    if (faction) spec = fieldFactions(spec, { [side]: faction, [other]: enemy })
+    const enemy = faction ? (FACTIONS[m.enemyFaction] ? m.enemyFaction : anyFaction(seed)) : null
+    if (faction) spec = musterArmies(spec, { [side]: { faction, commander }, [other]: { faction: enemy } })
     // Every unit gets an officer to carry the Commander's orders: a name,
     // his experience and his nature, drawn from the battle's seed.
     spec = { ...spec, units: assignOfficers(spec.units, seed) }
@@ -358,6 +365,55 @@ function createBattleStore({ dir = null, ai = null, now = () => Date.now() } = {
     return commander?.faction ?? asked ?? null
   }
 
+  // ── The standard army ─────────────────────────────
+
+  // Each side's army on the field: the one its Commander bought, else its
+  // faction's usual army. `sides`: { [side]: { faction, commander? } }
+  function musterArmies(spec, sides) {
+    const armies = {}
+    for (const [side, { faction, commander }] of Object.entries(sides)) {
+      const units = commander?.army?.units ?? null
+      // Kept armies are checked when kept; checked again in case the rules
+      // under them have changed since.
+      const checked = units ? checkArmy(faction, units) : null
+      if (checked && !checked.ok) {
+        throw Object.assign(new Error(`${commander.name}'s army no longer passes muster: ${checked.errors.join('; ')}. Change it, or take the usual army.`), { status: 409 })
+      }
+      armies[side] = { faction, units }
+    }
+    return fieldArmies(spec, armies)
+  }
+
+  /**
+   * A Commander buys his standard army, or takes his faction's usual one
+   * (`{ usual: true }`). Only between battles: never while his army is in
+   * the field. Every army is checked here through the builder; the
+   * browser's word is not taken. His company is told (armyChanged): a unit
+   * dismissed loses its count of battles toward an officer.
+   *
+   * @returns his company's view, with the army
+   */
+  function setArmy(token, body = {}) {
+    const commander = commanders.get(token)
+    if (!commander) return null
+    if (commander.ended) mayLead(commander)
+    const busy = fighting(commander)
+    if (busy) {
+      throw Object.assign(new Error(`${commander.name}'s army is in the field (${busy.title}). It can be changed when the battle is over.`), { status: 409 })
+    }
+    if (!commander.faction) throw Object.assign(new Error('Choose a faction first: the army is bought from its kit.'), { status: 409 })
+    let units = null
+    if (!body.usual) {
+      const checked = checkArmy(commander.faction, body.units)
+      if (!checked.ok) throw Object.assign(new Error(checked.errors.join('; ')), { status: 400, errors: checked.errors })
+      units = checked.units
+    }
+    const names = [...(units ?? usualArmy(commander.faction)).map(u => u.name), FACTIONS[commander.faction].elite.name]
+    commanders.setCompany(commander, armyChanged(commander.company, names))
+    commanders.setArmy(commander, units)
+    return commanderView(token)
+  }
+
   // The unfinished battle a Commander's army is in, if any.
   function fighting(commander) {
     // In the field until the battle is written into his company, not just
@@ -419,10 +475,13 @@ function createBattleStore({ dir = null, ai = null, now = () => Date.now() } = {
     if (commander) mayLead(commander)
 
     const record = gameRecord(entry.game)
-    // Their faction's army, where the muster gave this side another.
+    // Their Commander's own army (the one he bought, or his faction's
+    // usual one), where the muster gave this side another.
     const mustered = sideFaction(record.spec, side)
     const faction = mustered ? musterFaction(commander, asked) ?? mustered : null
-    let spec = faction && faction !== mustered ? fieldFactions(record.spec, { [side]: faction }) : record.spec
+    let spec = faction && (faction !== mustered || commander?.army)
+      ? musterArmies(record.spec, { [side]: { faction, commander } })
+      : record.spec
     // A seed of the side's own, so the two sides' first veterans are not
     // drawn alike.
     const led = leadSide(spec, side, commander ? commander.company : createCompany(), (Math.imul(record.seed, 31) + 17) >>> 0)
@@ -856,7 +915,9 @@ function createBattleStore({ dir = null, ai = null, now = () => Date.now() } = {
     commanderView,
     scenarios: () => Object.keys(SCENARIOS).map(id => ({ id, title: SCENARIO_TITLES[id] ?? id })),
     maps: () => mapChoices(),
-    factions: () => factionChoices()
+    factions: () => factionChoices(),
+    setArmy,
+    appraise: (faction, body) => appraise(faction, body)
   }
 }
 

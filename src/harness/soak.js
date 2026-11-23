@@ -119,6 +119,22 @@ for (const field of fields) for (const red of Object.keys(FACTIONS)) for (const 
   }
 }
 
+// Armies a player bought (src/harness/bought-league.js: all cheap, all
+// slingers, veterans, all horse), each against its own faction's usual
+// army and another's, on every map: the same faction on both sides is
+// allowed (ruled 2026-11-23).
+const { boughtArmies, playBought } = require('./bought-league')
+const bought = { games: 0, finished: 0, stuck: [] }
+for (const field of fields) for (const [i, key] of Object.keys(FACTIONS).entries()) {
+  const keys = Object.keys(FACTIONS)
+  for (const [kind, units] of Object.entries(boughtArmies(key))) for (const enemy of [key, keys[(i + 1) % keys.length]]) {
+    const r = playBought(key, units, enemy, { map: field, seed: bought.games + 1 })
+    bought.games++
+    if (r.decided) bought.finished++
+    else bought.stuck.push(`${field} ${key} ${kind} v ${enemy}`)
+  }
+}
+
 let decided = 0
 let meetingTurns = 0
 for (let seed = 1; seed <= 50; seed++) {
@@ -136,7 +152,9 @@ for (const stuck of thinking.stuck.slice(0, 10)) console.log(`  stuck: ${stuck}`
 console.log(`faction armies: ${armies.finished} of ${armies.games} finished, ` +
   `${(armies.turns / Math.max(1, armies.finished)).toFixed(1)} player turns on average`)
 for (const stuck of armies.stuck.slice(0, 10)) console.log(`  stuck: ${stuck}`)
+console.log(`bought armies: ${bought.finished} of ${bought.games} finished`)
+for (const stuck of bought.stuck.slice(0, 10)) console.log(`  stuck: ${stuck}`)
 console.log(`meeting battle: a verdict in ${decided} of 50, ` +
   `${(meetingTurns / Math.max(1, decided)).toFixed(1)} battle turns on average`)
 
-if (result.stuck.length > 0 || thinking.stuck.length > 0 || armies.stuck.length > 0 || decided < 50 || result.unread > 0) process.exitCode = 1
+if (result.stuck.length > 0 || thinking.stuck.length > 0 || armies.stuck.length > 0 || bought.stuck.length > 0 || decided < 50 || result.unread > 0) process.exitCode = 1

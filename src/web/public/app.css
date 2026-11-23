@@ -150,3 +150,31 @@ table.losses th:first-child, table.losses td:first-child { text-align: left; }
 .how-to .examples { display: flex; flex-wrap: wrap; gap: 8px; }
 .how-to .examples .btn { text-align: left; }
 @media (min-width: 900px) { .btn-tall { display: none; } }
+
+/* ── Buying the army ─────────────────────────────── */
+.budget { padding: 12px 14px; background: var(--panel-raised); border: 1px solid var(--rule); display: flex; flex-direction: column; gap: 6px; position: sticky; top: 0; z-index: 2; }
+.budget strong { font-family: var(--font-display); font-size: 20px; }
+.budget .track { height: 9px; background: var(--rule); }
+.budget .fill { height: 9px; background: var(--ink); }
+.budget.over .fill { background: var(--side-red); }
+.buy-unit { padding: 12px 14px; background: var(--panel-raised); border: 1px solid var(--rule); display: flex; flex-direction: column; gap: 6px; }
+.buy-unit header { display: flex; justify-content: space-between; align-items: baseline; gap: 8px; }
+.buy-unit h3 { margin: 0; font-family: var(--font-display); font-size: 18px; }
+.buy-unit .cost { font-size: 14px; font-weight: 600; white-space: nowrap; }
+.buy-unit.elite { border: 2px solid var(--ink); }
+.buy-unit .actions { display: flex; gap: 8px; flex-wrap: wrap; }
+.step { display: flex; flex-direction: column; gap: 8px; }
+.step h3 { margin: 0; font-size: 14px; font-weight: 600; }
+.options { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; }
+.opt {
+  display: flex; justify-content: space-between; align-items: center; gap: 6px;
+  min-height: 44px; padding: 6px 10px; text-align: left;
+  border: 1px solid var(--rule); background: var(--panel-raised); color: var(--ink);
+  font: inherit; font-size: 14px; cursor: pointer;
+}
+.opt span { font-size: 13px; color: var(--ink-soft); white-space: nowrap; }
+.opt[aria-pressed="true"] { border: 2px solid var(--ink); font-weight: 600; }
+.opt[aria-disabled="true"] { color: var(--ink-soft); background: transparent; border-style: dashed; text-decoration: line-through; }
+.opt[aria-disabled="true"] span { text-decoration: none; }
+.refused { margin: 0; padding: 10px 12px; border: 2px solid var(--side-red); background: var(--panel-raised); font-size: 14px; }
+.buy-foot { position: sticky; bottom: 0; padding: 12px 0 max(12px, env(safe-area-inset-bottom)); background: var(--ground); display: flex; flex-direction: column; gap: 8px; border-top: 1px solid var(--rule); }

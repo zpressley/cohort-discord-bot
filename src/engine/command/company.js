@@ -210,4 +210,26 @@ function settleBattle(company, battle, fates) {
   return next
 }
 
-module.exports = { createCompany, musterOfficers, settleBattle, leadUnit, ridesWith, HEADLESS }
+/**
+ * The Commander has changed his army between battles. A unit is known by
+ * its name (`leads`, `units`): a unit he kept (its kit changed or not) is
+ * the same men, with its officer, or its count of battles toward one. A
+ * unit he dismissed takes its count with it: men raised again start from
+ * nothing. Its officer stays in the company, a man and not a unit, and at
+ * the next muster leads a unit that has none, as an officer whose men are
+ * not on the field always does (musterOfficers). A unit he adds has no
+ * officer and no battles. So changing the army never makes an officer:
+ * they are still earned in battle.
+ *
+ * @param {Object} company
+ * @param {string[]} names  every unit of the new army by name, the elite's too
+ * @returns {Object} the company after it
+ */
+function armyChanged(company, names) {
+  const next = copy(company)
+  const kept = new Set(names)
+  next.units = Object.fromEntries(Object.entries(next.units).filter(([kind]) => kept.has(kind)))
+  return next
+}
+
+module.exports = { createCompany, musterOfficers, settleBattle, leadUnit, ridesWith, armyChanged, HEADLESS }
