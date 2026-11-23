@@ -604,3 +604,68 @@ themselves, are not built.
    `CLAUDE.md` at the top of the repository and in `src/engine`, `src/web`,
    `src/interpreter`, `src/narrator` and `src/opponent`.
 
+
+### How the friend's Commander was built (Claude's choices, open to change)
+
+Asked for: in a two-player battle, the friend who joins by link brings a
+Commander as the mustering player does, so both sides have something at
+stake. The code is `join` in `src/web/battles.js`, `whoLeads` in
+`src/web/public/app.js`, and `POST /api/seat/:token/join` in `server.js`.
+
+- **The friend's first screen is "Who leads?"**: their Commanders whose
+  armies are free (the fallen and those in the field are not offered), "A
+  new Commander" (one tap: it is made and chosen at once, and kept in the
+  friend's own browser, as the mustering player's is), and "Without a
+  Commander". Their orders, and the read-back, are refused (409) until they
+  have chosen. Once the first turn has run, or the battle is over, the
+  choice is closed (409). The mustering seat never chooses here: it chose
+  at the muster.
+- **The same refusals as the muster:** a Commander who has fallen, or whose
+  army is in a battle (this one included), is refused with the muster's own
+  409 and words (`mayLead`, taken out of `muster` unchanged).
+- **From then on the friend's side is the mustering side's:** their
+  company's officers lead their units (`musterOfficers`, as at the muster),
+  their Commander rides with their best unit and can be taken or killed,
+  their army is in the field until the battle ends, and `settle` writes the
+  battle, and the Commander's own fate, into their company. `settle`, the
+  verdict and the dispatches already went side by side; nothing in them
+  needed changing. "Both commanders killed" ends in a draw and ends both
+  companies (tested), and each side is told its own fate as "you" and the
+  other's as its own men's doing (tested in the narrator).
+- **Entering the spec.** A battle is its spec, seed and order log, and the
+  officers and the Commander are in the spec. At the muster the friend's
+  side gets officers drawn from the seed, as before. When the friend
+  chooses, no turn has run yet (the choice is closed after the first), so
+  the game is made again: the spec with the friend's officers and Commander
+  put in, the same seed, and the order log so far played back into it
+  (which can only be the mustering player's first orders, if sent). The old
+  game is thrown away and the battle is saved as one spec and one log, like
+  any other, so a restart replays it exactly. Safe because nothing that a
+  turn decides has happened yet: orders only wait in the log until both
+  sides are in, and the mustering side's reading of them never depended on
+  the other side's officers. Tested: a battle joined after the mustering
+  player sent orders, played on, then the server restarted, gives both
+  seats the identical view.
+- **The friend's first veteran** is drawn with a seed of the side's own
+  (from the battle's seed), so the two sides' new veterans are not given
+  the same name by the same draw.
+- **A seat with no Commander** (the friend taps "Without a Commander", or
+  their browser cannot keep anything) fights exactly as a new Commander
+  would: one veteran with the best unit, no officer on the others, and a
+  Commander on the field who can be taken or killed; nothing is written
+  anywhere after the battle. Chosen as the simplest fair rule: both sides
+  face the same risks and have the same officers as a new player, and
+  refusing gains nothing. (The other reading, officers from the seed and no
+  Commander on the field as before, gave the side that refused full
+  officers and nothing to lose.) A browser with storage off can still tap
+  "A new Commander": the server makes him; only the link is not kept.
+- **Fog of war:** a seat's view has only its own side's Commander and
+  officers; the other side's company, Commander, names and link never
+  reach it, before or after the battle (tested).
+- **Unchanged:** a battle against the computer, and a battle mustered
+  without a Commander (the API only; the app always sends one). Battles
+  saved before this change have no friend's choice pending and play on as
+  they were.
+- **Not built:** the friend cannot see which Commander leads the enemy
+  (none is told); a friend who never opens the link holds the battle at
+  turn 1, as before.

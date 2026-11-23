@@ -320,6 +320,44 @@ async function muster() {
   })
 }
 
+// ── Who leads: the friend's first screen in the tent ───
+// As at the muster: one of your Commanders whose army is free, or a new
+// one (one tap). Without one you fight as a new Commander would, and
+// nothing is kept. Closed once the first turn has run.
+async function whoLeads(token, view) {
+  const b = view.battle
+  const ready = (await loadCommanders()).filter(c => !c.ended && !c.battle)
+  const choice = (c, i) => `<button class="btn btn-wide${i === 0 ? ' btn-main' : ''}" type="button" data-lead="${esc(c.token)}">${esc(c.name)}, ${c.battles} battle${c.battles === 1 ? '' : 's'} fought</button>`
+  app.innerHTML = `
+    <header class="bar"><a href="/battles" data-link>Battles</a><div class="bar-title"><strong>${esc(b.title)}</strong><span>${esc(sideName(b.side))} · against a friend</span></div><span></span></header>
+    <main class="page" id="who-leads">
+      <h1>Who leads?</h1>
+      <p class="note">You command ${esc(sideName(b.side))}. Your Commander rides with your best unit, and his officers lead your units. What befalls them here goes with them to the next battle.</p>
+      ${ready.map(choice).join('')}
+      <button class="btn btn-wide${ready.length ? '' : ' btn-main'}" type="button" data-lead="new">A new Commander</button>
+      <button class="btn btn-wide" type="button" data-lead="">Without a Commander</button>
+      <p class="note">Without one, you fight as a new Commander would, and nothing is kept after the battle.</p>
+      <div id="who-leads-error"></div>
+    </main>`
+  for (const button of app.querySelectorAll('[data-lead]')) {
+    button.addEventListener('click', async () => {
+      for (const b of app.querySelectorAll('[data-lead]')) b.disabled = true
+      try {
+        const lead = button.dataset.lead
+        const commander = lead === 'new' ? await newCommander() : lead || null
+        await api('POST', `/api/seat/${token}/join`, { commander })
+        route()
+      } catch (error) {
+        // The choice closed meanwhile (the battle has begun): to the tent.
+        const now = await api('GET', `/api/seat/${token}`).catch(() => null)
+        if (now && !now.choosing) return route()
+        for (const b of app.querySelectorAll('[data-lead]')) b.disabled = false
+        document.getElementById('who-leads-error').innerHTML = `<p class="error">${esc(error.message)}</p>`
+      }
+    })
+  }
+}
+
 // ── The Command Tent ───────────────────────────────────
 async function tent(token) {
   const state = {
@@ -346,6 +384,8 @@ async function tent(token) {
     if (b.status === 'finished') { state.tab = 'orders'; state.picked = null; state.place = null; state.flash = null }
   }
   await load()
+  // The friend who joined by link chooses who leads before their first orders.
+  if (state.view.choosing) return whoLeads(token, state.view)
 
   app.innerHTML = `
     <header class="bar" id="bar"></header>

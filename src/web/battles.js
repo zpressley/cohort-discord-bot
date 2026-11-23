@@ -30,7 +30,7 @@ const { interpretText } = require('../interpreter/orders')
 const { lyingInWait } = require('../interpreter/resolve')
 const { assignOfficers } = require('../engine/command/roster')
 const { planTurn } = require('../opponent/planner')
-const { musterOfficers, settleBattle, leadUnit } = require('../engine/command/company')
+const { musterOfficers, settleBattle, leadUnit, createCompany } = require('../engine/command/company')
 const { bargainChips } = require('../engine/command/commander')
 const { createCommanderStore } = require('./commanders')
 const { digest, summarise } = require('../narrator/turnNarrator')
@@ -178,6 +178,7 @@ function createBattleStore({ dir = null, ai = null, now = () => Date.now() } = {
       // said turn by turn (for his officers' memory), and whether the
       // battle has been written into the companies.
       commanders: entry.commanders ?? {},
+      joining: entry.joining ?? null,
       said: entry.said ?? {},
       settled: Boolean(entry.settled),
       record: gameRecord(entry.game)
@@ -245,14 +246,8 @@ function createBattleStore({ dir = null, ai = null, now = () => Date.now() } = {
     // The mustering Commander's own officers lead his side. His army can
     // fight one battle at a time (ruled 2026-11-22).
     const commander = m.commander ? commanders.get(m.commander) : null
-    if (commander?.ended) {
-      throw Object.assign(new Error(`Commander ${commander.name} ${commander.ended.how === 'killed' ? 'was killed' : 'was lost'} at ${commander.ended.at}. Muster with a new Commander.`), { status: 409 })
-    }
     if (commander) {
-      const busy = fighting(commander)
-      if (busy) {
-        throw Object.assign(new Error(`${commander.name ?? 'This Commander'}'s army is in the field (${busy.title}). An army fights one battle at a time.`), { status: 409 })
-      }
+      mayLead(commander)
       const mine = spec.units.filter(u => u.side === side).map(u => ({ ...u, kind: unitName(u).toLowerCase() }))
       const led = musterOfficers(commander.company, mine, seed)
       commanders.setCompany(commander, led.company)
@@ -279,6 +274,8 @@ function createBattleStore({ dir = null, ai = null, now = () => Date.now() } = {
       // turn runs: so a commander can see and change it.
       pending: {},
       commanders: commander ? { [side]: commander.id } : {},
+      // The friend's seat, until they choose who leads it (see join).
+      joining: solo ? null : other,
       said: {},
       settled: false,
       game
@@ -293,6 +290,76 @@ function createBattleStore({ dir = null, ai = null, now = () => Date.now() } = {
   function fighting(commander) {
     const entry = commander.battle ? battles.get(commander.battle) : null
     return entry && !entry.game.outcome.decided ? entry : null
+  }
+
+  // A Commander who has fallen, or whose army is in the field, cannot lead.
+  function mayLead(commander) {
+    if (commander.ended) {
+      throw Object.assign(new Error(`Commander ${commander.name} ${commander.ended.how === 'killed' ? 'was killed' : 'was lost'} at ${commander.ended.at}. Muster with a new Commander.`), { status: 409 })
+    }
+    const busy = fighting(commander)
+    if (busy) {
+      throw Object.assign(new Error(`${commander.name ?? 'This Commander'}'s army is in the field (${busy.title}). An army fights one battle at a time.`), { status: 409 })
+    }
+  }
+
+  // ── The friend who joins by link ──────────────────
+
+  // Whether this seat has still to choose who leads it: the friend's seat,
+  // until they choose or the first turn has run.
+  function choosing(entry, side) {
+    return entry.joining === side && entry.game.playerTurn === 0 && !entry.game.outcome.decided
+  }
+
+  /**
+   * The friend chooses who leads their side, as the mustering player does at
+   * the muster: one of their Commanders (his company's officers lead their
+   * units, he rides with their best unit, the battle is written into his
+   * company), or none. With none they fight as a new Commander would, with
+   * a veteran on their best unit and a Commander on the field, and nothing
+   * is kept.
+   *
+   * The officers and the Commander are in the spec, and a battle is its
+   * spec, seed and order log. No turn has run yet, so the game is made again
+   * from the new spec and the order log so far (the mustering player's
+   * first orders, if sent) played back into it: the saved battle is then
+   * one spec and one log, as every battle is.
+   *
+   * @param {string} token           the friend's seat
+   * @param {string|null} commander  their Commander's token, or null for none
+   */
+  function join(token, commanderToken = null) {
+    const seat = seatOf(token)
+    if (!seat) return null
+    const { entry, side } = seat
+    if (!choosing(entry, side)) {
+      throw Object.assign(new Error('Who leads this side is settled: the battle has begun.'), { status: 409 })
+    }
+    const commander = commanderToken ? commanders.get(commanderToken) : null
+    if (commanderToken && !commander) throw Object.assign(new Error('no such commander'), { status: 404 })
+    if (commander) mayLead(commander)
+
+    const record = gameRecord(entry.game)
+    const mine = record.spec.units.filter(u => u.side === side).map(u => ({ ...u, kind: unitName(u).toLowerCase() }))
+    // A seed of the side's own, so the two sides' first veterans are not
+    // drawn alike.
+    const led = musterOfficers(commander ? commander.company : createCompany(), mine, (Math.imul(record.seed, 31) + 17) >>> 0)
+    const officerOf = new Map(led.units.map(u => [u.id, u.officer]))
+    const spec = {
+      ...record.spec,
+      units: record.spec.units.map(u => (officerOf.has(u.id) ? { ...u, officer: officerOf.get(u.id) } : u)),
+      commanders: { ...(record.spec.commanders ?? {}), [side]: { unitId: mine[leadUnit(mine)].id } }
+    }
+    entry.game = replayGame({ ...record, spec })
+    entry.joining = null
+    if (commander) {
+      commanders.setCompany(commander, led.company)
+      entry.commanders = { ...(entry.commanders ?? {}), [side]: commander.id }
+    }
+    entry.updatedAt = now()
+    save(entry)
+    if (commander) commanders.setBattle(commander, entry.id)
+    return { status: 'joined', commander: commander ? commander.name : null }
   }
 
   /** A Commander's company, and the battle his army is in (with his seat). */
@@ -445,6 +512,8 @@ function createBattleStore({ dir = null, ai = null, now = () => Date.now() } = {
       enemies,
       objectives,
       pending: entry.pending[side] ?? null,
+      // The friend has yet to choose who leads (join).
+      choosing: !atGame && choosing(entry, side),
       commander: commanderView_(game, side, atGame),
       dispatches: [...entry.dispatches[side]].reverse(),
       verdict: game.outcome.decided && !atGame
@@ -519,10 +588,16 @@ function createBattleStore({ dir = null, ai = null, now = () => Date.now() } = {
     return { status: 'finished' }
   }
 
+  // The friend's first orders wait on their choice of who leads.
+  function mustHaveChosen(entry, side) {
+    if (choosing(entry, side)) throw Object.assign(new Error('Choose who leads your side first.'), { status: 409 })
+  }
+
   /** Read orders back without sending them. */
   async function readBack(token, text) {
     const seat = seatOf(token)
     if (!seat) return null
+    mustHaveChosen(seat.entry, seat.side)
     const read = await interpretText(String(text ?? ''), context(seat.entry, seat.side), { ai })
     const name = namer(seat.entry.game, seat.side)
     return {
@@ -544,6 +619,7 @@ function createBattleStore({ dir = null, ai = null, now = () => Date.now() } = {
     const { entry, side } = seat
     const game = entry.game
     if (game.outcome.decided) return { status: 'finished' }
+    mustHaveChosen(entry, side)
 
     // A Commander in the enemy's hands sends no orders: he waits, and the
     // turn runs on the orders his units have. (He may still yield.)
@@ -659,6 +735,7 @@ function createBattleStore({ dir = null, ai = null, now = () => Date.now() } = {
 
   return {
     muster,
+    join,
     summary,
     view,
     replay,

@@ -20,6 +20,10 @@
 //   GET  /api/seat/:token/summary           just the status line (to poll)
 //   GET  /api/seat/:token/replay?turn=n     a finished battle as this side saw it
 //                                           after turn n
+//   POST /api/seat/:token/join { commander }  the friend who joined by link
+//                                           chooses who leads their side: a
+//                                           Commander's token, or null for none;
+//                                           only before the first turn runs
 //   POST /api/seat/:token/read   { text }   read orders back, send nothing
 //   POST /api/seat/:token/orders { text }   send orders
 //   POST /api/seat/:token/bargain { unit }  a Commander held by the enemy
@@ -134,6 +138,10 @@ function createServer(store) {
           if (req.method === 'GET' && parts[3] === 'replay') {
             const shown = store.replay(token, url.searchParams.get('turn'))
             return shown ? send(res, 200, shown) : send(res, 409, { error: 'the battle is not over yet' })
+          }
+          if (req.method === 'POST' && parts[3] === 'join') {
+            const body = await readBody(req)
+            return send(res, 200, store.join(token, typeof body.commander === 'string' ? body.commander : null))
           }
           if (req.method === 'POST' && parts[3] === 'read') {
             const body = await readBody(req)
