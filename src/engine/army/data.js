@@ -133,7 +133,12 @@ const WEAPONS = {
 
 // [salvage] ARMOR_CATEGORIES / SHIELD_OPTIONS SP costs (the combat values for
 // the same keys live in phase 2's tables).
-const ARMOR_SP = { no_armor: 0, light_armor: 0, medium_armor: 1, heavy_armor: 2 }
+// Armour by its weight in iron (army balance, docs/design/army-balance.md
+// part 5): medium 1 -> 2, heavy 2 -> 4. At the old prices armour was the
+// cheapest edge in the game: three professionals in heavy armour won 98%
+// of their battles against the usual armies, in light armour 74%, for 6 SP
+// less. Heavy infantry is still the best in a stand-up fight; it costs it.
+const ARMOR_SP = { no_armor: 0, light_armor: 0, medium_armor: 2, heavy_armor: 4 }
 const SHIELD_SP = { no_shield: 0, light_shield: 0, medium_shield: 1, heavy_shield: 2 }
 
 // [salvage] MOUNT_OPTIONS: 3 SP standard, 2 for the horse cultures.

@@ -34,7 +34,7 @@ async function start(store = createBattleStore({})) {
 }
 
 const ROMAN = [
-  { name: 'legionaries', quality: 'professional', weapon: 'roman_gladius', armor: 'heavy_armor', shield: 'heavy_shield' },
+  { name: 'legionaries', quality: 'professional', weapon: 'roman_gladius', armor: 'medium_armor', shield: 'heavy_shield' },
   { name: 'slingers', quality: 'levy', weapon: 'sling' },
   { name: 'slingers 2', quality: 'levy', weapon: 'sling' },
   { name: 'riders', quality: 'levy', weapon: 'sword_standard', mounted: true }
@@ -78,14 +78,14 @@ test('an army with kit its culture may not field is refused with the builder\'s 
 test('a choice that would overspend the budget is refused with the budget\'s reason', async () => {
   const app = await start()
   try {
-    const units = [{ name: 'legionaries', quality: 'veteran_mercenary', weapon: 'roman_gladius', armor: 'heavy_armor', shield: 'heavy_shield' }]
+    const units = [{ name: 'legionaries', quality: 'veteran_mercenary', weapon: 'roman_gladius', armor: 'medium_armor', shield: 'heavy_shield' }]
     const seen = (await app.api('POST', '/api/factions/rome/appraise', { units, draft: { quality: 'levy', weapon: 'roman_gladius' } })).body
     assert.equal(seen.spent, 15)
     assert.equal(seen.left, 15)
     assert.equal(seen.draft.options.quality.find(o => o.value === 'veteran_mercenary').refused, null)
     const more = (await app.api('POST', '/api/factions/rome/appraise', { units: [...units, { ...units[0], name: 'hastati', armor: 'medium_armor', shield: 'no_shield' }], draft: { quality: 'levy', weapon: 'sling' } })).body
-    assert.equal(more.left, 3)
-    assert.equal(more.draft.refused, 'The army would cost 32 supply points against a budget of 30')
+    assert.equal(more.left, 2)
+    assert.equal(more.draft.refused, 'The army would cost 33 supply points against a budget of 30')
     assert.ok(more.left < more.cheapest, 'no room for another unit')
   } finally { await app.close() }
 })

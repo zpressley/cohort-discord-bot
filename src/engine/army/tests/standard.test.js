@@ -22,7 +22,7 @@ test('an army over its budget is refused with the builder\'s reason', () => {
   const rich = Array.from({ length: 3 }, (_, i) => ({ name: `swords ${i + 1}`, quality: 'veteran_mercenary', weapon: 'sword_standard', armor: 'heavy_armor', shield: 'heavy_shield' }))
   const checked = checkStandard('rome', rich)
   assert.equal(checked.ok, false)
-  assert.deepEqual(checked.errors, ['army costs 45 SP against a budget of 30'])
+  assert.deepEqual(checked.errors, ['army costs 51 SP against a budget of 30'])
 })
 
 test('an army with kit its culture may not field is refused with the builder\'s reason', () => {

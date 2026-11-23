@@ -17,10 +17,10 @@ const legionary = {
 
 // ── Pricing ────────────────────────────────────────────
 
-test('a legionary prices out: 7 quality + 2 gladius + 1 armor + 2 shield = 12 SP', () => {
+test('a legionary prices out: 7 quality + 2 gladius + 2 medium armour + 2 shield = 13 SP', () => {
   const result = buildUnit(legionary, 'Roman Republic')
   assert.ok(result.ok, result.errors.join('; '))
-  assert.equal(result.cost, 12)
+  assert.equal(result.cost, 13)
   assert.equal(result.unit.size, 100, 'Q6: a unit is one hundred men')
 })
 
@@ -133,18 +133,18 @@ test('Sparta fields less: 25 SP against the standard 30', () => {
   const twoUnits = {
     culture: 'Spartan City-State',
     units: [
-      { quality: 'professional', weapon: 'greek_xiphos', armor: 'medium_armor', shield: 'heavy_shield' }, // 12
-      { quality: 'professional', weapon: 'greek_xiphos', armor: 'medium_armor', shield: 'heavy_shield' }  // 12
+      { quality: 'professional', weapon: 'greek_xiphos', armor: 'light_armor', shield: 'heavy_shield' }, // 11
+      { quality: 'professional', weapon: 'greek_xiphos', armor: 'light_armor', shield: 'heavy_shield' }  // 11
     ]
   }
-  assert.ok(buildArmy(twoUnits).ok, '24 SP fits in 25')
+  assert.ok(buildArmy(twoUnits).ok, '22 SP fits in 25')
 
   const three = { ...twoUnits, units: [...twoUnits.units, { quality: 'levy', weapon: 'clubs', armor: 'no_armor', shield: 'no_shield' }] }
   const over = buildArmy(three)
-  assert.ok(!over.ok, '28 SP does not')
+  assert.ok(!over.ok, '26 SP does not')
   assert.ok(over.errors[0].includes('budget of 25'))
 
-  // The same 28 SP army fits Carthage's 32 — provided Carthage may buy the
+  // The same 26 SP army fits Carthage's 32 — provided Carthage may buy the
   // kit. Swap the Spartan blades for common ones to isolate the budget rule.
   const carthaginian = {
     culture: 'Carthaginian Empire',
@@ -157,13 +157,13 @@ test('an army budget buys 3-4 real units, which is the Q6 army shape', () => {
   const army = buildArmy({
     culture: 'Roman Republic',
     units: [
-      { quality: 'professional', weapon: 'roman_gladius', armor: 'medium_armor', shield: 'heavy_shield' }, // 12
+      { quality: 'professional', weapon: 'roman_gladius', armor: 'medium_armor', shield: 'heavy_shield' }, // 13
       { quality: 'militia', weapon: 'spear_professional', armor: 'light_armor', shield: 'medium_shield' }, // 8
       { quality: 'militia', weapon: 'self_bow_basic', armor: 'light_armor', shield: 'no_shield' }          // 6
     ]
   })
   assert.ok(army.ok, army.errors.join('; '))
-  assert.equal(army.army.usedSP, 26)
+  assert.equal(army.army.usedSP, 27)
   // Plus the free elite: 4 units of ~100 on the field, per the design's
   // "armies become 4-6 units of ~100" consequence of Q6.
 })

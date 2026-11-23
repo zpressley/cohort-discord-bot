@@ -114,8 +114,8 @@ const FACTIONS = {
       weapon: 'self_bow_professional', armor: 'light_armor', shield: 'no_shield'
     },
     army: [
-      { name: 'spearmen', quality: 'professional', weapon: 'spear_professional', armor: 'medium_armor', shield: 'medium_shield' },
-      { name: 'spearmen', quality: 'professional', weapon: 'spear_professional', armor: 'medium_armor', shield: 'medium_shield' },
+      { name: 'spearmen', quality: 'professional', weapon: 'spear_professional', armor: 'light_armor', shield: 'medium_shield' },
+      { name: 'spearmen', quality: 'professional', weapon: 'spear_professional', armor: 'light_armor', shield: 'medium_shield' },
       { name: 'spears', quality: 'militia', weapon: 'spear_basic', armor: 'light_armor', shield: 'medium_shield' }
     ]
   },
@@ -292,7 +292,7 @@ const FACTIONS = {
     army: [
       { name: 'swordsmen', quality: 'militia', weapon: 'roman_gladius', armor: 'light_armor', shield: 'heavy_shield' },
       { name: 'slingers', quality: 'levy', weapon: 'sling', armor: 'no_armor', shield: 'no_shield' },
-      { name: 'veterans', quality: 'professional', weapon: 'roman_gladius', armor: 'medium_armor', shield: 'heavy_shield' }
+      { name: 'veterans', quality: 'professional', weapon: 'roman_gladius', armor: 'light_armor', shield: 'heavy_shield' }
     ]
   },
 
@@ -306,7 +306,7 @@ const FACTIONS = {
       weapon: 'two_handed_spear', armor: 'medium_armor', shield: 'no_shield'
     },
     army: [
-      { name: 'pikemen', quality: 'professional', weapon: 'two_handed_spear', armor: 'medium_armor', shield: 'no_shield' },
+      { name: 'pikemen', quality: 'professional', weapon: 'two_handed_spear', armor: 'light_armor', shield: 'no_shield' },
       { name: 'spearmen', quality: 'militia', weapon: 'spear_basic', armor: 'light_armor', shield: 'medium_shield' },
       { name: 'spearmen', quality: 'militia', weapon: 'spear_basic', armor: 'light_armor', shield: 'medium_shield' }
     ]

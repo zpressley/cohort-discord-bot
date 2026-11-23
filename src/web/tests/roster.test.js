@@ -33,7 +33,7 @@ async function start(store = createBattleStore({})) {
   return { server, api, close: () => new Promise(resolve => server.close(resolve)) }
 }
 
-// Rome's usual army: legionaries 12, hastati 10, velites 5 (27 of 30); the
+// Rome's usual army: legionaries 13, hastati 11, velites 5 (29 of 30); the
 // praetorian guard free.
 const roman = async (app) => (await app.api('POST', '/api/commanders', { faction: 'rome' })).body
 
@@ -82,7 +82,7 @@ test('an army in the field may not cost more than the budget: what marches over 
     store.commanders.setRoster(c, addToRoster(c, { name: 'pikes', quality: 'veteran_mercenary', weapon: 'two_handed_spear', culture: 'Macedonian Kingdoms' }, 'captured'))
     const refused = await app.api('POST', '/api/battles', { opponent: 'standing', commander: red.token, marching: ['legionaries', 'hastati', 'velites', 'pikes'] })
     assert.equal(refused.status, 400)
-    assert.equal(refused.body.error, 'They would cost 39 supply points against a budget of 30: leave one at home.')
+    assert.equal(refused.body.error, 'They would cost 41 supply points against a budget of 30: leave one at home.')
     assert.equal(store.commanders.get(red.token).battle, null, 'no battle was made')
     // Leave the hastati at home, and they may go.
     const made = await app.api('POST', '/api/battles', { opponent: 'standing', commander: red.token, marching: ['legionaries', 'velites', 'pikes'] })
@@ -209,7 +209,7 @@ test('a unit taken can march: it costs its kit\'s price in supply, and takes the
     const { blue } = await hastatiGiven(app, store)
     const theirs = (await app.api('GET', `/api/commander/${blue.token}`)).body
     const cost = (name) => theirs.roster.units.find(u => u.name === name).cost
-    assert.equal(cost('hastati'), 10, 'militia 5, gladius 3, medium armour 1, heavy shield 1')
+    assert.equal(cost('hastati'), 11, 'militia 5, gladius 2, medium armour 2, heavy shield 2')
     const all = theirs.roster.units.filter(u => u.how !== 'elite').map(u => u.name)
     const over = await app.api('POST', '/api/battles', { opponent: 'standing', commander: blue.token, marching: all })
     assert.equal(over.status, 400, 'everything at once is over the budget')
