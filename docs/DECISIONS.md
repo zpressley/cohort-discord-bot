@@ -2274,3 +2274,92 @@ wins. The soak still ends every battle; the balance table is unchanged.
 3. The computer is asked on its own news and every hour. Fewer would make
    it weaker; it does not stop the player either way.
 4. The day: ten hours of battle time. Right?
+
+### How the army balance was built (Claude's choices, open to change)
+
+Builds Zach's answers of November 23 to the army balance study
+(`docs/design/army-balance.md`, whose Part 5 has every table): Recommendation A
+taken; veterans who fight a little better and die less taken (the engine part
+was on the branch already; the app wiring is other work); no muster roll, the
+balance to come "from the units themselves and the combination of weapons and
+armor", with "more levers".
+
+**A on twenty factions.**
+- A faction's elite is checked only for kit its culture may field, not for
+  A's rules on what is sold (`buildUnit(pick, culture, { elite: true })`): the
+  Peltast Guard's and Blue Men's javelins and the Eternal Sky Riders' medium
+  armour stand, as the doc gives them.
+- Every javelin or throwing-axe unit in a usual army re-armed: Rome's velites
+  (levy, sword, light kit), Macedon's peltasts (professional, basic spear),
+  Sparta's skirmishers (levy bows), Germania's skirmishers (levy slingers) and
+  axemen (battle axe), Thrace's javelin men (tribal slingers), the Numidian,
+  Berber, Celtic and Sarmatian light horse (swords). Then Han, Kush, Mongolia,
+  Sarmatia, Bactria and Sparta re-picked by the twenty-factions method
+  (`army-study/usual.js repick`).
+- The suite's slowness on that branch was a hang, not a loop:
+  `web/tests/factions.test.js` mustered illegal usual armies, one test threw
+  before closing its server, and the file never exited.
+
+**The levers kept** (each in `tables.js` or `army/data.js`, with its
+measurements in the comment):
+- **Armour by its weight**: medium 2 SP, heavy 4 (were 1 and 2). Three
+  professionals with a 1-SP spear won 74% in light armour, 94% in medium, 98%
+  in heavy. After: heavy infantry 99% -> 88% against the usual armies.
+- **Heavy armour's wind**: stamina drain 12 a round (was 6; 9 tried). Heavy
+  infantry 88% -> 78% against the usual armies, 79% -> 69% against the other
+  classic armies; pikes now beat it (54%).
+- **The usual armies re-picked** under those two (Germania, Parthia, Yayoi,
+  Kush, Samnium, Bactria, Carthage, Maurya). League, 6,080 battles: every
+  faction 40% to 59%; 26 of 190 pairings past 75/25 (41 before A, same
+  harness and seeds).
+
+**Tried and dropped** (Part 5 has the numbers): heavy foot marching 2 tiles;
+pikes keeping the enemy off on open ground and disordered in rough; the
+computer playing horse archers as archers (a planner change, reverted);
+the basic spear at 2 SP; professional archers with a sword; the pike at 4 SP.
+Stopped after three rounds in a row that did not help.
+
+**Measured, not retuned**: the Commander's odds (taken 1 in 24.4 -> 23.5 for
+a player who sends everyone in, `captive-league.js`, 2,000 battles; with the
+computer's plan on both sides 1 in 40 -> 34 taken, 1 in 450 -> 368 killed,
+12,160 Commanders). `VETERANCY.STEPS` unchanged. `npm run balance`: the
+mirror ladder as A left it; the duel matrix's heavy infantry row moved with
+its wind (against spearmen 29/71, cavalry 2/98).
+
+**Tests.** A's rules had no tests; each now has one whose title reads as the
+rule, as do armour's price and wind. Tests that pinned old numbers pin the new
+ones. Fingerprints of whole battles (`attack-named-unchanged`,
+`messengers-unchanged`, `asked-unchanged`) were retaken, the old values kept in
+each header: combat changed on purpose, so the same battles fall out
+differently. The riders tests that search seeds 5 to 10 for a battle that stops
+for one Commander alone now search to 40.
+
+**Still failing, for Zach**: `roster.test.js` "battles and Commanders saved
+before the roster still load, and replay to the same battle" and `asked.test.js`
+"battles saved before the riders rulings load, replay to the same battle...".
+A battle saved under the old combat replays differently under the new (the
+finished one is no longer decided at its last turn). The fixtures are left as
+they were.
+
+**Guessed.**
+- "The balance needs to come from the units themselves" was read as prices
+  and what kit does, not new kinds of unit or new orders. The other reading
+  would allow a skirmish rule (missile troops step back from slower foot),
+  which is the lever this work most lacks and is a question below.
+- "Some units should be best but can then cost more" was read as armour
+  (the best protection, now priced), not the professional tier: at the old
+  armour prices the tier price barely mattered (pro 8 SP: 92% for heavy
+  infantry, as at 7).
+- Elites exempt from A's sale rules: read as "the elite is not bought". The
+  other reading re-arms the doc's elites to fit A.
+- The usual armies keep to the doc's restrictions as before (Parthia's 10 SP
+  of levy, Kush's no heavy foot, Yayoi's no horse, all horse for the steppe).
+
+**Open, for Zach.**
+1. Professionals in medium armour are now the best buy (three with a basic
+   spear: 92-93%). Medium armour at 3 SP (measured 86%), or wait for players?
+2. A skirmish rule, so horse archers and slingers can wear heavy infantry
+   down as at Carrhae? (Recommended next.)
+3. Battles saved under older rules: replay under the rules they were played
+   with (a rules version on each saved battle), or under today's?
+4. Kush's Golden Bows fight with a knife hand to hand: give the elite a sword?
