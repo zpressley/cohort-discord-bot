@@ -14,7 +14,7 @@ const fs = require('fs')
 const path = require('path')
 const crypto = require('crypto')
 
-const { createCompany } = require('../engine/command/company')
+const { createCompany, unitsOf } = require('../engine/command/company')
 const { gradeOf, EARNED_AT } = require('../engine/command/officers')
 const { PLAIN } = require('../data/officers')
 const { FACTIONS } = require('../data/factions')
@@ -126,7 +126,10 @@ function createCommanderStore({ dir = null, now = () => Date.now() } = {}) {
       })),
       // Units with no officer yet, and the battles each has come through
       // toward one (he comes forward at `earnedAt` battles).
-      unled: Object.entries(company.units ?? {}).map(([kind, battles]) => ({ kind, battles })),
+      unled: unitsOf(company).filter(u => !u.led).map(u => ({ kind: u.kind, battles: u.battles })),
+      // Every unit's own veterancy: the battles it has come through and
+      // the average experience of its men.
+      units: unitsOf(company).map(u => ({ kind: u.kind, battles: u.battles, veterancy: u.veterancy })),
       earnedAt: EARNED_AT,
       fallen: [...company.fallen].reverse()
     }

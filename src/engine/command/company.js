@@ -14,10 +14,17 @@
 //             record   his battles with this Commander, oldest first:
 //                      { battle, title, result, unit, fate, deeds, orders }
 //                      It is his memory. It goes with him if he is lost.
-//   units     { kind: battles } for each kind of unit with no officer: how
-//             many battles it has come through since it last had one. An
-//             officer comes forward from its ranks at EARNED_AT (ruled
-//             2026-11-23: nameless 0 to 4 battles, then green).
+//   units     { kind: { strength, totalExperience, battlesParticipated } }
+//             for every kind of unit the company has fielded: the unit's
+//             own veterancy (veterans/veterancy.js: every man who comes
+//             through a battle banks one; the fallen take theirs with them;
+//             recruits arrive knowing nothing). An officer comes forward
+//             from its ranks at EARNED_AT battles (ruled 2026-11-23:
+//             nameless 0 to 4 battles, then green), and a successor to one
+//             lost starts at the unit's own level (ruled 2026-11-23: "the
+//             veteran status of the unit, its average level, determines the
+//             officer's starting spot. A 30 officer in charge of a 24 unit
+//             gets a legendary successor").
 //   fallen    those killed or taken, as a roll: the company keeps its dead,
 //             but not what they knew
 //   battles   how many the company has fought
@@ -29,12 +36,26 @@ const { PERSONALITIES, EARNED_AT, MAX_EXPERIENCE } = require('./officers')
 const { assignOfficers } = require('./roster')
 const { NAMES, PLAIN } = require('../../data/officers')
 const { QUALITY_ORDER } = require('../combat/tables')
+const { createVeteranState, averageExperience, applyBattle } = require('../veterans/veterancy')
 
 function createCompany() {
   return { officers: [], units: {}, fallen: [], battles: 0, settled: [], nextId: 1 }
 }
 
-const copy = (company) => ({ units: {}, settled: [], ...JSON.parse(JSON.stringify(company)) })
+function copy(company) {
+  const next = { units: {}, settled: [], ...JSON.parse(JSON.stringify(company)) }
+  // A company saved when a unit was only a count of battles.
+  for (const [kind, v] of Object.entries(next.units)) {
+    if (typeof v === 'number') next.units[kind] = { ...createVeteranState({ strength: 0 }), battlesParticipated: v }
+  }
+  return next
+}
+
+// The level an officer who comes forward from a unit's ranks starts at: the
+// unit's own, and never less than green.
+function fromTheRanks(state) {
+  return Math.max(EARNED_AT, Math.min(MAX_EXPERIENCE, Math.round(averageExperience(state))))
+}
 
 // What a unit with no officer takes into battle: no one.
 const HEADLESS = { headless: true, name: null, experience: 0, personality: 'steady' }
@@ -119,15 +140,11 @@ function musterOfficers(company, units, seed) {
   for (const unit of wanting) if (spare.length) lead.set(unit.id, spare.shift())
 
   const out = units.map(unit => {
+    // Every unit the company fields has its own veterancy, from here.
+    if (!(unit.kind in next.units)) next.units[unit.kind] = createVeteranState({ strength: unit.strength ?? 0 })
     const officer = lead.get(unit.id)
-    if (!officer) {
-      // No officer: the unit's own count of battles runs (unless its
-      // officer is only wounded, and will be back).
-      if (!next.officers.some(o => o.leads === unit.kind) && !(unit.kind in next.units)) next.units[unit.kind] = 0
-      return { ...unit, officer: { ...HEADLESS } }
-    }
+    if (!officer) return { ...unit, officer: { ...HEADLESS } }
     officer.leads = unit.kind
-    delete next.units[unit.kind]
     return { ...unit, officer: { id: officer.id, name: officer.name, experience: officer.experience, personality: officer.personality } }
   })
   return { company: next, units: out }
@@ -136,22 +153,28 @@ function musterOfficers(company, units, seed) {
 /**
  * Write a finished battle into the company.
  *
- * Officers who came through gain a battle's experience. The wounded gain it
- * too, and sit the next battle out. One killed, captured or given up to the
- * enemy leaves the company, and his men must earn an officer again.
+ * Officers who came through gain a battle's experience (to MAX_EXPERIENCE
+ * and no further). The wounded gain it too, and sit the next battle out.
+ * One killed, captured or given up to the enemy leaves the company.
  *
- * A unit with no officer that comes through a battle is a battle nearer to
- * one: at EARNED_AT battles an officer comes forward from its ranks. He has
- * a name, and the unit's battles for his experience, which makes him
- * green. A unit destroyed starts again from nothing. No officer's
- * experience counts beyond MAX_EXPERIENCE.
+ * Every unit's own veterancy moves with the battle: its survivors bank
+ * one, its fallen take theirs with them, and it is made up to strength
+ * with recruits who know nothing. A unit destroyed, or given to the enemy,
+ * starts again from nothing.
+ *
+ * A unit with no officer that has EARNED_AT battles behind it finds one in
+ * its own ranks, at the unit's own level. So a unit that loses its officer
+ * fights its next battle without one, and then has a successor; unless the
+ * officer lost had MAX_EXPERIENCE battles, when his successor is ready at
+ * once.
  *
  * @param {Object} company
  * @param {Object} battle  { id, title, result: 'victory'|'defeat'|'draw', seed? }
  * @param {Array}  fates   one per unit that fought:
  *   { officerId (null for a unit with no officer), unit, culture?,
  *     fate: 'unhurt'|'wounded'|'captured'|'killed'|'given up', how?,
- *     destroyed?: boolean, deeds?: string, orders?: string[] }
+ *     destroyed?: boolean, mustered?: number (men it went in with),
+ *     survivors?: number (men it came out with), deeds?, orders? }
  * @returns {Object} the company after it
  */
 function settleBattle(company, battle, fates) {
@@ -163,32 +186,44 @@ function settleBattle(company, battle, fates) {
   // A wounded man who sat this one out is fit again.
   for (const officer of next.officers) if (officer.status === 'wounded' && !fought.has(officer.id)) officer.status = 'fit'
 
+  const comeForward = (f, entry, state) => {
+    next.officers.push({
+      id: `o${next.nextId++}`,
+      name: freshName(next, f.culture, random),
+      experience: fromTheRanks(state),
+      personality: PERSONALITIES[Math.floor(random() * PERSONALITIES.length)],
+      leads: f.unit,
+      status: 'fit',
+      record: [{ ...entry, fate: 'unhurt', named: true }]
+    })
+  }
+
   for (const f of fates) {
     const entry = {
       battle: battle.id, title: battle.title, result: battle.result, unit: f.unit,
       fate: f.fate, ...(f.how ? { how: f.how } : {}),
       deeds: f.deeds ?? '', orders: (f.orders ?? []).slice(-12)
     }
-    const officer = f.officerId ? next.officers.find(o => o.id === f.officerId) : null
 
+    // The unit's own veterancy.
+    const gone = Boolean(f.destroyed) || f.fate === 'given up'
+    const mustered = f.mustered ?? next.units[f.unit]?.strength ?? 0
+    let state = next.units[f.unit] ?? createVeteranState({ strength: mustered })
+    if (gone) {
+      state = createVeteranState({ strength: mustered })
+    } else {
+      if (state.strength === 0) state.strength = mustered
+      applyBattle(state, { survivors: f.survivors == null ? null : Math.min(state.strength, Math.max(0, f.survivors)) })
+      state.strength = mustered || state.strength   // made up to strength again
+    }
+    next.units[f.unit] = state
+
+    const officer = f.officerId ? next.officers.find(o => o.id === f.officerId) : null
     if (!officer) {
-      // A unit with no officer of its own (one whose officer is wounded
-      // keeps no count: he will be back).
-      if (f.officerId || !(f.unit in next.units)) continue
-      next.units[f.unit] = f.destroyed || f.fate === 'given up' ? 0 : next.units[f.unit] + 1
-      const battles = next.units[f.unit]
-      if (battles >= EARNED_AT) {
-        next.officers.push({
-          id: `o${next.nextId++}`,
-          name: freshName(next, f.culture, random),
-          experience: battles,
-          personality: PERSONALITIES[Math.floor(random() * PERSONALITIES.length)],
-          leads: f.unit,
-          status: 'fit',
-          record: [{ ...entry, fate: 'unhurt', named: true }]
-        })
-        delete next.units[f.unit]
-      }
+      // A unit with no officer of its own. (One whose officer is wounded,
+      // or was there but is no longer in the company, waits.)
+      if (f.officerId || next.officers.some(o => o.leads === f.unit)) continue
+      if (state.battlesParticipated >= EARNED_AT) comeForward(f, entry, state)
       continue
     }
 
@@ -200,7 +235,8 @@ function settleBattle(company, battle, fates) {
         name: officer.name, fate: f.fate, at: battle.title, led: f.unit,
         experience: officer.experience, personality: officer.personality, battles: officer.record.length
       })
-      next.units[officer.leads] = 0
+      // An officer of the greatest experience has his successor ready.
+      if (officer.experience >= MAX_EXPERIENCE && !gone && state.battlesParticipated >= EARNED_AT) comeForward(f, entry, state)
       continue
     }
     officer.experience = Math.min(MAX_EXPERIENCE, officer.experience + 1)
@@ -211,4 +247,17 @@ function settleBattle(company, battle, fates) {
   return next
 }
 
-module.exports = { createCompany, musterOfficers, settleBattle, leadUnit, ridesWith, HEADLESS }
+/** Each unit of the company: its battles, its veterancy, and whether it has an officer. */
+function unitsOf(company) {
+  return Object.entries(company.units ?? {}).map(([kind, v]) => {
+    const state = typeof v === 'number' ? { ...createVeteranState({ strength: 0 }), battlesParticipated: v } : v
+    return {
+      kind,
+      battles: state.battlesParticipated,
+      veterancy: averageExperience(state),
+      led: company.officers.some(o => o.leads === kind)
+    }
+  })
+}
+
+module.exports = { createCompany, musterOfficers, settleBattle, unitsOf, leadUnit, ridesWith, HEADLESS }

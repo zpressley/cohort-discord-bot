@@ -34,7 +34,7 @@ const { musterOfficers, settleBattle, ridesWith, createCompany } = require('../e
 const { bargainChips } = require('../engine/command/commander')
 const { createCommanderStore } = require('./commanders')
 const { digest, summarise } = require('../narrator/turnNarrator')
-const { gradeOf } = require('../engine/command/officers')
+const { gradeOf, DEATH_ODDS } = require('../engine/command/officers')
 const { narrateTurn, report } = require('../narrator/turnNarrator')
 const { orderWords } = require('../narrator/words')
 const { loadScenario, SCENARIOS, mapChoices } = require('../adapters/hotseat/scenarios')
@@ -121,7 +121,8 @@ function officerFates(game, side) {
     const exposure = exposureFromEvents(events, spec.id)
     const chances = fateChances({ result, losses, exposure })
     const roll = random()
-    const pKill = perOfficer(chances.kill, units.length)
+    // The longer he has served, the better he is at coming through.
+    const pKill = perOfficer(chances.kill, units.length) * (spec.officer && !spec.officer.headless ? DEATH_ODDS[gradeOf(spec.officer)] ?? 1 : 1)
     const pCapture = perOfficer(chances.capture, units.length)
     const pWound = perOfficer(chances.wound, units.length)
     // A unit with no officer has no one to lose (the roll is still made,
@@ -138,6 +139,8 @@ function officerFates(game, side) {
       officerId: spec.officer?.id ?? null,
       ...(spec.officer?.headless ? { headless: true } : {}),
       destroyed: (unit?.strength ?? 0) <= 0,
+      // The men it went in with and came out with, for its veterancy.
+      mustered: spec.strength, survivors: Math.max(0, unit?.strength ?? 0),
       fate,
       ...(fate === 'wounded' ? { how: woundReason(exposure) } : {})
     }
@@ -786,7 +789,7 @@ function createBattleStore({ dir = null, ai = null, now = () => Date.now() } = {
         const deeds = digest(events, { map: game.battle.map, ownIds: new Set([f.unitId]) })[0]?.text ?? ''
         return {
           unitId: f.unitId, culture: game.spec.units.find(u => u.id === f.unitId)?.culture ?? null,
-          officerId: f.officerId, unit: f.unit.toLowerCase(), destroyed: f.destroyed,
+          officerId: f.officerId, unit: f.unit.toLowerCase(), destroyed: f.destroyed, mustered: f.mustered, survivors: f.survivors,
           fate: f.headless && price === f.unitId ? 'given up' : f.fate, ...(f.how ? { how: f.how } : {}),
           deeds: name(deeds).replace(/^[^:]+:\s*/, '').replace('BROKE', 'broke'),
           // "Spears, Swords: advance on the enemy" was said to both.

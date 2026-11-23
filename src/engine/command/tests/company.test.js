@@ -6,7 +6,7 @@
 const { test } = require('node:test')
 const assert = require('node:assert/strict')
 
-const { createCompany, musterOfficers, settleBattle, ridesWith, HEADLESS } = require('../company')
+const { createCompany, musterOfficers, settleBattle, unitsOf, ridesWith, HEADLESS } = require('../company')
 const { gradeOf, grasp, EARNED_AT, MAX_EXPERIENCE } = require('../officers')
 
 const units = () => [
@@ -30,7 +30,8 @@ test('a new company has one officer, a veteran with the elite; no other unit has
   assert.equal(gradeOf(first.units[2].officer), 'veteran')
   assert.equal(typeof first.units[2].officer.name, 'string')
   assert.deepEqual([first.units[0].officer, first.units[1].officer], [HEADLESS, HEADLESS])
-  assert.deepEqual(first.company.units, { spears: 0, swords: 0 }, 'their battles are counted from here')
+  assert.deepEqual(unitsOf(first.company).map(u => [u.kind, u.battles, u.led]), [['spears', 0, false], ['swords', 0, false], ['elite', 0, true]],
+    'every unit\'s own battles are counted from here')
   const plain = musterOfficers(createCompany(), units().map(u => ({ ...u, quality: u.kind === 'elite' ? 'militia' : 'professional' })), 7)
   assert.equal(plain.company.officers[0].leads, 'spears', 'with no elite unit, he is with the best')
 })
@@ -51,10 +52,10 @@ test('a unit earns its officer: nameless for three battles, a green officer with
   for (let n = 1; n < EARNED_AT; n++) {
     company = through(company, n)
     assert.equal(company.officers.length, 1, `no one yet after battle ${n}`)
-    assert.deepEqual(company.units, { spears: n, swords: n })
+    assert.deepEqual(unitsOf(company).map(u => [u.kind, u.battles, u.led]), [['spears', n, false], ['swords', n, false], ['elite', n, true]])
   }
   company = through(company, EARNED_AT)
-  assert.deepEqual(company.units, {}, 'every unit has its officer now')
+  assert.ok(unitsOf(company).every(u => u.led), 'every unit has its officer now')
   for (const kind of ['spears', 'swords']) {
     const officer = company.officers.find(o => o.leads === kind)
     assert.equal(typeof officer.name, 'string')
@@ -80,24 +81,65 @@ test('an officer rises with his battles: seasoned at 8, a veteran at 13, a legen
   assert.equal(gradeOf(musterOfficers(createCompany(), units(), 7).units[2].officer), 'veteran', 'a new Commander\'s one officer is a veteran')
 })
 
-test('a unit destroyed starts earning again from nothing', () => {
+test('a unit destroyed starts again from nothing', () => {
   let company = through(createCompany(), 1)
   company = through(company, 2, (f) => (f.unit === 'spears' ? { ...f, destroyed: true } : f))
-  assert.deepEqual(company.units, { spears: 0, swords: 2 })
+  assert.deepEqual(unitsOf(company).map(u => [u.kind, u.battles]), [['spears', 0], ['swords', 2], ['elite', 2]])
 })
 
-test('an officer killed or taken is gone, his memory with him, and his men must earn another', () => {
-  const one = musterOfficers(createCompany(), units(), 7)
-  const lost = one.units[2]   // the veteran
-  const after = settleBattle(one.company, battle(1), [fate(one.units[0]), fate(one.units[1]), fate(lost, 'killed')])
-  assert.deepEqual(after.officers, [])
-  assert.deepEqual(after.fallen.map(f => [f.name, f.fate, f.at, f.led]), [[lost.officer.name, 'killed', 'Battle 1', 'elite']])
-  assert.equal(after.fallen[0].record, undefined, 'the roll keeps who he was, not what he knew')
-  assert.deepEqual(after.units, { spears: 1, swords: 1, elite: 0 })
+test('a unit\'s veterancy is the experience of its men: survivors bank a battle, the fallen take theirs with them, recruits know nothing', () => {
+  const unit = (company) => unitsOf(company).find(u => u.kind === 'spears')
+  const men = (f, survivors) => (f.unit === 'spears' ? { ...f, mustered: 100, survivors } : f)
+  let whole = createCompany()
+  let bled = createCompany()
+  for (let n = 1; n <= 6; n++) {
+    whole = through(whole, n, f => men(f, 100))
+    bled = through(bled, n, f => men(f, 60))
+  }
+  assert.equal(unit(whole).veterancy, 6, 'no one lost in six battles: every man has six behind him')
+  assert.ok(unit(bled).veterancy < 2, `forty men in a hundred lost each time: ${unit(bled).veterancy}`)
+  assert.equal(unit(bled).battles, 6, 'the unit has still come through six battles')
+})
 
-  const two = musterOfficers(after, units(), 8)
-  assert.deepEqual(two.units[2].officer, HEADLESS)
-  assert.deepEqual(two.company.officers, [], 'no one is handed to them')
+test('an officer killed or taken is gone, his memory with him; his men fight the next battle without one, then find a successor at their own level', () => {
+  // The elite, kept whole for ten battles under its veteran.
+  let company = createCompany()
+  for (let n = 1; n <= 10; n++) company = through(company, n, f => ({ ...f, mustered: 100, survivors: 100 }))
+  const veteran = company.officers.find(o => o.leads === 'elite')
+  const mustered = musterOfficers(company, units(), 11)
+  company = settleBattle(mustered.company, battle(11), mustered.units.map(u => ({ ...fate(u, u.kind === 'elite' ? 'killed' : 'unhurt'), mustered: 100, survivors: 100 })))
+  assert.equal(company.officers.some(o => o.id === veteran.id), false)
+  assert.deepEqual(company.fallen.map(f => [f.name, f.fate, f.at, f.led]), [[veteran.name, 'killed', 'Battle 11', 'elite']])
+  assert.equal(company.fallen[0].record, undefined, 'the roll keeps who he was, not what he knew')
+  assert.equal(company.officers.some(o => o.leads === 'elite'), false, 'no successor yet')
+
+  const next = musterOfficers(company, units(), 12)
+  assert.deepEqual(next.units[2].officer, HEADLESS, 'the battle after, they have no officer')
+  company = settleBattle(next.company, battle(12), next.units.map(u => ({ ...fate(u), mustered: 100, survivors: 100 })))
+  const successor = company.officers.find(o => o.leads === 'elite')
+  assert.notEqual(successor.name, veteran.name)
+  assert.equal(successor.experience, 12, 'twelve battles the unit has come through whole: he starts where his men are')
+  assert.equal(gradeOf(successor), 'seasoned')
+  assert.equal(successor.record.length, 1, 'but he remembers nothing of the battles before him')
+})
+
+test('an officer of thirty battles has his successor ready at once: over a unit of 24, a legend', () => {
+  let company = createCompany()
+  for (let n = 1; n <= 23; n++) company = through(company, n, f => ({ ...f, mustered: 100, survivors: 100 }))
+  const old = company.officers.find(o => o.leads === 'elite')
+  assert.equal(old.experience, MAX_EXPERIENCE)
+  const mustered = musterOfficers(company, units(), 24)
+  company = settleBattle(mustered.company, battle(24), mustered.units.map(u => ({ ...fate(u, u.kind === 'elite' ? 'killed' : 'unhurt'), mustered: 100, survivors: 100 })))
+  const successor = company.officers.find(o => o.leads === 'elite')
+  assert.ok(successor, 'no battle without an officer')
+  assert.equal(successor.experience, 24)
+  assert.equal(gradeOf(successor), 'legendary')
+  // The same unit bled white each battle would have given him a green one.
+  let bled = createCompany()
+  for (let n = 1; n <= 23; n++) bled = through(bled, n, f => ({ ...f, mustered: 100, survivors: 50 }))
+  const m2 = musterOfficers(bled, units(), 24)
+  bled = settleBattle(m2.company, battle(24), m2.units.map(u => ({ ...fate(u, u.kind === 'elite' ? 'killed' : 'unhurt'), mustered: 100, survivors: 50 })))
+  assert.equal(gradeOf(bled.officers.find(o => o.leads === 'elite')), 'green')
 })
 
 test('a wounded officer sits the next battle out, his men without him, and comes back for the one after', () => {
@@ -106,7 +148,6 @@ test('a wounded officer sits the next battle out, his men without him, and comes
   const after1 = settleBattle(one.company, battle(1), [fate(one.units[0]), fate(one.units[1]), fate(hurt, 'wounded', { how: 'in the rout' })])
   const two = musterOfficers(after1, units(), 8)
   assert.deepEqual(two.units[2].officer, HEADLESS)
-  assert.equal('elite' in two.company.units, false, 'they are not earning another: he will be back')
 
   const after2 = settleBattle(two.company, battle(2), two.units.map(u => fate(u)))
   const three = musterOfficers(after2, units(), 9)

@@ -1025,3 +1025,57 @@ Zach, on the four questions the factions work raised:
    age. His answer: "Go with the proposed pov/messenger ranges." The
    specification is `docs/design/point-of-view-and-messengers.md`.
 
+## Rulings, November 23, 2026 (officer perks)
+
+Asked what else might come with each level, Zach, on the ideas put to him:
+
+> "The second perk is too powerful and the unreliable officers could make
+> the game a bit too hard early on, I would say additional details as
+> progression happens but never incorrect details. The other perk is lower
+> odds of death as they progress, I like the 30 getting a green officer but
+> I would say if the unit itself provides the officer so the veteran status
+> of the unit, its average level determine the officers starting spot. A 30
+> officer in charge of a 24 unit gets a legendary successor."
+
+So:
+- **Not wanted:** an officer of 30 battles as a "second" near whom orders
+  arrive at once.
+- **Reports:** more detail as an officer rises, never a wrong detail. To
+  be built with news by rider (`docs/design/point-of-view-and-messengers.md`).
+- **Death:** an officer's odds of being killed fall as he rises.
+- **Successors:** the unit provides its officer, and the unit's own
+  veterancy sets where he starts.
+- **Long missions for legendary officers** (his own, earlier the same
+  day): not built.
+
+### How death odds and successors were built (Claude's choices, open to change)
+
+- **Death odds** (`DEATH_ODDS` in `command/officers.js`): a seasoned
+  officer runs 85% of a green one's chance of being killed in a battle, a
+  veteran 70%, a legend 50%. Capture and wounds are unchanged.
+- **A unit's veterancy** is the average experience of its men, by the
+  engine's veterancy rules from the old design (`veterans/veterancy.js`):
+  every man who comes through a battle banks one, the fallen take theirs
+  with them, and the unit is made up to strength with recruits who know
+  nothing. A unit kept whole for 24 battles has a veterancy of 24; one
+  that loses forty men in a hundred each time never rises above about 2.
+  This is where "survival" pays.
+- **Who comes forward.** A unit with no officer and at least 4 battles
+  behind it finds one in its ranks after a battle, starting at the unit's
+  veterancy and never below green. For a unit's first officer that is
+  green. So a unit that loses its officer fights its next battle without
+  one, and then has a successor at its own level: he has the unit's skill,
+  and none of the dead man's memory. This replaces "must earn another from
+  nothing".
+- **An officer of 30 battles has his successor ready at once**: no battle
+  without an officer. Over a unit of 24, a legend; over a unit bled white,
+  a green one.
+- A unit destroyed, or given to the enemy, starts again from nothing.
+- **Claude's reading, the other being open:** "the 30 getting a green
+  officer" was read as the level-30 perk being the immediate successor,
+  and the unit's level setting where every successor starts. The other
+  reading is that only a level-30 officer's unit gets a successor at its
+  own level, and every other unit starts again from nothing.
+- Not built: a unit's veterancy helping it stand in battle. The engine has
+  the rule (`veteranResistance`) and the web app does not pass it in.
+

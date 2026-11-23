@@ -42,6 +42,11 @@ const GRADES = [
 ]
 const MAX_EXPERIENCE = 30
 
+// How an officer's chance of being killed in a battle falls as he rises
+// (ruled 2026-11-23: "lower odds of death as they progress"): a share of
+// the chance a green officer runs. Starting values.
+const DEATH_ODDS = { green: 1, seasoned: 0.85, veteran: 0.7, legendary: 0.5 }
+
 // The chance he keeps the first clause beyond the plain order, the second,
 // the third and any after. A green officer carries the plain order and
 // seldom more; a veteran holds the whole chain; a legendary one never
@@ -138,4 +143,4 @@ function losingTheThread(officer, lost, enemyInSight) {
   return lost === 'condition' ? 'carry on' : 'hold'
 }
 
-module.exports = { GRADES, GRASP, PERSONALITIES, MAX_STEPS, EARNED_AT, MAX_EXPERIENCE, gradeOf, chanceToKeep, clauses, grasp, losingTheThread }
+module.exports = { GRADES, GRASP, PERSONALITIES, MAX_STEPS, EARNED_AT, MAX_EXPERIENCE, DEATH_ODDS, gradeOf, chanceToKeep, clauses, grasp, losingTheThread }

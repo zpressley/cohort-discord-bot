@@ -112,9 +112,14 @@ Each step leaves the game playable and is merged on its own.
 
 ## What comes after, not in this build
 
+- **Reports that say more as an officer rises, and never say anything
+  wrong** (ruled November 23). A unit with no officer reports that there
+  is an enemy and where; a green officer adds what kind; a seasoned one
+  roughly how many; a veteran exactly how many; a legend how they are
+  holding up. Every level's report is true as far as it goes.
 - Officers who act on their Commander's intent when out of contact
-  (veterans and above), and the level-30 officer as a second near whom
-  orders arrive at once: see the officer perks put to Zach on November 23.
+  (veterans and above). The level-30 officer as a "second" near whom
+  orders arrive at once was ruled out as too powerful.
 - A unit choosing to send word of something urgent faster than the
   routine report.
 - The enemy catching a rider and reading the order.

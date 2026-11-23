@@ -318,7 +318,7 @@ test('a Commander starts with one officer, his veteran; the other units earn the
     const made = (await app.api('POST', '/api/commanders')).body
     const commander = made.token
     assert.deepEqual((await app.api('GET', `/api/commander/${commander}`)).body,
-      { name: made.name, faction: null, factionTitle: null, ended: null, battles: 0, officers: [], unled: [], earnedAt: 4, fallen: [], battle: null })
+      { name: made.name, faction: null, factionTitle: null, ended: null, battles: 0, officers: [], unled: [], units: [], earnedAt: 4, fallen: [], battle: null })
 
     const first = (await app.api('POST', '/api/battles', { opponent: 'standing', side: 'red', seed: 3, commander })).body.seats.red
     const mustered = (await app.api('GET', `/api/commander/${commander}`)).body
