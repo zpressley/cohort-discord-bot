@@ -97,7 +97,7 @@ test('a battle with an offer, a counter and an acceptance survives a server rest
   }
 })
 
-test('fog of war, held: his view holds only what can be seen from where he is held, and his dispatch only what his captors saw', async () => {
+test('fog of war, held: his map holds only what can be seen from where he is held; his dispatch is his captors\' own', async () => {
   const store = createBattleStore({})
   const app = await start(store)
   try {
@@ -123,14 +123,25 @@ test('fog of war, held: his view holds only what can be seen from where he is he
     assert.ok(known.every(id => !JSON.stringify(tent.enemies).includes(id)), 'nothing his side knew before or has learned since')
     assert.equal((await app.api('POST', `/api/seat/${seats.red}/read`, { text: 'everyone advance' })).status, 409)
 
-    // A turn held: the dispatch is told from where he sits.
+    // A turn held: he hears the reports that come in to his captors, their
+    // own units and all, and nothing of his own army that they cannot see.
     await app.api('POST', `/api/seat/${seats.red}/orders`, { text: '' })
     await app.api('POST', `/api/seat/${seats.blue}/orders`, { text: 'everyone advance' })
     const after = (await app.api('GET', `/api/seat/${seats.red}`)).body
     const dispatch = after.dispatches[0]
-    assert.match(dispatch.lines[0], /^You are held by enemy .+: this is what could be seen and heard from where you sit$/)
-    const unseen = after.own.filter(u => u.outOfSight).map(u => u.name)
-    for (const line of dispatch.lines) for (const name of unseen) assert.equal(new RegExp(`\\b${name}\\b`).test(line), false, `"${line}" tells of ${name}`)
+    assert.match(dispatch.lines[0], /^You are held by enemy .+, and hear the reports as they come in to your captors$/)
+    // What blue was told of the same turn, in blue's own names, is what he read.
+    const theirs = (await app.api('GET', `/api/seat/${seats.blue}`)).body.dispatches[0]
+    assert.equal(theirs.turn, dispatch.turn)
+    assert.ok(theirs.lines.length > 0)
+    assert.equal(dispatch.lines.length - 1, theirs.lines.length, 'line for line, after the heading')
+    assert.ok(dispatch.lines.slice(1).some(l => /^Enemy /.test(l)), 'their units are "enemy" to him still')
+    // His far unit, which no enemy can see, is in neither.
+    const blueSees = new Set(sideView(game, 'blue').intel.filter(e => e.status === 'visible').map(e => e.id))
+    if (!blueSees.has(away.id)) {
+      const name = after.own.find(u => u.id === away.id)?.name
+      for (const line of dispatch.lines) assert.equal(new RegExp(`\\b${name}\\b`).test(line), false, `"${line}" tells of ${name}, whom his captors cannot see`)
+    }
 
     // Free again: his side's view is his once more.
     Object.assign(game.battle.commanders.red, { status: 'free', heldBy: null, unitId: game.battle.world.units.find(u => u.side === 'red' && u.strength > 0).id })

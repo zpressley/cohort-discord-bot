@@ -221,6 +221,7 @@ function wordEvent(event) {
     case 'lostThread': return `${event.headless ? 'With no officer,' : `${event.officer ?? 'The officer'} of`} ${event.unitId} ${event.headless ? 'have' : 'has'} LOST THE THREAD (${event.lost}) and will ${event.did}`
     case 'quarryGone': return `${event.unitId}: ${event.on} is beaten or gone; it advances on the enemy instead`
     case 'ownCommand': return `${event.headless ? 'With no officer,' : `${event.officer ?? 'The officer'} of`} ${event.unitId}, his Commander held, will ${event.did === 'rescue' ? `go for ${event.on} to free him` : event.did}`
+    case 'officerYielded': return `${event.officer} of ${event.unitId} YIELDS THE FIELD: the Commander is held and half the army is gone`
     case 'deserted': return `${event.men} men of ${event.unitId} DESERT; ${event.strength} left`
     case 'commanderRode': return `The Commander rides over from ${event.from} to ${event.unitId}`
     case 'grasp': return null

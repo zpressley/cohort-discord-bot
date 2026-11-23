@@ -41,7 +41,7 @@
 const { createBattleState, stepTurn } = require('../battle/battle')
 const { unitsOnSide, sides } = require('../world')
 const { samePosition } = require('../map/labels')
-const { createIntel, updateIntel, sideView: fogSideView } = require('./fogOfWar')
+const { createIntel, updateIntel, learnFromCaptivity, sideView: fogSideView } = require('./fogOfWar')
 const { evaluateVictory, objectiveController, objectiveArea, OBJECTIVE_HOLD_MINUTES } = require('./victory')
 const { bargainChips, commanderFate } = require('../command/commander')
 const { PARLEY } = require('../combat/tables')
@@ -336,6 +336,13 @@ function processPlayerTurn(game) {
       sightings.push(...updateIntel(game.intel[side], battle.world, side, battle.turn, battle.map, battle.hidden))
     }
 
+    // A Commander who got free this tick tells his side where every enemy
+    // unit stood as he left their camp (battle.js does the same for what
+    // his units make for): each is known as last seen there.
+    for (const freed of battle.log.forTurn(battle.turn).filter(e => e.type === 'commanderFreed')) {
+      learnFromCaptivity(game.intel[freed.side], battle.world, freed.side, battle.turn)
+    }
+
     const objectiveChanges = updateObjectiveHolds(game)
 
     ticks.push({ tick, battleTurn: battle.turn, record: turnRecord, sightings })
@@ -422,6 +429,7 @@ function victoryContext(game) {
     surrendered: game.surrendered,
     bargained: game.bargained,
     commanders: game.battle.commanders,
+    yielded: game.battle.yielded ?? null,
     allSides: Object.keys(game.startingStrength),
     startingStrength: game.startingStrength,
     objectiveHolds: game.objectiveHolds,

@@ -30,11 +30,11 @@ const { interpretText } = require('../interpreter/orders')
 const { lyingInWait } = require('../interpreter/resolve')
 const { assignOfficers } = require('../engine/command/roster')
 const { planTurn } = require('../opponent/planner')
-const { musterOfficers, settleBattle, commanderOfNone, ridesWith, createCompany } = require('../engine/command/company')
+const { musterOfficers, settleBattle, ridesWith, createCompany } = require('../engine/command/company')
 const { bargainChips, canRide, heldSight, sightFrom } = require('../engine/command/commander')
 const { captorAnswer } = require('../opponent/captor')
 const { createCommanderStore } = require('./commanders')
-const { digest, summarise, fromCaptivity } = require('../narrator/turnNarrator')
+const { digest, summarise } = require('../narrator/turnNarrator')
 const { gradeOf, DEATH_ODDS, loyaltyBand } = require('../engine/command/officers')
 const T = require('../engine/combat/tables')
 const { narrateTurn, report } = require('../narrator/turnNarrator')
@@ -1010,7 +1010,8 @@ function createBattleStore({ dir = null, ai = null, now = () => Date.now() } = {
       const after = settleBattle(commander.company, { id: entry.id, title: entry.title, result, seed: game.seed }, fates)
       // Held as the battle was lost, with no deal: free, a commander of
       // none (command/commander.js, heldWhenTheBattleEnds).
-      commanders.setCompany(commander, end?.fate === 'stripped' ? commanderOfNone(after, entry.title) : after)
+      // (A Commander held as a lost battle ended keeps what came through it.)
+      commanders.setCompany(commander, after)
       if (commander.battle === entry.id) commanders.setBattle(commander, null)
       // Killed: everything ends with him. (A held Commander is never killed.)
       if (end?.fate === 'killed') commanders.end(commander, { how: end.fate, at: entry.title })
@@ -1045,20 +1046,29 @@ function createBattleStore({ dir = null, ai = null, now = () => Date.now() } = {
       // Held for the turn (taken before it began), he hears only what the
       // unit holding him could see and hear (ruled 2026-11-23).
       const captivity = heldThrough(game, side, events)
+      // ... and reads the reports that come in to his captors (ruled
+      // 2026-11-23: "you get dispatches from the enemy side"): everything
+      // their side could know of the turn, their own units and all.
+      const theirs = captivity ? [...game.battle.world.units, ...game.battle.fledUnits].filter(u => u.side !== side) : []
+      const theirIds = new Set(theirs.map(u => u.id))
+      const theySaw = captivity ? Object.keys(entry.seats).filter(s => s !== side)
+        .flatMap(s => sideView(game, s).intel.filter(e => e.status === 'visible').map(e => e.id)) : []
       const turn = {
         map: game.battle.map, side, culture: own[0]?.culture ?? 'unknown',
-        ownIds,
-        seenEnemyIds: captivity ? new Set([...captivity.seen].filter(id => !ownIds.has(id))) : new Set(seen),
-        events: captivity ? fromCaptivity(events, { seen: captivity.seen, side }) : events,
+        // Held: the turn as his captors' side knows it, told in his own
+        // names for everyone ("enemy swords", "Spears").
+        ownIds: captivity ? theirIds : ownIds,
+        seenEnemyIds: captivity ? new Set(theySaw) : new Set(seen),
+        events,
         nameOf: name,
-        // Where each of the side's own units stands now, to say where it fought.
-        whereIs: (id) => own.find(u => u.id === id)?.position ?? null
+        // Where each unit of the side told of stands now, to say where it fought.
+        whereIs: (id) => (captivity ? theirs : own).find(u => u.id === id)?.position ?? null
       }
       // The plain account: what this side could know, most important first,
       // the fighting told unit by unit.
       const lines = report(turn).map(l => l.charAt(0).toUpperCase() + l.slice(1))
       if (captivity?.captor) {
-        lines.unshift(`You are held by ${name(captivity.captor.id)} ${where(captivity.captor.position)}: this is what could be seen and heard from where you sit`)
+        lines.unshift(`You are held by ${name(captivity.captor.id)} ${where(captivity.captor.position)}, and hear the reports as they come in to your captors`)
       }
       const told = await narrateTurn(ai, { ...turn, plain: lines.join('\n') })
       entry.dispatches[side].push({

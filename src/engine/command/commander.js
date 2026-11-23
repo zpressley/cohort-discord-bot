@@ -42,9 +42,12 @@
 //     is running his own unit at that point").
 //   - He sees only what can be seen from where he is held (heldSight).
 //   - If the battle ends, not won, while he is still held and no deal was
-//     struck, he goes free "a commander of none": his company is gone, he
-//     is not (heldWhenTheBattleEnds; ruled 2026-11-23). Held, he is never
-//     killed, and cannot yield by his own word: the field is his to offer.
+//     struck, honor lets him go, with whatever is left of his army at the
+//     end of the battle (heldWhenTheBattleEnds; ruled 2026-11-23: "They
+//     get whatever is left at the end of the battle"). If nothing is left
+//     he is "a commander of none". Held, he is never killed, and cannot
+//     yield by his own word: the field is his to offer, or his senior
+//     officer's to yield (battle.js, whoYields).
 //   - Held, a disloyal officer's men desert; a loyal one goes for the men
 //     who hold him (battle.js; LOYALTY in tables.js).
 //   - Free, he may ride with another of his units, one within a tile of the
@@ -156,16 +159,18 @@ function stepCommanders({ commanders, world, broken, fledUnits, events, mustered
  * A Commander still in the enemy's hands when his battle ends, not won,
  * with no deal struck. Ruled 2026-11-23: "Honor binds a commander from
  * killing his foe, but if he won't surrender the field to save his men
- * then he leaves a commander of none." He goes free, alive, with nothing:
- * every officer leaves his company and every unit's count toward one
- * starts again (web/battles.js, settle). He himself, his name, his faction
- * and his battles, goes on, and may muster again.
+ * then he leaves a commander of none." And, asked what he is left with:
+ * "They get whatever is left at the end of the battle." He goes free,
+ * alive, with what the battle left him: the officers and units that came
+ * through it, by the same fates as any battle. An army fought to nothing
+ * leaves him a commander of none; that is the fighting's doing, and no
+ * rule's.
  *
- * The one place this rule lives. (Before this ruling the enemy took his
- * best unit left, and with none left he was lost as if killed.)
+ * The one place this rule lives. (First the enemy took his best unit left;
+ * then, for a day, every officer left him whatever had come through.)
  */
 function heldWhenTheBattleEnds() {
-  return { fate: 'stripped', price: null, prices: [] }
+  return { fate: 'released', price: null, prices: [] }
 }
 
 /**
@@ -174,12 +179,13 @@ function heldWhenTheBattleEnds() {
  * @param {Object} o  { commanders, world, outcome, bargained }
  *   bargained  { side, units } when a deal bought his freedom mid-battle
  *              (units: the ids given; none when he gave the field alone)
- * @returns {{ fate: 'free'|'freed'|'ransomed'|'killed'|'stripped', price: string|null, prices: string[] }|null}
+ * @returns {{ fate: 'free'|'freed'|'ransomed'|'killed'|'released', price: string|null, prices: string[] }|null}
  *   freed     held, and his army won: the enemy had to give him up
  *   ransomed  his freedom had a price: the units in `prices` (`price`, the
  *             first; none when the field alone was the price)
- *   stripped  held as the battle ended, not won, with no deal: free, a
- *             commander of none (heldWhenTheBattleEnds)
+ *   released  held as the battle ended, not won, with no deal: honor lets
+ *             him go, with whatever of his army is left
+ *             (heldWhenTheBattleEnds)
  */
 function commanderFate({ commanders, world, outcome, bargained = null }, side) {
   const c = commanders?.[side]

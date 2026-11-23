@@ -1489,3 +1489,47 @@ the rules in `command/officers.js` (`loyaltyMove`, `loyaltyBand`) and
   loyalty; telling the Commander before a battle what an order will cost
   him with each officer.
 
+## Rulings, November 23, 2026 (the captive, again)
+
+Zach, on four questions the negotiation raised:
+
+1. Whether a deal might give units and let him fight on: "No incentive to
+   ever do that. Unless you are freed by your troops, they route the unit
+   holding you." Every deal yields the field, as built.
+2. What a held Commander knows: "The unit holding you and you get
+   dispatches from the enemy side. (Makes earning your freedom even worse
+   for the captor, you know where everyone they have is)."
+3. What he is left with when a battle is lost while he is held: "They get
+   whatever is left at the end of the battle. Let's make it so some
+   officers can surrender the field as well."
+4. Whether the computer, as a captive, should make offers: "Yea it can but
+   it does not really matter." Not built.
+
+### How these were built (Claude's choices, open to change)
+
+- **He reads his captors' dispatches.** While he is held, his dispatch for
+  a turn is the other side's: everything their side could know of it,
+  their own units and all, told in his own names for everyone ("enemy
+  swords", "Spears"). His map and Army tab are still only what the unit
+  holding him can see. Nothing of his own army reaches him that his
+  captors cannot see.
+- **Freed, he brings it out.** When the unit holding him breaks and he gets
+  away, his side knows where every enemy unit stood as he left: each one
+  it cannot see is marked as last seen there, and his units told to
+  advance will go for them.
+- **He keeps what the battle left.** A Commander held when the battle is
+  lost with no deal is let go, alive, and his officers and units fare as
+  in any battle. For a day (the build before this ruling) every officer
+  left him whatever had come through; that is gone. An army fought to
+  nothing still leaves him "a commander of none".
+- **His senior officer may yield the field.** While the Commander is held,
+  as each player turn opens: if the most experienced officer on the field
+  (of a unit not broken) is one who looks to his men (he values survival;
+  or, of an officer whose values are not known, he is cautious by nature),
+  and half the army's men are dead, fled or broken
+  (`tables.LOYALTY.YIELD_LOSSES`), he yields. The battle is lost at once
+  and what is left is saved. One who lives for glory fights on. A loyal
+  officer does not yield: he is going for the men who hold his Commander.
+  So whom a Commander has made his senior officer decides how a captivity
+  ends.
+

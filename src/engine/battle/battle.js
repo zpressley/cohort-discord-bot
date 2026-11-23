@@ -39,7 +39,7 @@ const {
 } = require('../movement')
 const { createEventLog } = require('./events')
 const { normalizeOrder, planUnit, nextStep, isSeeking, NEAR_TILES } = require('./orders')
-const { grasp, losingTheThread, ownCommand, loyaltyOf } = require('../command/officers')
+const { grasp, losingTheThread, ownCommand, wouldYield, loyaltyOf } = require('../command/officers')
 const { createCommanders, stepCommanders, canRide } = require('../command/commander')
 const { canSee, visionRange } = require('../map/sight')
 const { coverFor } = require('./hiding')
@@ -354,6 +354,18 @@ function stepTurn(state, sideOrders = {}, { sameTurn = false } = {}) {
       freshThisTurn.add(unit.id)
     }
   }
+  // The senior officer on the field (the most experienced, of a unit not
+  // broken) may yield it himself while his Commander is held, if he is one
+  // who would (command/officers.js, wouldYield) and half the army's men are
+  // dead, fled or broken. The battle is over; honor frees the Commander.
+  const whoYields = (side, effective) => {
+    const senior = effective.filter(u => u.officer?.name && !u.officer.headless)
+      .sort((a, b) => (b.officer.experience ?? 0) - (a.officer.experience ?? 0) || a.id.localeCompare(b.id))[0]
+    if (!senior || !wouldYield(senior.officer)) return null
+    const mustered = spec.units.filter(u => u.side === side).reduce((sum, u) => sum + u.strength, 0)
+    const inHand = effective.reduce((sum, u) => sum + u.strength, 0)
+    return mustered > 0 && 1 - inHand / mustered >= T.LOYALTY.YIELD_LOSSES ? senior : null
+  }
   // A disloyal officer's men slip away, every ten minutes their Commander
   // is held (ruled 2026-11-23).
   const desert = (side) => {
@@ -385,6 +397,13 @@ function stepTurn(state, sideOrders = {}, { sameTurn = false } = {}) {
     // is free: from then on his units keep what they were last doing until
     // he gives them new orders.
     if (held) desert(side)
+    if (held && !sameTurn && !state.yielded) {
+      const yielder = whoYields(side, effective)
+      if (yielder) {
+        state.yielded = side
+        log.emit('officerYielded', turn, { side, unitId: yielder.id, officer: yielder.officer.name })
+      }
+    }
     if (held && !sameTurn) runOwnUnits(side, effective)
     else if (!held && state.ownCommand) for (const u of effective) state.ownCommand.delete(u.id)
 
@@ -917,10 +936,20 @@ function stepTurn(state, sideOrders = {}, { sameTurn = false } = {}) {
       events: log.forTurn(turn), mustered: state.mustered, random: state.commanderRandom
     })
     for (const e of fell) log.emit(e.type, turn, e.fields)
+    // A Commander who gets free brings out what he heard in the enemy's
+    // camp, where every report came in (ruled 2026-11-23: "you know where
+    // everyone they have is"): his side now knows where each enemy unit
+    // stood as he left.
+    for (const e of fell.filter(e => e.type === 'commanderFreed')) {
+      const side = e.fields.side
+      if (!state.lastSeen.has(side)) state.lastSeen.set(side, new Map())
+      for (const enemy of livingUnits(world).filter(u => u.side !== side)) state.lastSeen.get(side).set(enemy.id, { ...enemy.position })
+    }
   }
 
   // ── Victory ─────────────────────────────────────
-  const outcome = commandersOutcome(state.commanders, [...new Set(spec.units.map(u => u.side))]) ??
+  const allSides = [...new Set(spec.units.map(u => u.side))]
+  const outcome = commandersOutcome(state.commanders, allSides) ?? yieldedOutcome(state.yielded, allSides) ??
     checkBattleOutcome(world, broken, state.isShaken)
   if (outcome.decided) {
     state.outcome = outcome
@@ -1190,6 +1219,13 @@ function commandersOutcome(commanders, allSides) {
   return { decided: true, winner: others[0], reason: 'enemy commander killed' }
 }
 
+// A side whose senior officer yielded the field, his Commander being held.
+function yieldedOutcome(yielded, allSides) {
+  if (!yielded) return null
+  const winner = allSides.find(side => side !== yielded) ?? 'draw'
+  return { decided: true, winner, reason: 'enemy officers yielded' }
+}
+
 function checkBattleOutcome(world, broken, isShaken = () => false) {
   const formed = (side) => unitsOnSide(world, side).filter(u => u.strength > 0 && !broken.has(u.id))
   const steady = (side) => formed(side).filter(u => !isShaken(u))
@@ -1240,6 +1276,7 @@ module.exports = {
   runBattle,
   checkBattleOutcome,
   commandersOutcome,
+  yieldedOutcome,
   tileAwayFrom,
   edgeTarget,
   isOnEdge,

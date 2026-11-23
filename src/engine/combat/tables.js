@@ -672,6 +672,11 @@ const LOYALTY = {
   // speaks up more, and holds to his orders when he loses the thread. A
   // disloyal one's men start a battle in worse heart, and he is likelier to
   // lose the thread of an order and go by his nature.
+  // His senior officer may yield the field while he is held (ruled
+  // 2026-11-23: "Let's make it so some officers can surrender the field as
+  // well"): one who looks to his men, once this share of the army's men
+  // are dead, fled or broken.
+  YIELD_LOSSES: 0.5,
   LEARNS: 1.25,          // battles of experience a loyal officer gains from one
   DISLOYAL_MORALE: -10,  // on his unit's morale as a battle opens
   DISLOYAL_GRASP: 0.6    // on his chance to keep each clause of an order
