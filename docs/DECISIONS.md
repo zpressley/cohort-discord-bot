@@ -1439,3 +1439,53 @@ its own; red sends everyone in every turn, blue is the computer.
 5. Should deserters count as fallen, as fled, or as a count of their own?
 6. A commander of none musters with no veteran at all: is that the intent,
    or should he get the new Commander's one veteran back?
+
+### How loyalty was built (Claude's choices, open to change)
+
+Zach's ruling 9 of November 23 (quoted above: "Earned through glory or
+survival. The theme of the game..."). The numbers are in `tables.LOYALTY`;
+the rules in `command/officers.js` (`loyaltyMove`, `loyaltyBand`) and
+`command/company.js`.
+
+- **Each officer holds one thing dear: glory or survival.** It is his for
+  life, drawn when he comes forward, and shown on his card ("lives for
+  glory", "looks to his men").
+- **Loyalty runs from 0 to 100 and starts at 50.** At 70 and over he is
+  loyal; at 30 and under, disaffected; between, neither, and nothing is
+  said.
+- **Each battle he fights moves it**, by how the battle ended and what it
+  was for his own unit:
+
+  | He values | Victory | Draw | Defeat |
+  |---|---|---|---|
+  | Glory, and his unit fought | +6 | +2 | -3 |
+  | Glory, and it never struck a blow | -4 | -3 | -6 |
+  | Survival, and it lost 15% or fewer | +6 | +1 | -3 |
+  | Survival, and it lost between | +2 | -2 | -5 |
+  | Survival, and it lost 35% or more | -5 | -6 | -8 |
+
+  So a bloody victory pleases the one and costs the other; a victory his
+  men only watched does the opposite; a defeat costs both. An officer who
+  sat the battle out is not moved. His record says, for each battle,
+  whether he thought the better or the worse of his Commander for it.
+- **A loyal officer:**
+  - learns faster: a battle counts as 1.25 toward his next level;
+  - holds to his orders: when he loses the thread he carries on with what
+    he remembers, whatever his nature;
+  - speaks up: he gives counsel even while green;
+  - and, when his Commander is taken, goes for the men who hold him (built
+    with the negotiation).
+- **A disaffected officer:**
+  - his men come to a battle in worse heart (10 off their morale as it
+    opens);
+  - he keeps less of an order (each clause at 0.6 of his usual chance), and
+    so goes by his nature more often;
+  - and his men desert while his Commander is held.
+- Loyalty does not make a loyal officer cleverer or his men braver: the
+  gain is in learning, steadiness and counsel.
+- From 50 it takes four good battles to win an officer and four bad ones
+  to lose him. That pace is a guess.
+- Not built: an officer leaving, or refusing an order, for want of
+  loyalty; telling the Commander before a battle what an order will cost
+  him with each officer.
+

@@ -899,3 +899,22 @@ test('a battle has an end of day: after its last turn the side that lost the sma
   } finally { await app.close() }
 })
 
+test('an officer holds glory or survival dear, and each battle moves his loyalty: his card and his record say so', async () => {
+  const app = await start()
+  try {
+    const commander = (await app.api('POST', '/api/commanders')).body.token
+    const seat = (await app.api('POST', '/api/battles', { opponent: 'standing', side: 'red', seed: 3, commander })).body.seats.red
+    const before = (await app.api('GET', `/api/commander/${commander}`)).body.officers[0]
+    assert.ok(['glory', 'survival'].includes(before.values))
+    assert.equal(before.loyalty, null, 'neither loyal nor disaffected yet')
+    assert.equal((await app.api('GET', `/api/seat/${seat}`)).body.own[0].officer.loyalty, null)
+    const ended = await fight(app, seat)
+    const fate = ended.verdict.officers.find(o => o.unit === 'Spears').fate
+    const after = (await app.api('GET', `/api/commander/${commander}`)).body.officers.find(o => o.leads === 'spears')
+    if (after && fate !== 'killed' && fate !== 'captured') {
+      assert.equal(typeof after.record[0].loyalty, 'number', 'what this battle did to his loyalty')
+      assert.notEqual(after.record[0].loyalty, 0)
+    }
+  } finally { await app.close() }
+})
+

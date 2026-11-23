@@ -130,4 +130,8 @@ const KIT = {
 // the horse"): what he is read back, and what the Army tab says.
 const RIDE_WITH = { say: 'ride with', doing: 'riding with', did: 'rode over to' }
 
-module.exports = { orderWords, moraleWords, ORDER, OWN_EDGE, HOLD_THERE, KIT, RIDE_WITH }
+// An officer's loyalty to his Commander, and what he holds dear.
+const LOYALTY_WORDS = { loyal: 'loyal', disloyal: 'disaffected' }
+const VALUES_WORDS = { glory: 'lives for glory', survival: 'looks to his men' }
+
+module.exports = { orderWords, moraleWords, ORDER, OWN_EDGE, HOLD_THERE, KIT, RIDE_WITH, LOYALTY_WORDS, VALUES_WORDS }

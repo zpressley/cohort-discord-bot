@@ -148,3 +148,25 @@ test('men who are shot at know where it came from, though they cannot see the ar
   stepTurn(state, { blue: [{ unitRef: 'theirs', action: 'advance' }] })
   assert.deepEqual(of(state, 'contact').map(e => [e.aId, e.bId]), [['archers', 'theirs']], 'up to the trees, where they find them')
 })
+
+// ── Loyalty in the field ───────────────────────────────
+
+test('the men of a disloyal officer come to the fight in worse heart; no one else\'s are changed', () => {
+  const T = require('../../combat/tables')
+  const fightWith = (officer) => {
+    const state = battle([
+      unit({ id: 'ours', position: { x: 12, y: 12 }, ...(officer ? { officer } : {}) }),
+      unit({ id: 'theirs', side: 'blue', position: { x: 13, y: 12 } })
+    ])
+    stepTurn(state, { red: [{ unitRef: 'ours', action: 'advance' }] })
+    return { morale: state.resolver.getState('ours').morale, log: JSON.stringify(state.log.all().filter(e => e.type === 'exchange').map(e => [e.a.killed, e.b.killed])) }
+  }
+  const officer = (loyalty) => ({ name: 'Marcus', experience: 9, personality: 'steady', ...(loyalty === undefined ? {} : { loyalty }) })
+  const none = fightWith(null)
+  assert.deepEqual(fightWith(officer()), none, 'an officer with no loyalty yet')
+  assert.deepEqual(fightWith(officer(T.LOYALTY.NEUTRAL)), none)
+  assert.deepEqual(fightWith(officer(T.LOYALTY.LOYAL)), none, 'loyalty does not make men braver than they are')
+  const sour = fightWith(officer(T.LOYALTY.DISLOYAL))
+  assert.equal(sour.morale, none.morale + T.LOYALTY.DISLOYAL_MORALE)
+  assert.equal(sour.log, none.log, 'the blows fall the same')
+})
