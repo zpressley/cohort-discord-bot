@@ -15,7 +15,9 @@
 //   GET  /api/factions                      whose armies can fight it
 //   POST /api/battles                       muster: { scenario, map, opponent, side,
 //                                           timeLimitMinutes, objectives, commander,
-//                                           faction, enemyFaction }
+//                                           faction, enemyFaction, marching }
+//                                           (marching: the names of his units
+//                                           that march; else as last time)
 //                                           -> { id, seats: { side: token } }
 //   GET  /api/seats?tokens=a,b              one line per battle, for "your battles"
 //   GET  /api/seat/:token                   the Command Tent: this side's view
@@ -37,12 +39,21 @@
 //   GET  /api/commander/:token              his company: officers, their
 //                                           records, those lost, his army,
 //                                           and the battle his army is in
-//   POST /api/commander/:token/army { units } | { usual: true }
+//   POST /api/commander/:token/army { units, captured } | { usual: true }
 //                                           he buys his standard army (checked
 //                                           through the builder), or takes his
 //                                           faction's usual one; not while his
 //                                           army is in the field
-//   POST /api/factions/:id/appraise { units, draft, at }
+//   POST /api/commander/:token/officer { officer, to }
+//                                           he moves an officer (his id) to
+//                                           another of his units, swapping
+//                                           with the one there; not while his
+//                                           army is in the field
+//   POST /api/commander/:token/name { unit, name }
+//                                           he names a unit that has an
+//                                           officer; refused with the reason
+//                                           if the name will not do
+//   POST /api/factions/:id/appraise { units, draft, at, reserved }
 //                                           an army being bought, priced: each
 //                                           unit, the budget left, and every
 //                                           choice for the draft unit with the
@@ -114,6 +125,9 @@ function serveFile(res, file) {
   send(res, 200, fs.readFileSync(file), TYPES[path.extname(file)] ?? 'application/octet-stream')
 }
 
+// A list of unit names from the browser, or null if none was sent.
+const names = (list) => (Array.isArray(list) ? list.slice(0, 60).map(n => String(n).slice(0, 40)) : null)
+
 function createServer(store) {
   return http.createServer(async (req, res) => {
     try {
@@ -140,7 +154,8 @@ function createServer(store) {
             turnLimit: Number.isInteger(body.turnLimit) ? body.turnLimit : undefined,
             commander: typeof body.commander === 'string' ? body.commander : null,
             faction: typeof body.faction === 'string' && body.faction ? body.faction : null,
-            enemyFaction: typeof body.enemyFaction === 'string' && body.enemyFaction ? body.enemyFaction : null
+            enemyFaction: typeof body.enemyFaction === 'string' && body.enemyFaction ? body.enemyFaction : null,
+            marching: names(body.marching)
           }))
         }
         // A Commander and his company of officers, kept from battle to battle.
@@ -151,12 +166,23 @@ function createServer(store) {
         // Buying an army: every choice priced, and why any is refused.
         if (req.method === 'POST' && parts[1] === 'factions' && parts[2] && parts[3] === 'appraise' && parts.length === 4) {
           const body = await readBody(req)
-          const seen = store.appraise(parts[2], { units: body.units, draft: body.draft ?? null, at: body.at ?? null })
+          const seen = store.appraise(parts[2], { units: body.units, draft: body.draft ?? null, at: body.at ?? null, reserved: names(body.reserved) ?? [] })
           return seen ? send(res, 200, seen) : send(res, 404, { error: 'no such faction' })
         }
         if (req.method === 'POST' && parts[1] === 'commander' && parts[2] && parts[3] === 'army' && parts.length === 4) {
           const body = await readBody(req)
-          const company = store.setArmy(parts[2], { usual: body.usual === true, units: body.units })
+          const company = store.setArmy(parts[2], { usual: body.usual === true, units: body.units, captured: names(body.captured) })
+          return company ? send(res, 200, company) : send(res, 404, { error: 'no such commander' })
+        }
+        // Moving an officer to another of his units, and naming a unit.
+        if (req.method === 'POST' && parts[1] === 'commander' && parts[2] && parts[3] === 'officer' && parts.length === 4) {
+          const body = await readBody(req)
+          const company = store.transfer(parts[2], { officer: typeof body.officer === 'string' ? body.officer : null, to: typeof body.to === 'string' ? body.to : null })
+          return company ? send(res, 200, company) : send(res, 404, { error: 'no such commander' })
+        }
+        if (req.method === 'POST' && parts[1] === 'commander' && parts[2] && parts[3] === 'name' && parts.length === 4) {
+          const body = await readBody(req)
+          const company = store.nameUnit(parts[2], { unit: typeof body.unit === 'string' ? body.unit : null, name: typeof body.name === 'string' ? body.name.slice(0, 80) : '' })
           return company ? send(res, 200, company) : send(res, 404, { error: 'no such commander' })
         }
         if (req.method === 'GET' && parts[1] === 'commander' && parts[2] && parts.length === 3) {
@@ -179,7 +205,7 @@ function createServer(store) {
           if (req.method === 'POST' && parts[3] === 'join') {
             const body = await readBody(req)
             return send(res, 200, store.join(token, typeof body.commander === 'string' ? body.commander : null,
-              typeof body.faction === 'string' && body.faction ? body.faction : null))
+              typeof body.faction === 'string' && body.faction ? body.faction : null, names(body.marching)))
           }
           if (req.method === 'POST' && parts[3] === 'read') {
             const body = await readBody(req)

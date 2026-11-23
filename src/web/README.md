@@ -58,3 +58,31 @@ them); against a friend you do not: his Commander brings his own army.
 armies.js      buying an army: each choice priced and judged, the
                builder's reasons in plain words, the names units are given
 ```
+
+## The roster
+
+Everything a Commander owns is his roster (`roster.js`): the units he
+bought (or his faction's usual army), the units that came to him some other
+way (only capture so far), and his elite. At the muster, "Who marches"
+(folded under the army line, showing the supply spent and left) lists them
+all; a tap leaves a unit at home or brings it. It starts as last time (the
+first time, everything bought), so a player who changes nothing still musters
+in one tap. What marches may not cost more than his budget; the elite always
+marches, free. A unit at home keeps its officer and all it has, and takes
+no part.
+
+A unit given in a deal between two players' Commanders goes to the
+captor's roster, with its kit, veterancy, training and officer; it costs its
+kit's price to march. The army screen shows it under "Taken from the enemy",
+with "Let them go". On Your officers, "Move him to other men" moves an
+officer to another unit, or in place of the officer there
+(`POST /api/commander/:token/officer`). On the army screen, a unit with an
+officer has "Name them" (`POST /api/commander/:token/name`); the server
+judges the name and says why one will not do. Names are not yet moderated:
+they reach other players' screens, always through `esc()`.
+
+```
+roster.js      the roster: who marches and what it costs, units taken from
+               the enemy (AVENUES: where other ways of gaining a unit go),
+               the rules for a unit's name
+```

@@ -26,6 +26,9 @@
 //   - The computer's side, which has no Commander on the field, sends its
 //     orders the same way from its best unit, when they come marked so
 //     (byCommandPost). What it knows is not delayed.
+//   - A battle whose spec says `messengers: false` has none of it: the web
+//     app marks so the battles saved before riders, so that they play back
+//     as they were played.
 //
 // One search over the whole field (Dijkstra, a binary heap, ties broken by
 // tile index so it is the same every time) gives every unit's delay at
@@ -157,7 +160,7 @@ function commandPost(state, side) {
  * field does; so does a side whose orders came marked as from a command
  * post (the computer's, in the app: byCommandPost).
  */
-const byRider = (state, side) => Boolean(state.commanders?.[side]) || Boolean(state.posts?.has(side))
+const byRider = (state, side) => state.spec?.messengers !== false && (Boolean(state.commanders?.[side]) || Boolean(state.posts?.has(side)))
 
 /**
  * Orders marked to go out by rider from the side's best unit, as the
@@ -176,6 +179,8 @@ const byCommandPost = (orders) => (Array.isArray(orders) ? orders.map(o => ({ ..
  *   side sends no orders at all (its Commander held, or none on the field)
  */
 function riders(state, side) {
+  // (A battle saved before riders, played back: spec.messengers false.)
+  if (state.spec?.messengers === false) return null
   const post = commandPost(state, side)
   if (!post) return null
   const costs = riderCosts({ map: state.map, world: state.world, broken: state.broken, hidden: state.hidden, side, from: post.position })

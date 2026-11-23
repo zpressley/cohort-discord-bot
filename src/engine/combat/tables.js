@@ -679,7 +679,12 @@ const LOYALTY = {
   YIELD_LOSSES: 0.5,
   LEARNS: 1.25,          // battles of experience a loyal officer gains from one
   DISLOYAL_MORALE: -10,  // on his unit's morale as a battle opens
-  DISLOYAL_GRASP: 0.6    // on his chance to keep each clause of an order
+  DISLOYAL_GRASP: 0.6,   // on his chance to keep each clause of an order
+  // An officer given to his captor in a deal for his own Commander's
+  // freedom (web/battles.js, settle): he has every reason to hate his new
+  // Commander. Under DISLOYAL, so it bites from his first battle for him.
+  // Claude's number, a guess.
+  CAPTURED: 15
 }
 
 // Riding with another unit (ruled 2026-11-23: "a commander needed to be

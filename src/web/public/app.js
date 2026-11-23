@@ -221,17 +221,31 @@ const VALUES_WORDS = { glory: 'lives for glory', survival: 'looks to his men' }
 const GRADE_WORDS = { green: 'green', seasoned: 'seasoned', veteran: 'a veteran', legendary: 'a legend' }
 const RESULT_WORDS = { victory: 'a victory', defeat: 'a defeat', draw: 'a draw' }
 const FATE_WORDS = { killed: 'killed', captured: 'taken by the enemy', 'given up': 'given to the enemy for the Commander\'s freedom', left: 'left you when the battle left you a commander of none' }
-async function officers() {
+async function officers(note = null) {
   const commanders = await loadCommanders()
   const battleLine = (r) => `<li><strong>${esc(r.title)}</strong>, ${esc(RESULT_WORDS[r.result] ?? r.result)}${
-    r.fate === 'wounded' ? `; wounded${r.how ? ` (${esc(r.how)})` : ''}` : ''}.${r.deeds ? ` His men ${esc(r.deeds)}.` : ''}${r.named ? ' Here he came forward to lead them.' : ''}${r.loyalty > 0 ? ' He thought the better of you for it.' : r.loyalty < 0 ? ' He thought the worse of you for it.' : ''}</li>`
-  const card = (o) => `<div class="officer">
+    r.fate === 'wounded' ? `; wounded${r.how ? ` (${esc(r.how)})` : ''}` : ''}${r.fate === 'given up' ? '; given up, with his men, in a deal for his Commander\'s freedom' : ''}.${r.deeds ? ` His men ${esc(r.deeds)}.` : ''}${r.named ? ' Here he came forward to lead them.' : ''}${r.loyalty > 0 ? ' He thought the better of you for it.' : r.loyalty < 0 ? ' He thought the worse of you for it.' : ''}</li>`
+  // Moving an officer to other men (between battles only): to a unit with
+  // none, or in place of the officer there, who takes his.
+  const moves = (o, c) => {
+    if (c.ended || c.battle || !c.roster) return ''
+    const others = c.roster.units.filter(u => u.name !== o.leads)
+    if (!others.length) return ''
+    return `<button class="btn btn-quiet" type="button" data-move="${esc(o.id)}" aria-expanded="false">Move him to other men</button>
+      <div class="move-list" id="move-${esc(o.id)}" hidden>
+        <span>His experience and record go with him; each unit keeps its own veterancy.</span>
+        ${others.map(u => `<button class="btn btn-wide" type="button" data-commander="${esc(c.token)}" data-officer="${esc(o.id)}" data-to="${esc(u.name)}">To the ${esc(u.name)}${u.officer ? `, in place of ${esc(u.officer.name)}` : ', who have no officer'}</button>`).join('')}
+      </div>`
+  }
+  const card = (o, c) => `<div class="officer" data-officer-card="${esc(o.id)}">
       <strong>${esc(o.name)}</strong>
       <span>Leads the ${esc(o.leads)} · ${esc(GRADE_WORDS[o.grade] ?? o.grade)}, ${esc(o.personality)}${o.status === 'wounded' ? ' · wounded, back after the next battle' : ''}</span>
       ${o.values ? `<span>He ${esc(VALUES_WORDS[o.values] ?? o.values)}${o.loyalty ? `, and is ${esc(LOYALTY_WORDS[o.loyalty])}` : ''}.</span>` : ''}
+      ${o.taken ? `<span class="taken-note">Given to you by Commander ${esc(o.taken.commander)} at ${esc(o.taken.battle)}, in a deal for his own freedom. He has every reason to hate you.</span>` : ''}
       ${o.record.length
-        ? `<details><summary>${o.record.length} battle${o.record.length === 1 ? '' : 's'} with you</summary><ul>${o.record.map(battleLine).join('')}</ul></details>`
+        ? `<details><summary>${o.record.length} battle${o.record.length === 1 ? '' : 's'} with ${o.taken ? 'his Commanders' : 'you'}</summary><ul>${o.record.map(battleLine).join('')}</ul></details>`
         : '<span>Yet to fight under you.</span>'}
+      ${moves(o, c)}
     </div>`
   const fallen = (f) => `<p class="note">${esc(f.name)}, who led the ${esc(f.led)}: ${esc(FATE_WORDS[f.fate] ?? f.fate)} at ${esc(f.at)}, after ${f.battles} battle${f.battles === 1 ? '' : 's'} with you.</p>`
   const company = (c) => `
@@ -242,7 +256,7 @@ async function officers() {
         ? `His army is in the field${c.battle.seat ? `: <a href="/b/${esc(c.battle.seat)}" data-link>${esc(c.battle.title)}</a>` : ` (${esc(c.battle.title)})`}.`
         : 'His army is ready to muster.'}</p>
       ${!c.ended && c.faction ? `<a class="btn btn-wide" href="/army/${esc(c.token)}" data-link>${c.battle ? 'His army' : c.army?.own ? 'Change his army' : 'Buy his own army'}</a>` : ''}
-      ${c.officers.map(card).join('')}
+      ${c.officers.map(o => card(o, c)).join('')}
       ${(c.units ?? []).filter(u => u.trained > 0).map(u => `<p class="note">The ${esc(u.kind)} have been trained up ${u.trained} level${u.trained === 1 ? '' : 's'} by an officer of thirty battles.</p>`).join('')}
       ${(c.unled ?? []).map(u => `<p class="note">The ${esc(u.kind)} have no officer${u.battles >= c.earnedAt ? ': one of their own will step up after their next battle' : ` yet: ${u.battles} battle${u.battles === 1 ? '' : 's'} come through. One comes forward after ${c.earnedAt}`}.</p>`).join('')}
       ${c.fallen.length ? `<p class="label-caps">Lost</p>${c.fallen.map(fallen).join('')}` : ''}`
@@ -252,9 +266,31 @@ async function officers() {
       ${commanders.length === 0
         ? '<p class="note">No officers yet. A Commander starts with one, a veteran with his best unit. The rest are earned: a unit that comes through enough battles finds an officer in its own ranks.</p>'
         : '<p class="note">A unit with no officer keeps only a plain order. One that comes through enough battles finds an officer in its own ranks; a veteran follows a longer order. An army fights one battle at a time.</p>'}
+      ${note ? `<p class="note" role="status" id="officers-note">${esc(note)}</p>` : ''}
       ${commanders.map(company).join('')}
       <a class="btn btn-main btn-wide" href="/muster" data-link>Muster a new battle</a>
     </main>`
+  for (const b of app.querySelectorAll('[data-move]')) {
+    b.addEventListener('click', () => {
+      const list = document.getElementById(`move-${b.dataset.move}`)
+      list.hidden = !list.hidden
+      b.setAttribute('aria-expanded', String(!list.hidden))
+    })
+  }
+  for (const b of app.querySelectorAll('[data-to]')) {
+    b.addEventListener('click', async () => {
+      b.disabled = true
+      try {
+        const after = await api('POST', `/api/commander/${b.dataset.commander}/officer`, { officer: b.dataset.officer, to: b.dataset.to })
+        const him = after.officers.find(o => o.id === b.dataset.officer)
+        await officers(`${him.name} now leads the ${him.leads}.`)
+        document.getElementById(`move-${b.dataset.officer}`)?.closest('.officer')?.scrollIntoView({ block: 'center' })
+      } catch (error) {
+        b.disabled = false
+        b.insertAdjacentHTML('afterend', `<p class="error">${esc(error.message)}</p>`)
+      }
+    })
+  }
 }
 
 // ── Muster ─────────────────────────────────────────────
@@ -313,6 +349,34 @@ async function muster() {
   const pickCommander = document.querySelector('select[name="commander"]')
   const pickFaction = document.querySelector('select[name="faction"]')
   const chosenNow = () => commanders.find(c => c.token === pickCommander?.value) ?? null
+  // Who marches, for each Commander: what he chose last time, changed here
+  // by a tap on a unit. The elite always marches; the supply spent and left
+  // is in view; over the budget, the muster waits until he leaves one home.
+  const marching = new Map()
+  const cap = (s) => String(s).charAt(0).toUpperCase() + String(s).slice(1)
+  const spentOn = (c) => c.roster.units.filter(u => u.how !== 'elite' && marching.get(c.token).includes(u.name)).reduce((n, u) => n + (u.cost ?? 0), 0)
+  function whoMarches(c) {
+    const r = c.roster
+    const names = marching.get(c.token)
+    const spent = spentOn(c)
+    const over = spent > r.budget
+    const going = r.units.filter(u => u.how !== 'elite' && names.includes(u.name)).map(u => cap(u.name))
+    const elite = r.units.find(u => u.how === 'elite')
+    const row = (u) => {
+      const always = u.how === 'elite'
+      const on = always || names.includes(u.name)
+      return `<button class="opt march" type="button" ${always ? 'aria-disabled="true" data-always' : `data-march="${esc(u.name)}"`} aria-pressed="${on}">
+        <span class="march-name"><strong>${esc(cap(u.name))}</strong>${u.came ? ` <em>${esc(u.came)}</em>` : ''}<br><span class="march-officer">${esc(u.officer ? `Officer: ${u.officer.name}` : 'No officer')}${always ? ' · always marches' : ''}</span></span>
+        <span>${always ? 'free' : `${u.cost ?? '–'} pts`}<br>${on ? 'marches' : 'at home'}</span>
+      </button>`
+    }
+    return `<details class="who-marches" id="who-marches"${over ? ' open' : ''}>
+        <summary><span class="note">${esc(going.join(', '))}${going.length ? ', and ' : ''}the ${esc(elite.name)}.</span>
+          <span class="march-sum${over ? ' over' : ''}" id="march-sum">${spent} of ${r.budget} supply points${over ? `: ${spent - r.budget} over` : `, ${r.budget - spent} left`} · Who marches</span></summary>
+        <p class="note">Tap a unit to leave it at home or bring it. A unit at home keeps its officer and all it has learned, and takes no part.</p>
+        <div class="march-list">${r.units.map(row).join('')}</div>
+      </details>`
+  }
   function showFaction() {
     const chosen = chosenNow()
     const own = chosen?.faction ? factions.find(f => f.id === chosen.faction) : null
@@ -321,17 +385,27 @@ async function muster() {
     document.getElementById('faction-note').textContent = f
       ? `${own ? `As ${chosen.name}, you fight for ${f.title}. ` : ''}${f.fights} Your elite unit, the ${f.elite.charAt(0).toUpperCase() + f.elite.slice(1)}, comes free: your veteran officer leads them, and you ride with them.`
       : ''
-    // His army: the one he bought, or his faction's usual one.
+    // His army: the one he bought, or his faction's usual one; and of all
+    // he owns, who marches (as last time, unless he changes it here).
     const army = chosen?.faction ? chosen.army : null
-    const names = (army?.units ?? []).map(u => u.name.charAt(0).toUpperCase() + u.name.slice(1)).join(', ')
+    if (chosen?.roster && !marching.has(chosen.token)) marching.set(chosen.token, [...chosen.roster.marching])
     document.getElementById('army-line').innerHTML = chosen?.faction
       ? `<strong>${army.own ? 'Your own army' : `The usual army of ${esc(f.title)}`}</strong>
-         <span class="note">${esc(names)}${names ? ', and ' : ''}the ${esc(f.elite)}.</span>
+         ${chosen.roster ? whoMarches(chosen) : ''}
          <a class="btn btn-wide" href="/army/${esc(chosen.token)}?then=/muster" data-link id="to-army">${army.own ? 'Change your army' : 'Buy your own army'}</a>`
       : `<strong>The usual army of ${esc(f?.title ?? '')}</strong>
          <span class="note">Or buy your own: make your Commander first, and choose his units within his budget.</span>
          <button class="btn btn-wide" type="button" id="make-and-buy">Make your Commander, and buy his army</button>`
     document.getElementById('to-army')?.addEventListener('click', () => rememberCommander(chosen.token))
+    for (const b of document.querySelectorAll('[data-march]')) {
+      b.addEventListener('click', () => {
+        const names = marching.get(chosen.token)
+        const name = b.dataset.march
+        marching.set(chosen.token, names.includes(name) ? names.filter(n => n !== name) : [...names, name])
+        showFaction()
+        document.getElementById('who-marches').open = true
+      })
+    }
     document.getElementById('make-and-buy')?.addEventListener('click', async (event) => {
       event.target.disabled = true
       try {
@@ -370,7 +444,9 @@ async function muster() {
       rememberCommander(commander)
       const result = await api('POST', '/api/battles', {
         map: form.get('map'), opponent, side, commander, faction,
-        enemyFaction: opponent === 'friend' ? null : form.get('enemyFaction') || null
+        enemyFaction: opponent === 'friend' ? null : form.get('enemyFaction') || null,
+        // Who marches, as chosen here (the server judges the budget).
+        ...(chosen?.roster && marching.has(chosen.token) ? { marching: marching.get(chosen.token) } : {})
       })
       const mine = result.seats[side]
       saveSeat({ token: mine, title: result.title, side })
@@ -426,15 +502,70 @@ async function armyScreen(token) {
     note: null,
     error: null,
     changed: false,
-    saving: false
+    saving: false,
+    // The units that came to him otherwise (taken from the enemy), kept
+    // unless he lets them go; and the unit he is naming, if any.
+    captured: (commander.roster?.units ?? []).filter(u => u.came).map(u => u.name),
+    naming: null,
+    nameError: null
   }
   const cap = (s) => String(s).charAt(0).toUpperCase() + String(s).slice(1)
   const inField = Boolean(commander.battle)
   const back = then ? `<a href="${esc(then)}" data-link>${then === '/muster' ? 'Muster' : 'The battle'}</a>` : '<a href="/officers" data-link>Your officers</a>'
+  const rosterUnit = (name) => (commander.roster?.units ?? []).find(u => u.name === name)
+  const eliteName = () => (commander.roster?.units ?? []).find(u => u.how === 'elite')?.name
 
   async function appraise() {
-    state.seen = await api('POST', `/api/factions/${commander.faction}/appraise`, { units: state.units, draft: state.draft, at: state.at })
+    const reserved = [...state.captured, eliteName()].filter(Boolean)
+    state.seen = await api('POST', `/api/factions/${commander.faction}/appraise`, { units: state.units, draft: state.draft, at: state.at, reserved })
     if (state.draft) state.draft.name = state.seen.draft.name
+  }
+
+  // Naming a unit that has an officer: kept at once, between battles.
+  function nameBox(name) {
+    if (inField || state.changed || !commander.officers.some(o => o.leads === name)) return ''
+    if (state.naming !== name) return `<button class="btn btn-quiet" type="button" data-name-unit="${esc(name)}">Name them</button>`
+    return `<form class="name-form" id="name-form">
+        <label class="field">A name of their own
+          <input name="name" id="new-name" maxlength="30" autocomplete="off" autocapitalize="none" spellcheck="false" placeholder="old guard">
+        </label>
+        <span class="note">One to three words, letters only. It is theirs while they live, and the enemy hears it. Your orders find them by it, and by what they were called before.</span>
+        ${state.nameError ? `<p class="refused" role="alert" id="name-refused">${esc(state.nameError)}</p>` : ''}
+        <button class="btn btn-main btn-wide" type="submit">Give them this name</button>
+        <button class="btn btn-wide" type="button" id="name-cancel">Leave them as they are</button>
+      </form>`
+  }
+  function wireNaming() {
+    app.querySelectorAll('[data-name-unit]').forEach(b => b.addEventListener('click', () => {
+      state.naming = b.dataset.nameUnit
+      state.nameError = null
+      render()
+      document.getElementById('new-name')?.focus()
+      document.getElementById('name-form')?.scrollIntoView({ block: 'center' })
+    }))
+    document.getElementById('name-cancel')?.addEventListener('click', () => { state.naming = null; state.nameError = null; render() })
+    document.getElementById('name-form')?.addEventListener('submit', async (event) => {
+      event.preventDefault()
+      const typed = new FormData(event.target).get('name')
+      try {
+        const view = await api('POST', `/api/commander/${token}/name`, { unit: state.naming, name: typed })
+        Object.assign(commander, view)
+        state.units = (view.army?.units ?? []).map(u => ({ ...u }))
+        state.captured = (view.roster?.units ?? []).filter(u => u.came).map(u => u.name)
+        const was = state.naming
+        const now = view.roster.units.find(u => (u.formerly ?? []).includes(was) || u.name === was)
+        state.note = `The ${was} are the ${now?.name ?? typed} now.`
+        state.naming = null
+        state.nameError = null
+        await appraise()
+        render()
+      } catch (error) {
+        state.nameError = error.message
+        render()
+        document.getElementById('new-name').value = typed
+        document.getElementById('name-refused')?.scrollIntoView({ block: 'center' })
+      }
+    })
   }
 
   // What his company has for a unit: its officer, or its battles toward one.
@@ -466,19 +597,35 @@ async function armyScreen(token) {
         ${budget(s.spent, s.budget)}
         ${inField ? `<p class="question">His army is in the field (${esc(commander.battle.title)}). It can be changed when the battle is over.</p>` : ''}
         <div class="buy-unit elite">
-          <header><h3>${esc(cap(s.elite.name))}</h3><span class="cost">Free</span></header>
+          <header><h3>${esc(cap(eliteName() ?? s.elite.name))}</h3><span class="cost">Free</span></header>
           <span class="note">${esc(s.elite.words)}</span>
-          <span class="note">Your elite unit, and ${esc(s.title)}'s own. Not for sale: it comes with every army. Your veteran officer leads them, and you ride with them.</span>
+          <span class="note">Your elite unit, and ${esc(s.title)}'s own. Not for sale: it comes with every army, and always marches. You ride with them.</span>
+          <span class="note">${officerLine(eliteName() ?? s.elite.name)}</span>
+          ${state.naming === eliteName() ? nameBox(eliteName()) : `<div class="actions">${nameBox(eliteName())}</div>`}
         </div>
         ${s.units.map((u, i) => `
           <div class="buy-unit" data-unit="${i}">
             <header><h3>${esc(cap(u.name))}</h3><span class="cost">${u.cost ?? '–'} points</span></header>
             <span class="note">${esc(u.words)}${u.men ? `, ${u.men} men` : ''}</span>
-            <span class="note">${officerLine(u.name)}</span>
+            <span class="note">${officerLine(u.name)}${u.formerly?.length ? ` · once the ${esc(u.formerly.join(', the '))}` : ''}</span>
             ${u.errors.map(e => `<p class="refused">${esc(e)}</p>`).join('')}
-            ${inField ? '' : `<div class="actions">
+            ${inField ? '' : state.naming === u.name ? nameBox(u.name) : `<div class="actions">
               <button class="btn btn-quiet" type="button" data-change="${i}">Change</button>
               <button class="btn btn-quiet" type="button" data-dismiss="${i}">Dismiss</button>
+              ${nameBox(u.name)}
+            </div>`}
+          </div>`).join('')}
+        ${state.captured.length ? `<p class="label-caps">Taken from the enemy</p>
+          <p class="note">Units given to you in a deal for an enemy Commander's freedom: yours to march, with their own kit, whatever your faction forges, at its price in supply. They are over and above what you buy.</p>` : ''}
+        ${state.captured.map(name => rosterUnit(name)).filter(Boolean).map(u => `
+          <div class="buy-unit" data-captured="${esc(u.name)}">
+            <header><h3>${esc(cap(u.name))}</h3><span class="cost">${u.cost ?? '–'} points to march</span></header>
+            <span class="note">${esc(u.words)}</span>
+            <span class="note">${esc(cap(u.came))}${u.from ? `: Commander ${esc(u.from.commander)}'s, at ${esc(u.from.battle)}` : ''}${u.formerly?.length ? ` · once the ${esc(u.formerly.join(', the '))}` : ''}</span>
+            <span class="note">${officerLine(u.name)}</span>
+            ${inField ? '' : state.naming === u.name ? nameBox(u.name) : `<div class="actions">
+              <button class="btn btn-quiet" type="button" data-release="${esc(u.name)}">Let them go</button>
+              ${nameBox(u.name)}
             </div>`}
           </div>`).join('')}
         ${s.units.length === 0 ? '<p class="note">No units bought yet. Buy at least one, or take the usual army.</p>' : ''}
@@ -487,7 +634,7 @@ async function armyScreen(token) {
         ${s.errors.map(e => `<p class="refused">${esc(e)}</p>`).join('')}
         ${state.note ? `<p class="note" role="status">${esc(state.note)}</p>` : ''}
         ${state.error ? `<p class="error">${esc(state.error)}</p>` : ''}
-        <p class="note">A unit you keep keeps its officer, or its battles toward one, whatever you change. A unit you dismiss takes its battles with it; its officer stays with you, and leads a unit that has none. A new unit has no officer: it earns one in battle.</p>
+        <p class="note">A unit you keep keeps its officer, or its battles toward one, whatever you change. A unit you dismiss takes its battles with it; its officer stays with you, and leads a unit that has none. A new unit has no officer: it earns one in battle. At the muster you choose who marches; a unit left at home is still yours, and what you buy still counts it.</p>
         ${inField ? '' : `<div class="buy-foot">
           <button class="btn btn-main btn-wide" type="button" id="keep"${s.errors.length || state.saving ? ' disabled' : ''}>${state.changed || !state.own ? 'Keep this army' : 'Kept'}</button>
           <button class="btn btn-wide" type="button" id="usual">Take the usual army of ${esc(s.title)}</button>
@@ -508,6 +655,14 @@ async function armyScreen(token) {
       await appraise()
       render()
     }))
+    app.querySelectorAll('[data-release]').forEach(b => b.addEventListener('click', async () => {
+      state.captured = state.captured.filter(n => n !== b.dataset.release)
+      state.changed = true
+      state.note = `The ${b.dataset.release} are let go: they go home, and their officer with them.`
+      await appraise()
+      render()
+    }))
+    wireNaming()
     document.getElementById('add')?.addEventListener('click', async () => {
       state.at = null
       state.draft = { ...NEW_UNIT }
@@ -521,6 +676,7 @@ async function armyScreen(token) {
       Object.assign(commander, view)
       state.units = view.army.units.map(u => ({ ...u }))
       state.own = view.army.own
+      state.captured = (view.roster?.units ?? []).filter(u => u.came).map(u => u.name)
       state.changed = false
       state.saving = false
       if (then) return go(then)
@@ -536,8 +692,8 @@ async function armyScreen(token) {
         render()
       }
     }
-    document.getElementById('keep')?.addEventListener('click', () => keep({ units: state.units }))
-    document.getElementById('usual')?.addEventListener('click', () => keep({ usual: true }))
+    document.getElementById('keep')?.addEventListener('click', () => keep({ units: state.units, captured: state.captured }))
+    document.getElementById('usual')?.addEventListener('click', () => keep({ usual: true, captured: state.captured }))
   }
 
   function renderDraft(s) {
@@ -591,7 +747,8 @@ async function armyScreen(token) {
     document.getElementById('draft-back').addEventListener('click', leave)
     document.getElementById('draft-cancel').addEventListener('click', leave)
     document.getElementById('take').addEventListener('click', async () => {
-      const unit = { name: d.name, quality: d.quality, weapon: d.weapon, armor: d.armor, shield: d.shield, mounted: d.mounted }
+      // A unit he named keeps its name (the server holds which those are).
+      const unit = { name: d.name, quality: d.quality, weapon: d.weapon, armor: d.armor, shield: d.shield, mounted: d.mounted, ...(state.draft.named ? { named: true } : {}) }
       if (state.at === null) state.units.push(unit)
       else state.units[state.at] = unit
       state.note = state.at === null ? `The ${d.name} join your army.` : `The ${d.name} are changed.`

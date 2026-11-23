@@ -101,7 +101,8 @@ function createGame(spec, options = {}) {
   // What each Commander on the field knows, and when (word.js): only for a
   // side with one. A battle with none has no ledger and runs as before.
   game.word = {}
-  for (const side of Object.keys(spec.commanders ?? {}).sort()) game.word[side] = createWord(game, side)
+  // (A battle saved before riders has none: spec.messengers false.)
+  if (spec.messengers !== false) for (const side of Object.keys(spec.commanders ?? {}).sort()) game.word[side] = createWord(game, side)
 
   return game
 }

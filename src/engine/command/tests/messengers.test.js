@@ -186,3 +186,13 @@ test('a unit cut off is told to its Commander once, and so is its coming back in
   assert.deepEqual(told('inTouch'), ['far'])
   assert.deepEqual(told('cutOff'), ['far'], 'told once')
 })
+
+test('a battle saved before riders (its spec marked messengers: false) plays back with every order at once and no ledger', () => {
+  const game = createGame({ ...spec(army()), standingOrders: {}, messengers: false }, { seed: 1 })
+  assert.deepEqual(game.word, {})
+  submitOrders(game, 'red', [north(game.battle, 'far')])
+  submitOrders(game, 'blue', byCommandPost([{ unitRef: 'foe', action: 'hold' }]))
+  assert.equal(game.battle.log.all().filter(e => e.type.startsWith('rider')).length, 0)
+  assert.ok(at(game.battle, 'far').y < 10, 'the far unit moved at once')
+  assert.equal(orderDelays(game.battle, 'red', ['far']), null, 'and the read-back says nothing of riders')
+})
