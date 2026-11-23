@@ -514,7 +514,9 @@ function wantedNow(game, turnRecord, sightedBy, heard, objectiveChanges) {
       if (nothingMoved(turnRecord)) reasons.push('stalled')
       if (quiet(side)) reasons.push('time')
     }
-    const why = order.find(r => reasons.includes(r))
+    // However busy his men, no one waits longer than COMMAND.LONGEST.
+    if (battle.turn - (game.askedAt[side] ?? 0) >= COMMAND.LONGEST) reasons.push('long')
+    const why = [...order, 'long'].find(r => reasons.includes(r))
     if (why) by[side] = why
   }
   return Object.keys(by).length > 0 ? by : null

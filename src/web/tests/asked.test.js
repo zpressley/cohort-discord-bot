@@ -65,8 +65,11 @@ test('between two Commanders, when the battle stops for one only he is asked: th
     assert.equal(theirs.battle.turn, game.calls[other] + 1)
     assert.notEqual(theirs.battle.turn, game.playerTurn + 1, 'not the battle\'s count of stops')
     // The one asked gives his orders: the battle moves on at once.
+    const ran = game.history.length
     const sent = (await app.api('POST', `/api/seat/${seats[wanted]}/orders`, { text: '' })).body
-    assert.equal(sent.status, 'turn-ran')
+    assert.ok(game.history.length > ran, 'the battle moved on')
+    // He is told it ran only if it ran to a stop for him.
+    assert.equal(sent.status, waitingOn(game).includes(wanted) || game.outcome.decided ? 'turn-ran' : 'waiting')
     const after = (await app.api('GET', `/api/seat/${seats[other]}`)).body
     if (!waitingOn(game).includes(other) && !game.outcome.decided) {
       assert.deepEqual({ turn: after.battle.turn, dispatches: after.dispatches.length }, before, 'still nothing for him')

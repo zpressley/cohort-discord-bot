@@ -180,7 +180,7 @@ const RIDER = {
   // ... and when it comes again (the dispatch).
   wordAgain: (unit) => `word has come from ${unit} again`,
   // While the battle goes on without him: his men are at his orders.
-  carryingOut: 'Your officers are carrying out your orders.',
+  carryingOut: 'Your officers are carrying out your orders. You will be asked for more when they have done what you asked, or when something happens to you.',
   // An order of his still on the road to a unit (the Army tab).
   onTheRoad: (order, minutes) => `a rider is on the way with new orders (${order}): about ${clock(minutes)} more`,
   // A dispatch's news from far off.

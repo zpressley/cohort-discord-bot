@@ -110,3 +110,13 @@ test('a battle saved before the rulings (everyoneAsked) asks every side at every
   assert.equal(game.history.at(-1).wanted, undefined)
   assert.deepEqual(waitingOn(game).sort(), ['blue', 'red'])
 })
+
+test(`however busy his men, no Commander waits longer than ${COMMAND.LONGEST * 10} minutes to be asked`, () => {
+  // His men are on the long march, and he was last asked (by hand, for the
+  // test) all but ten minutes of that long ago.
+  const game = createGame(spec(), { seed: 1 })
+  game.askedAt.red = -(COMMAND.LONGEST - 1)
+  const stretch = redTurn(game, march)
+  assert.equal(stretch.at(-1).wanted.red, 'long')
+  assert.equal(stretch.flatMap(h => h.ticks).length, 1)
+})

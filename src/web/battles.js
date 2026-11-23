@@ -915,6 +915,8 @@ function createBattleStore({ dir = null, ai = null, now = () => Date.now() } = {
       enemies,
       objectives,
       pending: entry.pending[side] ?? null,
+      // While his orders are with the army (narrator/words.js).
+      carryingOut: RIDER.carryingOut,
       // The friend has yet to choose who leads (join).
       choosing: !atGame && choosing(entry, side),
       // Whose army this side is (a faction of src/data/factions.js), if any.
@@ -1197,7 +1199,9 @@ function createBattleStore({ dir = null, ai = null, now = () => Date.now() } = {
       entry.updatedAt = now()
       save(entry)
     }
-    return { status: result.status === 'waiting' ? 'waiting' : 'turn-ran', understood, notes }
+    // (Turn-ran only when it ran to a stop for him: that it ran on to one
+    // for the other Commander is not his to know.)
+    return { status: result.status === 'waiting' || status(entry, side) === 'waiting' ? 'waiting' : 'turn-ran', understood, notes }
   }
 
   // A finished battle is written into the company of each Commander who

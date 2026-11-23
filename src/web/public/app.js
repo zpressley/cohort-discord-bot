@@ -105,9 +105,11 @@ function ago(at) {
   const days = Math.round(hours / 24)
   return `${days} day${days === 1 ? '' : 's'} ago`
 }
-const STATUS = { 'your-orders': 'Your orders', waiting: 'Waiting on the enemy', finished: 'Finished' }
+// (Not "waiting on the enemy": he is not told whether the battle is running
+// or standing for the other Commander.)
+const STATUS = { 'your-orders': 'Your orders', waiting: 'With the army', finished: 'Finished' }
 const WHY = {
-  contact: 'blows were struck', sighting: 'the enemy was sighted', time: 'an hour passed',
+  contact: 'blows were struck', sighting: 'the enemy was sighted', time: 'an hour passed', long: 'a long while passed',
   commander: 'a Commander fell into enemy hands, or got out of them',
   stalled: 'all was quiet', ready: 'your orders were carried out', fire: 'there was shooting', rallied: 'a broken unit rallied', objective: 'ground changed hands', decided: 'the battle was decided',
   surrender: 'a commander yielded'
@@ -194,7 +196,7 @@ async function battles() {
   const card = (l) => {
     const verdict = verdictWords(l)
     const opponent = l.opponent === 'standing' ? 'against the computer' : 'against a friend'
-    const when = l.status === 'waiting' ? `your orders went ${ago(l.sentAt)}` : `turn ${l.turn} · ${clock(l.minutes)}`
+    const when = l.status === 'waiting' && l.sentAt ? `your orders went ${ago(l.sentAt)}` : `turn ${l.turn} · ${clock(l.minutes)}`
     return `<a class="battle-link${l.status === 'your-orders' ? ' mine' : ''}" href="/b/${esc(l.token)}" data-link>
       <strong>${esc(l.title)}</strong>
       <span>${esc(sideName(l.side))}, ${opponent}</span>
@@ -207,7 +209,7 @@ async function battles() {
     <main class="page">
       ${lines.length === 0 ? '<p class="note">No battles yet in this browser. A battle\'s link brings it here too.</p>' : ''}
       ${section('Waiting on you', group('your-orders'))}
-      ${section('Waiting on the enemy', group('waiting'))}
+      ${section('Your orders are with the army', group('waiting'))}
       ${section('Finished', group('finished'))}
       <a class="btn btn-main btn-wide" href="/muster" data-link>Muster a new battle</a>
       <a class="btn btn-wide" href="/officers" data-link>Your officers</a>
@@ -878,7 +880,7 @@ async function tent(token) {
     const chip = b.status === 'your-orders' ? '<span class="chip chip-dark">Your orders</span>' : `<span class="chip">${esc(STATUS[b.status])}</span>`
     document.getElementById('bar').innerHTML = `
       <a href="/battles" data-link>Battles</a>
-      <div class="bar-title"><strong>${esc(b.title)}</strong><span>${esc(sideName(b.side))} · turn ${b.turn}${b.turnLimit ? ` of ${b.turnLimit}` : ''} · ${esc(clock(b.minutes))}</span></div>
+      <div class="bar-title"><strong>${esc(b.title)}</strong><span>${esc(sideName(b.side))} · turn ${b.turn}${b.turnLimit ? ` of ${b.turnLimit}` : ''} · ${esc(clock(b.minutes))}${b.dayMinutes ? ` · night falls at ${esc(clock(b.dayMinutes).replace(/ of battle$/, ''))}` : ''}</span></div>
       ${chip}`
   }
 
@@ -1015,7 +1017,8 @@ async function tent(token) {
       u.broken ? '<span class="flag flag-warn">broken</span>' : '',
       u.hidden ? '<span class="flag">hidden</span>' : '',
       u.crowding && u.crowding !== 'organized' ? `<span class="flag flag-warn">${esc(u.crowding)}</span>` : '',
-      u.word?.cutOff ? '<span class="flag flag-warn">cut off</span>' : ''
+      u.word?.cutOff ? '<span class="flag flag-warn">cut off</span>' : '',
+      u.word?.noWord ? '<span class="flag flag-warn">no word</span>' : ''
     ].join('')
     const officerLine = (u) => !u.officer ? '' : u.officer.headless ? '<p class="unit-order"><strong>No officer yet:</strong> they keep a plain order and nothing more</p>'
       : `<p class="unit-order"><strong>Officer:</strong> ${esc(u.officer.name)}, ${esc(u.officer.grade)} and ${esc(u.officer.personality)}${u.officer.loyalty ? `, ${esc(LOYALTY_WORDS[u.officer.loyalty])}` : ''}</p>`
@@ -1032,7 +1035,7 @@ async function tent(token) {
       <div class="unit-card" aria-pressed="${u.id === state.picked}">
         <header><h3>${esc(u.name)}</h3><span class="where">${esc(u.at)} · ${esc(terrainWords(v, u.position.x, u.position.y))}</span></header>
         <span class="note">${esc([u.quality, u.role].filter(Boolean).join(' ').replace(/_/g, ' '))}, ${u.strength} of ${u.maxStrength} men</span>
-        ${u.word && !u.word.live ? `<p class="unit-order word${u.word.cutOff ? ' cut-off' : ''}"><strong>${u.word.cutOff ? 'Cut off.' : 'By rider:'}</strong> ${esc(u.word.cutOff ? u.word.said.replace(/^cut off: n/, 'N') : `as they were ${u.word.said}`)}</p>` : ''}
+        ${u.word && !u.word.live ? `<p class="unit-order word${u.word.cutOff || u.word.noWord ? ' cut-off' : ''}"><strong>${u.word.cutOff ? 'Cut off.' : 'By rider:'}</strong> ${esc(u.word.cutOff ? u.word.said.replace(/^cut off: n/, 'N') : u.word.noWord ? `${u.word.said}. This is where they last were` : `as they were ${u.word.said}`)}</p>` : ''}
         ${u.rider ? `<p class="unit-order"><strong>On the road:</strong> ${esc(u.rider.said)}</p>` : ''}
         ${v.commander?.unitId === u.id ? '<p class="unit-order"><strong>You ride with them.</strong> If they are cut to half and still in the fight, you can be taken or killed.</p>' : ''}
         <div class="bars">${meter('Men', u.strength, u.maxStrength)}${meter('Morale', u.morale, 100)}${meter('Wind', u.stamina, u.staminaPool)}</div>
@@ -1167,11 +1170,11 @@ async function tent(token) {
     if (b.status === 'waiting' && !state.editing) {
       body.innerHTML = `
         <p class="calm">Your orders are with the army.</p>
-        <p>${b.opponent === 'friend' ? 'The enemy commander has not answered yet.' : 'The turn is running.'} There is no hurry: close this page, and the turn will be here when you come back.</p>
-        <p class="note">Sent ${esc(ago(v.pending?.at))}</p>
+        <p>${esc(v.carryingOut ?? '')} There is no hurry: close this page, and it will be here when you come back.</p>
+        ${v.pending ? `<p class="note">Sent ${esc(ago(v.pending.at))}</p>
         <p class="label-caps">What you ordered</p>
-        ${(v.pending?.understood ?? []).map(l => `<p class="readback">${esc(l)}</p>`).join('') || '<p class="note">No new orders: every unit keeps its last one.</p>'}`
-      foot.innerHTML = '<button class="btn btn-wide" type="button" id="change">Change your orders before the turn runs</button>'
+        ${(v.pending.understood ?? []).map(l => `<p class="readback">${esc(l)}</p>`).join('') || '<p class="note">No new orders: every unit keeps its last one.</p>'}` : '<p class="note">Your army tab shows each unit as the last word of it left them.</p>'}`
+      foot.innerHTML = `<button class="btn btn-wide" type="button" id="change">${v.pending ? 'Change your orders' : 'Send new orders'}</button>`
       document.getElementById('change').addEventListener('click', () => {
         state.editing = true
         state.draft = state.draft || v.pending?.text || ''

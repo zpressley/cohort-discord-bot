@@ -29,7 +29,7 @@ const arg = (name, fallback) => { const i = process.argv.indexOf(name); return i
 const ROOT = path.resolve(arg('--root', path.join(__dirname, '..')))
 const need = (p) => require(path.join(ROOT, p))
 
-const { createGame, submitOrders } = need('engine/orchestrator')
+const { createGame, submitOrders, waitingOn } = need('engine/orchestrator')
 const { planTurn } = need('opponent/planner')
 const { loadScenario, mapChoices } = need('adapters/hotseat/scenarios')
 const { fieldFactions, FACTIONS } = need('engine/army/factions')
@@ -51,8 +51,19 @@ function play(red, blue, { map, seed, policy }) {
   const game = createGame({ ...spec, standingOrders: {}, commanders: { red: { unitId: elite } } }, { seed })
   const r = { orders: 0, cutOffUnits: new Set(), cutOffTurns: 0, unitTurns: 0 }
   let turns = 0
-  while (!game.outcome.decided && turns < MAX_PLAYER_TURNS) {
+  let stops = 0
+  // Each side gives orders only when the battle stops for it (the riders
+  // rulings); a build before them asks both every turn. `turns` counts
+  // red's own turns.
+  const wanted = (side) => (waitingOn ? waitingOn(game).includes(side) : true)
+  while (!game.outcome.decided && turns < MAX_PLAYER_TURNS && stops < 4 * MAX_PLAYER_TURNS) {
+    stops++
     const battle = game.battle
+    if (!wanted('red')) {
+      const blueOrders = planTurn(game, 'blue')
+      submitOrders(game, 'blue', COMPUTER === 'rider' && byCommandPost ? byCommandPost(blueOrders) : blueOrders)
+      continue
+    }
     // Who is cut off as the turn opens, by this tree's rule.
     const road = riders(battle, 'red')
     if (road) {
@@ -74,15 +85,20 @@ function play(red, blue, { map, seed, policy }) {
     submitOrders(game, 'red', orders)
     // Blue's orders by rider from its best unit, as in the app (step 3);
     // --computer instant for its orders at once, as before.
+    turns++
+    if (game.outcome.decided || !wanted('blue')) continue
     const blueOrders = planTurn(game, 'blue')
     submitOrders(game, 'blue', COMPUTER === 'rider' && byCommandPost ? byCommandPost(blueOrders) : blueOrders)
-    turns++
   }
   const events = game.battle.log.all()
   return {
     decided: game.outcome.decided,
     winner: game.outcome.winner,
     turns,
+    stops: game.history.length,
+    // How long he waited each time before he was asked again (minutes),
+    // and why he was.
+    ...waitsOf(game),
     minutes: game.minutesElapsed,
     orders: r.orders,
     delays: events.filter(e => e.type === 'riderSent' && e.side === 'red').map(e => e.minutes),
@@ -95,12 +111,25 @@ function play(red, blue, { map, seed, policy }) {
   }
 }
 
+// The time between the stops that asked red (every stop, in a build before
+// the riders rulings), and why each asked him.
+function waitsOf(game) {
+  let wait = 0
+  const waits = []
+  const why = []
+  for (const h of game.history) {
+    wait += h.ticks.length
+    if (!h.wanted || h.wanted.red) { waits.push(wait * 10); why.push(h.wanted?.red ?? h.interrupt); wait = 0 }
+  }
+  return { waits, why }
+}
+
 function league({ battles = 336, policy = 'planner' } = {}) {
   const maps = mapChoices().map(m => m.id)
   const factions = Object.keys(FACTIONS)
   const pairs = []
   for (const a of factions) for (const b of factions) if (a !== b) for (const map of maps) pairs.push([a, b, map])
-  const all = { battles: 0, stuck: 0, wins: 0, losses: 0, draws: 0, turns: 0, minutes: 0, orders: 0, delays: [], blocked: 0, blueDelays: [], blueBlocked: 0, battlesCutOff: 0, cutOffTurns: 0, unitTurns: 0 }
+  const all = { stops: 0, waits: [], why: {}, battles: 0, stuck: 0, wins: 0, losses: 0, draws: 0, turns: 0, minutes: 0, orders: 0, delays: [], blocked: 0, blueDelays: [], blueBlocked: 0, battlesCutOff: 0, cutOffTurns: 0, unitTurns: 0 }
   for (let i = 0; i < battles; i++) {
     const [a, b, map] = pairs[i % pairs.length]
     const r = play(a, b, { map, seed: 1000 + i * 7919, policy })
@@ -110,6 +139,9 @@ function league({ battles = 336, policy = 'planner' } = {}) {
     else if (r.winner === 'blue') all.losses++
     else all.draws++
     all.turns += r.turns
+    all.stops += r.stops
+    all.waits.push(...r.waits)
+    for (const w of r.why) all.why[w] = (all.why[w] ?? 0) + 1
     all.minutes += r.minutes
     all.orders += r.orders
     all.delays.push(...r.delays)
@@ -133,6 +165,10 @@ if (require.main === module) {
   console.log(`${all.battles} battles (${ROOT}), red ${policy}; ${all.stuck} did not end; ${((Date.now() - started) / 1000).toFixed(0)} s`)
   console.log(`red won ${all.wins} (${pct(all.wins, done)}), lost ${all.losses} (${pct(all.losses, done)}), drew ${all.draws}; ` +
     `${(all.turns / Math.max(1, done)).toFixed(1)} player turns, ${Math.round(all.minutes / Math.max(1, done))} battle minutes on average`)
+  const w = [...all.waits].sort((x, y) => x - y)
+  const wq = (q) => w[Math.min(w.length - 1, Math.floor(q * w.length))] ?? 0
+  console.log(`${(all.stops / Math.max(1, done)).toFixed(1)} stops of the battle (for either side); red waited between his turns: median ${wq(0.5)} min, 90% ${wq(0.9)}, longest ${w.at(-1) ?? 0}; over an hour ${pct(w.filter(x => x > 60).length, w.length)}`)
+  console.log(`why red was asked: ${Object.entries(all.why).sort((a, b) => b[1] - a[1]).map(([k, n]) => `${k} ${pct(n, w.length)}`).join(', ')}`)
   const d = [...all.delays].sort((x, y) => x - y)
   const at = (q) => d.length ? d[Math.min(d.length - 1, Math.floor(q * d.length))] : 0
   const atOnce = all.orders - d.length - all.blocked
