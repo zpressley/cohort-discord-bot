@@ -127,6 +127,19 @@ function mono(faction, kit, count = null) {
 }
 
 // ── One battle ───────────────────────────────────────
+// A usual army is data, written for the prices of its day: while a study
+// tries other prices it is fielded as written, its budget lifted for the
+// muster only. `--strict-usual` holds it to the budget (and fails if over).
+const STRICT_USUAL = process.argv.includes('--strict-usual')
+function overBudget(faction, fn) {
+  if (STRICT_USUAL) return fn()
+  const culture = FACTIONS[faction].culture
+  const had = Object.prototype.hasOwnProperty.call(D.SP_BUDGETS, culture)
+  const was = D.SP_BUDGETS[culture]
+  D.SP_BUDGETS[culture] = 1000
+  try { return fn() } finally { if (had) D.SP_BUDGETS[culture] = was; else delete D.SP_BUDGETS[culture] }
+}
+
 /**
  * @param {Object} red   { faction, units|null, policy?='planner', men? }
  * @param {Object} blue  the same
@@ -136,10 +149,15 @@ function mono(faction, kit, count = null) {
  */
 function battle(red, blue, { map = 'crownhill', seed = 1, turnLimit = DAY_TURNS, mark = null } = {}) {
   const sides = { red, blue }
-  const spec0 = fieldArmies(loadScenario('meeting-battle', { map, deploy: true }), {
-    red: { faction: red.faction, units: red.units },
-    blue: { faction: blue.faction, units: blue.units }
-  })
+  // Each side mustered on its own, so that a usual army a price change has
+  // put over its budget can still be the yardstick while prices are tried
+  // (overBudget, below); a bought army is always held to its budget.
+  let spec0 = loadScenario('meeting-battle', { map, deploy: true })
+  for (const side of ['red', 'blue']) {
+    const s = sides[side]
+    const muster = () => fieldArmies(spec0, { [side]: { faction: s.faction, units: s.units } })
+    spec0 = s.units ? muster() : overBudget(s.faction, muster)
+  }
   // Optional per-side scaling of men (bought units only, not the elite).
   const units = spec0.units.map(u => {
     const m = sides[u.side]?.men
