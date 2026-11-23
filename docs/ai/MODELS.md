@@ -135,3 +135,18 @@ out a read, about $0.00020). The dispatch check ran four times: three clean,
 and one that opened with the wrong fact (it led with a unit that held, not
 the one that broke). Dispatches are written at a little warmth, so they
 vary; the facts in it were right.
+
+2026-11-23, with an attack that can name an enemy unit (one new field,
+`enemy`): **50 of 52** on two full runs (19 by the grammar alone, 33 AI
+calls, 2,355 tokens in and 190 out a read, about $0.00020). The same two
+misses both times. One was new: "send the horse after those bowmen" read as
+a plain advance. One was an old order the new instruction had disturbed:
+told to ask when a named enemy was not in sight, the model began asking
+about the enemy in a condition too ("unless enemy cavalry is sitting on
+it"). A first rewording cured the first and made the model ask about two
+more. The instruction that held: the field is only for the unit an attack
+goes for, the model writes the Commander's own words when nothing listed
+fits and never asks because of it (the code asks, in `resolve.js`), and
+`against` and conditions name a kind of enemy, not a unit. On the five
+orders involved: 5 of 5. The day's free tokens were spent by then, so **a
+full run with the final wording is still owed.**
