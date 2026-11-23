@@ -2133,3 +2133,144 @@ Zach, on the army balance study (`docs/design/army-balance.md`):
    battles, the war spear's price, the usual armies picked again, training
    and veterancy together): "See answer to 3, pull more levers and
    rebalance in a way to keeps the fun army building ideas alive."
+
+### How the riders rulings were built (Claude's choices, open to change)
+
+Built from Zach's four answers of November 23 to the questions above (the
+immediate range stays; he notices when no word comes; an order on the road
+still arrives and no word returns; the game keeps going, and each
+Commander is notified only when there are commands to give or things
+happen to him). The code: `engine/orchestrator/orchestrator.js` ("Asked
+when wanted": `wantedNow`, `nothingToDo`, `waitingOn`, `game.wanted`,
+`game.calls`, `game.askedAt`), `engine/orchestrator/word.js` (`overdue`,
+`back`, `blocked`), `web/battles.js` (who is waited on, the dispatch, the
+tent), `web/public/app.js` and `map.js`, the words in `narrator/words.js`
+(`RIDER.noWord`, `wordAgain`, `carryingOut`). The numbers are in
+`tables.COMMAND` (`OVERDUE` 2, `QUIET` 6, `LONGEST` 36, in ten minutes)
+and `tables.DAY.MINUTES` (600).
+
+**1. The immediate range.** Unchanged: 6 tiles.
+
+**2. He notices; he is not told.** No `cutOff` or `inTouch` event, and
+his ledger's `cutOff` stays false. Each unit's last word is judged against
+what he could expect: a report should be no older than a rider's ride from
+where he last heard the unit was, to where he is, round the enemy he knows
+of (the same search the read-back uses, on his ledger, never the truth),
+plus 20 minutes of slack. Past that the unit is `overdue`: the Army tab
+says "By rider: no word of them since 2 h 10 min into the battle. This is
+where they last were", with a "no word" flag; the map draws the cross that
+used to mean cut off, and labels it "no word". A unit cut off, one
+destroyed where no word of it could come, and one merely far off on ground
+he did not know was blocked all look the same. When word comes again it
+just arrives; the dispatch adds "Word has come from the hastati again".
+Nothing announces either change, and neither stops the battle.
+- *The read-back* was already judged from his ledger: it never says a unit
+  is cut off unless the enemy he knows of shuts the way.
+- *An order no rider can carry* used to be told at once ("no rider could
+  get through"), which told him the unit was cut off. Now the Army tab
+  shows the order on the road for as long as the ride would take as far as
+  he knows, and the dispatch tells him the rider could not get through when
+  the rider is back: a ride there and back, as he knows the way. Guessed:
+  the other reading is that he hears nothing at all of it (no word
+  returns); I took a rider who cannot get through to come back and say so.
+- Measured (`messenger-league.js`, 400 battles, planner): units marked "no
+  word" as red is asked: 1% of unit-turns (210); of those, 49% truly cut
+  off, 8% gone from the field, 43% only late (word on its way, or the way
+  longer than he knew). With 40 minutes of slack: 43 marks, 23% late, but
+  he notices far fewer. I kept 20.
+
+**3. An order on the road still arrives; no word returns.** As built; the
+test is "an order already on the road still reaches a unit cut off after
+the rider left, but no word comes back from it".
+
+**4. Each Commander is asked only when wanted.** In a battle with a
+Commander on the field the battle no longer runs in turns of up to an
+hour that every side answers. It runs on until it stops for a side that
+is wanted, and only those are asked; the rest are neither told nor waited
+for (`waitingOn`). A side is wanted:
+- with his army: when news worth stopping for reaches him (a fight,
+  shooting, a rout, a sighting, a rally: the stops as built before), or
+  his orders are carried out (`ready`, judged by what reached him);
+- with his men having nothing left to do (every unit holding, hidden, or
+  at its place, by his ledger, and nothing on the road): after an hour.
+  Guessed: Zach said "commands to give (his units ... have none)"; asked at
+  once and every ten minutes after would be the literal reading, which
+  would stop a holding army every tick. The other reading is that a
+  holding army waits until something happens to it;
+- held: when his captors hear what would stop them (as before), and every
+  hour, for he always has an offer to make; offers and answers go on the
+  table between stops whatever, as before;
+- with no Commander on the field (the computer): as every side was asked
+  before, on its own side's news and every hour (`QUIET`). It plans as
+  before; only how often it is asked changed (no change in `src/opponent`).
+  Guessed: the other reading is that it is asked only when the player is;
+- every side: when ground changes hands, when a Commander is taken or
+  freed, and when the battle is decided (all of these both sides know);
+- no one waits longer than six hours (`LONGEST`), however busy his men:
+  a guard so that no battle can run away. 1% of red's turns in the league
+  ended that way (a unit fighting on where no word comes back).
+
+*Two players.* A seat not wanted shows "With the army", "Your officers are
+carrying out your orders. You will be asked for more when they have done
+what you asked, or when something happens to you", and a button to send
+new orders. His tent is his ledger as it stands: the last word to reach
+him. Nothing says the battle is waiting on the other seat ("Waiting on the
+enemy" and "The enemy commander has not answered yet" are gone, for they
+would tell him the other was asked). His turn number is his own (how many
+times the battle has stopped for him), not the battle's. If he sends
+orders unasked they wait, and go out when the battle moves on; they never
+make it wait for him. Your guess, which I kept: he may change his mind
+unasked. Sending orders that run the battle on to a stop for the other
+side answers him "waiting", not "turn ran". The dispatch is written only
+to a side the battle stopped for, and covers every stretch since his last
+dispatch (`through`, the history length); its heading gives his own reason.
+
+*Against the computer* the server answers for the computer at each of its
+own stops in the same request, so a player's request always ends on his
+own turn or the verdict (each of the computer's orders is in the log).
+
+*The day.* Turns are now each Commander's own, so the day is counted in
+battle time: `DAY.MINUTES` 600, ten hours (forty turns at the fifteen
+minutes a turn ran on average before: 230 battle minutes over 15.1 turns).
+The tent says "night falls at 10 h". A `turnLimit` asked for (a testing
+aid) still counts the battle's stops. Guessed: the other reading is forty
+of each Commander's own turns.
+
+*Saved battles.* The server marks each battle it saves as played with the
+rulings (`asked: true`); one without the mark is rebuilt with
+`spec.everyoneAsked: true`, which plays it, and goes on with it, as
+before: every side asked at every stop, a turn within the hour, and a unit
+cut off told at once. Tests: a fixture made with the code of main at
+ca49eab (`web/tests/fixtures/before-asked`) replays to the same history
+and armies; whole event logs of a battle with a Commander, under
+`everyoneAsked`, match those of the old code; and a battle with no
+Commander on the field runs exactly as before
+(`harness/tests/asked-unchanged.test.js`).
+
+**Measured** (`node src/harness/messenger-league.js --battles 400`, the
+same seeds; red the player with his Commander, blue the computer; red now
+gives orders only when asked, so "player turns" are his own; before, every
+turn was both sides'):
+
+| | before | after |
+|---|---|---|
+| Red's wins, planner | 51% (205) | 51% (204) |
+| Red's wins, planner on word | 51% (205) | 51% (204) |
+| Red's wins, everyone in | 44% (177) | 43% (172) |
+| Player turns (planner) | 14.5 | 12.5 |
+| Stops of the battle, either side (planner) | 14.5 | 15.8 |
+| Battle minutes (planner) | 230 | 237 |
+| Red's wait between his turns (planner) | median 10, 90% 30, longest 60 | median 10, 90% 30, longest 360; over an hour 3% |
+| Why red was asked (planner) | contact 50%, fire 14%, stalled 10%, sighting 8%, time 7%, decided 7% | contact 58%, fire 17%, sighting 10%, decided 8%, ready 3%, time 2%, long 1% |
+
+Fewer turns for the player, a few longer waits, and no change in who
+wins. The soak still ends every battle; the balance table is unchanged.
+
+**For Zach:**
+1. A Commander whose men only hold is asked again after an hour. Should
+   a holding army rather wait until something happens to it?
+2. An order no rider can carry: told when the rider is back (a ride there
+   and back), or never?
+3. The computer is asked on its own news and every hour. Fewer would make
+   it weaker; it does not stop the player either way.
+4. The day: ten hours of battle time. Right?

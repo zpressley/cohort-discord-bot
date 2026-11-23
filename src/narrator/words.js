@@ -174,6 +174,13 @@ const RIDER = {
   age: (minutes) => (minutes <= 0 ? 'now' : `${clock(minutes)} ago`),
   // A unit no rider can get through to.
   cutOff: (minutesIntoBattle) => `cut off: no word of them since ${minutesIntoBattle ? `${clock(minutesIntoBattle)} into the battle` : 'the battle began'}`,
+  // A unit whose word is overdue (ruled 2026-11-23: "Notice when no word
+  // comes back"): he is not told why, only that it has not come.
+  noWord: (minutesIntoBattle) => `no word of them since ${minutesIntoBattle ? `${clock(minutesIntoBattle)} into the battle` : 'the battle began'}`,
+  // ... and when it comes again (the dispatch).
+  wordAgain: (unit) => `word has come from ${unit} again`,
+  // While the battle goes on without him: his men are at his orders.
+  carryingOut: 'Your officers are carrying out your orders. You will be asked for more when they have done what you asked, or when something happens to you.',
   // An order of his still on the road to a unit (the Army tab).
   onTheRoad: (order, minutes) => `a rider is on the way with new orders (${order}): about ${clock(minutes)} more`,
   // A dispatch's news from far off.

@@ -11,6 +11,7 @@ const assert = require('node:assert/strict')
 const { createBattleState, stepTurn } = require('../../battle/battle')
 const { createGame, submitOrders, gameRecord, replayGame } = require('../../orchestrator/orchestrator')
 const { riders, riderCosts, orderDelays, byCommandPost, commandPost } = require('../messengers')
+const { updateWord } = require('../../orchestrator/word')
 const { COMMAND } = require('../../combat/tables')
 
 const MAP = { name: 'plain-40', width: 40, height: 20, terrain: {} }
@@ -172,9 +173,9 @@ test('the computer\'s orders unmarked go at once, however far, as before', () =>
   assert.equal(state.posts, undefined)
 })
 
-test('a unit cut off is told to its Commander once, and so is its coming back in touch', () => {
+test('in a battle saved before the riders rulings, a unit cut off is told to its Commander once, and so is its coming back in touch', () => {
   const wall = Array.from({ length: 10 }, (_, i) => unit({ id: `wall${i}`, side: 'blue', position: { x: 20, y: i * 2 + 1 } }))
-  const game = createGame({ ...spec([...army(), ...wall]), standingOrders: {} }, { seed: 1 })
+  const game = createGame({ ...spec([...army(), ...wall]), standingOrders: {}, everyoneAsked: true }, { seed: 1 })
   submitOrders(game, 'red', [])
   submitOrders(game, 'blue', wall.map(w => ({ unitRef: w.id, action: 'hold' })))
   const told = (type) => game.battle.log.all().filter(e => e.type === type).map(e => e.unitId)
@@ -185,6 +186,24 @@ test('a unit cut off is told to its Commander once, and so is its coming back in
   submitOrders(game, 'blue', [])
   assert.deepEqual(told('inTouch'), ['far'])
   assert.deepEqual(told('cutOff'), ['far'], 'told once')
+})
+
+// Ruled 2026-11-23: "Yes but no word returns."
+test('an order already on the road still reaches a unit cut off after the rider left, but no word comes back from it', () => {
+  const wall = Array.from({ length: 10 }, (_, i) => unit({ id: `wall${i}`, side: 'blue', position: { x: 39, y: i * 2 + 1 } }))
+  const game = createGame({ ...spec([...army(), ...wall]), standingOrders: {} }, { seed: 1 })
+  const battle = game.battle
+  const tick = (orders = {}) => { stepTurn(battle, orders, { sameTurn: battle.turn > 0 }); updateWord(game, 'red') }
+  tick({ red: [north(battle, 'far')], blue: wall.map(w => ({ unitRef: w.id, action: 'hold' })) })
+  assert.equal(battle.log.all().find(e => e.type === 'riderSent').minutes, 30, 'the rider sets out: thirty minutes')
+  // The enemy closes the way behind him.
+  for (const w of wall) battle.world.units.find(u => u.id === w.id).position = { x: 20, y: w.position.y }
+  for (let i = 0; i < 5; i++) tick()
+  assert.ok(at(battle, 'far').y < 10, 'the order reached them, and they marched')
+  assert.equal(battle.orderBook.get('far')?.action, 'move')
+  const known = game.word.red.units.far
+  assert.ok(known.heard <= 1, 'no word of them since the way was closed')
+  assert.deepEqual(known.position, { x: 30, y: 10 }, 'so he does not know they marched')
 })
 
 test('a battle saved before riders (its spec marked messengers: false) plays back with every order at once and no ledger', () => {
