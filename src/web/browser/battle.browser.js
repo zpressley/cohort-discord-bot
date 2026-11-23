@@ -463,3 +463,74 @@ test('held, on a phone: an offer made with the tick boxes, the friend who holds 
     assert.equal(await red.textContent('.readback'), 'You: ride with Swords')
   })
 })
+
+test('the roster on a phone: who marches at the muster, a unit taken from the enemy, an officer moved, a unit named', { skip }, async () => {
+  await withApp(async ({ base, browser, errors, store }) => {
+    const post = async (url, body) => (await fetch(base + url, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) })).json()
+    // Rome's hastati, under an officer of their own, given to a Commander
+    // of Macedon in a deal for Rome's Commander's freedom.
+    const red = await post('/api/commanders', { faction: 'rome' })
+    const blue = await post('/api/commanders', { faction: 'macedon' })
+    const c = store.commanders.get(red.token)
+    store.commanders.setCompany(c, { ...c.company, nextId: 2, officers: [{ id: 'o1', name: 'Tullus', experience: 9, personality: 'steady', values: 'survival', loyalty: 60, leads: 'hastati', status: 'fit', record: [] }] })
+    const seats = (await post('/api/battles', { opponent: 'friend', side: 'red', seed: 3, commander: red.token })).seats
+    await post(`/api/seat/${seats.blue}/join`, { commander: blue.token })
+    const game = store.seatOf(seats.red).entry.game
+    Object.assign(game.battle.commanders.red, { status: 'held', heldBy: game.battle.world.units.find(u => u.side === 'blue').id })
+    await post(`/api/seat/${seats.red}/offer`, { units: ['red_hastati'] })
+    const offer = (await (await fetch(`${base}/api/seat/${seats.blue}`)).json()).captive.offer.id
+    await post(`/api/seat/${seats.blue}/answer`, { offer, accept: true })
+
+    const p = await page(browser, errors, { width: 390, height: 844 })
+    await p.goto(base + '/battles')
+    await p.evaluate((token) => { localStorage.setItem('cohort.commanders', JSON.stringify([token])); localStorage.setItem('cohort.lastCommander', token) }, blue.token)
+
+    // The muster: one tap marches what marched last time; open, he chooses.
+    await p.goto(base + '/muster')
+    await p.waitForSelector('#who-marches')
+    assert.match(await p.textContent('#march-sum'), /\d+ of 30 supply points, \d+ left/)
+    await p.click('#who-marches summary')
+    await p.click('[data-march="hastati"]')
+    assert.match(await p.textContent('#march-sum'), /: \d+ over/, 'the hastati too are over the budget')
+    await p.click('[data-march="sarissa foot 2"]')
+    assert.doesNotMatch(await p.textContent('#march-sum'), /over/)
+    assert.equal(await p.getAttribute('[data-march="hastati"]', 'aria-pressed'), 'true')
+    assert.equal(await p.locator('[data-always]').count(), 1, 'the elite always marches')
+    await p.locator('#who-marches').scrollIntoViewIfNeeded()
+    if (process.env.SHOT) await p.screenshot({ path: process.env.SHOT.replace('.png', '-who-marches.png'), fullPage: true })
+    assert.equal(await p.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth), true, 'no sideways scroll')
+
+    // The army screen: the unit taken, and naming it.
+    await p.goto(`${base}/army/${blue.token}`)
+    await p.waitForSelector('[data-captured="hastati"]')
+    assert.match(await p.textContent('[data-captured="hastati"]'), /Taken from the enemy: Commander .*'s[\s\S]*Officer: Tullus/)
+    if (process.env.SHOT) await p.screenshot({ path: process.env.SHOT.replace('.png', '-roster-captured.png'), fullPage: true })
+    await p.click('[data-name-unit="hastati"]')
+    await p.fill('#new-name', 'horse wolves')
+    await p.click('#name-form button[type="submit"]')
+    await p.waitForSelector('#name-refused')
+    assert.equal(await p.textContent('#name-refused'), '"horse" is a kind of troops in an order: it cannot be in a name.')
+    // The refusal is the server's 400, which the page logs: expected here.
+    const logged = errors.findIndex(e => /status of 400/.test(e))
+    if (logged >= 0) errors.splice(logged, 1)
+    await p.locator('#name-form').scrollIntoViewIfNeeded()
+    if (process.env.SHOT) await p.screenshot({ path: process.env.SHOT.replace('.png', '-naming.png') })
+    await p.fill('#new-name', 'Iron Wolves')
+    await p.click('#name-form button[type="submit"]')
+    await p.waitForSelector('[data-captured="iron wolves"]')
+    assert.match(await p.textContent('#army-screen'), /The hastati are the iron wolves now/)
+
+    // The Officers page: Tullus moved to the elite, in place of the veteran.
+    await p.goto(base + '/officers')
+    const tullus = store.commanders.get(blue.token).company.officers.find(o => o.name === 'Tullus')
+    await p.waitForSelector(`[data-officer-card="${tullus.id}"]`)
+    assert.match(await p.textContent(`[data-officer-card="${tullus.id}"]`), /Given to you by Commander .* He has every reason to hate you/)
+    await p.click(`[data-move="${tullus.id}"]`)
+    await p.locator(`#move-${tullus.id}`).scrollIntoViewIfNeeded()
+    if (process.env.SHOT) await p.screenshot({ path: process.env.SHOT.replace('.png', '-transfer.png') })
+    await p.click(`[data-officer="${tullus.id}"][data-to="silver shields"]`)
+    await p.waitForSelector('#officers-note')
+    assert.equal(await p.textContent('#officers-note'), 'Tullus now leads the silver shields.')
+    assert.equal(store.commanders.get(blue.token).company.officers.find(o => o.name === 'Tullus').leads, 'silver shields')
+  })
+})

@@ -20,7 +20,9 @@
 //
 // Pure: the same army, side and map always give the same units.
 
-const { buildArmy, buildUnit, toBattleUnits, roleFor } = require('./builder')
+const { buildArmy, buildUnit, toBattleUnits, roleFor, unitSize, mountCost } = require('./builder')
+const D = require('./data')
+const T = require('../combat/tables')
 const { formUp, factionUnits } = require('./factions')
 const { resolveMap } = require('../map/map')
 const { deployArmies } = require('../map/deploy')
@@ -63,12 +65,14 @@ function usualArmy(key) {
  *   `units` the list, names and kit only. The builder's errors name a unit
  *   by its place ("unit 2: ...").
  */
-function checkStandard(key, units) {
+function checkStandard(key, units, { mayBeEmpty = false } = {}) {
   const faction = FACTIONS[key]
   if (!faction) return { ok: false, errors: [`no faction "${key}"`], army: null, units: [] }
   const list = (Array.isArray(units) ? units : []).map(u => ({ name: typeof u?.name === 'string' ? u.name : '', ...kitOf(u) }))
   const built = buildArmy({ culture: faction.culture, units: list.map(kitOf) })
-  const errors = [...built.errors]
+  // A muster may field the elite alone (every other unit he owns left at
+  // home); an army bought must have a unit in it.
+  const errors = built.errors.filter(e => !(mayBeEmpty && list.length === 0 && e === 'an army needs at least one unit'))
   const elite = faction.elite.name
   list.forEach((u, i) => {
     if (!u.name) errors.push(`unit ${i + 1}: every unit needs a name`)
@@ -77,7 +81,7 @@ function checkStandard(key, units) {
     else if (list.findIndex(o => o.name === u.name) !== i) errors.push(`unit ${i + 1}: two units are called "${u.name}"`)
   })
   if (errors.length) return { ok: false, errors, army: null, units: list }
-  return { ok: true, errors: [], army: built.army, units: list }
+  return { ok: true, errors: [], army: built.army ?? { culture: faction.culture, usedSP: 0, units: [] }, units: list }
 }
 
 // The elite's kit, checked as faction.js checks it: only what the culture
@@ -91,16 +95,59 @@ function eliteOf(key) {
 }
 
 /**
- * A bought army's units for one side: the bought units, then the elite.
+ * The builder's price for a unit's kit, whoever forged it (a unit taken
+ * from the enemy: "it was captured, not bought"), at what horses cost this
+ * culture. The elite is priced as the best troops that can be bought, as
+ * a faction's elite is checked (eliteOf). Nothing about the kit is refused.
+ */
+function kitPrice(kit, culture) {
+  const k = kitOf(kit)
+  const tier = T.QUALITY_TIERS[k.quality === 'elite' ? 'veteran_mercenary' : k.quality]
+  const weapon = D.WEAPONS[k.weapon]
+  if (!tier || !weapon || !(k.armor in D.ARMOR_SP) || !(k.shield in D.SHIELD_SP)) return null
+  return tier.cost + weapon.sp + D.ARMOR_SP[k.armor] + D.SHIELD_SP[k.shield] + (k.mounted ? mountCost(culture) : 0)
+}
+
+// A unit taken from the enemy, as the builder gives its units: its kit as
+// it was, at the numbers it was raised to (`men`: an elite's are its
+// faction's), else its quality's.
+function takenUnit(unit) {
+  const k = kitOf(unit)
+  const tier = T.QUALITY_TIERS[k.quality]
+  if (!tier || !D.WEAPONS[k.weapon] || !(k.armor in D.ARMOR_SP) || !(k.shield in D.SHIELD_SP)) return null
+  const men = Number.isInteger(unit.men) && unit.men > 0 ? unit.men : unitSize(tier, k.weapon, k.mounted)
+  return { ...k, size: men, cost: 0 }
+}
+
+/**
+ * A bought army's units for one side: the bought units, then any taken
+ * from the enemy (`gained`, each with its own kit and culture; the caller
+ * has judged that he may field them), then the elite.
  * Ids carry each unit's name ("red_spears_2" is "Spears 2"), formed up
  * around 0,0 as a faction's army is (factions.js: formUp).
+ *
+ * A unit its Commander has renamed still answers to what it was called
+ * before (`formerly` on the unit, or on `elite`), where no other unit on
+ * the field answers to that.
+ *
+ * @param {Object} options
+ *   gained      [{ name, ...kit, culture, formerly }]
+ *   elite       { name, formerly }: the elite's own name, if he gave it one
+ *   mayBeEmpty  the elite may take the field alone
  */
-function standardUnits(key, units, side, homeEdge = side === 'red' ? 'west' : 'east') {
-  const checked = checkStandard(key, units)
+function standardUnits(key, units, side, homeEdge = side === 'red' ? 'west' : 'east', { gained = [], elite = null, mayBeEmpty = false } = {}) {
+  const checked = checkStandard(key, units, { mayBeEmpty })
   if (!checked.ok) throw new Error(`the army fails the builder: ${checked.errors.join('; ')}`)
+  const faction = FACTIONS[key]
   const e = eliteOf(key)
-  const names = [...checked.units.map(u => u.name), e.name]
-  const specs = toBattleUnits(checked.army, { side, positions: names.map(() => 'A1'), eliteWeapon: e.weapon })
+  const taken = gained.map(u => ({ name: String(u.name), built: takenUnit(u), culture: u.culture ?? faction.culture }))
+  const bad = taken.find(t => !t.built)
+  if (bad) throw new Error(`the ${bad.name}: their kit is not known`)
+  const names = [...checked.units.map(u => u.name), ...taken.map(t => t.name), elite?.name ?? e.name]
+  if (new Set(names).size !== names.length) throw new Error('two units on the field have one name')
+  const army = { ...checked.army, units: [...checked.army.units, ...taken.map(t => t.built)] }
+  const specs = toBattleUnits(army, { side, positions: names.map(() => 'A1'), eliteWeapon: e.weapon })
+  taken.forEach((t, i) => { specs[checked.units.length + i].culture = t.culture })
   Object.assign(specs[specs.length - 1], {
     // The faction's own number of men for its elite, where it has one.
     ...(e.size ? { strength: e.size, maxStrength: e.size } : {}),
@@ -116,10 +163,20 @@ function standardUnits(key, units, side, homeEdge = side === 'red' ? 'west' : 'e
     const kin = names.filter(n => baseOf(n) === base)
     return base !== name && kin.length > 1 && !kin.includes(base)
   }
+  // What each was called before, where nothing else on the field answers
+  // to it: no other unit's name, that name without its number, or another
+  // unit's own former name.
+  const listOf = (v) => (Array.isArray(v) ? v.map(String) : [])
+  const formerly = [...(Array.isArray(units) ? units : []).map(u => listOf(u?.formerly)), ...gained.map(u => listOf(u.formerly)), listOf(elite?.formerly)]
+  const answersTo = (i) => new Set([names[i], baseOf(names[i])])
+  const clear = (name, i) => names.every((_, j) => j === i || (!answersTo(j).has(name) && !formerly[j].includes(name)))
   const out = specs.map((spec, i) => ({
     ...spec,
     id: `${side}_${slug(names[i])}`,
-    aliases: together(names[i]) ? [names[i], baseOf(names[i])] : [names[i]],
+    aliases: [
+      ...(together(names[i]) ? [names[i], baseOf(names[i])] : [names[i]]),
+      ...formerly[i].filter(n => !answersTo(i).has(n) && clear(n, i))
+    ],
     faction: key
   }))
   return formUp(out, homeEdge)
@@ -132,14 +189,16 @@ function standardUnits(key, units, side, homeEdge = side === 'red' ? 'west' : 'e
  * keeps its army where it stands.
  *
  * @param {Object} spec    a scenario spec
- * @param {Object} armies  { [side]: { faction, units: [...] | null } }
+ * @param {Object} armies  { [side]: { faction, units: [...] | null, gained?, elite? } }
+ *   (gained and elite as standardUnits takes them; with them, `units` is
+ *   the list of bought units that march, which may be none)
  */
 function fieldArmies(spec, armies) {
   const map = resolveMap(spec.map ?? 'crownhill')
   let units = spec.units
-  for (const [side, { faction, units: bought }] of Object.entries(armies)) {
+  for (const [side, { faction, units: bought, gained = [], elite = null }] of Object.entries(armies)) {
     const homeEdge = spec.sides?.[side]?.homeEdge
-    const mine = bought ? standardUnits(faction, bought, side, homeEdge) : factionUnits(faction, side, homeEdge)
+    const mine = bought ? standardUnits(faction, bought, side, homeEdge, { gained, elite, mayBeEmpty: true }) : factionUnits(faction, side, homeEdge)
     const army = deployArmies(map, mine, { [side]: spec.sides?.[side] ?? {} })
     const at = units.findIndex(u => u.side === side)
     const rest = units.filter(u => u.side !== side)
@@ -159,4 +218,4 @@ function anyFaction(seed) {
   return keys[Math.floor(random() * keys.length)]
 }
 
-module.exports = { usualArmy, checkStandard, standardUnits, fieldArmies, anyFaction, kitOf, baseOf }
+module.exports = { usualArmy, checkStandard, standardUnits, fieldArmies, anyFaction, kitOf, baseOf, kitPrice }

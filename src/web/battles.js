@@ -42,9 +42,10 @@ const { orderWords } = require('../narrator/words')
 const { loadScenario, SCENARIOS, mapChoices } = require('../adapters/hotseat/scenarios')
 const { MAPS } = require('../data/maps')
 const { FACTIONS, factionChoices } = require('../engine/army/factions')
-const { fieldArmies, anyFaction, usualArmy } = require('../engine/army/standard')
-const { armyChanged } = require('../engine/command/company')
-const { checkArmy, appraise } = require('./armies')
+const { fieldArmies, anyFaction, usualArmy, kitOf, baseOf } = require('../engine/army/standard')
+const { armyChanged, handOver, takeIn, moveOfficer, renameUnit } = require('../engine/command/company')
+const { checkArmy, appraise, unitNoun } = require('./armies')
+const { rosterOf, marchingOf, checkMarching, fieldingOf, benchedOf, plainName, nameRefusal, renamed, without, addToRoster } = require('./roster')
 const { PARLEY } = T
 
 const TERRAIN_CODES = {
@@ -286,7 +287,10 @@ function createBattleStore({ dir = null, ai = null, now = () => Date.now() } = {
     // who has one, the scenario's own armies fight, as before factions.
     const faction = musterFaction(commander, m.faction)
     const enemy = faction ? (FACTIONS[m.enemyFaction] ? m.enemyFaction : anyFaction(seed)) : null
-    if (faction) spec = musterArmies(spec, { [side]: { faction, commander }, [other]: { faction: enemy } })
+    // Which of his units march: as asked, else as last time (roster.js).
+    if (commander) mayLead(commander)
+    const marching = commander?.faction ? whoMarches(commander, m.marching) : null
+    if (faction) spec = musterArmies(spec, { [side]: { faction, commander, marching }, [other]: { faction: enemy } })
     // Every unit gets an officer to carry the Commander's orders: a name,
     // his experience and his nature, drawn from the battle's seed.
     spec = { ...spec, units: assignOfficers(spec.units, seed) }
@@ -294,8 +298,7 @@ function createBattleStore({ dir = null, ai = null, now = () => Date.now() } = {
     // fight one battle at a time (ruled 2026-11-22).
     let company = null   // his company with this battle's officers given out
     if (commander) {
-      mayLead(commander)
-      const led = leadSide(spec, side, commander.company, seed)
+      const led = leadSide(spec, side, commander.company, seed, marching ? benchedOf(commander, marching) : [])
       company = led.company
       // He is on the field himself, riding with his best unit (his
       // veteran's): there he can be taken, or killed.
@@ -336,6 +339,8 @@ function createBattleStore({ dir = null, ai = null, now = () => Date.now() } = {
     if (commander) {
       if (faction && !commander.faction) commanders.setFaction(commander, faction)
       commanders.setCompany(commander, company)
+      // What marched this time is what marches next time, unless he changes it.
+      if (marching) commanders.setRoster(commander, { marching })
       commanders.setBattle(commander, entry.id)
     }
     return { id: entry.id, title: entry.title, seats: Object.fromEntries(Object.entries(entry.seats).filter(([, t]) => t)) }
@@ -353,9 +358,10 @@ function createBattleStore({ dir = null, ai = null, now = () => Date.now() } = {
   // A side's officers from a company, and the Commander on the field with
   // the unit his most experienced officer leads (a new Commander's veteran
   // is with the elite unit). For the muster and for the friend who joins.
-  function leadSide(spec, side, company, seed) {
+  // `benched`: the units he owns that stay at home; their officers stay with them.
+  function leadSide(spec, side, company, seed, benched = []) {
     const mine = spec.units.filter(u => u.side === side).map(u => ({ ...u, kind: unitName(u).toLowerCase() }))
-    const led = musterOfficers(company, mine, seed)
+    const led = musterOfficers(company, mine, seed, { benched })
     const officerOf = new Map(led.units.map(u => [u.id, u.officer]))
     // The quality each unit takes the field at: what it was raised as, and
     // what an officer of the greatest experience has since made of it.
@@ -382,21 +388,90 @@ function createBattleStore({ dir = null, ai = null, now = () => Date.now() } = {
 
   // ── The standard army ─────────────────────────────
 
-  // Each side's army on the field: the one its Commander bought, else its
-  // faction's usual army. `sides`: { [side]: { faction, commander? } }
+  // Each side's army on the field: the units of its Commander's roster that
+  // march (the ones he bought, or his faction's usual army; those taken from
+  // the enemy; the elite), else its faction's usual army.
+  // `sides`: { [side]: { faction, commander?, marching? } } (marching: the
+  // names, as whoMarches gives them)
   function musterArmies(spec, sides) {
     const armies = {}
-    for (const [side, { faction, commander }] of Object.entries(sides)) {
-      const units = commander?.army?.units ?? null
+    for (const [side, { faction, commander, marching }] of Object.entries(sides)) {
+      if (!commander?.faction) {
+        armies[side] = { faction, units: commander?.army?.units ?? null }
+        continue
+      }
+      const field = fieldingOf(commander, marching ?? whoMarches(commander))
       // Kept armies are checked when kept; checked again in case the rules
       // under them have changed since.
-      const checked = units ? checkArmy(faction, units) : null
+      const checked = field.units?.length ? checkArmy(faction, field.units) : null
       if (checked && !checked.ok) {
         throw Object.assign(new Error(`${commander.name}'s army no longer passes muster: ${checked.errors.join('; ')}. Change it, or take the usual army.`), { status: 409 })
       }
-      armies[side] = { faction, units }
+      armies[side] = { faction, ...field }
     }
     return fieldArmies(spec, armies)
+  }
+
+  // The names of the units that march with a Commander: those asked (an
+  // array, from the muster), else those that marched last time. Either way
+  // within his budget, or refused with the reason.
+  function whoMarches(commander, asked) {
+    const checked = checkMarching(commander, Array.isArray(asked) ? asked : marchingOf(commander))
+    if (!checked.ok) {
+      const error = Array.isArray(asked) ? checked.errors.join(' ') : `${checked.errors.join(' ')} Choose again who marches.`
+      throw Object.assign(new Error(error), { status: Array.isArray(asked) ? 400 : 409, errors: checked.errors })
+    }
+    return checked.names
+  }
+
+  // Not while his army is in the field.
+  function athome(commander, what) {
+    if (commander.ended) mayLead(commander)
+    const busy = fighting(commander)
+    if (busy) throw Object.assign(new Error(`${commander.name}'s army is in the field (${busy.title}). ${what} when the battle is over.`), { status: 409 })
+  }
+
+  /**
+   * A Commander moves an officer to another of his units, between battles
+   * (company.js, moveOfficer): to one that has none, or in exchange with the
+   * officer who leads it.
+   *
+   * @param {Object} body { officer: his id, to: the unit's name }
+   * @returns his company's view
+   */
+  function transfer(token, body = {}) {
+    const commander = commanders.get(token)
+    if (!commander) return null
+    athome(commander, 'His officers can be moved')
+    const officer = commander.company.officers.find(o => o.id === body.officer)
+    if (!officer) throw Object.assign(new Error('There is no such officer in your company.'), { status: 400 })
+    const to = rosterOf(commander).find(u => u.name === body.to)
+    if (!to) throw Object.assign(new Error(`You have no unit called "${String(body.to ?? '').slice(0, 40)}".`), { status: 400 })
+    commanders.setCompany(commander, moveOfficer(commander.company, officer.id, to.name).company)
+    return commanderView(token)
+  }
+
+  /**
+   * A Commander names one of his units that has an officer, between battles
+   * (roster.js, nameRefusal). The unit is the same men under its new name:
+   * its veterancy, training and officer (company.js, renameUnit), its place
+   * in his bought army or among those taken, in what marches; and it still
+   * answers to what it was called before where nothing else does.
+   *
+   * @param {Object} body { unit: its name now, name: the new one }
+   * @returns his company's view
+   */
+  function nameUnit(token, body = {}) {
+    const commander = commanders.get(token)
+    if (!commander) return null
+    athome(commander, 'His units can be named')
+    const from = String(body.unit ?? '')
+    const name = plainName(body.name)
+    const refused = nameRefusal(commander, from, name)
+    if (refused) throw Object.assign(new Error(refused), { status: 400, errors: [refused] })
+    commanders.setRoster(commander, renamed(commander, from, name))
+    commanders.setCompany(commander, renameUnit(commander.company, from, name))
+    return commanderView(token)
   }
 
   /**
@@ -418,14 +493,48 @@ function createBattleStore({ dir = null, ai = null, now = () => Date.now() } = {
     }
     if (!commander.faction) throw Object.assign(new Error('Choose a faction first: the army is bought from its kit.'), { status: 409 })
     let units = null
+    const before = rosterOf(commander)
     if (!body.usual) {
       const checked = checkArmy(commander.faction, body.units)
-      if (!checked.ok) throw Object.assign(new Error(checked.errors.join('; ')), { status: 400, errors: checked.errors })
-      units = checked.units
+      // A unit he named keeps its name only if it is the unit he named: the
+      // browser cannot name a unit by saying so.
+      const named = (name) => before.find(u => u.name === name && u.named && (u.how === 'bought' || u.how === 'usual'))
+      const errors = [...checked.errors, ...checked.units.filter(u => u.named && !named(u.name)).map(u => `${u.name}: that is not a name for ${unitNoun(u)}`)]
+      if (errors.length) throw Object.assign(new Error(errors.join('; ')), { status: 400, errors })
+      units = checked.units.map(({ named: _n, formerly: _f, ...u }) => {
+        const was = u.name && named(u.name)
+        return was ? { ...u, named: true, ...(was.formerly?.length ? { formerly: was.formerly } : {}) } : u
+      })
     }
-    const names = [...(units ?? usualArmy(commander.faction)).map(u => u.name), FACTIONS[commander.faction].elite.name]
+    // The units that came to him otherwise, but those he lets go
+    // (`captured`: the names of those he keeps; all, if not said).
+    const keep = Array.isArray(body.captured) ? body.captured.map(String) : null
+    const gained = (commander.gained ?? []).filter(u => !keep || keep.includes(u.name))
+    const elite = rosterOf(commander).find(u => u.how === 'elite').name
+    const clash = (units ?? []).find(u => u.name === elite || gained.some(g => g.name === u.name || baseOf(g.name) === baseOf(u.name)))
+    if (clash) {
+      const error = `${clash.name.charAt(0).toUpperCase()}${clash.name.slice(1)}: you have a unit called that already`
+      throw Object.assign(new Error(error), { status: 400, errors: [error] })
+    }
+    const bought = units ?? usualArmy(commander.faction)
+    const names = [...bought.map(u => u.name), ...gained.map(u => u.name), elite]
     commanders.setCompany(commander, armyChanged(commander.company, names))
     commanders.setArmy(commander, units)
+    // Who marches next: those that marched and are still his, and every
+    // unit he has just bought; then, should that be over the budget, the
+    // units taken from the enemy stay at home, the last taken first.
+    const fields = { gained: gained.length ? gained : null }
+    if (Array.isArray(commander.marching)) {
+      const had = new Set(before.map(u => u.name))
+      let marching = [...commander.marching.filter(n => names.includes(n)), ...bought.map(u => u.name).filter(n => !had.has(n))]
+      commanders.setRoster(commander, { ...fields, marching })
+      for (const g of [...gained].reverse()) {
+        if (checkMarching(commander, marching).ok) break
+        marching = marching.filter(n => n !== g.name)
+      }
+      fields.marching = marching
+    }
+    commanders.setRoster(commander, fields)
     return commanderView(token)
   }
 
@@ -477,8 +586,9 @@ function createBattleStore({ dir = null, ai = null, now = () => Date.now() } = {
    * @param {string} token           the friend's seat
    * @param {string|null} commander  their Commander's token, or null for none
    * @param {string|null} faction    for a Commander with none yet
+   * @param {string[]|null} marching the names of his units that march; else as last time
    */
-  function join(token, commanderToken = null, asked = null) {
+  function join(token, commanderToken = null, asked = null, marchingAsked = null) {
     const seat = seatOf(token)
     if (!seat) return null
     const { entry, side } = seat
@@ -494,12 +604,14 @@ function createBattleStore({ dir = null, ai = null, now = () => Date.now() } = {
     // usual one), where the muster gave this side another.
     const mustered = sideFaction(record.spec, side)
     const faction = mustered ? musterFaction(commander, asked) ?? mustered : null
-    let spec = faction && (faction !== mustered || commander?.army)
-      ? musterArmies(record.spec, { [side]: { faction, commander } })
+    // Those of his units that marched last time march (roster.js).
+    const marching = commander?.faction ? whoMarches(commander, marchingAsked) : null
+    let spec = faction && (faction !== mustered || commander?.army || (marching && fieldingOf(commander, marching).units))
+      ? musterArmies(record.spec, { [side]: { faction, commander, marching } })
       : record.spec
     // A seed of the side's own, so the two sides' first veterans are not
     // drawn alike.
-    const led = leadSide(spec, side, commander ? commander.company : createCompany(), (Math.imul(record.seed, 31) + 17) >>> 0)
+    const led = leadSide(spec, side, commander ? commander.company : createCompany(), (Math.imul(record.seed, 31) + 17) >>> 0, marching ? benchedOf(commander, marching) : [])
     spec = led.spec
     entry.game = replayGame({ ...record, spec })
     entry.joining = null
@@ -507,6 +619,7 @@ function createBattleStore({ dir = null, ai = null, now = () => Date.now() } = {
     if (commander) {
       if (faction && !commander.faction) commanders.setFaction(commander, faction)
       commanders.setCompany(commander, led.company)
+      if (marching) commanders.setRoster(commander, { marching })
       entry.commanders = { ...(entry.commanders ?? {}), [side]: commander.id }
     }
     entry.updatedAt = now()
@@ -983,6 +1096,7 @@ function createBattleStore({ dir = null, ai = null, now = () => Date.now() } = {
     const game = entry.game
     if (!game.outcome.decided || entry.settled) return
     entry.settled = true
+    const written = []
     for (const [side, id] of Object.entries(entry.commanders ?? {})) {
       const commander = commanders.byId(id)
       if (!commander) continue
@@ -999,6 +1113,8 @@ function createBattleStore({ dir = null, ai = null, now = () => Date.now() } = {
           unitId: f.unitId, culture: game.spec.units.find(u => u.id === f.unitId)?.culture ?? null,
           officerId: f.officerId, unit: f.unit.toLowerCase(), destroyed: f.destroyed, mustered: f.mustered, survivors: f.survivors, fought: f.fought,
           fate: f.headless && prices.includes(f.unitId) ? 'given up' : f.fate, ...(f.how ? { how: f.how } : {}),
+          // Given in a deal: the unit is gone, whatever befell its officer.
+          ...(prices.includes(f.unitId) ? { given: true } : {}),
           deeds: name(deeds).replace(/^[^:]+:\s*/, '').replace('BROKE', 'broke'),
           // "Spears, Swords: advance on the enemy" was said to both.
           orders: said
@@ -1006,16 +1122,66 @@ function createBattleStore({ dir = null, ai = null, now = () => Date.now() } = {
             .map(line => line.replace(/^[^:]+:\s*/, ''))
         }
       })
+      written.push({ side, commander, result, fates, prices, fresh: !(commander.company.settled ?? []).includes(entry.id) })
+    }
+    // What changes hands in a deal, read before any company is written.
+    const taken = capturesOf(entry, written)
+    for (const { side, commander, result, fates, prices, fresh } of written) {
       const end = commanderOf(game, side)
-      const after = settleBattle(commander.company, { id: entry.id, title: entry.title, result, seed: game.seed }, fates)
-      // Held as the battle was lost, with no deal: free, a commander of
-      // none (command/commander.js, heldWhenTheBattleEnds).
+      let after = settleBattle(commander.company, { id: entry.id, title: entry.title, result, seed: game.seed }, fates)
       // (A Commander held as a lost battle ended keeps what came through it.)
+      // The units his side was given in a deal join him, with their officers.
+      const coming = fresh ? taken.filter(t => t.to === side) : []
+      for (const unit of coming) {
+        const added = addToRoster(commander, unit.unit, 'captured')
+        commanders.setRoster(commander, { gained: added.gained })
+        after = takeIn(after, { name: added.unit.name, state: unit.state, officer: unit.officer, from: unit.unit.from })
+      }
       commanders.setCompany(commander, after)
+      // The units he gave are his no more, to a player or to the computer.
+      if (fresh && commander.faction) {
+        const gone = fates.filter(f => prices.includes(f.unitId)).map(f => f.unit)
+        for (const unit of gone) commanders.setRoster(commander, without(commander, unit))
+        if (gone.length) commanders.setCompany(commander, armyChanged(commander.company, rosterOf(commander).map(u => u.name)))
+      }
       if (commander.battle === entry.id) commanders.setBattle(commander, null)
       // Killed: everything ends with him. (A held Commander is never killed.)
       if (end?.fate === 'killed') commanders.end(commander, { how: end.fate, at: entry.title })
     }
+  }
+
+  // The units given in a deal between two players' Commanders, each as it
+  // goes to its captor's roster (ruled 2026-11-23: "Additional units from
+  // capture and other avenues exist"): its kit as it was raised, its men,
+  // its veterancy and training with this battle in them, its officer if he
+  // went with it, and whom it was taken from. Nothing is taken from or by
+  // the computer: it keeps no roster.
+  function capturesOf(entry, written) {
+    const game = entry.game
+    const out = []
+    for (const captive of written) {
+      if (!captive.prices.length) continue
+      const captor = written.find(w => w.side !== captive.side)
+      if (!captor?.commander.faction || !captive.commander.faction) continue
+      const roster = rosterOf(captive.commander)
+      for (const f of captive.fates.filter(x => captive.prices.includes(x.unitId))) {
+        const spec = game.spec.units.find(u => u.id === f.unitId)
+        const own = roster.find(u => u.name === f.unit)
+        const kit = own ?? { quality: spec.raisedAs ?? spec.quality, weapon: spec.primaryWeapon, armor: spec.armor, shield: spec.shield, mounted: Boolean(spec.mounted) }
+        const { state, officer } = handOver(captive.commander.company, { id: entry.id, title: entry.title, result: captive.result }, f)
+        out.push({
+          to: captor.side,
+          state,
+          officer,
+          unit: {
+            ...kitOf(kit), name: f.unit, men: spec.maxStrength ?? spec.strength, culture: spec.culture ?? null,
+            ...(own?.named ? { named: true } : {}), ...(own?.formerly ? { formerly: own.formerly } : {}),
+            from: { commander: captive.commander.name, faction: captive.commander.faction ?? null, battle: entry.title }
+          }
+        })
+      }
+    }
+    return out
   }
 
   // Was this side's Commander held all through the turn just run (taken
@@ -1104,6 +1270,8 @@ function createBattleStore({ dir = null, ai = null, now = () => Date.now() } = {
     maps: () => mapChoices(),
     factions: () => factionChoices(),
     setArmy,
+    transfer,
+    nameUnit,
     appraise: (faction, body) => appraise(faction, body)
   }
 }
