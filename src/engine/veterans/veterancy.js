@@ -19,6 +19,8 @@
 // All pure functions over a plain serializable state object. No DB here; the
 // repository in persistence.js stores whatever this produces.
 
+const { VETERANCY } = require('../combat/tables')
+
 // [salvage] EliteUnit.veteranLevel thresholds, by average experience.
 const VETERAN_LEVELS = [
   { name: 'Recruit', min: 0 },
@@ -131,7 +133,38 @@ function addRecruits(state, count) {
   return state
 }
 
+// ── Veterancy in battle (docs/design/army-balance.md, part 4) ──
+// A unit's veterancy is its men's average experience (averageExperience,
+// 0 to 30). In a battle it counts by the steps of tables.VETERANCY.STEPS,
+// which fall where an officer's grades do; below the first a unit is raw.
+const STEP_LEVELS = ['green', 'seasoned', 'veteran', 'legendary']   // one for each step, in order
+
+/** The level a veterancy has reached: 'raw', or the step's name. */
+function veterancyLevel(veterancy) {
+  let level = 'raw'
+  VETERANCY.STEPS.forEach((step, i) => { if ((veterancy ?? 0) >= step.from) level = STEP_LEVELS[i] ?? level })
+  return level
+}
+
+/**
+ * The veterancy the computer's army takes against a Commander (ruled
+ * 2026-11-23): the average of the units he fields, each unit counting
+ * once whatever its numbers (the elite among them; a unit with none counts
+ * as nothing), and no more than tables.VETERANCY.MATCH_UP_TO. To the
+ * hundredth, as averageExperience is.
+ *
+ * @param {Array} units  his units in this battle, each with `veterancy` or none
+ * @returns {number}
+ */
+function matchedVeterancy(units) {
+  if (!units?.length) return 0
+  const mean = units.reduce((n, u) => n + Math.max(0, u.veterancy ?? 0), 0) / units.length
+  return Math.min(VETERANCY.MATCH_UP_TO, Math.round(mean * 100) / 100)
+}
+
 module.exports = {
+  veterancyLevel,
+  matchedVeterancy,
   VETERAN_LEVELS,
   RESISTANCE_PER_LEVEL,
   createVeteranState,

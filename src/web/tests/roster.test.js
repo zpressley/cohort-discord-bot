@@ -431,7 +431,7 @@ test('battles and Commanders saved before the roster still load, and replay to t
       const now = (await app.api('GET', `/api/commander/${expected.commanders[key]}`)).body
       const was = expected.companies[key]
       assert.deepEqual(now.officers.map(({ id, ...o }) => o), was.officers)
-      assert.deepEqual(now.units, was.units)
+      assert.deepEqual(now.units.map(({ level, ...u }) => u), was.units)
       assert.deepEqual(now.roster.marching, was.army.units.map(u => u.name))
     }
     // The open battle goes on.

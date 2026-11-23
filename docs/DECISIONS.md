@@ -2363,3 +2363,118 @@ they were.
 3. Battles saved under older rules: replay under the rules they were played
    with (a rules version on each saved battle), or under today's?
 4. Kush's Golden Bows fight with a knife hand to hand: give the elite a sword?
+
+### How veterans in battle were built (Claude's choices, open to change)
+
+Builds Part 4 of `docs/design/army-balance.md` ("Veterans who fight
+better", and "The fairness problem"), taken 2026-11-23 with the computer
+matching the player. The engine's part (`tables.VETERANCY.STEPS`: from
+green 4, seasoned 8, veteran 13 and legendary 20 battles a man, +0.25,
++0.5, +0.75 and +1 to attack and defence and 5, 10, 15 and 20 in a hundred
+fewer of the men a blow would fell) was on the branch already; nothing
+passed a unit's veterancy into a battle. The code: `web/battles.js`
+(`leadSide`, `matchComputer`), `veterans/veterancy.js` (`veterancyLevel`,
+`matchedVeterancy`), `tables.VETERANCY.MATCH_UP_TO`, `narrator/words.js`
+(`VETERANCY_WORDS`), `web/commanders.js` (the view's `units[].level`), the
+Officers page and the army screen.
+
+**What was built.**
+- **Each unit goes in with its own veterancy.** At the muster, and when a
+  friend joins with his Commander, each of his units takes its men's
+  average experience (`unitsOf`, to the hundredth) as it stands before the
+  battle, onto the unit in the battle's spec. So it is saved with the
+  battle and replays. A unit at 0 (raised new, or bled to nothing) gets no
+  `veterancy` at all, so it is the same spec, and the same battle, as
+  before.
+- **The computer matches, up to seasoned.** Against the computer, every
+  unit of its army takes one number: the average of the veterancy of the
+  units he fields in this battle, **each unit counting once whatever its
+  numbers, the elite among them, a unit with none counting as nothing**,
+  and no more than 8 (`MATCH_UP_TO`, seasoned). Units left at home do not
+  count. It is fixed at the muster, in the spec, for the whole battle.
+- **Between two Commanders** each army carries its own; nothing is matched.
+  The friend's side carries nothing until he joins with a Commander. No
+  "fresh armies" switch (not asked for).
+- **He can see it.** On Your officers each officer's card says "His men:
+  seasoned, 9 battles a man on average", and a unit with no officer the
+  same ("Their men: raw, ..."); on the army screen each unit's line ends
+  "· men: seasoned". The words are `VETERANCY_WORDS` in `words.js`: the
+  officers' grade words (green, seasoned, veteran, legendary) at the same
+  steps, and **"raw"** below green (a new word: nothing in `words.js` named a
+  unit below green; "nameless" is an officer's, "fresh" and "recruit" were
+  the old ladder's). The server sends the word; the page puts it through
+  `esc()`.
+- **Fog of war.** No seat's view, his own or the enemy's, says any unit's
+  veterancy or what the computer matched (tested). The enemy's veterancy is
+  shown nowhere.
+- **Training and veterancy stack**, as the study describes: a unit trained
+  up a level by an officer of thirty battles goes in at its new quality and
+  with its veterancy (tested). No cap.
+
+**Measured** (`node src/harness/army-study/veterans-match.js --seeds 4`,
+new: a Commander's usual army, every unit of it carrying the veterancy,
+against the computer's usual army of another faction, the planner on both
+sides; the 9 factions whose usual army passes the builder on this base
+(kush, han, maurya, silla, persia, parthia, samnium, tibet, yayoi), four
+maps, both ways round; 288 battles a row, each its own seed, the same seeds
+in every row). `veterans.js --vs usual` could not run here: it fields all
+twenty factions' usual armies, and eleven fail the builder on this base.
+
+| His units carry | Without the match: won, his men lost, the computer's | With it: the computer carries | won, his men lost, the computer's |
+|---|---|---|---|
+| none | 51%, 39.1%, 39.5% | none | 51%, 39.1%, 39.5% |
+| green (4) | 52%, 37.0%, 39.9% | 4 | 51%, 38.1%, 38.6% |
+| seasoned (8) | 55%, 35.4%, 40.9% | 8 | 51%, 36.7%, 37.5% |
+| veteran (13) | 59%, 33.8%, 41.3% | 8 | 52%, 35.2%, 38.3% |
+| legendary (20) | 59%, 32.6%, 42.0% | 8 | 54%, 33.1%, 38.5% |
+| thirty battles (30) | 59%, 32.6%, 42.0% | 8 | 54%, 33.1%, 38.5% |
+
+What the numbers say:
+- **Without the match** a long-lived Commander wins clearly more (none 51%,
+  veteran and legendary 59%) and loses fewer men.
+- **With the match** the computer is never a pushover: the veteran wins
+  about what a new Commander wins (51% new, 51% seasoned, 52%
+  veteran, 54% legendary), within the noise (about 4
+  points at 288 battles). **His reward is almost all in men kept alive**,
+  not in battles won: his losses fall from 39 to 33 men in a hundred,
+  about as much as without the match, while the computer's matched men
+  also die a little less (39.5 to 38.5).
+- Thirty battles is the same as legendary: the steps stop at 20.
+- So the match does what was asked ("never a pushover"), and the reward
+  that is left is the one the game is about (keeping his people alive). If
+  Zach wants a veteran to win more often against the computer too, the cap
+  could be lower (green), or the match a share of his average.
+
+**Guessed at.**
+- **The average weighs units equally and counts the elite** (as
+  recommended). The other reading: weigh by men (a big unit of recruits
+  pulls it down more), or leave the elite out (it is usually his best).
+- **"Up to seasoned" read as a veterancy of 8**, seasoned's step; the
+  average itself is passed under it (so 6 is 6, which fights as green).
+  The other reading: round the match down to its step.
+- **The match is of the units he fields this battle**, not his whole
+  roster.
+- **A friend's side** carries nothing until he joins with a Commander; a
+  friend who joins with none fields no veterancy, and no match is made
+  (he is not the computer).
+- **"raw"** as the word for a unit below green.
+- Veterancy goes in to the hundredth, as the company keeps it; only the
+  steps matter in the battle.
+
+**Left open.**
+- **A cap on training and veterancy together** (the study's question 8:
+  "professional +1"?). Not ruled; none built.
+- The muster does not show the enemy's or the computer's veterancy before
+  the battle (the study's idea for friends); not asked for.
+- `veterans.js` should be run again with the twenty factions once their
+  usual armies pass the builder.
+
+**Tests.** `src/engine/veterans/tests/veterancy-in-battle.test.js` (5) and
+`src/web/tests/veterans.test.js` (11), and a line in the fog-of-war test
+in `server.test.js`. A battle saved before this change is
+`tests/fixtures/before-veterans` (made with the code before, by
+`fixtures/make-before-veterans.js`): it has no veterancy in its spec and
+replays exactly. Like every saved battle, it pins the combat rules of the
+day: a change to combat replays it differently (as `before-roster` already
+does on this base). `roster.test.js` compares a Commander's units without
+the new `level`.
