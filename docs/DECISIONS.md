@@ -706,6 +706,67 @@ so costs his company nothing; while the price taken from him at a defeat
 is his best unit, the elite with its veteran.
 
 
+### How attacking a named enemy was built (Claude's choices, open to change)
+
+Review items L10 ("an attack order may name a seen enemy unit; the unit
+follows it while it stays in sight") and L11 ("say where they will stop in
+the read-back").
+
+- **The order.** An attack may carry `enemy`, an enemy unit's id
+  (`battle/orders.js`). Each tick the unit makes for that enemy while its
+  side can see it; else for where its side last saw it (`state.lastSeen`);
+  once a unit of its side has stood there and found no one (the same memory
+  "advance" goes by), it presses the enemy as a plain advance does
+  (`toPress`, `whereToLook`), and goes for the named enemy again if it is
+  seen again. It never steers by where an unseen enemy truly stands. The
+  order never finishes, as advance does not: reaching the place last seen is
+  not "arrived", and it does not stop the clock early.
+- **When the enemy is gone.** Destroyed, broken or off the field: the order
+  becomes a plain advance (careful and any condition kept) and the unit's
+  own side is told so (a new private event, `quarryGone`). Guess: a broken
+  enemy counts as gone. The other reading was to chase it as it flees; the
+  engine's pursuit already does that, and an enemy that rallies is pressed
+  by the advance anyway.
+- **Missile troops** told to attack a named enemy shoot at that one first.
+- **Seen kinds.** To let a Commander say "their archers" for an enemy whose
+  id is `blue_unit_3`, a side's intel now records what anyone seeing a unit
+  could tell: its role, whether it is mounted, and its weapon
+  (`orchestrator/fogOfWar.js`). Nothing decides anything by it.
+- **Reading it.** The grammar reads "horse attack their archers", "spears
+  charge the enemy swords", "swords go for the archers", "horse ride down
+  their slingers": after attack, charge, assault, engage, hit, strike or fall
+  on, the words must mark the enemy ("their", "enemy") or name a kind of
+  troops; "go for", "go after", "ride down" and "run down" are always an
+  enemy. "Attack the ford" and "attack the enemy" read as before. Only an
+  enemy the side's intel carries (in sight or last seen) can be named, by
+  kind or by a word of its name ("swordsmen" for the enemy swords); nothing
+  seen that fits is a question listing what has been seen; two that fit is a
+  choice, each option written back as "archers at D2-SE", which picks the
+  one seen nearest that square. The read-back: "red_horse: attack
+  blue_archers, in sight at D2-SE" (the web app's names make it "attack
+  enemy archers"); the Army tab says "attacking enemy archers".
+- **The AI reader** has one more field, `enemy` (the name as listed under
+  "Enemy seen", or null), defaulted to null for replies without it. The
+  briefing now says what kind each seen enemy is. A live benchmark run is
+  owed: it was not run.
+- **The computer's side is unchanged.** Its horse still attack the square
+  where they see archers; it gives orders afresh every player turn, so the
+  named order would only help within the ticks of one turn, and that win was
+  not measured. Left alone.
+- **L11.** "Fall back" with no place named now reads back where each unit
+  will stop, from the engine's own home target: "fall back to your own edge
+  of the field at A3-NW, 100 m west, and hold there". The reader needs the
+  side's home edge in its context (`homeEdge`); the hotseat gives it. The web
+  app's reading context does not carry it yet (one line in
+  `web/battles.js` `context()`, left for whoever owns that file), so there
+  the read-back says "fall back to your own edge of the field, and hold
+  there" without the squares.
+- **Measured.** A battle that never gives the order runs exactly as before:
+  whole event logs of four computer-against-computer games and three meeting
+  battles fingerprinted against the code before the change
+  (`harness/tests/attack-named-unchanged.test.js`). The balance matrix is
+  unchanged; the soak ends every game.
+
 ### How factions at the muster were built (Claude's choices, open to change)
 
 Builds ruling 2 of November 23 ("The elite unit is the unique unit of the

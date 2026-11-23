@@ -62,10 +62,11 @@ function unitName(unit) {
 
 // An order in force, in plain words. A unit with no order follows its
 // side's standing order: to advance (the computer's side), or to hold.
-function describeOrder(order, standing = null) {
+// `name` words an enemy unit's id ("enemy archers"), for an attack on one.
+function describeOrder(order, standing = null, name = (id) => id) {
   if (!order) return standing === 'advance' ? 'advancing on the enemy (standing orders)' : 'holding (no orders yet)'
   // The same words the read-back and the dispatches use (narrator/words.js).
-  const doing = orderWords('doing', order, order.target ? where(order.target) : null)
+  const doing = orderWords('doing', order, order.enemy ? name(order.enemy) : order.target ? where(order.target) : null)
   const more = order.steps?.length ? `, then ${order.steps.length} more ${order.steps.length === 1 ? 'step' : 'steps'}` : ''
   switch (order.action) {
     case 'ambush': return doing +
@@ -492,6 +493,8 @@ function createBattleStore({ dir = null, ai = null, now = () => Date.now() } = {
       units: game.battle.world.units.filter(u => u.side === side && u.strength > 0 && !game.battle.broken.has(u.id))
         .map(u => ({ ...u, aliases: [unitName(u).toLowerCase(), ...(u.aliases ?? [])] })),
       enemies: sideView(game, side).intel,
+      // Where "fall back" takes a unit, for the read-back.
+      homeEdge: game.spec.sides?.[side]?.homeEdge,
       lyingInWait: lyingInWait(game.battle, side),
       // For counsel: the units that would break at the first blow.
       shaken: game.battle.world.units.filter(u => u.side === side && game.battle.isShaken(u)).map(u => u.id)
@@ -546,7 +549,7 @@ function createBattleStore({ dir = null, ai = null, now = () => Date.now() } = {
         holdingFire: Boolean(battle.orderBook.get(u.id)?.holdFire),
         order: battle.broken.has(u.id)
           ? 'broken and fleeing'
-          : describeOrder(battle.orderBook.get(u.id), game.spec.standingOrders?.[side]) +
+          : describeOrder(battle.orderBook.get(u.id), game.spec.standingOrders?.[side], namer(game, side)) +
             (battle.rallied?.has(u.id) ? (state && state.morale <= 25 ? ' (rallied, at breaking point)' : ' (rallied)') : ''),
         target: battle.orderBook.get(u.id)?.target ?? null
       }

@@ -219,6 +219,18 @@ function stepTurn(state, sideOrders = {}, { sameTurn = false } = {}) {
     // When the whole field has been looked over, begin again.
     return { id: 'the ground not yet searched', position: whereToLook(unit) }
   }
+  // Where a unit told to attack one enemy (by its id) makes for: the enemy
+  // itself while its side can see it; else where its side last saw it; null
+  // when no one knows where it went (it presses the enemy as advance does).
+  // { gone: true } when the enemy is destroyed, broken or off the field.
+  // Never where an enemy its side cannot see truly stands.
+  const toFollow = (unit, enemyId) => {
+    const enemy = getUnit(world, enemyId)
+    if (!enemy || enemy.side === unit.side || enemy.strength <= 0 || broken.has(enemyId)) return { gone: true }
+    if (seenAtStart.get(unit.side)?.has(enemyId)) return { id: enemyId, position: enemy.position }
+    const remembered = state.lastSeen.get(unit.side)?.get(enemyId)
+    return remembered ? { id: enemyId, position: remembered } : null
+  }
   const lookedOver = new Set()
   const whereToLook = (unit) => {
     if (!state.searched.has(unit.side)) state.searched.set(unit.side, new Set())
@@ -345,6 +357,7 @@ function stepTurn(state, sideOrders = {}, { sameTurn = false } = {}) {
     const context = (unit) => ({
       fresh: fresh.has(unit.id),
       nearestEnemy: (u) => toPress(u),
+      namedEnemy: (u, id) => toFollow(u, id),
       homeTarget: (u) => edgeTarget(map, u.position, edge)
     })
 
@@ -365,7 +378,8 @@ function stepTurn(state, sideOrders = {}, { sameTurn = false } = {}) {
         freshThisTurn.add(unit.id)
       }
 
-      let { move, order, lostThread } = planUnit(unit, current, context(unit))
+      let { move, order, lostThread, quarryGone } = planUnit(unit, current, context(unit))
+      if (quarryGone) log.emit('quarryGone', turn, { unitId: unit.id, on: quarryGone })
       if (lostThread) {
         // He has done what he remembered, and not what came after.
         const instead = loseThread(unit, 'steps', current);
@@ -501,7 +515,7 @@ function stepTurn(state, sideOrders = {}, { sameTurn = false } = {}) {
     // it does now: 'hold' (digs in) or 'standing' (back to its side's
     // standing orders).
     const order = state.orderBook.get(move.unitId)
-    if (move.reachedTarget && order && order.action !== 'hold' && order.action !== 'advance') {
+    if (move.reachedTarget && order && order.action !== 'hold' && order.action !== 'advance' && !order.enemy) {
       log.emit('arrived', turn, {
         unitId: move.unitId, action: order.action, at: { ...move.to },
         then: order.then === 'hold' ? 'hold' : 'standing',
@@ -633,10 +647,12 @@ function stepTurn(state, sideOrders = {}, { sameTurn = false } = {}) {
     const moved = movedFar.has(shooter.id)
     if (moved && !shooter.mounted) continue
 
+    // (An attack on a named enemy shoots at that enemy first.)
     const first = order?.against ?? null
+    const wanted = (e) => first ? matchesKind(e, first) : Boolean(order?.enemy) && e.id === order.enemy
     const target = livingUnits(world)
       .filter(e => canShootAt(shooter, e, seenNow))
-      .map(e => ({ unit: e, distance: tileDistance(shooter.position, e.position), wanted: first && matchesKind(e, first) ? 0 : 1 }))
+      .map(e => ({ unit: e, distance: tileDistance(shooter.position, e.position), wanted: wanted(e) ? 0 : 1 }))
       .sort((x, y) => x.wanted - y.wanted || x.distance - y.distance || x.unit.id.localeCompare(y.unit.id))[0]
     if (!target) continue
     loosed.push({
@@ -1176,5 +1192,6 @@ module.exports = {
   tileAwayFrom,
   edgeTarget,
   isOnEdge,
+  matchesKind,
   DEFAULT_MAX_TURNS
 }

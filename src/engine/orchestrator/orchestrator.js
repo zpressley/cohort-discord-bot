@@ -297,6 +297,8 @@ function ordersCarriedOut(battle) {
     if (doneIds.has(unit.id) || battle.broken.has(unit.id) || unit.strength <= 0) return false
     const order = battle.orderBook.get(unit.id)
     if (!order) return false
+    // Going for a named enemy never finishes, as pressing the enemy does not.
+    if (order.enemy) return false
     switch (order.action) {
       case 'hold': case 'advance': return false
       case 'check': return true

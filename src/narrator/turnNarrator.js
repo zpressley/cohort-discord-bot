@@ -11,7 +11,7 @@
 const { featuresAt, detectFeatures } = require('../engine/map/features')
 const { distance } = require('../engine/map/labels')
 const { compassWord, TILE_METRES } = require('../engine/map/places')
-const { orderWords, moraleWords } = require('./words')
+const { orderWords, moraleWords, ORDER } = require('./words')
 const { gridLabel } = require('../engine/map/grid')
 
 // Where a tile is, in words: the feature it is part of, or the nearest
@@ -42,7 +42,7 @@ function involved(event) {
 
 // Events only the unit's own side knows of: its hiding, its search, an
 // ambush it held back, how packed its ranks are.
-const PRIVATE = new Set(['hidden', 'hideFailed', 'ambushHeld', 'checked', 'crowding', 'heartened', 'reacted', 'lostThread', 'commanderMoved'])
+const PRIVATE = new Set(['hidden', 'hideFailed', 'ambushHeld', 'checked', 'crowding', 'heartened', 'reacted', 'lostThread', 'commanderMoved', 'quarryGone'])
 // The engine's own record of a roll, which no commander is told of.
 const UNTOLD = new Set(['grasp'])
 
@@ -213,6 +213,7 @@ function plainFact(map, event) {
       : `${event.officer ? `${event.officer} of ${event.unitId}` : `the officer of ${event.unitId}`} lost the thread of his orders`) +
       (event.lost === 'condition' ? ' when the moment came' : ' once the first part was done') +
       (event.did === 'advance' ? ' and advanced on the enemy' : event.did === 'hold' ? ' and held where he stood' : ' and carried on as he was')
+    case 'quarryGone': return `${event.on}, whom ${event.unitId} were sent to attack, are beaten or gone; ${event.unitId} ${ORDER.advance.did} instead`
     case 'volley': return `${event.by} shot at ${event.unitId}` + (event.killed ? `, felling ${men(event.killed)}` : ', to little effect')
     case 'rout': return `${event.unitId} broke and fled from ${event.by}`
     case 'pursuit': return `${event.by} cut down ${event.killed} of the fleeing ${event.unitId}` + (event.trapped ? ', who were cornered' : '')
@@ -256,7 +257,7 @@ function plainFact(map, event) {
 // How much a commander needs to hear of each kind of event: lower is sooner.
 const WEIGHT = {
   victory: 0, commanderKilled: 0, commanderTaken: 0, commanderFreed: 0, commanderMoved: 1, destroyed: 1, rout: 1, fled: 1, rallied: 1, pursuit: 2, ambush: 1, surprise: 2, objective: 2,
-  volley: 3, lostThread: 1, reacted: 2,
+  volley: 3, lostThread: 1, reacted: 2, quarryGone: 2,
   heartened: 5,
   revealed: 3, exchange: 3, standoff: 3, push: 4, crush: 4, disengage: 4, contact: 4,
   hidden: 5, hideFailed: 5, checked: 5, ambushHeld: 5, crowding: 6, arrived: 6, halted: 6, move: 7
