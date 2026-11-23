@@ -86,7 +86,14 @@ function plain(reason, names = []) {
 }
 
 // A list from the browser: names and kit, nothing else.
-const clean = (units) => (Array.isArray(units) ? units.slice(0, 40) : []).map(u => ({ name: typeof u?.name === 'string' ? u.name.slice(0, 40) : '', ...kitOf(u) }))
+// A unit its Commander has named (`named`, and what it was called before,
+// `formerly`) keeps its name whatever its kit: the server takes the flag
+// only from the army it keeps (battles.js, setArmy), never from the browser.
+const clean = (units) => (Array.isArray(units) ? units.slice(0, 40) : []).map(u => ({
+  name: typeof u?.name === 'string' ? u.name.slice(0, 40) : '', ...kitOf(u),
+  ...(u?.named === true ? { named: true } : {}),
+  ...(Array.isArray(u?.formerly) ? { formerly: u.formerly.slice(0, 10).map(n => String(n).slice(0, 40)) } : {})
+}))
 
 /**
  * Check an army a player sends, as the server keeps it.
@@ -99,7 +106,7 @@ function checkArmy(key, units) {
   const checked = checkStandard(key, list)
   const errors = checked.errors.map(e => plain(e, names))
   list.forEach((u, i) => {
-    if (u.name && !checked.errors.some(e => e.startsWith(`unit ${i + 1}: `) && /name|called/.test(e)) && !nameFits(key, u, u.name)) {
+    if (u.name && !u.named && !checked.errors.some(e => e.startsWith(`unit ${i + 1}: `) && /name|called/.test(e)) && !nameFits(key, u, u.name)) {
       errors.push(`${cap(u.name)}: that is not a name for ${unitNoun(u)}`)
     }
   })
@@ -115,10 +122,11 @@ function checkArmy(key, units) {
  * shield"), and the army's budget is part of every choice.
  *
  * @param {string} key   the faction
- * @param {Object} body  { units, draft, at } `at`: the place in `units` of
- *                       the unit the draft changes; none for a new one
+ * @param {Object} body  { units, draft, at, reserved } `at`: the place in
+ *                       `units` of the unit the draft changes; none for a
+ *                       new one. `reserved`: names his other units bear
  */
-function appraise(key, { units = [], draft = null, at = null } = {}) {
+function appraise(key, { units = [], draft = null, at = null, reserved = [] } = {}) {
   const faction = FACTIONS[key]
   if (!faction) return null
   const culture = faction.culture
@@ -146,8 +154,11 @@ function appraise(key, { units = [], draft = null, at = null } = {}) {
   if (!draft) return out
 
   const kit = kitOf(draft)
-  const otherNames = others.map(u => u.name)
-  const name = typeof draft.name === 'string' && nameFits(key, kit, draft.name) && !otherNames.includes(draft.name)
+  // The names of the units he has that are not bought (taken from the
+  // enemy; his elite, if he named it) are not free either.
+  const otherNames = [...others.map(u => u.name), ...(Array.isArray(reserved) ? reserved.slice(0, 40).map(String) : [])]
+  // A unit he named keeps its name whatever its kit.
+  const name = typeof draft.name === 'string' && (draft.named === true || nameFits(key, kit, draft.name)) && !otherNames.includes(draft.name)
     ? draft.name : nextName(key, kit, otherNames)
   // Why the unit, or the army with it, is not allowed: the builder's first
   // reason, the unit's own before the budget's.
@@ -191,4 +202,4 @@ function appraise(key, { units = [], draft = null, at = null } = {}) {
   return out
 }
 
-module.exports = { appraise, checkArmy, unitNoun, namesFor, nextName, nameFits, kitWords, plain, usualArmy }
+module.exports = { appraise, checkArmy, unitNoun, namesFor, nextName, nameFits, kitWords, plain, usualArmy, budgetOf, taken }

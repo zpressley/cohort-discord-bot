@@ -19,6 +19,7 @@ const { gradeOf, EARNED_AT, loyaltyBand } = require('../engine/command/officers'
 const { PLAIN } = require('../data/officers')
 const { FACTIONS } = require('../data/factions')
 const { usualArmy } = require('../engine/army/standard')
+const { rosterView } = require('./roster')
 
 function createCommanderStore({ dir = null, now = () => Date.now() } = {}) {
   const folder = dir ? path.join(dir, 'commanders') : null
@@ -98,6 +99,22 @@ function createCommanderStore({ dir = null, now = () => Date.now() } = {}) {
     save(commander)
   }
 
+  /**
+   * His roster beyond what he bought (roster.js): any of `army` ({ units }),
+   * `gained` (the units that came to him otherwise), `marching` (the names
+   * of those he last chose to march) and `elite` ({ name, formerly }, the
+   * name he gave his elite). A field left out is left as it is; null
+   * removes it.
+   */
+  function setRoster(commander, fields) {
+    for (const key of ['army', 'gained', 'marching', 'elite']) {
+      if (!(key in fields)) continue
+      if (fields[key] === null) delete commander[key]
+      else commander[key] = fields[key]
+    }
+    save(commander)
+  }
+
   const get = (token) => byToken.get(token) ?? null
   const byId = (id) => [...byToken.values()].find(c => c.id === id) ?? null
   function setCompany(commander, company) {
@@ -137,12 +154,17 @@ function createCommanderStore({ dir = null, now = () => Date.now() } = {}) {
         : {}),
       battles: company.battles,
       officers: company.officers.map(o => ({
+        id: o.id,
         name: o.name, grade: gradeOf(o), experience: o.experience, personality: o.personality,
         // What he holds dear, and whether he is loyal, disaffected or neither.
         values: o.values ?? null, loyalty: loyaltyBand(o),
         leads: o.leads, status: o.status,
+        // Given to you in a deal for his own Commander's freedom.
+        ...(o.taken ? { taken: o.taken } : {}),
         record: [...o.record].reverse()
       })),
+      // Every unit he owns, what each costs to march, and which march.
+      ...(commander.faction ? { roster: rosterView(commander) } : {}),
       // Units with no officer yet, and the battles each has come through
       // toward one (he comes forward at `earnedAt` battles).
       unled: unitsOf(company).filter(u => !u.led).map(u => ({ kind: u.kind, battles: u.battles })),
@@ -154,7 +176,7 @@ function createCommanderStore({ dir = null, now = () => Date.now() } = {}) {
     }
   }
 
-  return { create, get, byId, setCompany, setBattle, setFaction, setArmy, end, view }
+  return { create, get, byId, setCompany, setBattle, setFaction, setArmy, setRoster, end, view }
 }
 
 module.exports = { createCommanderStore }

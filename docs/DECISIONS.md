@@ -1770,3 +1770,149 @@ factions). All end. The league plays them all.
    horse armies), so long as no faction is weak overall?
 7. The Berbers have no horse-culture discount; the doc does not give them
    one, but their elite is "desert cavalry". Should they?
+
+### How the roster, captured units, officer transfers and unit names were built (Claude's choices, open to change)
+
+Builds rulings 2 and 3 of November 23 (the army, and veterans): "You don't
+have to deploy every unit every game. But you cannot field an army over the
+supply threshold. Additional units from capture and other avenues exist. You
+can transfer officers." and "You can name units after they get an officer."
+The code: `src/web/roster.js` (new), `command/company.js` (`musterOfficers`'
+`benched`, `handOver`, `takeIn`, `moveOfficer`, `renameUnit`),
+`army/standard.js` (`kitPrice`, units taken and former names in
+`standardUnits`), `web/battles.js` (`muster`, `join`, `musterArmies`,
+`leadSide`, `setArmy`, `settle`, and `whoMarches`, `transfer`, `nameUnit`,
+`capturesOf`), `web/commanders.js` (`setRoster`, the view's `roster`), the
+muster form, the army screen and Your officers. The one number is
+`tables.LOYALTY.CAPTURED`.
+
+**The roster (A).**
+- Everything he owns: the units he bought (or his faction's usual army),
+  the units that came to him otherwise (`commander.gained`, each with `how`
+  it came), and his elite.
+- **The loophole is closed by what he buys:** everything bought must fit the
+  budget together, at home or not, as buying always was. Only units that came
+  otherwise (capture) take the roster beyond it. (The suggestion in the
+  brief, taken as it was.)
+- **What marches may cost no more than the budget**: a bought unit at its
+  price, a captured one at the builder's price for its kit whoever forged it
+  (an elite priced as veteran mercenaries, as a faction's elite is checked),
+  horses at the captor's culture's price. The elite always marches, free.
+  The elite may march alone.
+- **A unit at home** keeps everything and takes no part: no battle is
+  counted for it or its officer, and its officer is not lent to another unit
+  (`benched` in `musterOfficers`; an officer whose unit was dismissed is still
+  lent, as before). A wounded officer at home is fit again after the battle,
+  as one who sat a battle out always was.
+- **Who marches** is kept with the Commander (`commander.marching`): the
+  muster and the friend who joins use last time's choice, the first time
+  everything bought. A unit just bought joins it; a unit taken from the enemy
+  waits at home until chosen. Should a change of army put the choice over
+  the budget, taken units stay home, the last taken first.
+- **The muster form**: under the army line, a folded "Who marches" showing
+  the units marching and the supply spent and left; open, a tap on a unit
+  leaves it home or brings it, and the elite is shown fixed. Over the budget
+  the line turns red and the server refuses with the cost; one tap still
+  musters for a player who changes nothing. (The friend's "Who leads?"
+  screen marches last time's choice; it has no chooser of its own.)
+- His faction's usual army, marched whole and with no unit named, is
+  mustered exactly as before (tested equal); otherwise it is fielded as a
+  bought list.
+
+**Captured units (B).**
+- A unit given in a deal (`'given up'`) between two players' Commanders goes
+  to the captor's roster as `how: 'captured'`: its kit as it was raised (so
+  kit his faction cannot buy, Roman gladii in a Macedonian army), its men
+  (an elite keeps its faction's size), its culture, its veterancy and
+  training with this battle in them, its officer (his experience, record,
+  nature and what he holds dear his own, this battle added) and whom it was
+  taken from. A name he already uses gives it the next free one by the
+  existing rule, and it still answers to its old name.
+- **The captured officer's loyalty is 15** (`LOYALTY.CAPTURED`, under
+  DISLOYAL 30), whatever it was. Loyalty is built since this was asked for,
+  so it bites at once: his men start a battle in worse heart, he is likelier
+  to lose the thread of an order, and they desert while his new Commander is
+  held. His card says "Given to you by Commander ... in a deal for his own
+  freedom. He has every reason to hate you."
+- **Given units leave the giver's roster, to a player or to the computer.**
+  Before, a unit given was raised again from nothing next battle; now it is
+  gone (a usual army missing a unit becomes his own list). His elite, given,
+  is raised again: it is his faction's. A unit given whose officer was killed
+  in the same battle is gone too (`given` on its fate; before, it stayed).
+- **Nothing is captured from or by the computer**: it keeps no roster. A
+  Commander with no faction (from before factions) neither captures nor
+  loses roster units.
+- **Other avenues**: `AVENUES` in `roster.js` names how a unit may come
+  (only `captured`), and `addToRoster(commander, unit, how)` takes one in.
+  Nothing else is built.
+
+**Transferring officers (C).** On Your officers, "Move him to other men"
+under each officer opens a list of his other units: "To the velites, who
+have no officer" or "To the hastati, in place of Tullus" (the two change
+places). Only between battles (409 while the army is in the field). His
+experience, record and loyalty go with him; each unit's veterancy and
+training stay. A unit left with no officer finds one in its ranks by the
+existing rule. Stripping the elite of its officer is allowed.
+
+**Naming a unit (D).**
+- On the army screen, "Name them" on a unit (the elite too) that has an
+  officer; kept at once, between battles only, and not while army changes
+  are unsaved.
+- **The rules** (`nameRefusal`, judged on the server): one to three words of
+  plain letters, 3 to 24 characters in all, each word two letters or more;
+  kept in lower case with single spaces and no leading "the" (every unit
+  name is shown in sentence case, and the order reader takes no account of
+  case: "The Iron Wolves" is kept as "iron wolves" and shown "Iron wolves").
+  No word the order reader takes for something else: everyone, all, army,
+  the enemy, the sides, the order words, directions, pronouns, "and" and
+  "then" and the like. No word for a kind of troops: the order reader's
+  (horse, archers, foot...), the roles (spearmen, infantry, cavalry...), the
+  names the game gives kit (spears, swords, slingers...). No name the game
+  gives any unit of any faction (legionaries, silver shields...). No place on
+  any field, and no word for a kind of ground (hill, ford, bridge, road...).
+  Different from every other unit he owns. Each refusal says which rule.
+- **What carries the name:** his company (`units` and the officer's
+  `leads`), his bought army or his captured units (or the elite's own name),
+  what marches, and every battle mustered after it (the unit's id and
+  aliases, so the saved battle replays under it). Battles before keep the
+  name the unit bore then, as an officer's record does: changing a saved
+  battle would break its replay. A rename is refused while the army is in
+  the field, so no battle is between names.
+- **It still answers to what it was called before** (`formerly`), where
+  nothing else on the field answers to that: no other unit's name, that name
+  without its number, or another unit's former name.
+- A unit he named keeps its name through a change of kit; the server takes
+  `named` only from the army it keeps, never from the browser.
+- **Names are not yet moderated.** They reach other players' screens (a
+  captured unit, the enemy's dispatches) and always go through `esc()`.
+
+**Measured.** `npm run balance` unchanged. 15 new API tests
+(`tests/roster.test.js`) and a phone test in the browser; battles and
+Commanders saved by the code before this change (`tests/fixtures/
+before-roster`, made with main as it was) load, replay to the same state and
+go on.
+
+**Guessed at.**
+- That units given to the computer leave the giver's roster too (the other
+  reading: only those that go to a player).
+- That a captured unit waits at home until chosen, and a newly bought one
+  marches.
+- Captured officer loyalty 15; captured units priced at the captor's horse
+  price.
+- That the elite may march alone, and may be named, and when given is raised
+  again for its faction under its own name.
+- Names kept lower case; "the" dropped from the front.
+
+**For Zach.**
+1. Units given to the computer: gone from the roster (built), or raised
+   again as before?
+2. Should a captured unit's price to march be its kit's price (built), more
+   (a premium for kit the faction cannot forge), or less?
+3. Is 15 right for a captured officer's loyalty, and should anything win him
+   over faster than battles do?
+4. Should the friend's "Who leads?" screen let him choose who marches, or is
+   last time's choice enough?
+5. Names: is the list of refused words right, and should names be moderated
+   before they reach another player?
+6. A Commander whose elite is given in a deal: raised again from nothing
+   (built), or does he lose his elite?
