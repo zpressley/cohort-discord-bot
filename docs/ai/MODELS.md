@@ -148,5 +148,17 @@ more. The instruction that held: the field is only for the unit an attack
 goes for, the model writes the Commander's own words when nothing listed
 fits and never asks because of it (the code asks, in `resolve.js`), and
 `against` and conditions name a kind of enemy, not a unit. On the five
-orders involved: 5 of 5. The day's free tokens were spent by then, so **a
-full run with the final wording is still owed.**
+orders involved: 5 of 5. The day's free tokens were spent by then, so a
+full run with the final wording was owed.
+
+2026-11-23, later, the full run with the final wording: **51 of 52** on two
+full runs (19 by the grammar alone, 32 AI calls, 2,433 tokens in and about
+200 out a read, about $0.00018; the dispatch clean both times). The same
+miss both times: "archers fall back 100 metres to the west". The model gave
+the place as "the west" and dropped the distance, and the code, rightly,
+asked where that was. Fixed in the grammar, not the prompt: a fall back, like
+a march, now takes a distance and a compass direction ("fall back 100 m
+west", "pull back south"), so that order no longer reaches the model. With
+that the set stands at 52 of 52 by the two runs' readings (20 by the grammar
+alone); the order was checked through the benchmark by itself, and a third
+full run was not spent on it.

@@ -208,3 +208,18 @@ test('the AI\'s own "shoot" and "hold_fire" become a hold for missile troops', a
   const cease = await interpretText('tell the archers they should stop loosing', bowmen, { ai })
   assert.deepEqual(cease.orders, [{ unitRef: 'red_archers', action: 'hold', holdFire: true }])
 })
+
+test('fall back a distance in a compass direction is read by the grammar, and stops there', () => {
+  assert.deepEqual(parseLine('archers fall back 100 metres to the west'),
+    { kind: 'order', unitRef: 'archers', action: 'withdraw', place: '100 m west', then: null })
+  assert.equal(parseLine('archers pull back south').place, '200 m south', 'no distance given: 200 m')
+  assert.equal(parseLine('archers fall back to the ridge to the east').place, 'the ridge to the east',
+    'a place that ends in a direction is still a place')
+
+  const horse = world.units.find(u => u.id === 'red_horse')
+  const read = interpretLines(['horse fall back 100 metres to the west'], context)
+  assert.equal(read.questions.length, 0)
+  assert.equal(read.source, 'grammar')
+  assert.equal(read.orders[0].action, 'withdraw')
+  assert.deepEqual(read.orders[0].target, { x: horse.position.x - 4, y: horse.position.y }, '100 m is four tiles')
+})
