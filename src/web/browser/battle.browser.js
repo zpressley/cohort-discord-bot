@@ -536,3 +536,47 @@ test('the roster on a phone: who marches at the muster, a unit taken from the en
     assert.equal(store.commanders.get(blue.token).company.officers.find(o => o.name === 'Tullus').leads, 'silver shields')
   })
 })
+
+test('on a phone: a Commander the battle is not waiting on sees his orders with the army and nothing of why; a unit with no word says so', { skip }, async () => {
+  await withApp(async ({ base, browser, errors, store }) => {
+    const { waitingOn } = require('../../engine/orchestrator')
+    const post = async (url, body) => (await fetch(base + url, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body ?? {}) })).json()
+    let found = null
+    for (const seed of [5, 6, 7, 8, 9, 10]) {
+      const redC = (await post('/api/commanders', { faction: 'rome' })).token
+      const blueC = (await post('/api/commanders', { faction: 'han' })).token
+      const seats = (await post('/api/battles', { opponent: 'friend', side: 'red', seed, commander: redC })).seats
+      await post(`/api/seat/${seats.blue}/join`, { commander: blueC })
+      const game = store.seatOf(seats.red).entry.game
+      await post(`/api/seat/${seats.red}/orders`, { text: 'everyone advance' })
+      await post(`/api/seat/${seats.blue}/orders`, { text: 'everyone hold' })
+      for (let t = 0; t < 30 && !game.outcome.decided && waitingOn(game).length !== 1; t++) {
+        for (const side of waitingOn(game)) await post(`/api/seat/${seats[side]}/orders`, { text: '' })
+      }
+      if (!game.outcome.decided && waitingOn(game).length === 1) { found = { seats, game, other: waitingOn(game)[0] === 'red' ? 'blue' : 'red' }; break }
+    }
+    assert.ok(found, 'a battle that stopped for one Commander alone')
+    const { seats, game, other } = found
+    // One of his units has sent no word for longer than it should (by hand).
+    const far = Object.keys(game.word[other].units).find(id => id !== game.battle.commanders[other].unitId && !game.word[other].units[id].gone)
+    Object.assign(game.word[other].units[far], { overdue: true, live: false })
+
+    const p = await page(browser, errors, { width: 390, height: 844 })
+    await p.goto(`${base}/b/${seats[other]}`)
+    await p.waitForSelector('.calm')
+    assert.match(await p.textContent('.bar .chip'), /With the army/)
+    assert.match(await p.textContent('#panel-body'), /Your officers are carrying out your orders/)
+    assert.doesNotMatch(await p.textContent('#app'), /enemy commander|waiting on the enemy|has not answered/i)
+    assert.equal(await p.textContent('#change'), 'Send new orders', 'he may change his mind, unasked')
+    if (process.env.SHOT) await p.screenshot({ path: process.env.SHOT.replace('.png', '-with-the-army.png') })
+    await p.click('[data-tab="army"]')
+    const card = p.locator('.unit-card', { hasText: 'no word of them since' })
+    assert.equal(await card.count(), 1)
+    assert.match(await card.textContent(), /no word/)
+    assert.doesNotMatch(await p.textContent('#panel-body'), /cut off/i)
+    if (process.env.SHOT) {
+      await card.scrollIntoViewIfNeeded()
+      await p.screenshot({ path: process.env.SHOT.replace('.png', '-no-word.png') })
+    }
+  })
+})

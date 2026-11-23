@@ -17,7 +17,7 @@ const fs = require('fs')
 const path = require('path')
 const crypto = require('crypto')
 
-const { createGame, submitOrders, forceProcess, sideView, gameRecord, replayGame, commanderOf, captorOf, checkOffer, checkAnswer } = require('../engine/orchestrator')
+const { createGame, submitOrders, forceProcess, sideView, gameRecord, replayGame, commanderOf, captorOf, checkOffer, checkAnswer, waitingOn } = require('../engine/orchestrator')
 const { sides } = require('../engine/world')
 const { gridLabel } = require('../engine/map/grid')
 const { detectFeatures } = require('../engine/map/features')
@@ -204,6 +204,10 @@ function createBattleStore({ dir = null, ai = null, now = () => Date.now() } = {
       // Played with orders and news by rider (a battle saved before them
       // plays back without: engine/command/messengers.js).
       riders: entry.game.spec.messengers !== false,
+      // Played with the riders rulings of 2026-11-23: each side asked only
+      // when wanted, and no word noticed rather than told (a battle saved
+      // before them plays back without: spec.everyoneAsked).
+      asked: !entry.game.spec.everyoneAsked,
       record: gameRecord(entry.game)
     }
     const file = path.join(dir, `${entry.id}.json`)
@@ -217,9 +221,13 @@ function createBattleStore({ dir = null, ai = null, now = () => Date.now() } = {
       const data = JSON.parse(fs.readFileSync(path.join(dir, name), 'utf8'))
       // A battle saved before orders and news went by rider replays as it
       // was played, and goes on so.
-      const record = data.riders ? data.record : { ...data.record, spec: { ...data.record.spec, messengers: false } }
+      let record = data.riders ? data.record : { ...data.record, spec: { ...data.record.spec, messengers: false } }
+      // ... and one saved before the riders rulings, as it was played: every
+      // side asked at every stop.
+      if (!data.asked) record = { ...record, spec: { ...record.spec, everyoneAsked: true } }
       const entry = { ...data, game: replayGame(record) }
       delete entry.riders
+      delete entry.asked
       delete entry.record
       register(entry)
     }
@@ -284,8 +292,12 @@ function createBattleStore({ dir = null, ai = null, now = () => Date.now() } = {
     // standing order to advance is the computer's side's alone.
     spec = { ...spec, standingOrders: solo && spec.standingOrders?.[other] ? { [other]: spec.standingOrders[other] } : {} }
     if (m.timeLimitMinutes) spec = { ...spec, timeLimitMinutes: Number(m.timeLimitMinutes) }
-    // Every battle has an end of day, so that none stands for ever.
-    spec = { ...spec, turnLimit: Number.isInteger(m.turnLimit) && m.turnLimit > 0 ? m.turnLimit : T.DAY.TURNS }
+    // Every battle has an end of day, so that none stands for ever: in
+    // battle time, since each side is asked only when wanted (a number of
+    // turns, if asked for: a testing aid).
+    spec = Number.isInteger(m.turnLimit) && m.turnLimit > 0
+      ? { ...spec, turnLimit: m.turnLimit }
+      : { ...spec, dayMinutes: Number.isInteger(m.dayMinutes) && m.dayMinutes > 0 ? m.dayMinutes : T.DAY.MINUTES }
     const objectives = (m.objectives ?? []).filter(Boolean).map((ground, i) => isGridRef(ground)
       ? { id: `objective-${i + 1}`, square: ground }
       : { id: `objective-${i + 1}`, feature: ground })
@@ -673,10 +685,17 @@ function createBattleStore({ dir = null, ai = null, now = () => Date.now() } = {
     return { entry: battles.get(seat.id), side: seat.side }
   }
 
+  // His orders are asked for when the battle has stopped for him; otherwise
+  // they are with his army. Whether the battle is running, or standing for
+  // the other Commander, he is not told (ruled 2026-11-23: "both would only
+  // be notified when there are commands to give or things happen to them").
   function status(entry, side) {
     if (entry.game.outcome.decided) return 'finished'
-    return entry.pending[side] ? 'waiting' : 'your-orders'
+    return waitingOn(entry.game).includes(side) && !entry.pending[side] ? 'your-orders' : 'waiting'
   }
+  // His own turn: how many times the battle has stopped for him, not for
+  // anyone else. Once it is over, everything is told.
+  const turnOf = (game, side) => (game.outcome.decided ? game.playerTurn : game.calls?.[side] ?? game.playerTurn) + 1
 
   /** A battle as one line, for "your battles". */
   function summary(token) {
@@ -691,7 +710,7 @@ function createBattleStore({ dir = null, ai = null, now = () => Date.now() } = {
       side,
       opponent: entry.auto ? 'standing' : 'friend',
       status: status(entry, side),
-      turn: game.playerTurn + 1,
+      turn: turnOf(game, side),
       minutes: game.minutesElapsed,
       outcome: game.outcome.decided ? game.outcome : null,
       updatedAt: entry.updatedAt,
@@ -785,7 +804,16 @@ function createBattleStore({ dir = null, ai = null, now = () => Date.now() } = {
       : battle.world.units.filter(u => u.side === side && u.strength > 0)
     // Orders of his still on the road (command/messengers.js): he knows
     // what he sent, and about when it arrives.
-    const onTheRoad = (id) => (battle.riders ?? []).filter(r => r.side === side && r.unitId === id).at(-1) ?? null
+    // An order no rider could carry he believes on the road as long as the
+    // ride would take, as far as he knows (word.js, blocked): that the way
+    // is shut he learns only when the rider is back.
+    const onTheRoad = (id) => {
+      const real = (battle.riders ?? []).filter(r => r.side === side && r.unitId === id).at(-1) ?? null
+      const shut = (word?.blocked ?? []).filter(b => b.unitId === id && b.arrives > battle.turn).at(-1)
+      if (!shut || (real && real.sent >= shut.sent)) return real
+      const given = game.orderLog.filter(l => l.side === side && Array.isArray(l.orders)).flatMap(l => l.orders).filter(o => o.unitRef === id).at(-1)
+      return { arrives: shut.arrives, order: given ?? null }
+    }
     const own = ownUnits.map(u => {
       if (held && !held.seen.has(u.id)) {
         return {
@@ -898,14 +926,16 @@ function createBattleStore({ dir = null, ai = null, now = () => Date.now() } = {
     const line = summary(token)
     return {
       battle: atGame
-        ? { ...line, turn: game.playerTurn + 1, minutes: game.minutesElapsed, sides: sides(battle.world), timeLimitMinutes: game.spec.timeLimitMinutes ?? null, turnLimit: game.spec.turnLimit ?? null }
-        : { ...line, sides: sides(battle.world), timeLimitMinutes: game.spec.timeLimitMinutes ?? null, turnLimit: game.spec.turnLimit ?? null },
+        ? { ...line, turn: game.playerTurn + 1, minutes: game.minutesElapsed, sides: sides(battle.world), timeLimitMinutes: game.spec.timeLimitMinutes ?? null, turnLimit: game.spec.turnLimit ?? null, dayMinutes: game.spec.dayMinutes ?? null }
+        : { ...line, sides: sides(battle.world), timeLimitMinutes: game.spec.timeLimitMinutes ?? null, turnLimit: game.spec.turnLimit ?? null, dayMinutes: game.spec.dayMinutes ?? null },
       map: { name: map.name, width: map.width, height: map.height, squareTiles: 4, terrain, landmarks },
       own,
       fallen,
       enemies,
       objectives,
       pending: entry.pending[side] ?? null,
+      // While his orders are with the army (narrator/words.js).
+      carryingOut: RIDER.carryingOut,
       // The friend has yet to choose who leads (join).
       choosing: !atGame && choosing(entry, side),
       // Whose army this side is (a faction of src/data/factions.js), if any.
@@ -944,14 +974,18 @@ function createBattleStore({ dir = null, ai = null, now = () => Date.now() } = {
   // ── Orders ────────────────────────────────────────
 
   // How old his word of a unit is, in the app's words (narrator/words.js).
+  // A unit cut off was told so in a battle saved before the riders rulings;
+  // since, he only notices that no word has come (`noWord`, from his own
+  // ledger: word.js, overdue).
   function wordOf(r, turn) {
     const minutesAgo = Math.max(0, (turn - r.heard) * 10)
-    return { live: r.live, minutesAgo, heardAt: r.heard * 10, cutOff: r.cutOff, said: r.cutOff ? RIDER.cutOff(r.heard * 10) : RIDER.age(minutesAgo) }
+    const said = r.cutOff ? RIDER.cutOff(r.heard * 10) : r.overdue ? RIDER.noWord(r.heard * 10) : RIDER.age(minutesAgo)
+    return { live: r.live, minutesAgo, heardAt: r.heard * 10, cutOff: r.cutOff, noWord: Boolean(r.overdue), said }
   }
   // An order of his still on the road to a unit.
   function riderOf(road, turn, name) {
     const inMinutes = Math.max(0, (road.arrives - turn) * 10)
-    const order = describeOrder(road.order, null, name)
+    const order = road.order ? describeOrder(road.order, null, name) : 'your orders'
     return { order, inMinutes, said: RIDER.onTheRoad(order, inMinutes) }
   }
 
@@ -1161,10 +1195,19 @@ function createBattleStore({ dir = null, ai = null, now = () => Date.now() } = {
     let result = submitOrders(game, side, read.surrender ? { surrender: true } : read.orders)
     // Solo: the computer's side answers at once, with the orders it thinks
     // best from what it has seen (opponent/planner.js).
+    // Its orders go by rider from its best unit, as a Commander's do from
+    // his (engine/command/messengers.js); what it knows is not delayed.
+    // The battle goes on, the computer asked each time it is wanted, until
+    // it is a player's turn again (ruled 2026-11-23: "No the game keeps
+    // going"); in a battle saved before that ruling, once a turn, as before.
+    const computerAlone = () => {
+      const wanted = waitingOn(game)
+      return wanted.length > 0 && wanted.every(s => s === entry.auto)
+    }
     if (result.status === 'waiting' && entry.auto && result.waitingOn.includes(entry.auto)) {
-      // Its orders go by rider from its best unit, as a Commander's do
-      // from his (engine/command/messengers.js); what it knows is not
-      // delayed.
+      result = submitOrders(game, entry.auto, byCommandPost(planTurn(game, entry.auto)))
+    }
+    for (let i = 0; i < 1000 && entry.auto && result.status === 'processed' && computerAlone(); i++) {
       result = submitOrders(game, entry.auto, byCommandPost(planTurn(game, entry.auto)))
     }
 
@@ -1175,7 +1218,9 @@ function createBattleStore({ dir = null, ai = null, now = () => Date.now() } = {
       entry.updatedAt = now()
       save(entry)
     }
-    return { status: result.status === 'waiting' ? 'waiting' : 'turn-ran', understood, notes }
+    // (Turn-ran only when it ran to a stop for him: that it ran on to one
+    // for the other Commander is not his to know.)
+    return { status: result.status === 'waiting' || status(entry, side) === 'waiting' ? 'waiting' : 'turn-ran', understood, notes }
   }
 
   // A finished battle is written into the company of each Commander who
@@ -1288,11 +1333,26 @@ function createBattleStore({ dir = null, ai = null, now = () => Date.now() } = {
 
   // Each human side's report of the turn just run: the plain account (fog
   // of war held) and, when the AI is on, the narrated one.
+  //
+  // Only a side the battle has stopped for is written to (ruled 2026-11-23:
+  // each is asked only when wanted), and his dispatch tells all that has
+  // reached him since his last: every stretch the battle ran while it did
+  // not want him. Once it is over, everyone is told.
   async function writeDispatches(entry) {
     const game = entry.game
-    const turnEntry = game.history.at(-1)
+    const last = game.history.at(-1)
     for (const side of Object.keys(entry.seats)) {
       if (!entry.seats[side]) continue
+      if (!game.outcome.decided && !waitingOn(game).includes(side)) continue
+      const before = entry.dispatches[side].at(-1)
+      const since = before ? before.through ?? before.turn : 0
+      const stretch = game.history.slice(since)
+      if (stretch.length === 0) continue
+      const turnEntry = {
+        playerTurn: game.calls?.[side] ?? last.playerTurn,
+        interrupt: last.wanted?.[side] ?? last.interrupt,
+        ticks: stretch.flatMap(h => h.ticks)
+      }
       const name = namer(game, side)
       const events = turnEntry.ticks.flatMap(t => game.battle.log.forTurn(t.battleTurn))
       const own = [...game.battle.world.units, ...game.battle.fledUnits].filter(u => u.side === side)
@@ -1345,7 +1405,11 @@ function createBattleStore({ dir = null, ai = null, now = () => Date.now() } = {
         }
         // News from far off first, newest first: it is what he could not
         // see for himself.
+        // Word come again from a unit he had had none of for too long.
+        const again = [...new Set((word.back ?? []).filter(b => b.turn > from && b.turn <= to).map(b => b.unitId))]
+          .map(id => capitalise(name(RIDER.wordAgain(id))))
         lines = [
+          ...again,
           ...[...late.keys()].sort((a, b) => a - b).flatMap(age => told(late.get(age)).map(l => `${RIDER.from(age)}: ${l}`)),
           ...told(news.filter(n => n.arrived === n.event.turn).map(n => n.event))
         ]
@@ -1361,6 +1425,8 @@ function createBattleStore({ dir = null, ai = null, now = () => Date.now() } = {
         turn: turnEntry.playerTurn,
         minutes: game.minutesElapsed,
         interrupt: turnEntry.interrupt,
+        // The battle's stretches it covers (game.history), for the next.
+        through: game.history.length,
         lines,
         narrated: told.source === 'ai' ? told.text : null,
         // The AI is on and there was something to tell, but it did not

@@ -17,7 +17,10 @@ The rules of a battle. Read `README.md` here for the layout.
   came from. Do not put tuning numbers in logic.
 - **Time.** A tick is ten battle minutes. A player turn runs up to six
   ticks and stops early on an interrupt (`orchestrator/orchestrator.js`).
-  Orders are given once, as a player turn opens.
+  Orders are given once, as a player turn opens. With a Commander on the
+  field, the battle instead runs on until it stops for a side that is
+  wanted, and only those are asked (`game.wanted`, `waitingOn`; "Asked
+  when wanted" in the orchestrator).
 - **Events are the record.** Anything that happens is an event in the log.
   A new event type also needs: a line in `src/narrator/turnNarrator.js`
   (`plainFact`, `WEIGHT`, and `PRIVATE` if only its own side may know),

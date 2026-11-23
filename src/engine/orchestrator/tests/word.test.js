@@ -8,7 +8,7 @@
 const { test } = require('node:test')
 const assert = require('node:assert/strict')
 
-const { createGame, submitOrders, gameRecord, replayGame } = require('../orchestrator')
+const { createGame, submitOrders, gameRecord, replayGame, waitingOn } = require('../orchestrator')
 const { newsBetween, arrivalOf, wordFromCaptivity } = require('../word')
 
 const MAP = { name: 'plain-40', width: 40, height: 20, terrain: {} }
@@ -24,10 +24,17 @@ const spec = (more = [], extra = {}) => ({
     unit({ id: 'foe', side: 'blue', position: { x: 37, y: 10 } }), ...more],
   commanders: { red: { unitId: 'guard' } }, ...extra
 })
+// One of red's turns: his orders, then the computer's whenever the battle
+// stops for it alone, until it stops for him (each side is asked only when
+// wanted). The ticks are all of those he waited through.
 const turn = (game, red = []) => {
+  const from = game.history.length
   submitOrders(game, 'red', red)
-  submitOrders(game, 'blue', [{ unitRef: 'foe', action: 'attack', enemy: 'far' }])
-  return game.history.at(-1)
+  for (let i = 0; i < 50 && !game.outcome.decided && !waitingOn(game).includes('red'); i++) {
+    submitOrders(game, 'blue', [{ unitRef: 'foe', action: 'attack', enemy: 'far' }])
+  }
+  const stretch = game.history.slice(from)
+  return { interrupt: stretch.at(-1).wanted?.red ?? stretch.at(-1).interrupt, ticks: stretch.flatMap(h => h.ticks) }
 }
 
 test('he knows the units about him as they are, and a distant unit as it was when word left it', () => {
@@ -71,15 +78,61 @@ test('a battle with no Commander on the field keeps no ledger, and stops the mom
   assert.deepEqual([first.interrupt, first.ticks.length], ['sighting', 1])
 })
 
-test('a unit no rider can reach is cut off: he hears nothing more of it, and knows it', () => {
-  // A wall of enemy between him and the far unit.
-  const wall = Array.from({ length: 10 }, (_, i) => unit({ id: `wall${i}`, side: 'blue', position: { x: 16, y: i * 2 + 1 } }))
-  const game = createGame(spec(wall), { seed: 1 })
+// A wall of enemy between him and the far unit, out of his sight and theirs.
+const wall = () => Array.from({ length: 10 }, (_, i) => unit({ id: `wall${i}`, side: 'blue', position: { x: 16, y: i * 2 + 1 } }))
+const holdWall = (game) => {
   submitOrders(game, 'red', [])
-  submitOrders(game, 'blue', wall.map(w => ({ unitRef: w.id, action: 'hold' })))
+  for (let i = 0; i < 50 && !waitingOn(game).includes('red'); i++) submitOrders(game, 'blue', wall().map(w => ({ unitRef: w.id, action: 'hold' })))
+}
+
+test('a unit cut off is not announced: he notices only when the word that should have come has not', () => {
+  const game = createGame(spec(wall()), { seed: 1 })
+  holdWall(game)
+  const far = game.word.red.units.far
+  assert.equal(far.heard, 0, 'no word since the battle began')
+  assert.equal(game.battle.log.all().filter(e => e.type === 'cutOff' || e.type === 'inTouch').length, 0, 'nothing tells him')
+  assert.equal(far.cutOff, false, 'his ledger holds no truth he could not know')
+  assert.ok(game.battle.turn > 3 + 2, 'longer than a rider from where they last were takes, and the slack')
+  assert.equal(far.overdue, true, 'he notices that no word has come')
+})
+
+test('a unit merely far off, whose word comes as it should, is not overdue', () => {
+  const game = createGame(spec(), { seed: 1 })
+  turn(game)
+  assert.ok(game.battle.turn - game.word.red.units.far.heard >= 3, 'its word is half an hour old')
+  assert.equal(game.word.red.units.far.overdue, false)
+})
+
+test('when word comes again from a unit he had no word of, it simply arrives, and is marked as come again', () => {
+  const game = createGame(spec(wall()), { seed: 1 })
+  holdWall(game)
+  assert.equal(game.word.red.units.far.overdue, true)
+  // The wall goes; riders get through again.
+  for (const w of wall()) game.battle.world.units.find(u => u.id === w.id).position = { x: 39, y: w.position.y }
+  holdWall(game)
+  assert.equal(game.word.red.units.far.overdue, false)
+  assert.deepEqual((game.word.red.back ?? []).map(b => b.unitId), ['far'])
+  assert.equal(game.battle.log.all().filter(e => e.type === 'inTouch').length, 0)
+})
+
+test('an order no rider can carry is news to him only when the rider is back, a ride there and back as far as he knows', () => {
+  const game = createGame(spec(wall()), { seed: 1 })
+  submitOrders(game, 'red', [{ unitRef: 'far', target: { x: 28, y: 2 } }])
+  submitOrders(game, 'blue', wall().map(w => ({ unitRef: w.id, action: 'hold' })))
+  const shut = game.battle.log.all().find(e => e.type === 'riderBlocked')
+  assert.equal(shut.unitId, 'far')
+  assert.equal(arrivalOf(game, 'red', shut), shut.turn + 6, 'thirty minutes there, thirty back')
+  assert.deepEqual(game.word.red.blocked, [{ unitId: 'far', sent: shut.turn, arrives: shut.turn + 3, back: shut.turn + 6 }])
+})
+
+test('a battle saved before the riders rulings (everyoneAsked) still tells him at once that a unit is cut off', () => {
+  const game = createGame({ ...spec(wall()), everyoneAsked: true }, { seed: 1 })
+  submitOrders(game, 'red', [])
+  submitOrders(game, 'blue', wall().map(w => ({ unitRef: w.id, action: 'hold' })))
   const far = game.word.red.units.far
   assert.equal(far.cutOff, true)
   assert.equal(far.heard, 0, 'no word since the battle began')
+  assert.equal(far.overdue, undefined)
 })
 
 test('word on the road survives a saved battle played back', () => {
@@ -91,7 +144,7 @@ test('word on the road survives a saved battle played back', () => {
   assert.deepEqual(again.history.map(h => h.interrupt), game.history.map(h => h.interrupt))
 })
 
-test('every player turn still ends within the hour, with every unit far off and every order an hour away', () => {
+test('the battle still stops for the computer within the hour, with every unit of his far off and every order an hour away', () => {
   const far = (id, y) => unit({ id, position: { x: 38, y } })
   const game = createGame({ ...spec(), units: [unit({ id: 'guard', position: { x: 0, y: 0 } }), far('a', 19), far('b', 18), unit({ id: 'foe', side: 'blue', position: { x: 20, y: 0 } })] }, { seed: 1 })
   for (let t = 0; t < 5; t++) {
