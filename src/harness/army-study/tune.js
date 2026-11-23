@@ -73,6 +73,9 @@ const CANDIDATES = {
   F6: [SIDEARM, [T.MISSILES, 'SHOCK', 0.67], ...LADDER, SLING200, HYPASPISTS, [D.WEAPONS.sling, 'sp', 2], [T.QUALITY_TIERS.levy, 'cost', 2], [T.QUALITY_TIERS.militia, 'cost', 4]],
   F7: [SIDEARM, [T.MISSILES, 'SHOCK', 0.67], ...LADDER, SLING200, HYPASPISTS, [D.WEAPONS.sling, 'sp', 2], [T.QUALITY_TIERS.levy, 'cost', 2], [T.QUALITY_TIERS.militia, 'cost', 4], [T.QUALITY_TIERS.tribal_warriors, 'cost', 4]],
   F8: [SIDEARM, [T.MISSILES, 'SHOCK', 0.67], ...LADDER, SLING200, [D.WEAPONS.sling, 'sp', 2], [T.QUALITY_TIERS.levy, 'cost', 2], [T.QUALITY_TIERS.militia, 'cost', 4], [T.QUALITY_TIERS.tribal_warriors, 'cost', 4], [D.WEAPONS.spear_professional, 'sp', 2]],
+  // On top of the proposal commit as it stands (militia 4, levy 2): the
+  // tier prices put back to 3/5/5 (levy, militia, tribal).
+  F9: [[T.QUALITY_TIERS.levy, 'cost', 3], [T.QUALITY_TIERS.militia, 'cost', 5], [T.QUALITY_TIERS.tribal_warriors, 'cost', 5]],
   R6: [...R.filter(p => p[1] !== 'SHOCK'), [T.MISSILES, 'SHOCK', 0.67], HYPASPISTS, SPEAR3, SLING200, ...HORSE2, ...VET]
 }
 
