@@ -85,8 +85,8 @@ Each order:
   move      go to a place
   hold      stay where they are (hold, wait, stay, stand, halt, stop)
   defend    go to a place and hold it (defend, guard, protect, dig in, take and hold, set up a position at)
-  advance   close with and fight the nearest enemy, and keep hunting until told otherwise (advance, charge, engage, attack with no place named, seek and destroy, attack on sight, engage at will). "Spring the trap" is advance for the units marked "lying in wait" only, unless the commander names others.
-  attack    go to a place looking for a fight (attack, assault, storm, seize, take + a place), or go for one enemy unit and follow it (attack, charge, go for + an enemy unit: set enemy)
+  advance   close with and fight the nearest enemy, and keep hunting until told otherwise (advance, charge, engage, attack with no place and no one enemy unit named, seek and destroy, attack on sight, engage at will). "Spring the trap" is advance for the units marked "lying in wait" only, unless the commander names others.
+  attack    go to a place looking for a fight (attack, assault, storm, seize, take + a place), or go for one enemy unit and follow it (attack, charge, go for, go after, send after, chase, hunt down + an enemy unit: set enemy)
   withdraw  fall back (retreat, pull back, disengage); to a place if one is named, else toward home
   hide      go to ground and hide (hide, take cover, conceal, lie low)
   check     search ground for hidden enemies (check, search, scout, sweep, reconnoitre)
@@ -104,7 +104,7 @@ Each order:
 - then_hold: true if they should hold once they arrive ("and hold", "and hold it", "make them hold it", "and stay there", "and dig in"). defend always holds; set true for it.
 - careful: true if they should move carefully, cautiously, slowly, on guard, in good order.
 - against: for ambush, what to strike; for shoot, what to shoot first: "cavalry", "infantry", "archers" or "scouts" (horsemen = cavalry, bowmen or slingers = archers, foot = infantry). null for anything, and for every other action.
-- enemy: for attack on one enemy unit ("charge their archers", "go for the enemy horse"), that unit's name exactly as listed under "Enemy seen". null otherwise. If the commander names an enemy that is not listed, or two listed fit his words, record nothing for it and ask in question.
+- enemy: only for the action attack, when it goes for one enemy unit ("charge their archers", "go for the enemy horse", "send the horse after those bowmen"): that unit's name as listed under "Enemy seen", matching his words to the kind in brackets there (bowmen or slingers = archers, horsemen = cavalry); if none listed fits, his own words for it ("their elephants"). null for every other action. Never ask a question because of it. against and if_event name a kind of enemy, not a unit: they need no enemy to be listed or in sight.
 - let_pass: for ambush only, how many enemy units to let go by before striking. 0 otherwise.
 - regardless: for ambush only, and only when the commander says so in words like "whatever happens", "no matter what", "at all costs": true. In every other case false.
 - if_event: one condition on this order, when the commander gives one ("if ...", "should ...", "unless ..."); otherwise "none". sees_enemy / sees_cavalry / sees_infantry / sees_archers: the unit sees the enemy, or that kind of enemy. attacked: it is attacked, charged or shot at. unit_breaks: another of the commander's own units breaks, routs or flees.
