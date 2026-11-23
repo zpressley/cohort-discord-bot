@@ -17,7 +17,7 @@
 //   units     { kind: battles } for each kind of unit with no officer: how
 //             many battles it has come through since it last had one. An
 //             officer comes forward from its ranks at EARNED_AT (ruled
-//             2026-11-23: "no officer until 3-4 battles of veterancy").
+//             2026-11-23: nameless 0 to 4 battles, then green).
 //   fallen    those killed or taken, as a roll: the company keeps its dead,
 //             but not what they knew
 //   battles   how many the company has fought
@@ -25,7 +25,7 @@
 //             one in twice (a server that stopped half way) changes nothing
 
 const { createRng } = require('../rng')
-const { PERSONALITIES, EARNED_AT } = require('./officers')
+const { PERSONALITIES, EARNED_AT, MAX_EXPERIENCE } = require('./officers')
 const { assignOfficers } = require('./roster')
 const { NAMES, PLAIN } = require('../../data/officers')
 const { QUALITY_ORDER } = require('../combat/tables')
@@ -96,7 +96,7 @@ function musterOfficers(company, units, seed) {
     next.officers.push({
       id: `o${next.nextId++}`,
       name: drawn.name,
-      experience: 6 + (drawn.experience % 4),
+      experience: 13 + (drawn.experience % 4),
       personality: drawn.personality,
       leads: units[at].kind,
       status: 'fit',
@@ -141,9 +141,10 @@ function musterOfficers(company, units, seed) {
  * enemy leaves the company, and his men must earn an officer again.
  *
  * A unit with no officer that comes through a battle is a battle nearer to
- * one: at EARNED_AT[0] battles an officer may come forward from its ranks
- * (an even chance), at EARNED_AT[1] one does. He has a name, and the unit's
- * battles for his experience. A unit destroyed starts again from nothing.
+ * one: at EARNED_AT battles an officer comes forward from its ranks. He has
+ * a name, and the unit's battles for his experience, which makes him
+ * green. A unit destroyed starts again from nothing. No officer's
+ * experience counts beyond MAX_EXPERIENCE.
  *
  * @param {Object} company
  * @param {Object} battle  { id, title, result: 'victory'|'defeat'|'draw', seed? }
@@ -176,7 +177,7 @@ function settleBattle(company, battle, fates) {
       if (f.officerId || !(f.unit in next.units)) continue
       next.units[f.unit] = f.destroyed || f.fate === 'given up' ? 0 : next.units[f.unit] + 1
       const battles = next.units[f.unit]
-      if (battles >= EARNED_AT[1] || (battles >= EARNED_AT[0] && random() < 0.5)) {
+      if (battles >= EARNED_AT) {
         next.officers.push({
           id: `o${next.nextId++}`,
           name: freshName(next, f.culture, random),
@@ -202,7 +203,7 @@ function settleBattle(company, battle, fates) {
       next.units[officer.leads] = 0
       continue
     }
-    officer.experience += 1
+    officer.experience = Math.min(MAX_EXPERIENCE, officer.experience + 1)
     officer.status = f.fate === 'wounded' ? 'wounded' : 'fit'
   }
   next.battles += 1

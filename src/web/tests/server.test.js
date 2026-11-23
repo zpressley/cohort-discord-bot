@@ -318,7 +318,7 @@ test('a Commander starts with one officer, his veteran; the other units earn the
     const made = (await app.api('POST', '/api/commanders')).body
     const commander = made.token
     assert.deepEqual((await app.api('GET', `/api/commander/${commander}`)).body,
-      { name: made.name, faction: null, factionTitle: null, ended: null, battles: 0, officers: [], unled: [], earnedAt: [3, 4], fallen: [], battle: null })
+      { name: made.name, faction: null, factionTitle: null, ended: null, battles: 0, officers: [], unled: [], earnedAt: 4, fallen: [], battle: null })
 
     const first = (await app.api('POST', '/api/battles', { opponent: 'standing', side: 'red', seed: 3, commander })).body.seats.red
     const mustered = (await app.api('GET', `/api/commander/${commander}`)).body
@@ -357,18 +357,19 @@ test('a Commander starts with one officer, his veteran; the other units earn the
     app = await start(createBattleStore({ dir }))
     assert.deepEqual((await app.api('GET', `/api/commander/${commander}`)).body, after)
     let company = after
-    for (let n = 2; n <= 6 && !company.ended && company.unled.length > 0; n++) {
+    for (let n = 2; n <= 7 && !company.ended && company.unled.length > 0; n++) {
       const seat = (await app.api('POST', '/api/battles', { opponent: 'standing', side: 'red', seed: 10 + n, commander })).body.seats.red
       await fight(app, seat)
       company = (await app.api('GET', `/api/commander/${commander}`)).body
-      if (n < 3) assert.equal(company.officers.filter(o => o.leads !== 'spears').length, 0, 'no one comes forward before the third battle')
+      if (n < 4) assert.equal(company.officers.filter(o => o.leads !== 'spears').length, 0, 'no one comes forward before the fourth battle')
     }
     if (!company.ended) {
       const earned = company.officers.filter(o => o.leads !== 'spears')
       assert.ok(earned.length > 0, 'officers have come forward')
       for (const o of earned) {
         assert.equal(typeof o.name, 'string')
-        assert.ok(o.experience >= 3)
+        assert.ok(o.experience >= 4)
+        assert.equal(o.grade, 'green')
         assert.equal(o.record.at(-1).named, true, 'his record begins where he came forward')
       }
     }

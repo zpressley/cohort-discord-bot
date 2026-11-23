@@ -29,9 +29,12 @@ function assignOfficers(units, seed) {
     let name = pick(pool)
     for (let tries = 0; taken.has(name) && tries < pool.length; tries++) name = pool[(pool.indexOf(name) + 1) % pool.length]
     const roll = random()
+    // The same spread of grades as ever, on the ladder of 2026-11-23: a
+    // veteran for the elite (13 to 16 battles); of the rest about 45% green
+    // (4 to 7), 40% seasoned (8 to 12) and 15% veteran (13 to 15).
     const experience = unit.quality === 'elite'
-      ? 6 + Math.floor(roll * 4)
-      : roll < 0.45 ? Math.floor(roll / 0.45 * 2) : roll < 0.85 ? 2 + Math.floor((roll - 0.45) / 0.40 * 3) : 5 + Math.floor((roll - 0.85) / 0.15 * 3)
+      ? 13 + Math.floor(roll * 4)
+      : roll < 0.45 ? 4 + Math.floor(roll / 0.45 * 4) : roll < 0.85 ? 8 + Math.floor((roll - 0.45) / 0.40 * 5) : 13 + Math.floor((roll - 0.85) / 0.15 * 3)
     const personality = pick(PERSONALITIES)
     if (unit.officer) return unit
     taken.add(name)

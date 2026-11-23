@@ -18,7 +18,9 @@ const deep = () => normalizeOrder({
 })
 
 test('grade comes from battles come through, and nothing else', () => {
-  assert.deepEqual([0, 1, 2, 4, 5, 12].map(n => gradeOf(officer(n))), ['green', 'green', 'seasoned', 'seasoned', 'veteran', 'veteran'])
+  assert.deepEqual([4, 7, 8, 12, 13, 19, 20, 30].map(n => gradeOf(officer(n))),
+    ['green', 'green', 'seasoned', 'seasoned', 'veteran', 'veteran', 'legendary', 'legendary'])
+  assert.equal(gradeOf(officer(0)), 'green', 'an officer is never less than green: under four battles a unit has none')
   assert.equal(gradeOf(null), 'green')
 })
 
@@ -38,7 +40,8 @@ test('the deeper the order, the less a green officer keeps; a veteran holds the 
     for (let i = 0; i < 400; i++) kept += grasp(deep(), officer(experience), random).kept
     return kept / 400
   }
-  const green = keptOver(0), seasoned = keptOver(3), veteran = keptOver(8)
+  const green = keptOver(4), seasoned = keptOver(8), veteran = keptOver(13)
+  assert.equal(keptOver(20), 3, 'a legend loses none of it')
   assert.ok(green < 0.7, `a green officer keeps ${green.toFixed(2)} of 3 clauses`)
   assert.ok(seasoned > green + 0.8 && seasoned < veteran)
   assert.ok(veteran > 2.6, `a veteran keeps ${veteran.toFixed(2)} of 3`)
@@ -48,7 +51,7 @@ test('the deeper the order, the less a green officer keeps; a veteran holds the 
 test('a lost condition stays on the order, marked; a lost step takes the later steps with it', () => {
   // Rolls: condition lost, first step kept, second step lost.
   const rolls = [0.99, 0.0, 0.99]
-  const { order, kept } = grasp(deep(), officer(3), () => rolls.shift())
+  const { order, kept } = grasp(deep(), officer(8), () => rolls.shift())
   assert.equal(kept, 1)
   assert.equal(order.when.lost, true)
   assert.equal(order.steps.length, 1)

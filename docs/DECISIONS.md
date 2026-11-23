@@ -993,3 +993,27 @@ Zach, on the four questions the factions work raised:
 4. **The kind of battle.** "One type right now, a deathmatch. Victory
    condition is surrendering the field, army loss, or commander death."
 
+## Rulings, November 23, 2026 (officer levels; the captive's end)
+
+1. **Officer levels.** "Nameless 0-4, Green 4-8, Seasoned 8-12, Vet 13+.
+   What other perks can we tie into the progression as 30 is the goal for
+   maximum veterancy? Being able to carry out long missions would be a
+   great feature for legendary 20+."
+   Built as: a unit has no officer for its first three battles; at its
+   fourth a green officer comes forward with a name (this replaces "after
+   3 or 4 battles, arriving seasoned"); seasoned at 8, veteran at 13,
+   legendary at 20; 30 is the most that counts (`GRADES`, `EARNED_AT`,
+   `MAX_EXPERIENCE` in `command/officers.js`). A new Commander's one
+   officer starts a veteran, at 13 to 16. A legendary officer never loses
+   any part of an order. Long missions, and the other perks of each level,
+   are not built: see the proposal put to Zach the same day.
+2. **A captive is not killed.** "Honor binds a commander from killing his
+   foe, but if he won't surrender the field to save his men then he leaves
+   a commander of none. Desertion can be another part of a disloyal
+   officer as his men abandon the unit by a % every round after the
+   commander is captured. Loyal officers rally men and fight for their
+   captured commander trying to free him."
+   Being built with the negotiation: a Commander held when the battle ends,
+   not won, with no deal, goes free with nothing (his company is gone; he
+   is not); the only total loss is death in the fighting.
+

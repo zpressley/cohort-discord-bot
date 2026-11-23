@@ -7,7 +7,7 @@ const { test } = require('node:test')
 const assert = require('node:assert/strict')
 
 const { createCompany, musterOfficers, settleBattle, ridesWith, HEADLESS } = require('../company')
-const { gradeOf, grasp, EARNED_AT } = require('../officers')
+const { gradeOf, grasp, EARNED_AT, MAX_EXPERIENCE } = require('../officers')
 
 const units = () => [
   { id: 'red_spears', side: 'red', kind: 'spears', quality: 'professional' },
@@ -46,34 +46,38 @@ test('the same officer leads the same men in the next battle, a battle older', (
   assert.deepEqual(createCompany(), { officers: [], units: {}, fallen: [], battles: 0, settled: [], nextId: 1 }, 'nothing is changed in place')
 })
 
-test('a unit earns its officer: none for two battles, one by the fourth, named and seasoned', () => {
+test('a unit earns its officer: nameless for three battles, a green officer with a name at the fourth', () => {
   let company = createCompany()
-  for (let n = 1; n < EARNED_AT[0]; n++) {
+  for (let n = 1; n < EARNED_AT; n++) {
     company = through(company, n)
     assert.equal(company.officers.length, 1, `no one yet after battle ${n}`)
     assert.deepEqual(company.units, { spears: n, swords: n })
   }
-  for (let n = EARNED_AT[0]; n <= EARNED_AT[1]; n++) company = through(company, n)
-  assert.deepEqual(company.units, {}, 'every unit has its officer by now')
+  company = through(company, EARNED_AT)
+  assert.deepEqual(company.units, {}, 'every unit has its officer now')
   for (const kind of ['spears', 'swords']) {
     const officer = company.officers.find(o => o.leads === kind)
     assert.equal(typeof officer.name, 'string')
-    assert.ok(officer.experience >= EARNED_AT[0] && officer.experience <= EARNED_AT[1], 'he comes with his unit\'s battles')
-    assert.equal(gradeOf(officer), 'seasoned')
+    assert.equal(officer.experience, EARNED_AT, 'he comes with his unit\'s battles')
+    assert.equal(gradeOf(officer), 'green')
     assert.equal(officer.record[0].named, true, 'his record begins with the battle that made him')
   }
   assert.equal(new Set(company.officers.map(o => o.name)).size, 3, 'no two alike')
   const next = musterOfficers(company, units(), 50)
   assert.ok(next.units.every(u => u.officer.id), 'and they lead their men from then on')
+})
 
-  // Across many companies, some officers come at three battles and some at four.
-  const at = new Set()
-  for (let c = 0; c < 20; c++) {
-    let other = createCompany()
-    for (let n = 1; n <= EARNED_AT[0]; n++) other = through(other, c * 10 + n)
-    at.add(other.officers.some(o => o.leads === 'spears') ? EARNED_AT[0] : EARNED_AT[1])
+test('an officer rises with his battles: seasoned at 8, a veteran at 13, a legend at 20, and 30 is the most that counts', () => {
+  let company = createCompany()
+  const grades = {}
+  for (let n = 1; n <= 34; n++) {
+    company = through(company, n)
+    const spears = company.officers.find(o => o.leads === 'spears')
+    if (spears) grades[n] = gradeOf(spears)
   }
-  assert.deepEqual([...at].sort(), EARNED_AT)
+  assert.deepEqual([4, 7, 8, 12, 13, 19, 20].map(n => grades[n]), ['green', 'green', 'seasoned', 'seasoned', 'veteran', 'veteran', 'legendary'])
+  assert.equal(company.officers.find(o => o.leads === 'spears').experience, MAX_EXPERIENCE)
+  assert.equal(gradeOf(musterOfficers(createCompany(), units(), 7).units[2].officer), 'veteran', 'a new Commander\'s one officer is a veteran')
 })
 
 test('a unit destroyed starts earning again from nothing', () => {

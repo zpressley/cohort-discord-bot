@@ -211,7 +211,7 @@ async function battles() {
 }
 
 // ── Your officers ──────────────────────────────────────
-const GRADE_WORDS = { green: 'green', seasoned: 'seasoned', veteran: 'a veteran' }
+const GRADE_WORDS = { green: 'green', seasoned: 'seasoned', veteran: 'a veteran', legendary: 'a legend' }
 const RESULT_WORDS = { victory: 'a victory', defeat: 'a defeat', draw: 'a draw' }
 const FATE_WORDS = { killed: 'killed', captured: 'taken by the enemy', 'given up': 'given to the enemy for the Commander\'s freedom' }
 async function officers() {
@@ -234,7 +234,7 @@ async function officers() {
         ? `His army is in the field${c.battle.seat ? `: <a href="/b/${esc(c.battle.seat)}" data-link>${esc(c.battle.title)}</a>` : ` (${esc(c.battle.title)})`}.`
         : 'His army is ready to muster.'}</p>
       ${c.officers.map(card).join('')}
-      ${(c.unled ?? []).map(u => `<p class="note">The ${esc(u.kind)} have no officer yet: ${u.battles} battle${u.battles === 1 ? '' : 's'} come through. One comes forward after ${c.earnedAt[0]} or ${c.earnedAt[1]}.</p>`).join('')}
+      ${(c.unled ?? []).map(u => `<p class="note">The ${esc(u.kind)} have no officer yet: ${u.battles} battle${u.battles === 1 ? '' : 's'} come through. One comes forward after ${c.earnedAt}.</p>`).join('')}
       ${c.fallen.length ? `<p class="label-caps">Lost</p>${c.fallen.map(fallen).join('')}` : ''}`
   app.innerHTML = `
     <header class="bar"><a href="/battles" data-link>Your battles</a><strong style="font-family: var(--font-display); font-size: 18px">Your officers</strong><span></span></header>

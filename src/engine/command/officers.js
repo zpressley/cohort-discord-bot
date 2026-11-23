@@ -15,8 +15,8 @@
 //
 // A unit may have no officer at all: { headless: true }. It has no one to
 // carry more than the plain order. In a campaign every unit but the elite
-// starts so, and an officer comes forward once the unit has 3 or 4 battles
-// of veterancy (ruled 2026-11-23; command/company.js).
+// starts so, and an officer comes forward once the unit has 4 battles of
+// veterancy (ruled 2026-11-23; command/company.js).
 //
 // Orders come in depths (docs/design/officers-memory-delegation.md). The
 // plain order is level 1 and every officer carries it. Each thing more is a
@@ -25,27 +25,39 @@
 // seeded roll made when the order is given, weighted by his grade, and
 // written to the event log. Pure: the caller supplies the random stream.
 
-// Grades, by battles come through.
+// Grades, by battles come through (ruled 2026-11-23):
+//   nameless   0 to 3    no officer yet: the unit keeps a plain order only
+//   green      4 to 7    an officer comes forward, with a name
+//   seasoned   8 to 12
+//   veteran    13 and up
+//   legendary  20 and up
+// 30 battles is the most that counts. A unit under 4 battles has no officer
+// at all (a headless unit, below); an officer, however he came by his
+// name, is never less than green.
 const GRADES = [
   { name: 'green', from: 0 },
-  { name: 'seasoned', from: 2 },
-  { name: 'veteran', from: 5 }
+  { name: 'seasoned', from: 8 },
+  { name: 'veteran', from: 13 },
+  { name: 'legendary', from: 20 }
 ]
+const MAX_EXPERIENCE = 30
 
 // The chance he keeps the first clause beyond the plain order, the second,
 // the third and any after. A green officer carries the plain order and
-// seldom more; a veteran holds the whole chain. Starting values.
+// seldom more; a veteran holds the whole chain; a legendary one never
+// loses any of it. Starting values.
 const GRASP = {
   green: [0.35, 0.10, 0.05],
   seasoned: [0.90, 0.55, 0.25],
-  veteran: [1.00, 0.95, 0.85]
+  veteran: [1.00, 0.95, 0.85],
+  legendary: [1.00, 1.00, 1.00]
 }
 
 const PERSONALITIES = ['bold', 'steady', 'cautious']
 
 // Battles a unit comes through before an officer comes forward from its
-// ranks: at the first number he may, at the second he does.
-const EARNED_AT = [3, 4]
+// ranks, green and with a name.
+const EARNED_AT = 4
 
 // The most an order may hold: steps after the first, and one condition.
 const MAX_STEPS = 3
@@ -126,4 +138,4 @@ function losingTheThread(officer, lost, enemyInSight) {
   return lost === 'condition' ? 'carry on' : 'hold'
 }
 
-module.exports = { GRADES, GRASP, PERSONALITIES, MAX_STEPS, EARNED_AT, gradeOf, chanceToKeep, clauses, grasp, losingTheThread }
+module.exports = { GRADES, GRASP, PERSONALITIES, MAX_STEPS, EARNED_AT, MAX_EXPERIENCE, gradeOf, chanceToKeep, clauses, grasp, losingTheThread }
