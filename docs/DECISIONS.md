@@ -897,3 +897,26 @@ their names ("Legions and Celts" no longer says who fights).
 5. The two kinds of battle are the same battle now. Should kinds of battle
    be something else (hold ground, a river crossing), or go from the
    muster?
+
+### The Commander's odds, set again for faction armies (November 23)
+
+The first odds (a 10% roll each ten minutes his unit is struck under half,
+50% when it is destroyed around him, one in four of the fallen killed) were
+measured with the generic armies, where his "best unit" broke early and
+left the fight. A faction's elite unit fights on when cut up, so he was
+rolled for far more often: over 480 battles a player who sent everyone in
+had his Commander taken in 1 battle in 12 and killed in 1 in 48. That is
+not "low odds", and death is total loss.
+
+Now: **4% a tick, 30% when overrun, about one in eight of the fallen
+killed** (`tables.COMMANDER`). Measured over 960 battles of every faction
+against every other, on every map, each battle with a seed of its own: a
+player who sends everyone in is taken in about 1 battle in 19; one who
+plans as the computer does, 1 in 27; killed, about 1 in 300 either way.
+
+A note for whoever measures this again: the Commander's dice are seeded
+from the battle's seed alone, so many battles on a handful of seeds roll
+the same dice over and over. The first measurement with factions used five
+seeds and showed no deaths in 240 battles; it was wrong. Give every battle
+its own seed.
+
