@@ -77,7 +77,7 @@ function counter(unit, { side, own, selected, ghost, aged = false, commander = f
   const pennant = commander
     ? '<g aria-hidden="true"><path d="M-6 -8V-19" style="stroke: var(--ink)" stroke-width="1.2"/><path d="M-6 -19L4 -16L-6 -13Z" style="fill: var(--ink)"/></g>'
     : ''
-  const cut = aged && unit.word?.cutOff
+  const cut = aged && (unit.word?.cutOff || unit.word?.noWord)
     ? '<path d="M7 -10L13 -4M13 -10L7 -4" style="stroke: var(--side-red)" stroke-width="1.8" aria-hidden="true"/>'
     : ''
   const strength = own && unit.maxStrength
@@ -123,7 +123,7 @@ function clusterLabel(group, ghost, aged = false) {
     // Your units known by rider: their names, and how old the word is (the
     // server's words: "20 min ago", or cut off).
     const oldest = group.reduce((a, b) => ((b.word?.minutesAgo ?? 0) > (a.word?.minutesAgo ?? 0) ? b : a))
-    const when = group.some(u => u.word?.cutOff) ? 'cut off' : oldest.word?.said ?? ''
+    const when = group.some(u => u.word?.cutOff) ? 'cut off' : group.some(u => u.word?.noWord) ? 'no word' : oldest.word?.said ?? ''
     return `${group.length <= 2 ? group.map(g => g.name).join(', ') : `${group.length} units`}, ${when}`
   }
   if (ghost) {
