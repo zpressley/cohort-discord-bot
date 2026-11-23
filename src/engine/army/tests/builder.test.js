@@ -24,11 +24,43 @@ test('a legionary prices out: 7 quality + 2 gladius + 1 armor + 2 shield = 12 SP
   assert.equal(result.unit.size, 100, 'Q6: a unit is one hundred men')
 })
 
-test('horse cultures pay 2 SP for the mount, everyone else pays 3', () => {
+test('horse cultures pay 1 SP for the mount, everyone else pays 2', () => {
   const rider = { quality: 'professional', weapon: 'sword_standard', armor: 'light_armor', shield: 'light_shield', mounted: true }
-  const roman = buildUnit(rider, 'Roman Republic')
-  const parthian = buildUnit(rider, 'Parthian Empire')
-  assert.equal(roman.cost - parthian.cost, 1)
+  const foot = buildUnit({ ...rider, mounted: false }, 'Roman Republic').cost
+  assert.equal(buildUnit(rider, 'Roman Republic').cost - foot, 2)
+  assert.equal(buildUnit(rider, 'Parthian Empire').cost - foot, 1)
+})
+
+// ── What is sold (Recommendation A, docs/design/army-balance.md) ─────
+
+test('a sling costs what a bow costs, and a crossbow one more', () => {
+  const price = (weapon, quality = 'levy', culture = 'Roman Republic') => buildUnit({ quality, weapon, armor: 'light_armor' }, culture).cost
+  assert.equal(price('sling'), 5)
+  assert.equal(price('sling') - price('self_bow_basic'), 1, 'the sling outshoots the levy bow, so it costs a point more')
+  assert.equal(price('sling_professional', 'professional') - price('self_bow_professional', 'professional'), 1)
+  assert.equal(price('han_chinese_crossbow', 'professional', 'Han Dynasty'), 10)
+})
+
+test('archers and slingers are light troops; a crossbowman may wear medium armour', () => {
+  const kit = (weapon, armor, culture = 'Roman Republic') => buildUnit({ quality: 'professional', weapon, armor }, culture)
+  assert.ok(kit('sling', 'light_armor').ok)
+  assert.match(kit('sling', 'medium_armor').errors.join(), /light armor at most/)
+  assert.match(kit('self_bow_professional', 'heavy_armor').errors.join(), /light armor at most/)
+  assert.ok(kit('han_chinese_crossbow', 'medium_armor', 'Han Dynasty').ok)
+  assert.match(kit('han_chinese_crossbow', 'heavy_armor', 'Han Dynasty').errors.join(), /medium armor at most/)
+})
+
+test('a sidearm or a thrown weapon is not sold alone; a faction\'s elite keeps the doc\'s kit', () => {
+  for (const weapon of ['daggers', 'sickle', 'light_javelin', 'throwing_spear', 'roman_pilum']) {
+    const r = buildUnit({ quality: 'professional', weapon }, 'Roman Republic')
+    assert.match(r.errors.join(), /beside another weapon, not alone/, weapon)
+  }
+  // The elite is never bought: the Peltast Guard's javelins and the Eternal
+  // Sky Riders' armour are the doc's, and stand.
+  assert.ok(buildUnit({ quality: 'veteran_mercenary', weapon: 'javelin_heavy', armor: 'light_armor', shield: 'light_shield' }, 'Thracian Odrysians', { elite: true }).ok)
+  assert.ok(buildUnit({ quality: 'veteran_mercenary', weapon: 'self_bow_professional', armor: 'medium_armor', mounted: true }, 'Pre-Genghis Mongolia', { elite: true }).ok)
+  // ...but what it may not field at all, it still may not.
+  assert.ok(!buildUnit({ quality: 'veteran_mercenary', weapon: 'roman_gladius' }, 'Thracian Odrysians', { elite: true }).ok)
 })
 
 test('Q8: there is no training purchase — the builder has no such field to pay into', () => {

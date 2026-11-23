@@ -149,13 +149,14 @@ test('experience lowers the bar, and fatigue raises it', () => {
     if (tire) state.resolver.tire(get(state, 'x'), tire)
     return state.resolver.canRally(get(state, 'x'))
   }
-  // Half their men gone.
-  assert.equal(fit({ strength: 50, quality: 'levy' }), false, 'levies do not come back from that')
+  // Half their men gone: levies need 46% of their men (CONDITION over
+  // their morale resistance), so three in five gone is too many.
+  assert.equal(fit({ strength: 40, quality: 'levy' }), false, 'levies do not come back from that')
   assert.equal(fit({ strength: 50, quality: 'professional' }), true)
   assert.equal(fit({ strength: 25, quality: 'professional' }), false)
   assert.equal(fit({ strength: 25, quality: 'elite' }), true, 'the best re-form from a quarter')
   // What a veteran unit has earned counts like its tier.
-  assert.equal(fit({ strength: 50, quality: 'levy', veteranResistance: 0.5 }), true)
+  assert.equal(fit({ strength: 40, quality: 'levy', veteranResistance: 0.5 }), true)
   // Spent men need more of their number: 35 fresh professionals rally, 35
   // exhausted ones do not.
   assert.equal(fit({ strength: 35 }), true)

@@ -224,12 +224,17 @@ test('Tribal Warriors bleed like Militia but hold like Professionals', () => {
   assert.ok(tribal.total < militia.total)
 })
 
-test('Veteran Mercenaries lose morale as fast as Militia despite the price', () => {
+// The notebook gave them "morale of mere Militia"; Recommendation A
+// (docs/design/army-balance.md) raised levy and militia a step and left
+// the veterans' morale where it was, which is now the levy's.
+test('Veteran Mercenaries lose morale as fast as Levy despite the price', () => {
   const sources = { killed: 15, pushDifferential: 2, chaos: 3 }
   assert.equal(
     D.moraleDamage(unit({ quality: 'veteran_mercenary' }), sources).total,
-    D.moraleDamage(unit({ quality: 'militia' }), sources).total
+    D.moraleDamage(unit({ quality: 'levy' }), sources).total
   )
+  assert.ok(D.moraleDamage(unit({ quality: 'veteran_mercenary' }), sources).total >
+    D.moraleDamage(unit({ quality: 'militia' }), sources).total)
 })
 
 // ── Stamina ────────────────────────────────────────────

@@ -66,16 +66,18 @@ test('Q7: Tribal Warriors match Militia on cost and stats, and differ only on mo
   assert.ok(tribal.factionGated, 'availability is the cost, so it must be gated')
 })
 
-test('Veteran Mercenaries hit hardest and hold worst — Militia morale', () => {
+test('Veteran Mercenaries hit hardest and hold worst — Levy morale', () => {
   // combat-design.md: "best Attack in the ladder, but morale of mere Militia.
-  // They hit hardest and leave first when losing."
+  // They hit hardest and leave first when losing." Recommendation A
+  // (docs/design/army-balance.md) raised levy and militia a step and left
+  // the veterans where they were: the bottom of the ladder.
   const vet = T.QUALITY_TIERS.veteran_mercenary
   const paid = ['levy', 'militia', 'tribal_warriors', 'professional']
 
   for (const key of paid) {
     assert.ok(vet.attack >= T.QUALITY_TIERS[key].attack, `vet merc must out-attack ${key}`)
   }
-  assert.equal(vet.morale, T.QUALITY_TIERS.militia.morale)
+  assert.equal(vet.morale, T.QUALITY_TIERS.levy.morale)
   assert.ok(vet.morale < T.QUALITY_TIERS.professional.morale,
     'a cheaper tier holds better — that is the trade')
 })
@@ -252,7 +254,7 @@ test('morale resistance rises with the tier morale stat', () => {
   const militia = R.moraleResistance(unit({ quality: 'militia' }))
   const elite = R.moraleResistance(unit({ quality: 'elite' }))
 
-  assert.equal(levy, 1, 'the bottom of the ladder gets no discount')
+  assert.equal(levy, 1 + T.MORALE.RESISTANCE_PER_POINT, 'the bottom of the ladder gets one point')
   assert.ok(militia > levy)
   assert.ok(elite > militia)
 })
@@ -389,4 +391,32 @@ test('mass wins the shove: heavier kit and horses push harder', () => {
 
   assert.ok(R.basePushRating(heavy) > R.basePushRating(light))
   assert.ok(R.basePushRating(horse) > R.basePushRating(light))
+})
+
+// ── Missile troops hand to hand (Recommendation A, docs/design/army-balance.md) ──
+
+test('a missile unit fights hand to hand with a knife, and does not brace against horse', () => {
+  // The notebook: "engaged archers fight (poorly) in melee". A sling was
+  // swung as hard as a gladius, and braced against a charge like a spear.
+  const slingers = unit({ primaryWeapon: 'sling' })
+  const knives = unit({ primaryWeapon: T.MISSILES.SIDEARM })
+  assert.equal(R.baseAttackRating(slingers), R.baseAttackRating(knives))
+  assert.ok(R.baseAttackRating(slingers) < R.baseAttackRating(unit({ primaryWeapon: 'roman_gladius' })))
+  assert.equal(R.isAntiCavalry(slingers), false)
+  assert.equal(R.isAntiCavalry(unit({ primaryWeapon: 'spear_basic' })), true)
+  // Their volleys still use the sling's own numbers.
+  assert.equal(R.missileEffectiveness(slingers, unit({ mounted: true })), T.WEAPONS.sling.effectiveness.cavalry / 100)
+})
+
+// ── Veterancy in battle (army-balance.md, part 4) ──────
+
+test('a veteran unit fights a little better at each step; a unit with none fights as before', () => {
+  const at = (veterancy) => R.attackRating(unit({ veterancy }), {})
+  assert.equal(R.veteranEdge(unit()).fight, 0)
+  assert.equal(at(3), at(0), 'under green, nothing')
+  assert.ok(at(4) > at(0))
+  assert.ok(at(8) > at(4) && at(13) > at(8) && at(20) > at(13))
+  const legendary = T.VETERANCY.STEPS[T.VETERANCY.STEPS.length - 1]
+  assert.ok(legendary.fight < T.QUALITY_TIERS.professional.attack - T.QUALITY_TIERS.militia.attack,
+    'a legendary unit gains less than the step from militia to professional')
 })

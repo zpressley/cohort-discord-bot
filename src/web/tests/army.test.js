@@ -85,7 +85,7 @@ test('a choice that would overspend the budget is refused with the budget\'s rea
     assert.equal(seen.draft.options.quality.find(o => o.value === 'veteran_mercenary').refused, null)
     const more = (await app.api('POST', '/api/factions/rome/appraise', { units: [...units, { ...units[0], name: 'hastati', armor: 'medium_armor', shield: 'no_shield' }], draft: { quality: 'levy', weapon: 'sling' } })).body
     assert.equal(more.left, 3)
-    assert.equal(more.draft.refused, 'The army would cost 31 supply points against a budget of 30')
+    assert.equal(more.draft.refused, 'The army would cost 32 supply points against a budget of 30')
     assert.ok(more.left < more.cheapest, 'no room for another unit')
   } finally { await app.close() }
 })
@@ -236,8 +236,8 @@ test('the same faction may fight on both sides, by choice or by lot, and each si
     const seat = (await app.api('POST', '/api/battles', { opponent: 'standing', side: 'red', commander: made.token, enemyFaction: 'sarmatia', seed: 7 })).body.seats.red
     const tent = (await app.api('GET', `/api/seat/${seat}`)).body
     assert.equal(tent.battle.title, 'Crownhill: Sarmatia against Sarmatia')
-    const read = (await app.api('POST', `/api/seat/${seat}/read`, { text: 'light riders 1 hold\niron scale riders advance' })).body
-    assert.deepEqual(read.understood, ['Light riders 1: hold', 'Iron scale riders: advance on the enemy'])
+    const read = (await app.api('POST', `/api/seat/${seat}/read`, { text: 'horse archers 1 hold\niron scale riders advance' })).body
+    assert.deepEqual(read.understood, ['Horse archers 1: hold', 'Iron scale riders: advance on the enemy'])
     // By lot, over enough seeds, his own faction comes up.
     const titles = new Set()
     for (let seed = 1; seed <= 160; seed++) {

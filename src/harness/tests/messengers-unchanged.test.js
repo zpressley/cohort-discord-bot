@@ -7,6 +7,10 @@
 // the computer on both sides, on two maps, two seeds each, with the number
 // of player turns. If one changes, riders changed a battle they should not
 // touch.
+//
+// Retaken when combat and the usual armies changed on purpose (the army
+// balance, Recommendation A: docs/design/army-balance.md). Before it they
+// were ec82c3c2 17, 1765942a 18, 1690181b 18, 5c67514a 20.
 
 const { test } = require('node:test')
 const assert = require('node:assert/strict')
@@ -24,10 +28,10 @@ function fingerprint(text) {
 }
 
 const BEFORE = {
-  'crownhill 1': 'ec82c3c2 17',
-  'crownhill 2': '1765942a 18',
-  'ashford 1': '1690181b 18',
-  'ashford 2': '5c67514a 20'
+  'crownhill 1': 'f8deabe5 20',
+  'crownhill 2': '745feb5f 30',
+  'ashford 1': 'f7d6da75 32',
+  'ashford 2': '6c59381b 38'
 }
 
 test('a battle with no Commander on the field runs exactly as before riders, event for event', () => {

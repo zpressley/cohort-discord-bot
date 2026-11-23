@@ -64,7 +64,9 @@ test('bought units have distinct names; one numbered is told apart, and a name a
 })
 
 test('a bought army forms up on every map, where the scenario puts its side, and a game can be made', () => {
-  const big = { rome: slingers(7), sarmatia: Array.from({ length: 3 }, (_, i) => ({ name: i ? `horse archers ${i + 1}` : 'horse archers', quality: 'tribal_warriors', weapon: 'self_bow_basic', armor: 'light_armor', mounted: true })) }
+  // Seven units, the most a Roman budget buys: levy archers at 4 SP each.
+  const archers = Array.from({ length: 7 }, (_, i) => ({ name: i ? `archers ${i + 1}` : 'archers', quality: 'levy', weapon: 'self_bow_basic', armor: 'light_armor' }))
+  const big = { rome: archers, sarmatia: Array.from({ length: 3 }, (_, i) => ({ name: i ? `horse archers ${i + 1}` : 'horse archers', quality: 'tribal_warriors', weapon: 'self_bow_basic', armor: 'light_armor', mounted: true })) }
   for (const map of mapChoices().map(m => m.id)) {
     for (const scenario of Object.keys(SCENARIOS)) {
       const spec = fieldArmies(loadScenario(scenario, { map, deploy: true }), { red: { faction: 'rome', units: big.rome }, blue: { faction: 'sarmatia', units: big.sarmatia } })

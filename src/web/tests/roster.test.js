@@ -33,7 +33,7 @@ async function start(store = createBattleStore({})) {
   return { server, api, close: () => new Promise(resolve => server.close(resolve)) }
 }
 
-// Rome's usual army: legionaries 12, hastati 10, velites 4 (26 of 30); the
+// Rome's usual army: legionaries 12, hastati 10, velites 5 (27 of 30); the
 // praetorian guard free.
 const roman = async (app) => (await app.api('POST', '/api/commanders', { faction: 'rome' })).body
 
@@ -82,7 +82,7 @@ test('an army in the field may not cost more than the budget: what marches over 
     store.commanders.setRoster(c, addToRoster(c, { name: 'pikes', quality: 'veteran_mercenary', weapon: 'two_handed_spear', culture: 'Macedonian Kingdoms' }, 'captured'))
     const refused = await app.api('POST', '/api/battles', { opponent: 'standing', commander: red.token, marching: ['legionaries', 'hastati', 'velites', 'pikes'] })
     assert.equal(refused.status, 400)
-    assert.equal(refused.body.error, 'They would cost 38 supply points against a budget of 30: leave one at home.')
+    assert.equal(refused.body.error, 'They would cost 39 supply points against a budget of 30: leave one at home.')
     assert.equal(store.commanders.get(red.token).battle, null, 'no battle was made')
     // Leave the hastati at home, and they may go.
     const made = await app.api('POST', '/api/battles', { opponent: 'standing', commander: red.token, marching: ['legionaries', 'velites', 'pikes'] })
@@ -135,7 +135,7 @@ test('what he buys must fit the budget together, at home or not: he cannot buy t
     const army = [
       { name: 'legionaries', quality: 'professional', weapon: 'roman_gladius', armor: 'medium_armor', shield: 'heavy_shield' },
       { name: 'hastati', quality: 'militia', weapon: 'roman_gladius', armor: 'medium_armor', shield: 'heavy_shield' },
-      { name: 'velites', quality: 'levy', weapon: 'light_javelin', shield: 'light_shield' }
+      { name: 'velites', quality: 'levy', weapon: 'sword_standard', armor: 'light_armor', shield: 'light_shield' }
     ]
     assert.equal((await app.api('POST', `/api/commander/${red.token}/army`, { units: army })).status, 200)
     // He leaves the legionaries at home...

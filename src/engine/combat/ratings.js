@@ -87,7 +87,7 @@ function moraleResistance(unit) {
     (unit.veteranResistance ?? 0) + (veteranEdge(unit).stand ?? 0)
 }
 
-// PROPOSAL (docs/design/army-balance.md, part 4): what a unit's earned
+// docs/design/army-balance.md, part 4 (taken 2026-11-23): what a unit's earned
 // veterancy (its men's average experience) gives it: the highest step of
 // tables.VETERANCY.STEPS it has reached, or nothing.
 const NO_EDGE = { fight: 0, stand: 0, survive: 0 }
@@ -116,7 +116,7 @@ function effectivenessAgainst(striker, target) {
   return (weapon.effectiveness[cls] ?? 50) / 100
 }
 
-// PROPOSAL (docs/design/army-balance.md): what a missile unit fights with
+// Recommendation A (docs/design/army-balance.md; taken 2026-11-23): what a missile unit fights with
 // hand to hand. With MISSILES.SIDEARM set, a unit whose weapon shoots
 // fights a melee with that weapon instead (it does not swing its sling);
 // unset, it fights with its missile weapon's numbers, as before.

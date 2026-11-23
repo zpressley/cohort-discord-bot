@@ -47,7 +47,7 @@ const FACTIONS = {
     army: [
       { name: 'legionaries', quality: 'professional', weapon: 'roman_gladius', armor: 'medium_armor', shield: 'heavy_shield' },
       { name: 'hastati', quality: 'militia', weapon: 'roman_gladius', armor: 'medium_armor', shield: 'heavy_shield' },
-      { name: 'velites', quality: 'levy', weapon: 'light_javelin', armor: 'no_armor', shield: 'light_shield' }
+      { name: 'velites', quality: 'levy', weapon: 'sword_standard', armor: 'light_armor', shield: 'light_shield' }
     ]
   },
 
@@ -65,7 +65,7 @@ const FACTIONS = {
     army: [
       { name: 'sarissa foot', quality: 'professional', weapon: 'macedonian_sarissa', armor: 'no_armor', shield: 'no_shield' },
       { name: 'sarissa foot', quality: 'professional', weapon: 'macedonian_sarissa', armor: 'no_armor', shield: 'no_shield' },
-      { name: 'peltasts', quality: 'professional', weapon: 'light_javelin', armor: 'no_armor', shield: 'light_shield' }
+      { name: 'peltasts', quality: 'professional', weapon: 'spear_basic', armor: 'light_armor', shield: 'light_shield' }
     ]
   },
 
@@ -79,8 +79,8 @@ const FACTIONS = {
       weapon: 'spear_professional', armor: 'heavy_armor', shield: 'heavy_shield'
     },
     army: [
-      { name: 'hoplites', quality: 'professional', weapon: 'spear_professional', armor: 'medium_armor', shield: 'heavy_shield' },
-      { name: 'skirmishers', quality: 'levy', weapon: 'light_javelin', armor: 'no_armor', shield: 'light_shield' },
+      { name: 'hoplites', quality: 'professional', weapon: 'spear_professional', armor: 'light_armor', shield: 'heavy_shield' },
+      { name: 'skirmishers', quality: 'levy', weapon: 'self_bow_basic', armor: 'light_armor', shield: 'no_shield' },
       { name: 'helots', quality: 'levy', weapon: 'spear_basic', armor: 'light_armor', shield: 'light_shield' }
     ]
   },
@@ -97,7 +97,7 @@ const FACTIONS = {
       weapon: 'spear_professional', armor: 'heavy_armor', shield: 'heavy_shield'
     },
     army: [
-      { name: 'numidian horse', quality: 'militia', weapon: 'light_javelin', armor: 'light_armor', shield: 'light_shield', mounted: true },
+      { name: 'numidian horse', quality: 'militia', weapon: 'sword_standard', armor: 'light_armor', shield: 'light_shield', mounted: true },
       { name: 'gauls', quality: 'militia', weapon: 'sword_standard', armor: 'light_armor', shield: 'medium_shield' },
       { name: 'slingers', quality: 'levy', weapon: 'sling', armor: 'no_armor', shield: 'no_shield' },
       { name: 'iberians', quality: 'militia', weapon: 'sword_standard', armor: 'light_armor', shield: 'light_shield' }
@@ -116,7 +116,7 @@ const FACTIONS = {
     army: [
       { name: 'spearmen', quality: 'professional', weapon: 'spear_professional', armor: 'medium_armor', shield: 'medium_shield' },
       { name: 'spearmen', quality: 'professional', weapon: 'spear_professional', armor: 'medium_armor', shield: 'medium_shield' },
-      { name: 'slingers', quality: 'levy', weapon: 'sling', armor: 'no_armor', shield: 'no_shield' }
+      { name: 'spears', quality: 'militia', weapon: 'spear_basic', armor: 'light_armor', shield: 'medium_shield' }
     ]
   },
 
@@ -131,7 +131,7 @@ const FACTIONS = {
       weapon: 'javelin_heavy', armor: 'light_armor', shield: 'light_shield', mounted: true
     },
     army: [
-      { name: 'riders', quality: 'tribal_warriors', weapon: 'light_javelin', armor: 'light_armor', shield: 'light_shield', mounted: true },
+      { name: 'riders', quality: 'tribal_warriors', weapon: 'sword_standard', armor: 'light_armor', shield: 'light_shield', mounted: true },
       { name: 'swordsmen', quality: 'tribal_warriors', weapon: 'sword_standard', armor: 'light_armor', shield: 'medium_shield' },
       { name: 'swordsmen', quality: 'tribal_warriors', weapon: 'sword_standard', armor: 'light_armor', shield: 'medium_shield' },
       { name: 'slingers', quality: 'levy', weapon: 'sling', armor: 'no_armor', shield: 'no_shield' }
@@ -150,8 +150,8 @@ const FACTIONS = {
     },
     army: [
       { name: 'horse archers', quality: 'tribal_warriors', weapon: 'self_bow_basic', armor: 'light_armor', shield: 'no_shield', mounted: true },
-      { name: 'light riders', quality: 'tribal_warriors', weapon: 'light_javelin', armor: 'light_armor', shield: 'light_shield', mounted: true },
-      { name: 'light riders', quality: 'tribal_warriors', weapon: 'light_javelin', armor: 'light_armor', shield: 'light_shield', mounted: true }
+      { name: 'horse archers', quality: 'tribal_warriors', weapon: 'self_bow_basic', armor: 'light_armor', shield: 'no_shield', mounted: true },
+      { name: 'horse archers', quality: 'tribal_warriors', weapon: 'self_bow_basic', armor: 'light_armor', shield: 'no_shield', mounted: true }
     ]
   },
 
@@ -166,8 +166,9 @@ const FACTIONS = {
       weapon: 'chinese_dao', armor: 'heavy_armor', shield: 'no_shield'
     },
     army: [
-      { name: 'crossbows', quality: 'professional', weapon: 'han_chinese_crossbow', armor: 'light_armor', shield: 'no_shield' },
-      { name: 'swords', quality: 'militia', weapon: 'chinese_dao', armor: 'light_armor', shield: 'light_shield' }
+      { name: 'crossbows', quality: 'professional', weapon: 'han_chinese_crossbow', armor: 'medium_armor', shield: 'no_shield' },
+      { name: 'swords', quality: 'militia', weapon: 'chinese_dao', armor: 'light_armor', shield: 'light_shield' },
+      { name: 'spears', quality: 'militia', weapon: 'spear_professional', armor: 'light_armor', shield: 'light_shield' }
     ]
   },
 
@@ -255,9 +256,9 @@ const FACTIONS = {
     },
     army: [
       { name: 'warriors', quality: 'tribal_warriors', weapon: 'spear_basic', armor: 'light_armor', shield: 'medium_shield' },
-      { name: 'axemen', quality: 'tribal_warriors', weapon: 'germanic_throwing_axe', armor: 'light_armor', shield: 'light_shield' },
+      { name: 'axemen', quality: 'tribal_warriors', weapon: 'battle_axe', armor: 'light_armor', shield: 'light_shield' },
       { name: 'spearmen', quality: 'tribal_warriors', weapon: 'germanic_framea', armor: 'light_armor', shield: 'no_shield' },
-      { name: 'skirmishers', quality: 'tribal_warriors', weapon: 'light_javelin', armor: 'light_armor', shield: 'light_shield' }
+      { name: 'skirmishers', quality: 'tribal_warriors', weapon: 'sling', armor: 'light_armor', shield: 'light_shield' }
     ]
   },
 
@@ -274,7 +275,7 @@ const FACTIONS = {
     army: [
       { name: 'rhomphaia men', quality: 'tribal_warriors', weapon: 'thracian_rhomphaia', armor: 'light_armor', shield: 'no_shield' },
       { name: 'rhomphaia men', quality: 'tribal_warriors', weapon: 'thracian_rhomphaia', armor: 'light_armor', shield: 'no_shield' },
-      { name: 'javelin men', quality: 'tribal_warriors', weapon: 'light_javelin', armor: 'light_armor', shield: 'light_shield' },
+      { name: 'slingers', quality: 'tribal_warriors', weapon: 'sling', armor: 'light_armor', shield: 'light_shield' },
       { name: 'spearmen', quality: 'tribal_warriors', weapon: 'spear_basic', armor: 'light_armor', shield: 'light_shield' }
     ]
   },
@@ -314,7 +315,7 @@ const FACTIONS = {
   mongolia: {
     culture: 'Pre-Genghis Mongolia',
     title: 'Mongolia',
-    fights: 'Every man on a horse: bowmen who never close, and armoured riders who do.',
+    fights: 'Every man on a horse: bowmen who never close, and riders who do.',
     // Doc: composite bows, layered armour, a hundred men. The builder's
     // composite bows belong to the Greeks and Parthians: the professional
     // bow stands in.
@@ -324,8 +325,9 @@ const FACTIONS = {
     },
     army: [
       { name: 'horse archers', quality: 'tribal_warriors', weapon: 'self_bow_basic', armor: 'light_armor', shield: 'no_shield', mounted: true },
-      { name: 'armoured riders', quality: 'tribal_warriors', weapon: 'sword_standard', armor: 'medium_armor', shield: 'light_shield', mounted: true },
-      { name: 'armoured riders', quality: 'tribal_warriors', weapon: 'sword_standard', armor: 'medium_armor', shield: 'light_shield', mounted: true }
+      { name: 'horse archers', quality: 'tribal_warriors', weapon: 'self_bow_basic', armor: 'light_armor', shield: 'no_shield', mounted: true },
+      { name: 'riders', quality: 'tribal_warriors', weapon: 'sword_standard', armor: 'light_armor', shield: 'light_shield', mounted: true },
+      { name: 'riders', quality: 'tribal_warriors', weapon: 'sword_standard', armor: 'light_armor', shield: 'light_shield', mounted: true }
     ]
   },
 
@@ -343,7 +345,7 @@ const FACTIONS = {
       { name: 'slingers', quality: 'levy', weapon: 'sling', armor: 'no_armor', shield: 'no_shield' },
       { name: 'levies', quality: 'levy', weapon: 'spear_basic', armor: 'light_armor', shield: 'light_shield' },
       { name: 'levies', quality: 'levy', weapon: 'spear_basic', armor: 'light_armor', shield: 'light_shield' },
-      { name: 'horsemen', quality: 'tribal_warriors', weapon: 'light_javelin', armor: 'medium_armor', shield: 'light_shield', mounted: true }
+      { name: 'horsemen', quality: 'tribal_warriors', weapon: 'celtic_longsword', armor: 'light_armor', shield: 'light_shield', mounted: true }
     ]
   },
 
@@ -358,8 +360,8 @@ const FACTIONS = {
       weapon: 'macedonian_sarissa', armor: 'heavy_armor', shield: 'no_shield'
     },
     army: [
-      { name: 'cataphracts', quality: 'professional', weapon: 'persian_kontos', armor: 'heavy_armor', shield: 'no_shield', mounted: true },
-      { name: 'peltasts', quality: 'levy', weapon: 'light_javelin', armor: 'light_armor', shield: 'light_shield' },
+      { name: 'cataphracts', quality: 'militia', weapon: 'persian_kontos', armor: 'heavy_armor', shield: 'no_shield', mounted: true },
+      { name: 'slingers', quality: 'levy', weapon: 'sling', armor: 'light_armor', shield: 'light_shield' },
       { name: 'archers', quality: 'militia', weapon: 'self_bow_basic', armor: 'light_armor', shield: 'no_shield' }
     ]
   },

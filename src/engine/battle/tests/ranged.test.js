@@ -40,7 +40,7 @@ const morale = (state, id) => state.resolver.getState(id)?.morale ?? T.MORALE.ST
 test('bows, slings and crossbows shoot; javelins and swords do not', () => {
   assert.equal(ranged.missileRange(archers()), 8, 'a composite bow reaches 200 m')
   assert.equal(ranged.missileRange(unit({ primaryWeapon: 'self_bow_basic' })), 5)
-  assert.equal(ranged.missileRange(unit({ primaryWeapon: 'sling' })), 12)
+  assert.equal(ranged.missileRange(unit({ primaryWeapon: 'sling' })), 8, 'a sling reaches 200 m, as a composite bow does')
   assert.equal(ranged.missileRange(unit({ primaryWeapon: 'roman_pilum' })), 0, 'thrown in the charge, not shot')
   assert.equal(ranged.missileRange(unit()), 0)
 })

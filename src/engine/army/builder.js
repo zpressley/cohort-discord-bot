@@ -41,9 +41,12 @@ function mountCost(culture) {
  *
  * @param {Object} pick { quality, weapon, armor, shield, mounted }
  * @param {string} culture
+ * @param {Object} [o]  { elite: true } checks a faction's own elite unit,
+ *   which is never sold: only what its culture may field and carry, not the
+ *   rules on what is sold (missile troops' armour, a weapon not sold alone)
  * @returns {{ ok, errors, cost, unit }}
  */
-function buildUnit(pick, culture) {
+function buildUnit(pick, culture, { elite = false } = {}) {
   const errors = []
   const {
     quality, weapon,
@@ -87,17 +90,20 @@ function buildUnit(pick, culture) {
         (shield === 'medium_shield' || shield === 'heavy_shield')) {
       errors.push(`${weapon} needs a free hand — light shield at most`)
     }
-    // PROPOSAL (docs/design/army-balance.md): missile troops are light
-    // troops; a crossbowman may be armoured to medium.
-    if (weaponData.armorMax && (armor in D.ARMOR_SP) &&
+    // Missile troops are light troops; a crossbowman may be armoured to
+    // medium (docs/design/army-balance.md, Recommendation A). A faction's
+    // elite is not bought: the doc's armoured horse archers stand.
+    if (!elite && weaponData.armorMax && (armor in D.ARMOR_SP) &&
         Object.keys(D.ARMOR_SP).indexOf(armor) > Object.keys(D.ARMOR_SP).indexOf(weaponData.armorMax)) {
       errors.push(`${weapon} is carried by men in ${weaponData.armorMax.replace('_armor', '')} armor at most`)
     }
-    // PROPOSAL: a sidearm or a thrown weapon is carried beside another
-    // weapon, and this builder has one weapon to a unit; until there are
-    // second weapons it is not sold alone.
-    if (weaponData.stacking === 'secondary' ||
-        (weaponData.stacking === 'stackable_ranged' && (T.WEAPONS[weapon]?.range ?? 0) < T.MISSILES.MIN_RANGE_M)) {
+    // A sidearm or a thrown weapon is carried beside another weapon, and
+    // this builder has one weapon to a unit; until there are second weapons
+    // it is not sold alone (Recommendation A). A faction's elite carries
+    // the doc's second weapon in its men's hands (the Peltast Guard's
+    // curved swords, the Blue Men's spears), so its javelins stand.
+    if (!elite && (weaponData.stacking === 'secondary' ||
+        (weaponData.stacking === 'stackable_ranged' && (T.WEAPONS[weapon]?.range ?? 0) < T.MISSILES.MIN_RANGE_M))) {
       errors.push(`${weapon} is carried beside another weapon, not alone`)
     }
   }

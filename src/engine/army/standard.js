@@ -89,7 +89,7 @@ function checkStandard(key, units, { mayBeEmpty = false } = {}) {
 function eliteOf(key) {
   const faction = FACTIONS[key]
   const { name, ...kit } = faction.elite
-  const check = buildUnit({ ...kit, quality: 'veteran_mercenary' }, faction.culture)
+  const check = buildUnit({ ...kit, quality: 'veteran_mercenary' }, faction.culture, { elite: true })
   if (!check.ok) throw new Error(`the ${name}: ${check.errors.join('; ')}`)
   return { name, ...kit }
 }

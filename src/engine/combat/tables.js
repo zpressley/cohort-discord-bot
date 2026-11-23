@@ -39,7 +39,7 @@ const QUALITY_TIERS = {
     size: 100,               // [Q6] was 400
     attack: 1,               // [salvage]
     defense: 1,              // [salvage]
-    morale: 1,               // PROPOSAL (docs/design/army-balance.md): was 0 [salvage]; at 0 levy broke at a look
+    morale: 1,               // Recommendation A (docs/design/army-balance.md; taken 2026-11-23): was 0 [salvage]; at 0 levy broke at a look
     push: 1,                 // [derived] push has no legacy table
     staminaPool: 60,         // [notebook] better training = more stamina
     restrictions: ['heavy_weapons', 'heavy_armor', 'heavy_shield']
@@ -50,7 +50,7 @@ const QUALITY_TIERS = {
     size: 100,
     attack: 2,
     defense: 2,
-    morale: 2,               // PROPOSAL: was 1
+    morale: 2,               // Recommendation A: was 1
     push: 2,
     staminaPool: 75,
     restrictions: []
@@ -201,7 +201,7 @@ const WEAPONS = {
 
   // Ranged — ranges in metres. Archers cannot use these while engaged in melee
   // (notebook), so in phase 2 they contribute melee damage only.
-  // PROPOSAL (docs/design/army-balance.md): sling range 300 -> 200, war
+  // Recommendation A (docs/design/army-balance.md; taken 2026-11-23): sling range 300 -> 200, war
   // sling 350 -> 250: a sling outranged every bow, at a third of the price.
   sling:                   { damage: 8,  effectiveness: { light: 85, medium: 45, heavy: 25, cavalry: 90 }, range: 200 },
   self_bow_basic:          { damage: 6,  effectiveness: { light: 70, medium: 35, heavy: 15, cavalry: 65 }, range: 125 },
@@ -507,11 +507,11 @@ const MISSILES = {
   // everyone else, so a mounted missile unit is raised at this share of
   // its quality tier's men (army/builder.js). A starting value.
   HORSE_ARCHER_NUMBERS: 0.6,
-  // PROPOSAL (docs/design/army-balance.md): how hard men felled by a volley shake a unit, as a share of
+  // Recommendation A (docs/design/army-balance.md; taken 2026-11-23): how hard men felled by a volley shake a unit, as a share of
   // the same men felled hand to hand (was 1). Missile fire wears a unit;
   // the melee breaks it.
   SHOCK: 0.67,
-  // PROPOSAL: the weapon a missile unit fights with hand to hand (a key of
+  // Recommendation A: the weapon a missile unit fights with hand to hand (a key of
   // WEAPONS): its knife, not its sling or bow (the notebook: "engaged
   // archers fight (poorly) in melee"). null: its missile weapon's numbers,
   // as before, when a sling was swung as hard as a sword and braced
@@ -584,7 +584,7 @@ const DAY = { TURNS: 40 }
 // the unit's average: at 1 they die evenly; at 0.5 the men who fall have on
 // average half the unit's experience. Starting value.
 //
-// PROPOSAL (docs/design/army-balance.md, part 4): what a unit's veterancy
+// docs/design/army-balance.md, part 4 (taken 2026-11-23): what a unit's veterancy
 // does in a battle. A unit carries its average experience, 0 to 30
 // (command/company.js, unitsOf), as `veterancy`. At each step it adds
 // `fight` to its attack and defence ratings (a professional has 4 of each

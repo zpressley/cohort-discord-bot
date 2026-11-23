@@ -32,7 +32,7 @@ function buildFaction(key) {
   // The elite is not bought, but it carries only kit its culture may field
   // and carry: priced as the best troops that can be bought, then given free.
   const { name, ...kit } = faction.elite
-  const check = buildUnit({ ...kit, quality: 'veteran_mercenary' }, faction.culture)
+  const check = buildUnit({ ...kit, quality: 'veteran_mercenary' }, faction.culture, { elite: true })
   errors.push(...check.errors.map(e => `the ${name}: ${e}`))
   for (const unit of faction.army) if (!unit.name) errors.push('every unit needs a name')
   if (errors.length) return { ok: false, errors, army: null, elite: null }

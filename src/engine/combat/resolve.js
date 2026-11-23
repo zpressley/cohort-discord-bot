@@ -258,7 +258,7 @@ function createCombatResolver(options = {}) {
         const bMorale = moraleShare(exchange.b.moraleDamage, aShare, bShare) * pace
 
         // (A veteran unit loses fewer of the men a blow would fell, but is
-        // shaken as much by it: PROPOSAL, tables.VETERANCY.STEPS `survive`.)
+        // shaken as much by it: tables.VETERANCY.STEPS `survive`.)
         const aKilled = takeCasualties(aState, exchange.a.detail.raw * bShare * pace * survives(a), a.strength)
         const bKilled = takeCasualties(bState, exchange.b.detail.raw * aShare * pace * survives(b), b.strength)
 
@@ -501,7 +501,7 @@ function rout(state, unit, victor, turn, events, routed) {
 // 100-man units almost every difference is smaller than one man — two runs with
 // visibly different chaos rolls produced identical casualties, round after
 // round, which made the seeded RNG decorative.
-// PROPOSAL (docs/design/army-balance.md, part 4): the share of the men a
+// docs/design/army-balance.md, part 4 (taken 2026-11-23): the share of the men a
 // blow would fell that a veteran unit loses (1 for a unit with none).
 function survives(unit) {
   return 1 - (R.veteranEdge(unit).survive ?? 0)

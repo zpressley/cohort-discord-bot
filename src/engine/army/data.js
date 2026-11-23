@@ -76,11 +76,11 @@ const TRIBAL_CULTURES = [
 //   shieldRestriction  no_shield | secondary_melee_only | medium_shield_max
 //   cavalryCompatible  false = cannot be taken mounted
 //   cultures           'all' or the list that may buy it
-//   armorMax           PROPOSAL (docs/design/army-balance.md): the heaviest
+//   armorMax           Recommendation A (docs/design/army-balance.md): the heaviest
 //                      armour its men may wear (missile troops are light
 //                      troops; crossbowmen may wear medium)
 //
-// PROPOSAL prices: sling 1 -> 2 (it outshot every bow at any price),
+// Recommendation A's prices: sling 1 -> 2 (it outshot every bow at any price),
 // sling_professional 2 -> 3, han_chinese_crossbow 2 -> 3 (it pierces armour
 // as nothing else does).
 const WEAPONS = {
