@@ -1279,3 +1279,12 @@ Built at once:
   veterancy wears away more slowly than its numbers. Who wins a battle is
   untouched.
 
+Zach's answer, the same day: "The idea that veterans would not fight
+better seems off, but it would need to be balanced into the game." Not
+built yet: how earned veterancy should make a unit fight better, and by
+how much, is part of the army balance study (`docs/design/army-balance.md`
+when it reports), because it changes who wins. What was measured first:
+the engine's one old rule for it (harder to break) at its old top
+strength takes a side from 53% of its battles to 83%, while it loses
+hardly fewer men.
+
