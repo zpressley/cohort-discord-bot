@@ -77,7 +77,7 @@ test('places resolve from where the units stand, and the player gets a read-back
   const read = interpretLines(['spears to the ridge to the east'], context)
   assert.equal(read.questions.length, 0)
   assert.equal(toLabel(read.orders[0].target), 'T2', 'The Crownhill')
-  assert.match(read.understood[0], /red_spears: move The Crownhill \d+ m east \(E1-NE\)/,
+  assert.match(read.understood[0], /red_spears: march to The Crownhill \d+ m east \(E1-NE\)/,
     'the read-back gives the grid quarter')
 
   const defend = interpretLines(['archers defend the woods'], context)
@@ -137,15 +137,17 @@ test('AI: a unit that is not on the field is a question, never a guess', async (
   assert.match(read.questions[0], /red_elephants/)
 })
 
-test('AI: a name for an id is accepted when it means one unit, and a second order to a unit becomes a note', async () => {
+test('AI: a name for an id is accepted when it means one unit, and a second order to a unit is the next step of a chain', async () => {
   const step = (place) => ({ units: ['spears'], action: 'move', place, then_hold: false, careful: false, against: null, let_pass: 0, regardless: false })
   const ai = aiReplying({ orders: [step('C2'), step('Harrow Bridge')], question: null, note: null, surrender: false })
   const read = await interpretText('get the spears over to C2 and after that on to the bridge', context, { ai })
   assert.equal(read.questions.length, 0)
-  assert.equal(read.orders.length, 1, 'one order a unit')
+  assert.equal(read.orders.length, 1, 'one order a unit, with what comes after inside it')
   assert.equal(read.orders[0].unitRef, 'red_spears')
-  assert.equal(gridLabel(read.orders[0].target), 'C2', 'the first step stands')
-  assert.match(read.notes[0], /red_spears: I recorded the first order only/)
+  assert.equal(gridLabel(read.orders[0].target), 'C2')
+  assert.equal(read.orders[0].steps.length, 1)
+  assert.equal(map.terrainAt(read.orders[0].steps[0].target), 'bridge')
+  assert.match(read.understood[0], /^red_spears: march to C2 \(C2-NW\); then march to Harrow Bridge/)
 })
 
 test('plain orders never reach the AI; only what the grammar cannot read does', async () => {

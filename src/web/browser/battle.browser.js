@@ -106,6 +106,34 @@ test('alone, on a phone: muster, an order written on the map, turns to a verdict
     await p.goto(base + '/')
     await p.waitForSelector('.battle-link')
     assert.match(p.url(), /\/battles$/, 'nothing waiting, so home is your battles')
+
+    // Your officers: those who lived, with the battle in their record.
+    await p.click('a[href="/officers"]')
+    await p.waitForSelector('.officer, .label-caps')
+    assert.match(await p.textContent('main'), /1 battle fought/)
+    if (await p.locator('.officer').count()) {
+      await p.locator('.officer summary').first().click()
+      assert.match(await p.locator('.officer li').first().textContent(), /a victory|a defeat|a draw/)
+    }
+    assert.match(await p.textContent('main'), /Commander \w+/)
+    assert.match(await p.textContent('main'), /ready to muster/)
+    if (process.env.SHOT) await p.screenshot({ path: process.env.SHOT, fullPage: true })
+
+    // The next muster offers him again, or a new Commander; while his army
+    // is in the field he cannot be chosen.
+    await p.goto(base + '/muster')
+    await p.waitForSelector('select[name="commander"]')
+    assert.match(await p.locator('select[name="commander"] option:checked').textContent(), /1 battle fought/)
+    await p.click('button[type="submit"]')
+    await p.waitForSelector('#orders')
+    await p.goto(base + '/muster')
+    await p.waitForSelector('select[name="commander"]')
+    assert.match(await p.locator('select[name="commander"] option:checked').textContent(), /A new Commander/)
+    assert.equal(await p.locator('select[name="commander"] option[disabled]').count(), 1, 'his army is in the field')
+    if (process.env.SHOT) await p.screenshot({ path: process.env.SHOT.replace('.png', '-muster.png'), fullPage: true })
+    await p.goto(base + '/officers')
+    await p.waitForSelector('.commander')
+    assert.match(await p.textContent('main'), /His army is in the field/)
   })
 })
 

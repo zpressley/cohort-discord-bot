@@ -121,3 +121,17 @@ to the set. The model has two answers of its own for them, `shoot` and
 `hold_fire`, which the code turns into a hold; asked instead to remember
 "shoot is a hold with a target", it read "loose at their cavalry" as an
 ambush.
+
+2026-11-21, with orders that have depth: the reply gained five fields for
+one condition, and a chain is written as orders for the same unit one after
+another. An AI read now costs about 2,150 tokens in and 290 out, about
+$0.00022. On the ten orders this touches: 7 of 10 at first, 9 of 10 after
+two fixes in code, and then, with a worked example added to the prompt, the
+six that go to the model read 6 of 6 twice.
+
+2026-11-22, the full run with depth and officers in: **50 of 50** orders
+read right (17 by the grammar alone, 33 AI calls, 2,250 tokens in and 186
+out a read, about $0.00020). The dispatch check ran four times: three clean,
+and one that opened with the wrong fact (it led with a unit that held, not
+the one that broke). Dispatches are written at a little warmth, so they
+vary; the facts in it were right.

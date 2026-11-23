@@ -72,7 +72,13 @@ const CASES = [
   { say: 'the heavy infantry advance', expect: [{ units: ['red_swords'], action: 'advance' }] },
   { say: 'Have the swords march carefully up the road toward Harrow Bridge and hold there', expect: [{ units: ['red_swords'], action: ['defend', 'move'], test: t => terrain(t) === 'bridge', careful: true }] },
   { say: 'archers go and stand with the horse', expect: [{ units: ['red_archers'], action: 'move', where: 'B3' }] },
-  { say: 'spears to C4, then on to the bridge', expect: [{ units: ['red_spears'], action: 'move', where: 'C4' }], note: true },
+  // Orders with depth: a chain, and one condition.
+  { say: 'spears to C4, then on to the bridge', expect: [{ units: ['red_spears'], action: 'move', where: 'C4', steps: 1 }], grammar: true },
+  { say: 'spears to North Ford, if their horse is there, hold', expect: [{ units: ['red_spears'], action: 'move', test: t => terrain(t) === 'ford', when: 'sees' }], grammar: true },
+  { say: 'First get the swords over to C4 and after that have them push on to the bridge and dig in there', expect: [{ units: ['red_swords'], action: 'move', where: 'C4', steps: 1 }] },
+  { say: 'I want the horse to stay put, but if the spears break, pull the horse back', expect: [{ units: ['red_horse'], action: 'hold', when: 'breaks' }] },
+  { say: 'Archers, hold your ground. If anyone attacks you, get back to the bridge.', expect: [{ units: ['red_archers'], action: 'hold', when: 'attacked' }] },
+  { say: 'Send the spears up to the north ford unless enemy cavalry is sitting on it, in which case they should stop and hold', expect: [{ units: ['red_spears'], action: 'move', test: t => terrain(t) === 'ford', when: 'sees' }] },
 
   // Several orders in one breath.
   {
@@ -149,6 +155,8 @@ function matches(order, want) {
   if (want.against !== undefined && (order.against ?? null) !== want.against) return false
   if (want.letPass !== undefined && (order.letPass ?? 0) !== want.letPass) return false
   if (want.regardless !== undefined && Boolean(order.regardless) !== want.regardless) return false
+  if (want.steps !== undefined && (order.steps?.length ?? 0) !== want.steps) return false
+  if (want.when !== undefined && order.when?.type !== want.when) return false
   return true
 }
 

@@ -51,6 +51,18 @@
 //              a unit broke
 //   pursuit    unitId, by, killed, remaining, trapped
 //              a fleeing unit cut down from behind
+//   grasp      unitId, officer, clauses, kept
+//              an order with more than one thing in it was given: how many
+//              clauses beyond the plain order it held, and how many the
+//              unit's officer kept (command/officers.js). The record of the
+//              roll; a commander is not told of it
+//   reacted    unitId, when, kind, action, target
+//              an order's condition came true ('sees', 'attacked',
+//              'breaks') and the unit took up the other thing it was told
+//   lostThread unitId, officer, lost, did
+//              the officer no longer remembered a part of his order (lost:
+//              'condition' or 'steps') and did as his nature told him (did:
+//              'advance', 'hold' or 'carry on')
 //   volley     unitId, by, killed, remaining, distance
 //              missile fire: `by` shot at `unitId` from `distance` tiles
 //   heartened  unitId, by, morale

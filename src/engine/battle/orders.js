@@ -34,6 +34,24 @@
 //             beside the ambush is not struck: the player springs the
 //             trap, with any order to attack (ruled 2026-10-29).
 //
+// Depth (November 2026, docs/design/officers-memory-delegation.md). An order
+// may hold more than one thing to do:
+//   steps   what to do next, in turn, each a plain order: "to C4, then on to
+//           the bridge, then dig in". A step is taken up when the one before
+//           it is done (the unit arrived, or finished its search). Standing
+//           fast, hiding and pressing the enemy never finish, so nothing
+//           after them is reached.
+//   when    one condition, and what to do instead if it comes true:
+//           { type, do } with type
+//             'sees'     the unit sees an enemy (kind: which, as for an
+//                        ambush's `against`; near: only within NEAR_TILES
+//                        of this place, "if their horse is at the ford")
+//             'attacked' it was fought or shot at last turn
+//             'breaks'   a named unit of its own side (unitId) has broken
+//           It holds through every step until it fires, once.
+// How much of this a unit's officer keeps is command/officers.js; a clause
+// he lost is marked on the order (when.lost, lostAfter).
+//
 // Any order that moves may be careful (Stage 3): the unit marches on guard,
 // at half speed, and cannot be caught by surprise. Otherwise a moving unit is
 // marching.
@@ -57,6 +75,7 @@
 // whoever can ask the player a question when the words are unclear.
 
 const { toPosition, samePosition } = require('../map/labels')
+const { MAX_STEPS } = require('../command/officers')
 
 const ACTIONS = ['move', 'hold', 'defend', 'advance', 'attack', 'withdraw', 'hide', 'check', 'ambush']
 const SEEKING = ['advance', 'attack']
@@ -67,6 +86,44 @@ const SEEKING = ['advance', 'attack']
  * silently does nothing.
  */
 function normalizeOrder(order) {
+  const out = normalizeOne(order)
+  const steps = (order.steps ?? []).slice(0, MAX_STEPS).map(normalizeOne)
+  if (steps.length > 0) out.steps = steps
+  if (order.when) out.when = normalizeWhen(order.when)
+  if (order.lostAfter) out.lostAfter = true
+  return out
+}
+
+const WHEN_TYPES = ['sees', 'attacked', 'breaks']
+// How near a place an enemy must be for "if they are there".
+const NEAR_TILES = 3
+
+function normalizeWhen(when) {
+  if (!WHEN_TYPES.includes(when.type)) throw new Error(`unknown order condition: ${when.type}`)
+  if (!when.do) throw new Error('an order condition needs something to do')
+  if (when.type === 'breaks' && !when.unitId) throw new Error('"if a unit breaks" needs the unit')
+  return {
+    type: when.type,
+    ...(when.type === 'sees' ? { kind: when.kind ?? null, near: when.near ? toPosition(when.near) : null } : {}),
+    ...(when.type === 'breaks' ? { unitId: when.unitId } : {}),
+    do: normalizeOne(when.do),
+    ...(when.lost ? { lost: true } : {})
+  }
+}
+
+// The order a unit takes up when the one it has is done: the next step, with
+// the rest of the chain and its condition; null when nothing follows.
+function nextStep(order) {
+  if (!order?.steps?.length) return null
+  const [next, ...rest] = order.steps
+  const out = { ...next }
+  if (rest.length > 0) out.steps = rest
+  if (order.when) out.when = order.when
+  if (order.lostAfter) out.lostAfter = true
+  return out
+}
+
+function normalizeOne(order) {
   if (order.action) {
     if (!ACTIONS.includes(order.action)) throw new Error(`unknown order action: ${order.action}`)
     const target = order.target && order.target !== 'hold' ? toPosition(order.target) : null
@@ -123,6 +180,12 @@ function planUnit(unit, order, context) {
       if (!samePosition(target, unit.position)) {
         return { move: { unitId: unit.id, target }, order }
       }
+      // At the target, with more to do: take up the next step at once. With
+      // more that the officer has lost, say so (the battle decides what he
+      // does instead).
+      const next = nextStep(order)
+      if (next) return planUnit(unit, next, context)
+      if (order.lostAfter) return { move: null, order: undefined, lostThread: true }
       // At the target. In the turn it was given, the order stands (the unit
       // simply has nowhere to go, as before Stage 2). Afterwards it is done:
       // dig in if told to, else back to the side's standing orders.
@@ -162,4 +225,4 @@ function isSeeking(order, standingOrder) {
   return standingOrder === 'advance'
 }
 
-module.exports = { normalizeOrder, planUnit, isSeeking, ACTIONS, SEEKING }
+module.exports = { normalizeOrder, planUnit, nextStep, isSeeking, ACTIONS, SEEKING, WHEN_TYPES, NEAR_TILES }
