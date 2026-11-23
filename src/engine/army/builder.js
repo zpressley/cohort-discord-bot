@@ -221,4 +221,4 @@ function roleFor(weapon) {
   return 'heavy_infantry'
 }
 
-module.exports = { buildUnit, buildArmy, toBattleUnits, PURCHASABLE }
+module.exports = { buildUnit, buildArmy, toBattleUnits, roleFor, PURCHASABLE }

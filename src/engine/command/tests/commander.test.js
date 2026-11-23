@@ -87,7 +87,8 @@ test('a battle: a Commander with a beaten unit is taken or killed in time, and a
   // threshold from the first blow.
   let taken = 0
   let killed = 0
-  for (let seed = 1; seed <= 60; seed++) {
+  const battles = 400
+  for (let seed = 1; seed <= battles; seed++) {
     const state = createBattleState(spec([
       unit({ id: 'guard', strength: 20, position: { x: 10, y: 10 } }),
       unit({ id: 'line', position: { x: 2, y: 18 } }),
@@ -104,7 +105,7 @@ test('a battle: a Commander with a beaten unit is taken or killed in time, and a
     }
   }
   assert.ok(taken > killed && killed > 0, `taken ${taken}, killed ${killed}: taken more often than killed, and both happen`)
-  assert.ok(taken + killed < 45, 'and often neither: the odds are low')
+  assert.ok(taken + killed < battles * 0.6, 'and often neither, even for a remnant left in the fight: the odds are low')
 })
 
 test('held, he gives no orders, and his units carry on with the ones they have', () => {
@@ -173,4 +174,19 @@ test('a battle with no Commanders on the field runs as it always did', () => {
   // The fighting is the same blow for blow until a Commander's death ends it.
   const shared = Math.min(withOne.length, without.length) - 1
   assert.deepEqual(withOne.slice(0, shared), without.slice(0, shared))
+})
+
+test('a Commander who only gets away to another unit does not stop the turn for the enemy to notice', () => {
+  // Red's guard is destroyed by hand as the turn opens; red's Commander
+  // comes through it and gets away to the line. Nothing else happens.
+  const game = createGame(spec([
+    unit({ id: 'guard', position: { x: 2, y: 2 } }),
+    unit({ id: 'line', position: { x: 2, y: 18 } }),
+    unit({ id: 'foe', side: 'blue', position: { x: 18, y: 18 } })
+  ]), { seed: 5 })
+  game.battle.world.units.find(u => u.id === 'guard').strength = 0
+  submitOrders(game, 'red', [])
+  submitOrders(game, 'blue', [])
+  assert.ok(game.battle.log.all().some(e => e.type === 'commanderMoved'), 'he moved')
+  assert.notEqual(game.history.at(-1).interrupt, 'commander')
 })

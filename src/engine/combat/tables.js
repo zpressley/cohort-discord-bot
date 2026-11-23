@@ -562,16 +562,24 @@ const HEART = {
 }
 
 // The Commander on the field (command/commander.js; ruled 2026-11-22: "low
-// odds and not possible till a threshold"). Starting values. The threshold
-// is half because units here break at about half strength: measured over
-// 160 battles, a Commander's unit was struck under a quarter in 4, under
-// half in 33. Over 720 battles with these numbers he fell in about 1 in 30
-// (nearly always taken and ransomed) and was killed in about 1 in 150.
+// odds and not possible till a threshold"). The threshold is half because
+// units here break at about half strength: with the first, generic armies a
+// Commander's unit was struck under a quarter in 4 battles of 160, under
+// half in 33.
+//
+// The odds were set again on 2026-11-23, once a Commander rode with his
+// faction's elite unit: elites fight on when cut up, so he was rolled for
+// far more often (with 10% a tick and 50% when overrun: taken in 1 battle
+// in 12, killed in 1 in 48, for a player who sends everyone in). With the
+// numbers below, over 960 battles of every faction against every other: a
+// player who sends everyone in is taken in about 1 battle in 19; one who
+// plans as the computer does, 1 in 27; killed, about 1 in 300 either way. A
+// Commander whose unit stays out of the fight cannot fall.
 const COMMANDER = {
   THRESHOLD: 0.5,      // his unit at or under this share of its strength
-  CHANCE: 0.10,        // each tick it is struck while under the threshold
-  OVERRUN: 0.5,        // the tick it is destroyed around him
-  KILLED_SHARE: 0.25   // of those who fall, killed; the rest are taken
+  CHANCE: 0.04,        // each tick it is struck while under the threshold
+  OVERRUN: 0.3,        // the tick it is destroyed around him
+  KILLED_SHARE: 0.12   // of those who fall, killed; the rest are taken
 }
 
 // ── Morale ─────────────────────────────────────────────

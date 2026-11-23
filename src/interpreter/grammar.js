@@ -17,6 +17,9 @@
 //   everyone advance    / advance           advance on the enemy
 //   swords withdraw     / fall back to C7   withdraw (to a place, or home)
 //   spears attack the ford / storm C7       attack (go there looking for a fight)
+//   horse attack their archers              attack an enemy unit its side has
+//   spears charge the enemy swords          seen, and follow it (an enemy
+//   swords go for the archers               kind, or a word of its name)
 //   archers hide in the woods               hide (go there, then hide)
 //   scouts check the woods / search C7      check (go there, then search)
 //   spears ambush in the woods              ambush (hide, then strike)
@@ -63,6 +66,12 @@ const HIDE_AND_STRIKE = new RegExp(`^(?:(.+?)\\s+)?(?:hide|hold|wait|lie low|sta
 const HIDE = new RegExp(`^(?:(.+?)\\s+)?(?:hide|take cover|go to ground|lie low|conceal themselves|stay hidden)(?:\\s+${PREP}\\s+(.+))?$`, 'i')
 const CHECK = /^(?:(.+?)\s+)?(?:check|search|scout|sweep|comb|look (?:in|into|through|over)|investigate)\b(?:\s+(.+))?$/i
 const ATTACK_PLACE = /^(?:(.+?)\s+)?(?:attack|storm|assault|seize|capture|charge)\s+(.+)$/i
+// "attack their archers", "go for the horse": an enemy unit, not a place.
+// After attack, charge and the like the words must say it is the enemy
+// ("their", "the enemy", "enemy") or name a kind of troops ("the archers");
+// "go for" and "go after" are only ever said of an enemy.
+const GO_FOR = /^(?:(.+?)\s+)?(go for|go after|ride down|run down|fall on|fall upon|attack|charge|assault|engage|hit|strike)\s+(.+)$/i
+const THE_ENEMY = /^(?:(?:the|their|those|that|enemy|enemy's|the enemy's)\s+)+/i
 // What "attack ..." names that is not a place: the enemy itself.
 const NOT_A_PLACE = /^(?:the )?(?:enemy|enemies|them|foe|foes|nearest(?: enemy)?|anything|everything)$/i
 
@@ -327,6 +336,15 @@ function readStage3(text, extra) {
   if (m) return order(m[1], 'hide', m[2] ? clean(m[2]) : null, null, extra)
   m = text.match(CHECK)
   if (m) return order(m[1], 'check', m[2] ? clean(m[2].replace(/^(?:the ground|around)\b\s*/i, '')) || null : null, null, extra)
+  m = text.match(GO_FOR)
+  if (m && !NOT_A_PLACE.test(clean(m[3])) && !/\s(?:to|towards|toward)\s/i.test(text)) {
+    const words = clean(m[3])
+    const marked = /^(?:their|those|enemy|the enemy)\b/i.test(words) || /^go |^ride |^run /i.test(m[2])
+    const bare = clean(words.replace(THE_ENEMY, ''))
+    if (bare && (marked || KINDS.some(([, pattern]) => pattern.test(bare.replace(/\s+at\s+.+$/i, ''))))) {
+      return order(m[1], 'attack', null, null, { ...extra, enemyRef: bare })
+    }
+  }
   m = text.match(ATTACK_PLACE)
   if (m && !NOT_A_PLACE.test(clean(m[2])) && !/\s(?:to|towards|toward)\s/i.test(text)) {
     return order(m[1], 'attack', clean(m[2]), null, extra)
@@ -334,4 +352,4 @@ function readStage3(text, extra) {
   return null
 }
 
-module.exports = { parseLine }
+module.exports = { parseLine, KINDS }

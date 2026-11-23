@@ -34,6 +34,12 @@ function saveSeat(seat) {
 function loadDraft(token) {
   try { return localStorage.getItem(`cohort.draft.${token}`) ?? '' } catch { return '' }
 }
+function howToHidden() {
+  try { return localStorage.getItem('cohort.hideHowTo') === '1' } catch { return false }
+}
+function hideHowTo() {
+  try { localStorage.setItem('cohort.hideHowTo', '1') } catch { /* it comes back next time */ }
+}
 function saveDraft(token, text) {
   try { text ? localStorage.setItem(`cohort.draft.${token}`, text) : localStorage.removeItem(`cohort.draft.${token}`) } catch { /* fine */ }
 }
@@ -63,8 +69,8 @@ async function loadCommanders() {
   if (known.length !== tokens.length) saveCommanders(known.map(c => c.token))
   return known
 }
-async function newCommander() {
-  const { token } = await api('POST', '/api/commanders')
+async function newCommander(faction) {
+  const { token } = await api('POST', '/api/commanders', { faction })
   saveCommanders([...commanderTokens(), token])
   return token
 }
@@ -221,7 +227,7 @@ async function officers() {
     </div>`
   const fallen = (f) => `<p class="note">${esc(f.name)}, who led the ${esc(f.led)}: ${esc(FATE_WORDS[f.fate] ?? f.fate)} at ${esc(f.at)}, after ${f.battles} battle${f.battles === 1 ? '' : 's'} with you.</p>`
   const company = (c) => `
-      <h2 class="commander">Commander ${esc(c.name)}</h2>
+      <h2 class="commander">Commander ${esc(c.name)}${c.factionTitle ? ` of ${esc(c.factionTitle)}` : ''}</h2>
       <p class="note">${c.battles} battle${c.battles === 1 ? '' : 's'} fought. ${c.ended
         ? `${c.ended.how === 'killed' ? 'Killed' : 'Lost in the enemy\'s hands'} at ${esc(c.ended.at)}. His name stays in the record; his company is no more.`
         : c.battle
@@ -243,12 +249,13 @@ async function officers() {
 
 // ── Muster ─────────────────────────────────────────────
 async function muster() {
-  const [scenarios, maps, commanders] = await Promise.all([api('GET', '/api/scenarios'), api('GET', '/api/maps'), loadCommanders()])
+  const [scenarios, maps, commanders, factions] = await Promise.all([api('GET', '/api/scenarios'), api('GET', '/api/maps'), loadCommanders(), api('GET', '/api/factions')])
   // The first Commander whose army is not in the field leads; with none, a new one.
   commanders.splice(0, commanders.length, ...commanders.filter(c => !c.ended))   // the fallen muster no more
   const ready = commanders.find(c => !c.battle)
   const commanderOption = (c) => `<option value="${esc(c.token)}"${c.battle ? ' disabled' : ''}${c === ready ? ' selected' : ''}>${esc(c.name)}${
     c.battle ? ' (army in the field)' : `, ${c.battles} battle${c.battles === 1 ? '' : 's'} fought`}</option>`
+  const factionOption = (f) => `<option value="${esc(f.id)}">${esc(f.title)}</option>`
   app.innerHTML = `
     <header class="bar"><a href="/battles" data-link>Your battles</a><strong style="font-family: var(--font-display); font-size: 18px">Muster a battle</strong><span></span></header>
     <main class="page">
@@ -256,7 +263,7 @@ async function muster() {
         <label class="field">The field
           <select name="map">${maps.map(m => `<option value="${esc(m.id)}">${esc(m.title)}</option>`).join('')}</select>
         </label>
-        <label class="field">The armies
+        <label class="field">The kind of battle
           <select name="scenario">${scenarios.map(s => `<option value="${esc(s.id)}">${esc(s.title.charAt(0).toUpperCase() + s.title.slice(1))}</option>`).join('')}</select>
         </label>
         <fieldset>
@@ -267,6 +274,13 @@ async function muster() {
         ${commanders.length ? `<label class="field">Your Commander
           <select name="commander">${commanders.map(commanderOption).join('')}<option value=""${ready ? '' : ' selected'}>A new Commander</option></select>
         </label>` : ''}
+        <label class="field" id="faction-field">Your faction, for life
+          <select name="faction">${factions.map(factionOption).join('')}</select>
+        </label>
+        <p class="note" id="faction-note"></p>
+        <label class="field">The enemy
+          <select name="enemyFaction"><option value="">Another faction, by lot</option>${factions.map(factionOption).join('')}</select>
+        </label>
         <label class="field">You command
           <select name="side"><option value="red">Red, from the west</option><option value="blue">Blue, from the east</option></select>
         </label>
@@ -281,6 +295,22 @@ async function muster() {
       </form>
       <div id="shared"></div>
     </main>`
+  // A Commander's faction is chosen once, when he is made: one who has
+  // his is shown it; a new one (or one from before factions) chooses.
+  const pickCommander = document.querySelector('select[name="commander"]')
+  const pickFaction = document.querySelector('select[name="faction"]')
+  function showFaction() {
+    const chosen = commanders.find(c => c.token === pickCommander?.value)
+    const own = chosen?.faction ? factions.find(f => f.id === chosen.faction) : null
+    document.getElementById('faction-field').style.display = own ? 'none' : ''
+    const f = own ?? factions.find(x => x.id === pickFaction.value)
+    document.getElementById('faction-note').textContent = f
+      ? `${own ? `As ${chosen.name}, you fight for ${f.title}. ` : ''}${f.fights} Your elite unit, the ${f.elite.charAt(0).toUpperCase() + f.elite.slice(1)}, comes free: your veteran officer leads them, and you ride with them.`
+      : ''
+  }
+  pickCommander?.addEventListener('change', showFaction)
+  pickFaction.addEventListener('change', showFaction)
+  showFaction()
   document.getElementById('muster').addEventListener('submit', async (event) => {
     event.preventDefault()
     const form = new FormData(event.target)
@@ -289,15 +319,17 @@ async function muster() {
     try {
       const side = form.get('side')
       const opponent = form.get('opponent')
-      const commander = form.get('commander') || await newCommander()
+      const chosen = commanders.find(c => c.token === form.get('commander'))
+      const faction = chosen?.faction ?? form.get('faction')
+      const commander = form.get('commander') || await newCommander(faction)
       const result = await api('POST', '/api/battles', {
         scenario: form.get('scenario'), map: form.get('map'), opponent, side, commander,
+        faction, enemyFaction: form.get('enemyFaction') || null,
         timeLimitMinutes: form.get('timeLimit') ? Number(form.get('timeLimit')) : null,
         objectives: String(form.get('objectives') ?? '').split(',').map(s => s.trim()).filter(Boolean)
       })
       const mine = result.seats[side]
-      const title = `${maps.find(m => m.id === form.get('map'))?.title ?? 'Battle'}: ${scenarios.find(s => s.id === form.get('scenario'))?.title ?? ''}`
-      saveSeat({ token: mine, title, side })
+      saveSeat({ token: mine, title: result.title, side })
       const friendSide = Object.keys(result.seats).find(s => s !== side)
       if (opponent !== 'friend' || !friendSide) return go(`/b/${mine}`)
       const link = `${location.origin}/b/${result.seats[friendSide]}`
@@ -320,6 +352,53 @@ async function muster() {
   })
 }
 
+// ── Who leads: the friend's first screen in the tent ───
+// As at the muster: one of your Commanders whose army is free, or a new
+// one (one tap). Without one you fight as a new Commander would, and
+// nothing is kept. Closed once the first turn has run.
+async function whoLeads(token, view) {
+  const b = view.battle
+  const [all, factions] = await Promise.all([loadCommanders(), view.faction ? api('GET', '/api/factions') : []])
+  const ready = all.filter(c => !c.ended && !c.battle)
+  const titleOf = (id) => factions.find(f => f.id === id)?.title ?? ''
+  const choice = (c, i) => `<button class="btn btn-wide${i === 0 ? ' btn-main' : ''}" type="button" data-lead="${esc(c.token)}">${esc(c.name)}, ${c.battles} battle${c.battles === 1 ? '' : 's'} fought${c.faction && view.faction ? ` (${esc(titleOf(c.faction))})` : ''}</button>`
+  // A new Commander's faction is his for life; the army the muster gave
+  // this side is the first choice.
+  const factionPick = view.faction ? `<label class="field">Your faction, as a new Commander, for life
+        <select name="faction">${factions.map(f => `<option value="${esc(f.id)}"${f.id === view.faction ? ' selected' : ''}>${esc(f.title)}</option>`).join('')}</select>
+      </label>` : ''
+  app.innerHTML = `
+    <header class="bar"><a href="/battles" data-link>Battles</a><div class="bar-title"><strong>${esc(b.title)}</strong><span>${esc(sideName(b.side))} · against a friend</span></div><span></span></header>
+    <main class="page" id="who-leads">
+      <h1>Who leads?</h1>
+      <p class="note">You command ${esc(sideName(b.side))}${view.faction ? `, with the army of ${esc(titleOf(view.faction))} unless your Commander is of another faction` : ''}. Your Commander rides with your best unit, and his officers lead your units. What befalls them here goes with them to the next battle.</p>
+      ${ready.map(choice).join('')}
+      ${factionPick}
+      <button class="btn btn-wide${ready.length ? '' : ' btn-main'}" type="button" data-lead="new">A new Commander</button>
+      <button class="btn btn-wide" type="button" data-lead="">Without a Commander</button>
+      <p class="note">Without one, you fight as a new Commander would, and nothing is kept after the battle.</p>
+      <div id="who-leads-error"></div>
+    </main>`
+  for (const button of app.querySelectorAll('[data-lead]')) {
+    button.addEventListener('click', async () => {
+      for (const b of app.querySelectorAll('[data-lead]')) b.disabled = true
+      try {
+        const lead = button.dataset.lead
+        const faction = lead === 'new' ? app.querySelector('select[name="faction"]')?.value || null : null
+        const commander = lead === 'new' ? await newCommander(faction) : lead || null
+        await api('POST', `/api/seat/${token}/join`, { commander, faction })
+        route()
+      } catch (error) {
+        // The choice closed meanwhile (the battle has begun): to the tent.
+        const now = await api('GET', `/api/seat/${token}`).catch(() => null)
+        if (now && !now.choosing) return route()
+        for (const b of app.querySelectorAll('[data-lead]')) b.disabled = false
+        document.getElementById('who-leads-error').innerHTML = `<p class="error">${esc(error.message)}</p>`
+      }
+    })
+  }
+}
+
 // ── The Command Tent ───────────────────────────────────
 async function tent(token) {
   const state = {
@@ -334,6 +413,10 @@ async function tent(token) {
     editing: false,
     sending: false,
     zoom: null,
+    // Your units under one fingertip, to choose from.
+    stack: null,
+    // The map at full height (on a phone it shares the screen with the orders).
+    tall: false,
     // The verdict's replay: the battle as you saw it after an earlier turn.
     shown: null
   }
@@ -346,6 +429,8 @@ async function tent(token) {
     if (b.status === 'finished') { state.tab = 'orders'; state.picked = null; state.place = null; state.flash = null }
   }
   await load()
+  // The friend who joined by link chooses who leads before their first orders.
+  if (state.view.choosing) return whoLeads(token, state.view)
 
   app.innerHTML = `
     <header class="bar" id="bar"></header>
@@ -355,6 +440,7 @@ async function tent(token) {
         <div class="map-tools">
           <button class="btn" type="button" id="zoom-in" aria-label="Zoom in">+</button>
           <button class="btn" type="button" id="zoom-out" aria-label="Zoom out">−</button>
+          <button class="btn btn-tall" type="button" id="tall" aria-label="Taller map" aria-pressed="false">⇕</button>
         </div>
         <div class="map-hint" id="map-hint"></div>
       </section>
@@ -387,7 +473,9 @@ async function tent(token) {
     svg.style.height = 'auto'
     if (state.shown) { if (keepScroll) { scroll.scrollLeft = left; scroll.scrollTop = top } return }
     attachGestures(svg, state.view, () => state.picked, {
-      onPick: (id) => { state.picked = id; state.place = null; state.flash = null; renderMap(); renderHint(); if (state.tab === 'army') renderPanel() },
+      onPick: (id) => { state.picked = id; state.stack = null; state.place = null; state.flash = null; renderMap(); renderHint(); if (state.tab === 'army') renderPanel() },
+      onStack: (units) => { state.stack = units.map(u => u.id); state.place = null; state.flash = null; renderHint() },
+      onPinch: (factor, x, y) => zoomBy(factor, { x, y }),
       onOrder: (unit, x, y) => addLine(`${unit.name} to ${gridRef(x, y)}`),
       onPlace: (x, y) => { state.place = { x, y }; state.flash = null; renderHint() }
     })
@@ -405,23 +493,41 @@ async function tent(token) {
     scroll.scrollTop = (26 + my * TILE) * scale - scroll.clientHeight / 2
   }
 
-  function zoomBy(factor) {
+  // Zoom about a point of the screen (the pinch's middle), or the middle of
+  // the map's window.
+  function zoomBy(factor, about = null) {
     const svg = scroll.querySelector('svg')
     const W = Number(svg.getAttribute('width'))
-    const centreX = (scroll.scrollLeft + scroll.clientWidth / 2) / svg.clientWidth
-    const centreY = (scroll.scrollTop + scroll.clientHeight / 2) / svg.clientHeight
+    const rect = scroll.getBoundingClientRect()
+    const px = about ? about.x - rect.left : scroll.clientWidth / 2
+    const py = about ? about.y - rect.top : scroll.clientHeight / 2
+    const centreX = (scroll.scrollLeft + px) / svg.clientWidth
+    const centreY = (scroll.scrollTop + py) / svg.clientHeight
     state.zoom = Math.min(2.5, Math.max(scroll.clientWidth / W / 1.2, state.zoom * factor))
     svg.style.width = `${Math.round(W * state.zoom)}px`
-    scroll.scrollLeft = centreX * svg.clientWidth - scroll.clientWidth / 2
-    scroll.scrollTop = centreY * svg.clientHeight - scroll.clientHeight / 2
+    scroll.scrollLeft = centreX * svg.clientWidth - px
+    scroll.scrollTop = centreY * svg.clientHeight - py
   }
+  document.getElementById('tall').addEventListener('click', (event) => {
+    state.tall = !state.tall
+    document.querySelector('.map-wrap').classList.toggle('tall', state.tall)
+    event.currentTarget.setAttribute('aria-pressed', String(state.tall))
+    event.currentTarget.setAttribute('aria-label', state.tall ? 'Shorter map' : 'Taller map')
+  })
   document.getElementById('zoom-in').addEventListener('click', () => zoomBy(1.4))
   document.getElementById('zoom-out').addEventListener('click', () => zoomBy(1 / 1.4))
 
   function renderHint() {
     const hint = document.getElementById('map-hint')
     const finished = state.view.battle.status === 'finished'
-    if (state.flash) {
+    if (state.stack && !state.picked && !state.flash) {
+      const units = state.stack.map(id => state.view.own.find(u => u.id === id)).filter(Boolean)
+      hint.innerHTML = `<span>Which one?</span>${units.map(u => `<button class="btn" type="button" data-stack="${esc(u.id)}">${esc(u.name)}</button>`).join('')}<button class="btn btn-quiet" type="button" id="stack-away">Never mind</button>`
+      hint.querySelectorAll('[data-stack]').forEach(b => b.addEventListener('click', () => {
+        state.picked = b.dataset.stack; state.stack = null; renderMap(); renderHint(); if (state.tab === 'army') renderPanel()
+      }))
+      document.getElementById('stack-away').addEventListener('click', () => { state.stack = null; renderHint() })
+    } else if (state.flash) {
       hint.innerHTML = `<span>Added to your orders: <strong>${esc(state.flash)}</strong></span>`
     } else if (state.picked) {
       const unit = state.view.own.find(u => u.id === state.picked)
@@ -443,6 +549,7 @@ async function tent(token) {
     state.draft = state.draft ? `${state.draft}\n${line}` : line
     saveDraft(token, state.draft)
     state.picked = null
+    state.stack = null
     state.place = null
     state.flash = line
     state.readback = null
@@ -527,12 +634,37 @@ async function tent(token) {
     if (!list.length) { body.innerHTML = '<p class="note">No dispatches yet. They come in once the first turn runs.</p>'; return }
     body.innerHTML = list.map((d, i) => `
       <article class="dispatch">
-        <header><h3>Turn ${d.turn}</h3><span class="when">${esc(clock(d.minutes))} · ${esc(WHY[d.interrupt] ?? d.interrupt)}</span></header>
+        <header><h3>Turn ${d.turn}</h3><span class="when">${d.plainReport && !d.narrated ? '<span class="flag" title="The dispatch could not be written this turn; this is the plain account.">plain report</span> ' : ''}${esc(clock(d.minutes))} · ${esc(WHY[d.interrupt] ?? d.interrupt)}</span></header>
         ${d.narrated ? `<p class="told">${esc(d.narrated)}</p>` : ''}
         ${d.narrated
           ? `<details><summary>The plain account</summary><ul>${d.lines.map(l => `<li>${esc(l)}</li>`).join('')}</ul></details>`
           : `<ul>${d.lines.map(l => `<li>${esc(l)}</li>`).join('')}</ul>`}
       </article>`).join('')
+  }
+
+  // The first turn's card: what the game understands, as orders to tap.
+  // Every line here is one the interpreter's grammar reads.
+  function howTo() {
+    const v = state.view
+    if (v.battle.turn !== 1 || howToHidden()) return ''
+    const own = v.own.filter(u => !u.broken)
+    if (!own.length) return ''
+    const east = (u, n) => gridRef(Math.min(v.map.width - 1, u.position.x + n), u.position.y)
+    const a = own[0]
+    const b = own[own.length > 1 ? 1 : 0]
+    const examples = [
+      'everyone advance',
+      `${a.name} to ${east(a, 4)}`,
+      `${b.name} defend ${east(b, 2)}`,
+      `${a.name} hold`,
+      `${b.name} fall back`
+    ]
+    return `<div class="how-to">
+      <strong>How to give orders</strong>
+      <span class="note">Say them as you would to an officer: a unit, then what it should do and where. One order to a line. Tap one to put it in the box.</span>
+      <div class="examples">${examples.map(e => `<button class="btn btn-quiet" type="button" data-example="${esc(e)}">${esc(e)}</button>`).join('')}</div>
+      <button class="btn btn-quiet" type="button" id="how-to-hide">Hide this</button>
+    </div>`
   }
 
   function orders(body, foot) {
@@ -567,7 +699,8 @@ async function tent(token) {
           <div style="display: flex; flex-direction: column; gap: 8px">${v.commander.chips.map(u =>
             `<button class="btn" type="button" data-bargain="${esc(u.id)}">Give up the ${esc(u.name.toLowerCase())}</button>`).join('')}</div>` : '<p class="note">You have no unit left on the field to bargain with.</p>'}
         ${state.readback?.error ? `<p class="error">${esc(state.readback.error)}</p>` : ''}`
-      foot.innerHTML = `<button class="btn btn-main btn-wide" type="button" id="wait"${state.sending ? ' disabled' : ''}>${state.sending ? 'Waiting…' : 'Wait, and let them fight'}</button>`
+      foot.innerHTML = `<button class="btn btn-main btn-wide" type="button" id="wait"${state.sending ? ' disabled' : ''}>${state.sending ? 'Waiting…' : 'Wait, and let them fight'}</button>
+        <button class="btn btn-quiet btn-wide" type="button" id="yield-held">Yield the battle as it stands</button>`
       const act = async (call) => {
         state.sending = true
         renderPanel()
@@ -583,6 +716,7 @@ async function tent(token) {
         watch()
       }
       document.getElementById('wait').addEventListener('click', () => act(() => api('POST', `/api/seat/${token}/orders`, { text: '' })))
+      document.getElementById('yield-held').addEventListener('click', () => act(() => api('POST', `/api/seat/${token}/orders`, { text: 'yield' })))
       body.querySelectorAll('[data-bargain]').forEach(b => b.addEventListener('click', () => act(() => api('POST', `/api/seat/${token}/bargain`, { unit: b.dataset.bargain }))))
       return
     }
@@ -595,6 +729,7 @@ async function tent(token) {
         <button class="btn" type="button" id="read-back">Read them back</button>
         ${state.draft ? '<button class="btn btn-quiet" type="button" id="clear">Clear</button>' : ''}
       </div>
+      ${rb ? '' : howTo()}
       ${rb ? `
         ${rb.understood.length ? `<p class="label-caps">Your officers understood</p>${rb.understood.map(l => `<p class="readback">${esc(l)}</p>`).join('')}` : ''}
         ${rb.questions.map(q => {
@@ -612,6 +747,14 @@ async function tent(token) {
       <button class="btn btn-main btn-wide" type="button" id="send"${state.sending ? ' disabled' : ''}>${state.sending ? 'Sending…' : 'Send the orders'}</button>
       <p class="note" style="text-align: center">Units you give no order keep their last one. Units hold until ordered.</p>`
 
+    body.querySelectorAll('[data-example]').forEach(b => b.addEventListener('click', () => {
+      state.draft = state.draft ? `${state.draft.replace(/\s+$/, '')}\n${b.dataset.example}` : b.dataset.example
+      saveDraft(token, state.draft)
+      state.readback = null
+      renderPanel()
+      document.getElementById('orders')?.focus()
+    }))
+    document.getElementById('how-to-hide')?.addEventListener('click', () => { hideHowTo(); renderPanel() })
     const box = document.getElementById('orders')
     box.addEventListener('input', () => { state.draft = box.value; state.readback = null; saveDraft(token, state.draft) })
     document.getElementById('clear')?.addEventListener('click', () => { state.draft = ''; state.readback = null; saveDraft(token, ''); renderPanel() })

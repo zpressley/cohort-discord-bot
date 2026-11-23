@@ -57,7 +57,9 @@ function createSession(spec, options = {}) {
         units: game.battle.world.units.filter(u =>
           u.side === side && u.strength > 0 && !game.battle.broken.has(u.id)),
         enemies: sideView(game, side).intel,
-        lyingInWait: lyingInWait(game.battle, side)
+        lyingInWait: lyingInWait(game.battle, side),
+        // So the read-back can say where a unit falling back will stop.
+        homeEdge: game.spec.sides?.[side]?.homeEdge ?? null
       }
     },
 

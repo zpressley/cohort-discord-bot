@@ -11,6 +11,8 @@
 //   an officer      the man who carries his orders to one unit
 //   march, hold, advance on the enemy, attack, fall back, hide, search,
 //   lie in ambush, shoot
+//                   (attack names a place, or an enemy unit: "attack the
+//                   enemy archers")
 //                   what a unit is told to do (the engine's move, hold,
 //                   advance, attack, withdraw, hide, check, ambush)
 //   firm, wavering, at breaking point
@@ -36,6 +38,12 @@ const ORDER = {
 }
 
 const HOLD_IT = { say: 'and hold it', doing: 'to hold it', did: 'to hold it' }
+
+// Where a unit falling back with no place named stops: its own side's edge
+// of the field, where it holds ("fall back to your own edge of the field at
+// A7-NE, 300 m west, and hold there").
+const OWN_EDGE = 'your own edge of the field'
+const HOLD_THERE = 'and hold there'
 
 /**
  * An order in words.
@@ -72,4 +80,4 @@ function moraleWords(morale) {
   return 'firm'
 }
 
-module.exports = { orderWords, moraleWords, ORDER }
+module.exports = { orderWords, moraleWords, ORDER, OWN_EDGE, HOLD_THERE }

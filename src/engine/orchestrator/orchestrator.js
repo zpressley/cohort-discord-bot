@@ -197,8 +197,10 @@ function processPlayerTurn(game) {
 
     game.outcome = evaluateVictory(victoryContext(game))
     if (game.outcome.decided) { interrupt = 'decided'; break }
-    // A Commander taken, freed or driven to another unit: both sides stop.
-    if (battle.log.forTurn(battle.turn).some(e => e.type.startsWith('commander'))) { interrupt = 'commander'; break }
+    // A Commander taken or freed: both sides stop, for both know of it. (One
+    // who only got away to another of his units is his own side's secret,
+    // and a stop would tell the enemy something had happened.)
+    if (battle.log.forTurn(battle.turn).some(e => e.type === 'commanderTaken' || e.type === 'commanderFreed')) { interrupt = 'commander'; break }
     if (turnRecord.engagements.length > 0) { interrupt = 'contact'; break }
     if (turnRecord.volleys.length > 0) { interrupt = 'fire'; break }
     if (sightings.length > 0) { interrupt = 'sighting'; break }
@@ -295,6 +297,8 @@ function ordersCarriedOut(battle) {
     if (doneIds.has(unit.id) || battle.broken.has(unit.id) || unit.strength <= 0) return false
     const order = battle.orderBook.get(unit.id)
     if (!order) return false
+    // Going for a named enemy never finishes, as pressing the enemy does not.
+    if (order.enemy) return false
     switch (order.action) {
       case 'hold': case 'advance': return false
       case 'check': return true

@@ -44,7 +44,7 @@ const REPLY_SCHEMA = {
       items: {
         type: 'object',
         additionalProperties: false,
-        required: ['units', 'action', 'place', 'then_hold', 'careful', 'against', 'let_pass', 'regardless', 'if_event', 'if_there', 'if_unit', 'if_action', 'if_place'],
+        required: ['units', 'action', 'place', 'then_hold', 'careful', 'against', 'let_pass', 'regardless', 'if_event', 'if_there', 'if_unit', 'if_action', 'if_place', 'enemy'],
         properties: {
           units: { type: 'array', items: { type: 'string' } },
           action: { type: 'string', enum: REPLY_ACTIONS },
@@ -59,7 +59,9 @@ const REPLY_SCHEMA = {
           if_there: { type: 'boolean' },
           if_unit: { type: ['string', 'null'] },
           if_action: { type: ['string', 'null'], enum: [...ACTIONS, null] },
-          if_place: { type: ['string', 'null'] }
+          if_place: { type: ['string', 'null'] },
+          // For attack: the enemy unit to go for, as listed under "Enemy seen".
+          enemy: { type: ['string', 'null'] }
         }
       }
     },
@@ -83,8 +85,8 @@ Each order:
   move      go to a place
   hold      stay where they are (hold, wait, stay, stand, halt, stop)
   defend    go to a place and hold it (defend, guard, protect, dig in, take and hold, set up a position at)
-  advance   close with and fight the nearest enemy, and keep hunting until told otherwise (advance, charge, engage, attack with no place named, seek and destroy, attack on sight, engage at will). "Spring the trap" is advance for the units marked "lying in wait" only, unless the commander names others.
-  attack    go to a place looking for a fight (attack, assault, storm, seize, take + a place or an enemy unit)
+  advance   close with and fight the nearest enemy, and keep hunting until told otherwise (advance, charge, engage, attack with no place and no one enemy unit named, seek and destroy, attack on sight, engage at will). "Spring the trap" is advance for the units marked "lying in wait" only, unless the commander names others.
+  attack    go to a place looking for a fight (attack, assault, storm, seize, take + a place), or go for one enemy unit and follow it (attack, charge, go for, go after, send after, chase, hunt down + an enemy unit: set enemy)
   withdraw  fall back (retreat, pull back, disengage); to a place if one is named, else toward home
   hide      go to ground and hide (hide, take cover, conceal, lie low)
   check     search ground for hidden enemies (check, search, scout, sweep, reconnoitre)
@@ -96,12 +98,13 @@ Each order:
   2. a named place copied exactly from "Named places" (match loose wording to the list: "the mill bridge" -> "Old Mill Bridge")
   3. plain ground words: "the woods", "the ridge to the east", "the nearest ford", "the clearing", "the woods north of the ford"
   4. a distance and compass direction from where the unit stands: "200 m north", "100 m south-east" (for "a little", "a short way" use 100 m; for a bare "go north" use 200 m)
-  5. to attack or approach a specific enemy unit, the grid square given for it under "Enemy seen"
+  5. to approach a specific enemy unit, the grid square given for it under "Enemy seen" (to attack one, set enemy instead, place null)
   When the words give a route and a destination ("up the road toward the mill bridge"), the place is the destination. To join or stand with another of the commander's units, use that unit's grid square from "Your units".
   Never write a unit name, "the enemy", "forward" or "ahead" as a place. "Forward", "toward the enemy" or "whoever is nearest" is the action advance with place null.
 - then_hold: true if they should hold once they arrive ("and hold", "and hold it", "make them hold it", "and stay there", "and dig in"). defend always holds; set true for it.
 - careful: true if they should move carefully, cautiously, slowly, on guard, in good order.
 - against: for ambush, what to strike; for shoot, what to shoot first: "cavalry", "infantry", "archers" or "scouts" (horsemen = cavalry, bowmen or slingers = archers, foot = infantry). null for anything, and for every other action.
+- enemy: only for the action attack, when it goes for one enemy unit ("charge their archers", "go for the enemy horse", "send the horse after those bowmen"): that unit's name as listed under "Enemy seen", matching his words to the kind in brackets there (bowmen or slingers = archers, horsemen = cavalry); if none listed fits, his own words for it ("their elephants"). null for every other action. Never ask a question because of it. against and if_event name a kind of enemy, not a unit: they need no enemy to be listed or in sight.
 - let_pass: for ambush only, how many enemy units to let go by before striking. 0 otherwise.
 - regardless: for ambush only, and only when the commander says so in words like "whatever happens", "no matter what", "at all costs": true. In every other case false.
 - if_event: one condition on this order, when the commander gives one ("if ...", "should ...", "unless ..."); otherwise "none". sees_enemy / sees_cavalry / sees_infantry / sees_archers: the unit sees the enemy, or that kind of enemy. attacked: it is attacked, charged or shot at. unit_breaks: another of the commander's own units breaks, routs or flees.
@@ -160,7 +163,7 @@ function briefing(context, text) {
     lines.push('Enemy seen:')
     for (const e of enemies) {
       const when = e.status === 'visible' ? 'in sight' : `last seen turn ${e.seenOnTurn}`
-      lines.push(`- ${e.name ?? e.id} at ${square(e.position)}, ${metres(distance(centre, e.position))} m ${compassWord(centre, e.position)} (${when})`)
+      lines.push(`- ${e.name ?? e.id}${e.role ? ` (${String(e.role).replace(/_/g, ' ')}${e.mounted ? ', mounted' : ''})` : ''} at ${square(e.position)}, ${metres(distance(centre, e.position))} m ${compassWord(centre, e.position)} (${when})`)
     }
   } else {
     lines.push('Enemy seen: none')
@@ -178,11 +181,11 @@ async function readWithAi(ai, text, context) {
     purpose: 'read-orders', system: SYSTEM, user: briefing(context, text),
     schema: REPLY_SCHEMA, schemaName: 'orders', maxTokens: 900, temperature: 0
   })
-  // A reply from before orders could carry a condition (a recorded fixture,
-  // say) simply has none.
+  // A reply from before orders could carry a condition or name an enemy (a
+  // recorded fixture, say) simply has none.
   if (reply.ok && Array.isArray(reply.json?.orders)) {
     reply.json.orders = reply.json.orders.map(o => (o && typeof o === 'object'
-      ? { if_event: 'none', if_there: false, if_unit: null, if_action: null, if_place: null, ...o }
+      ? { if_event: 'none', if_there: false, if_unit: null, if_action: null, if_place: null, enemy: null, ...o }
       : o))
   }
   if (!reply.ok || !validate(reply.json)) return null
@@ -276,6 +279,11 @@ async function readWithAi(ai, text, context) {
       intent.fire = o.action === 'shoot' ? 'shoot' : 'hold'
       if (o.action === 'hold_fire') intent.holdFire = true
       else if (o.against) intent.against = o.against
+    }
+    // Going for one enemy unit: which, resolve.js finds among those seen.
+    if (o.action === 'attack' && o.enemy && o.enemy.trim()) {
+      intent.enemyRef = o.enemy.trim()
+      intent.place = null
     }
     if (o.action === 'ambush') {
       if (o.against) intent.against = o.against
