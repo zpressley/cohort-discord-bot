@@ -387,15 +387,18 @@ function losesTo(officer, self = false) {
 // Every name must be known; one unknown name is a question, not a guess.
 function resolveUnits(reference, units) {
   const whole = resolveUnitReference(reference, units)
-  if (whole.units.length > 0) return whole
   const parts = String(reference).split(/\s*(?:,|&|\band\b)\s*/i).map(p => p.trim()).filter(Boolean)
+  // "hypaspists and archers" is two names, not one that happens to hold
+  // the word "archers": a match on one word of the whole stands only when
+  // the reference cannot be split into names.
+  if (whole.units.length > 0 && (whole.matchedBy !== 'role' || parts.length < 2)) return whole
   if (parts.length < 2) return { units: [] }
   const found = []
   for (const part of parts) {
     // A name is a word or three; anything longer is not a unit's name.
-    if (part.split(/\s+/).length > 3) return { units: [], unknown: part }
+    if (part.split(/\s+/).length > 3) return whole.units.length ? whole : { units: [], unknown: part }
     const match = resolveUnitReference(part, units)
-    if (match.units.length === 0) return { units: [], unknown: part }
+    if (match.units.length === 0) return whole.units.length ? whole : { units: [], unknown: part }
     for (const u of match.units) if (!found.includes(u)) found.push(u)
   }
   return { units: found }

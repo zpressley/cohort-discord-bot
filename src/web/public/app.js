@@ -63,8 +63,8 @@ async function loadCommanders() {
   if (known.length !== tokens.length) saveCommanders(known.map(c => c.token))
   return known
 }
-async function newCommander() {
-  const { token } = await api('POST', '/api/commanders')
+async function newCommander(faction) {
+  const { token } = await api('POST', '/api/commanders', { faction })
   saveCommanders([...commanderTokens(), token])
   return token
 }
@@ -243,12 +243,13 @@ async function officers() {
 
 // ── Muster ─────────────────────────────────────────────
 async function muster() {
-  const [scenarios, maps, commanders] = await Promise.all([api('GET', '/api/scenarios'), api('GET', '/api/maps'), loadCommanders()])
+  const [scenarios, maps, commanders, factions] = await Promise.all([api('GET', '/api/scenarios'), api('GET', '/api/maps'), loadCommanders(), api('GET', '/api/factions')])
   // The first Commander whose army is not in the field leads; with none, a new one.
   commanders.splice(0, commanders.length, ...commanders.filter(c => !c.ended))   // the fallen muster no more
   const ready = commanders.find(c => !c.battle)
   const commanderOption = (c) => `<option value="${esc(c.token)}"${c.battle ? ' disabled' : ''}${c === ready ? ' selected' : ''}>${esc(c.name)}${
     c.battle ? ' (army in the field)' : `, ${c.battles} battle${c.battles === 1 ? '' : 's'} fought`}</option>`
+  const factionOption = (f) => `<option value="${esc(f.id)}">${esc(f.title)}</option>`
   app.innerHTML = `
     <header class="bar"><a href="/battles" data-link>Your battles</a><strong style="font-family: var(--font-display); font-size: 18px">Muster a battle</strong><span></span></header>
     <main class="page">
@@ -256,7 +257,7 @@ async function muster() {
         <label class="field">The field
           <select name="map">${maps.map(m => `<option value="${esc(m.id)}">${esc(m.title)}</option>`).join('')}</select>
         </label>
-        <label class="field">The armies
+        <label class="field">The kind of battle
           <select name="scenario">${scenarios.map(s => `<option value="${esc(s.id)}">${esc(s.title.charAt(0).toUpperCase() + s.title.slice(1))}</option>`).join('')}</select>
         </label>
         <fieldset>
@@ -267,6 +268,13 @@ async function muster() {
         ${commanders.length ? `<label class="field">Your Commander
           <select name="commander">${commanders.map(commanderOption).join('')}<option value=""${ready ? '' : ' selected'}>A new Commander</option></select>
         </label>` : ''}
+        <label class="field" id="faction-field">His faction, for life
+          <select name="faction">${factions.map(factionOption).join('')}</select>
+        </label>
+        <p class="note" id="faction-note"></p>
+        <label class="field">The enemy
+          <select name="enemyFaction"><option value="">Another faction, by lot</option>${factions.map(factionOption).join('')}</select>
+        </label>
         <label class="field">You command
           <select name="side"><option value="red">Red, from the west</option><option value="blue">Blue, from the east</option></select>
         </label>
@@ -281,6 +289,22 @@ async function muster() {
       </form>
       <div id="shared"></div>
     </main>`
+  // A Commander's faction is chosen once, when he is made: one who has
+  // his is shown it; a new one (or one from before factions) chooses.
+  const pickCommander = document.querySelector('select[name="commander"]')
+  const pickFaction = document.querySelector('select[name="faction"]')
+  function showFaction() {
+    const chosen = commanders.find(c => c.token === pickCommander?.value)
+    const own = chosen?.faction ? factions.find(f => f.id === chosen.faction) : null
+    document.getElementById('faction-field').hidden = Boolean(own)
+    const f = own ?? factions.find(x => x.id === pickFaction.value)
+    document.getElementById('faction-note').textContent = f
+      ? `${own ? `${chosen.name} fights for ${f.title}. ` : ''}${f.fights} His elite unit, the ${f.elite}, comes free; his veteran officer leads them, and he rides with them.`
+      : ''
+  }
+  pickCommander?.addEventListener('change', showFaction)
+  pickFaction.addEventListener('change', showFaction)
+  showFaction()
   document.getElementById('muster').addEventListener('submit', async (event) => {
     event.preventDefault()
     const form = new FormData(event.target)
@@ -289,15 +313,17 @@ async function muster() {
     try {
       const side = form.get('side')
       const opponent = form.get('opponent')
-      const commander = form.get('commander') || await newCommander()
+      const chosen = commanders.find(c => c.token === form.get('commander'))
+      const faction = chosen?.faction ?? form.get('faction')
+      const commander = form.get('commander') || await newCommander(faction)
       const result = await api('POST', '/api/battles', {
         scenario: form.get('scenario'), map: form.get('map'), opponent, side, commander,
+        faction, enemyFaction: form.get('enemyFaction') || null,
         timeLimitMinutes: form.get('timeLimit') ? Number(form.get('timeLimit')) : null,
         objectives: String(form.get('objectives') ?? '').split(',').map(s => s.trim()).filter(Boolean)
       })
       const mine = result.seats[side]
-      const title = `${maps.find(m => m.id === form.get('map'))?.title ?? 'Battle'}: ${scenarios.find(s => s.id === form.get('scenario'))?.title ?? ''}`
-      saveSeat({ token: mine, title, side })
+      saveSeat({ token: mine, title: result.title, side })
       const friendSide = Object.keys(result.seats).find(s => s !== side)
       if (opponent !== 'friend' || !friendSide) return go(`/b/${mine}`)
       const link = `${location.origin}/b/${result.seats[friendSide]}`

@@ -17,6 +17,7 @@ const crypto = require('crypto')
 const { createCompany } = require('../engine/command/company')
 const { gradeOf, EARNED_AT } = require('../engine/command/officers')
 const { PLAIN } = require('../data/officers')
+const { FACTIONS } = require('../data/factions')
 
 function createCommanderStore({ dir = null, now = () => Date.now() } = {}) {
   const folder = dir ? path.join(dir, 'commanders') : null
@@ -52,19 +53,37 @@ function createCommanderStore({ dir = null, now = () => Date.now() } = {}) {
     }
   }
 
-  /** A new Commander with an empty company. */
-  function create() {
+  /**
+   * A new Commander with an empty company. His faction (src/data/factions.js)
+   * is chosen now and is his for life: his army is that faction's. One made
+   * without a faction (as before factions came to the muster) takes one at
+   * his first muster that names one, and keeps it.
+   */
+  function create({ faction = null } = {}) {
+    if (faction !== null && !FACTIONS[faction]) throw Object.assign(new Error(`There is no faction "${faction}".`), { status: 400 })
     const commander = {
       id: crypto.randomBytes(6).toString('hex'),
       token: crypto.randomBytes(18).toString('base64url'),
       name: newName(),
       createdAt: now(),
       battle: null,
+      ...(faction ? { faction } : {}),
       company: createCompany()
     }
     byToken.set(commander.token, commander)
     save(commander)
-    return { token: commander.token, name: commander.name }
+    return { token: commander.token, name: commander.name, faction: commander.faction ?? null }
+  }
+
+  /** Give a Commander with none his faction, once. It never changes after. */
+  function setFaction(commander, faction) {
+    if (!FACTIONS[faction]) throw Object.assign(new Error(`There is no faction "${faction}".`), { status: 400 })
+    if (commander.faction === faction) return
+    if (commander.faction) {
+      throw Object.assign(new Error(`${commander.name} fights for ${FACTIONS[commander.faction].title}, and always will.`), { status: 409 })
+    }
+    commander.faction = faction
+    save(commander)
   }
 
   const get = (token) => byToken.get(token) ?? null
@@ -96,6 +115,8 @@ function createCommanderStore({ dir = null, now = () => Date.now() } = {}) {
     const { company } = commander
     return {
       name: commander.name ?? 'Your Commander',
+      faction: commander.faction ?? null,
+      factionTitle: commander.faction ? FACTIONS[commander.faction]?.title ?? null : null,
       ended: commander.ended ? { how: commander.ended.how, at: commander.ended.at } : null,
       battles: company.battles,
       officers: company.officers.map(o => ({
@@ -111,7 +132,7 @@ function createCommanderStore({ dir = null, now = () => Date.now() } = {}) {
     }
   }
 
-  return { create, get, byId, setCompany, setBattle, end, view }
+  return { create, get, byId, setCompany, setBattle, setFaction, end, view }
 }
 
 module.exports = { createCommanderStore }

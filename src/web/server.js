@@ -12,8 +12,10 @@
 // The API, all JSON:
 //   GET  /api/scenarios                     what can be mustered
 //   GET  /api/maps                          where it can be fought
+//   GET  /api/factions                      whose armies can fight it
 //   POST /api/battles                       muster: { scenario, map, opponent, side,
-//                                           timeLimitMinutes, objectives, commander }
+//                                           timeLimitMinutes, objectives, commander,
+//                                           faction, enemyFaction }
 //                                           -> { id, seats: { side: token } }
 //   GET  /api/seats?tokens=a,b              one line per battle, for "your battles"
 //   GET  /api/seat/:token                   the Command Tent: this side's view
@@ -24,7 +26,7 @@
 //   POST /api/seat/:token/orders { text }   send orders
 //   POST /api/seat/:token/bargain { unit }  a Commander held by the enemy
 //                                           gives up a unit and leaves the field
-//   POST /api/commanders                    a new Commander -> { token, name }
+//   POST /api/commanders { faction }        a new Commander -> { token, name, faction }
 //   GET  /api/commander/:token              his company: officers, their
 //                                           records, those lost, and the
 //                                           battle his army is in
@@ -105,18 +107,24 @@ function createServer(store) {
         if (req.method === 'GET' && parts[1] === 'maps' && parts.length === 2) {
           return send(res, 200, store.maps())
         }
+        if (req.method === 'GET' && parts[1] === 'factions' && parts.length === 2) {
+          return send(res, 200, store.factions())
+        }
         if (req.method === 'POST' && parts[1] === 'battles' && parts.length === 2) {
           const body = await readBody(req)
           return send(res, 201, store.muster({
             scenario: body.scenario, map: body.map, opponent: body.opponent, side: body.side,
             timeLimitMinutes: body.timeLimitMinutes, objectives: Array.isArray(body.objectives) ? body.objectives.map(String) : [],
             seed: Number.isInteger(body.seed) ? body.seed : undefined,
-            commander: typeof body.commander === 'string' ? body.commander : null
+            commander: typeof body.commander === 'string' ? body.commander : null,
+            faction: typeof body.faction === 'string' && body.faction ? body.faction : null,
+            enemyFaction: typeof body.enemyFaction === 'string' && body.enemyFaction ? body.enemyFaction : null
           }))
         }
         // A Commander and his company of officers, kept from battle to battle.
         if (req.method === 'POST' && parts[1] === 'commanders' && parts.length === 2) {
-          return send(res, 201, store.commanders.create())
+          const body = await readBody(req)
+          return send(res, 201, store.commanders.create({ faction: typeof body.faction === 'string' && body.faction ? body.faction : null }))
         }
         if (req.method === 'GET' && parts[1] === 'commander' && parts[2] && parts.length === 3) {
           const company = store.commanderView(parts[2])
