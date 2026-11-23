@@ -125,7 +125,7 @@ const REASONS = {
   'enemy army collapsed': ['The enemy army was destroyed', 'Your army was destroyed'],
   'enemy surrendered': ['The enemy yielded', 'You yielded'],
   'enemy commander killed': ['The enemy Commander was killed', 'You were killed'],
-  'enemy commander bargained': ['The enemy Commander gave up a unit to go free', 'You gave up a unit and left the field'],
+  'enemy commander bargained': ['The enemy Commander bargained for his freedom and left the field', 'You bargained for your freedom and left the field'],
   'objectives held': ['You held the field', 'The enemy held the field'],
   'time ran out: fewer losses': ['The day ended, and the enemy lost more', 'The day ended, and you lost more'],
   'time ran out: held more objectives': ['The day ended with more ground in your hands', 'The day ended with more ground in the enemy\'s hands']
@@ -213,7 +213,7 @@ async function battles() {
 // ── Your officers ──────────────────────────────────────
 const GRADE_WORDS = { green: 'green', seasoned: 'seasoned', veteran: 'a veteran' }
 const RESULT_WORDS = { victory: 'a victory', defeat: 'a defeat', draw: 'a draw' }
-const FATE_WORDS = { killed: 'killed', captured: 'taken by the enemy', 'given up': 'given to the enemy for the Commander\'s freedom' }
+const FATE_WORDS = { killed: 'killed', captured: 'taken by the enemy', 'given up': 'given to the enemy for the Commander\'s freedom', left: 'left you when the battle left you a commander of none' }
 async function officers() {
   const commanders = await loadCommanders()
   const battleLine = (r) => `<li><strong>${esc(r.title)}</strong>, ${esc(RESULT_WORDS[r.result] ?? r.result)}${
@@ -419,6 +419,9 @@ async function tent(token) {
     shown: null
   }
 
+  // Held by the enemy, his units out of his sight have no place on his map.
+  const onMap = (v) => ({ ...v, own: v.own.filter(u => u.position) })
+
   async function load() {
     state.view = await api('GET', `/api/seat/${token}`)
     const b = state.view.battle
@@ -463,14 +466,14 @@ async function tent(token) {
     const left = scroll.scrollLeft
     const top = scroll.scrollTop
     const showing = state.shown ?? state.view
-    scroll.innerHTML = drawMap(showing, { selectedId: state.picked })
+    scroll.innerHTML = drawMap(onMap(showing), { selectedId: state.picked })
     const svg = scroll.querySelector('svg')
     const W = Number(svg.getAttribute('width'))
     if (state.zoom === null) state.zoom = Math.max(scroll.clientWidth / W, 15 / TILE)
     svg.style.width = `${Math.round(W * state.zoom)}px`
     svg.style.height = 'auto'
     if (state.shown) { if (keepScroll) { scroll.scrollLeft = left; scroll.scrollTop = top } return }
-    attachGestures(svg, state.view, () => state.picked, {
+    attachGestures(svg, onMap(state.view), () => state.picked, {
       onPick: (id) => { state.picked = id; state.stack = null; state.place = null; state.flash = null; renderMap(); renderHint(); if (state.tab === 'army') renderPanel() },
       onStack: (units) => { state.stack = units.map(u => u.id); state.place = null; state.flash = null; renderHint() },
       onPinch: (factor, x, y) => zoomBy(factor, { x, y }),
@@ -481,7 +484,8 @@ async function tent(token) {
   }
 
   function centreOnArmy() {
-    const own = state.view.own
+    // Held, the map opens where he is held.
+    const own = state.view.commander?.heldPosition ? [{ position: state.view.commander.heldPosition }] : onMap(state.view).own
     if (!own.length) return
     const svg = scroll.querySelector('svg')
     const scale = svg.clientWidth / Number(svg.getAttribute('width'))
@@ -592,29 +596,50 @@ async function tent(token) {
       u.hidden ? '<span class="flag">hidden</span>' : '',
       u.crowding && u.crowding !== 'organized' ? `<span class="flag flag-warn">${esc(u.crowding)}</span>` : ''
     ].join('')
-    const units = v.own.map(u => `
+    const officerLine = (u) => !u.officer ? '' : u.officer.headless ? '<p class="unit-order"><strong>No officer yet:</strong> they keep a plain order and nothing more</p>'
+      : `<p class="unit-order"><strong>Officer:</strong> ${esc(u.officer.name)}, ${esc(u.officer.grade)} and ${esc(u.officer.personality)}</p>`
+    // Held: what he can see of his own men from where he is held, and no more.
+    const sightCard = (u) => `
+      <div class="unit-card">
+        <header><h3>${esc(u.name)}</h3><span class="where">${u.outOfSight ? 'out of your sight' : esc(u.at)}</span></header>
+        <span class="note">${esc([u.quality, u.role].filter(Boolean).join(' ').replace(/_/g, ' '))}${u.outOfSight ? '' : `, about ${u.strength} men, in sight from where you are held`}</span>
+        ${officerLine(u)}
+        <p class="unit-order">${esc(u.order.charAt(0).toUpperCase() + u.order.slice(1))}.</p>
+        ${u.broken ? '<div class="flags"><span class="flag flag-warn">broken</span></div>' : ''}
+      </div>`
+    const units = v.own.map(u => u.outOfSight || u.inSightOfCaptivity ? sightCard(u) : `
       <div class="unit-card" aria-pressed="${u.id === state.picked}">
         <header><h3>${esc(u.name)}</h3><span class="where">${esc(u.at)} · ${esc(terrainWords(v, u.position.x, u.position.y))}</span></header>
         <span class="note">${esc([u.quality, u.role].filter(Boolean).join(' ').replace(/_/g, ' '))}, ${u.strength} of ${u.maxStrength} men</span>
         ${v.commander?.unitId === u.id ? '<p class="unit-order"><strong>You ride with them.</strong> If they are cut to half and still in the fight, you can be taken or killed.</p>' : ''}
         <div class="bars">${meter('Men', u.strength, u.maxStrength)}${meter('Morale', u.morale, 100)}${meter('Wind', u.stamina, u.staminaPool)}</div>
-        ${!u.officer ? '' : u.officer.headless ? '<p class="unit-order"><strong>No officer yet:</strong> they keep a plain order and nothing more</p>'
-          : `<p class="unit-order"><strong>Officer:</strong> ${esc(u.officer.name)}, ${esc(u.officer.grade)} and ${esc(u.officer.personality)}</p>`}
+        ${officerLine(u)}
         <p class="unit-order"><strong>Orders:</strong> ${esc(u.order)}${u.shootsTo ? esc(u.holdingFire ? '; holding fire' : `; shoots at enemies within ${u.shootsTo} m`) : ''}</p>
         <div class="flags">${flags(u)}</div>
         ${v.battle.status === 'finished' || u.broken ? '' : `<div style="display: flex; gap: 8px; flex-wrap: wrap">
           <button class="btn btn-quiet" type="button" data-pick="${esc(u.id)}">${u.id === state.picked ? 'Picked on the map' : 'Pick on the map'}</button>
           <button class="btn btn-quiet" type="button" data-order="${esc(u.name)}">Give an order</button>
+          ${u.canRide ? `<button class="btn btn-quiet" type="button" data-ride="${esc(u.name)}">Ride with them</button>` : ''}
         </div>`}
       </div>`).join('')
     const fallen = v.fallen.length ? `<p class="label-caps">Lost</p>${v.fallen.map(f => `<p class="note">${esc(f.name)}: ${f.fled ? 'fled the field' : 'destroyed'}</p>`).join('')}` : ''
     const seen = v.enemies.length
-      ? `<p class="label-caps">The enemy, as you know it</p>${v.enemies.map(e => `<p class="note">${esc(e.name)} at ${esc(e.at)}: ${e.status === 'visible' ? `in sight, about ${e.strength} men` : `last seen ${e.minutesAgo} min ago`}</p>`).join('')}`
+      ? `<p class="label-caps">${v.commander?.status === 'held' ? 'The enemy, as you can see it from where you are held' : 'The enemy, as you know it'}</p>${v.enemies.map(e => `<p class="note">${esc(e.name)} at ${esc(e.at)}: ${e.status === 'visible' ? `in sight, about ${e.strength} men` : `last seen ${e.minutesAgo} min ago`}</p>`).join('')}`
       : '<p class="note">No enemy in sight.</p>'
     body.innerHTML = `${units || '<p class="note">No units standing.</p>'}${fallen}${seen}`
     body.querySelectorAll('[data-pick]').forEach(b => b.addEventListener('click', () => {
       state.picked = state.picked === b.dataset.pick ? null : b.dataset.pick
       renderMap(); renderHint(); renderPanel()
+    }))
+    // "Ride with them": the order, put in the box to read back and send.
+    body.querySelectorAll('[data-ride]').forEach(b => b.addEventListener('click', () => {
+      const line = `I ride with the ${b.dataset.ride.toLowerCase()}`
+      state.draft = state.draft ? `${state.draft.replace(/\s+$/, '')}\n${line}` : line
+      saveDraft(token, state.draft)
+      state.readback = null
+      state.editing = true
+      state.tab = 'orders'
+      renderPanel()
     }))
     body.querySelectorAll('[data-order]').forEach(b => b.addEventListener('click', () => {
       state.draft = state.draft ? `${state.draft.replace(/\s+$/, '')}\n${b.dataset.order} ` : `${b.dataset.order} `
@@ -665,6 +690,52 @@ async function tent(token) {
     </div>`
   }
 
+  // You hold the enemy Commander: his offer, and your answer. You need not
+  // answer at all.
+  function captiveCard() {
+    const k = state.view.captive
+    if (!k) return ''
+    const list = (units) => ['the field', ...units.map(u => u.name)].join(', ').replace(/, ([^,]*)$/, ' and $1')
+    state.asking = state.asking ?? null
+    const asking = state.asking
+    return `<div class="captive question" style="display: flex; flex-direction: column; gap: 8px">
+      <p style="margin: 0"><strong>You hold the enemy Commander.</strong> Your ${esc(k.heldBy.toLowerCase())} have him.</p>
+      ${k.offer ? `<p style="margin: 0">For his freedom he offers ${esc(list(k.offer.units))}. Accept, and the battle is yours: he leaves the field, and what he names is yours.</p>
+        ${asking ? `<p class="label-caps">Ask for more: the field, and</p>
+          <div style="display: flex; flex-direction: column; gap: 8px">${[...k.offer.units, ...k.seen.filter(e => !k.offer.units.some(u => u.id === e.id))].map(e => `<label class="check"><input type="checkbox" data-ask="${esc(e.id)}"${asking.has(e.id) ? ' checked' : ''}> ${esc(e.name.charAt(0).toUpperCase() + e.name.slice(1))}</label>`).join('')}</div>
+          <p class="note">You can ask only for what he offered and enemy units your side has seen.</p>
+          <div style="display: flex; gap: 8px; flex-wrap: wrap"><button class="btn" type="button" id="ask-send">Ask for these</button><button class="btn btn-quiet" type="button" id="ask-cancel">Never mind</button></div>`
+          : `<div style="display: flex; gap: 8px; flex-wrap: wrap">
+          <button class="btn btn-main" type="button" id="offer-accept">Accept</button>
+          <button class="btn" type="button" id="offer-refuse">Refuse</button>
+          ${k.seen.some(e => !k.offer.units.some(u => u.id === e.id)) ? '<button class="btn" type="button" id="offer-more">Ask for more</button>' : ''}</div>
+          ${k.seen.some(e => !k.offer.units.some(u => u.id === e.id)) ? '' : '<p class="note" style="margin: 0">Your side has seen nothing more of his to ask for.</p>'}`}
+        <p class="note">Or answer nothing, and fight on.</p>`
+        : `<p class="note" style="margin: 0">${k.asked ? `You asked for ${esc(list(k.asked.units))}. ` : ''}He has no offer on the table.</p>`}
+    </div>`
+  }
+  function wireCaptive() {
+    const k = state.view.captive
+    if (!k?.offer) return
+    const answer = async (body) => {
+      try {
+        await api('POST', `/api/seat/${token}/answer`, { offer: k.offer.id, ...body })
+        state.asking = null
+        await load()
+      } catch (error) { state.readback = { understood: [], questions: [], error: error.message } }
+      renderAll()
+    }
+    document.getElementById('offer-accept')?.addEventListener('click', () => answer({ accept: true }))
+    document.getElementById('offer-refuse')?.addEventListener('click', () => answer({ refuse: true }))
+    document.getElementById('offer-more')?.addEventListener('click', () => { state.asking = new Set(k.offer.units.map(u => u.id)); renderPanel() })
+    document.getElementById('ask-cancel')?.addEventListener('click', () => { state.asking = null; renderPanel() })
+    document.querySelectorAll('[data-ask]').forEach(box => box.addEventListener('change', () => {
+      if (box.checked) state.asking.add(box.dataset.ask)
+      else state.asking.delete(box.dataset.ask)
+    }))
+    document.getElementById('ask-send')?.addEventListener('click', () => answer({ more: [...state.asking] }))
+  }
+
   function orders(body, foot) {
     const v = state.view
     const b = v.battle
@@ -686,41 +757,59 @@ async function tent(token) {
       return
     }
 
-    // In the enemy's hands: no orders. Wait, or give up a unit to go free.
+    // In the enemy's hands: no orders. Wait, or make an offer for his
+    // freedom: any of his units on the field, and the field itself.
     if (v.commander?.status === 'held') {
+      const c = v.commander
+      const t = c.table ?? {}
+      const list = (units) => ['the field', ...units.map(u => `the ${u.name.toLowerCase()}`)].join(', ').replace(/, ([^,]*)$/, ' and $1')
+      state.offering = state.offering ?? new Set((t.counter?.units ?? []).map(u => u.id))
+      const picked = c.chips.filter(u => state.offering.has(u.id))
+      const tableLine = t.offer
+        ? `<p class="readback">Your offer is with them: ${esc(list(t.offer.units))}. They have not answered.</p>`
+        : t.answer?.kind === 'more' && t.counter
+          ? `<p class="question" style="margin: 0">They ask for more: ${esc(list(t.counter.units))}. Offer all of that this turn and you go free at once.</p>`
+          : t.answer?.kind === 'refused' ? '<p class="note">They refused your last offer.</p>' : ''
       body.innerHTML = `
-        <p class="question" style="margin: 0"><strong>You are taken.</strong> The ${esc(v.commander.heldBy)} hold you.</p>
-        <p>You can send no orders. Your officers fight on with the ones they have.</p>
-        <p class="note">If your army wins, the enemy must give you up. If the men who hold you break, you are free. If the battle is lost while you are held, the enemy takes the best unit you have left on the field as your price; with none left, you are lost, and everything with you.</p>
-        ${v.commander.chips.length ? `<p class="label-caps">Or bargain now, and leave the field</p>
-          <p class="note">The battle is lost, the unit and its officer go to the enemy, and you go free.</p>
-          <div style="display: flex; flex-direction: column; gap: 8px">${v.commander.chips.map(u =>
-            `<button class="btn" type="button" data-bargain="${esc(u.id)}">Give up the ${esc(u.name.toLowerCase())}</button>`).join('')}</div>` : '<p class="note">You have no unit left on the field to bargain with.</p>'}
+        <p class="question" style="margin: 0"><strong>You are taken.</strong> The ${esc(c.heldBy)} hold you${c.heldAt ? ` at ${esc(c.heldAt)}` : ''}.</p>
+        <p>You can send no orders. Each of your officers now leads his own unit as he sees fit. You see only what can be seen from where you are held.</p>
+        <p class="note">If your army wins, the enemy must give you up. If the men who hold you break, you are free. If the battle is lost while they hold you and no deal is struck, they let you go a commander of none: every officer leaves you.</p>
+        ${tableLine}
+        <p class="label-caps">Offer a price for your freedom</p>
+        ${t.mayOffer === false ? '<p class="note">You have made your offer this turn. Wait for the turn to run.</p>' : `
+          <p class="note">One offer a turn. The field is always in it: the battle is lost, you go free, and every unit you name goes to the enemy with its officer. Name none to give the field alone, and keep every man. They need not answer.</p>
+          <div class="offer-units" style="display: flex; flex-direction: column; gap: 8px">${c.chips.map(u =>
+            `<label class="check"><input type="checkbox" data-chip="${esc(u.id)}"${state.offering.has(u.id) ? ' checked' : ''}> The ${esc(u.name.toLowerCase())}</label>`).join('')}</div>
+          <button class="btn" type="button" id="make-offer"${state.sending ? ' disabled' : ''}>${picked.length ? `Offer the field and ${picked.length === 1 ? 'the ' + esc(picked[0].name.toLowerCase()) : picked.length + ' units'}` : 'Offer the field alone'}</button>`}
         ${state.readback?.error ? `<p class="error">${esc(state.readback.error)}</p>` : ''}`
-      foot.innerHTML = `<button class="btn btn-main btn-wide" type="button" id="wait"${state.sending ? ' disabled' : ''}>${state.sending ? 'Waiting…' : 'Wait, and let them fight'}</button>
-        <button class="btn btn-quiet btn-wide" type="button" id="yield-held">Yield the battle as it stands</button>`
+      foot.innerHTML = `<button class="btn btn-main btn-wide" type="button" id="wait"${state.sending ? ' disabled' : ''}>${state.sending ? 'Waiting…' : 'Wait, and let them fight'}</button>`
       const act = async (call) => {
         state.sending = true
         renderPanel()
         try {
           await call()
           state.readback = null
+          state.offering = null
           await load()
           state.tab = state.view.battle.status === 'waiting' ? 'orders' : 'dispatches'
-          if (state.view.battle.status === 'finished') state.tab = 'orders'
+          if (state.view.battle.status === 'finished' || state.view.commander?.status === 'held') state.tab = 'orders'
         } catch (error) { state.readback = { understood: [], questions: [], error: error.message } }
         state.sending = false
         renderAll()
         watch()
       }
+      body.querySelectorAll('[data-chip]').forEach(box => box.addEventListener('change', () => {
+        if (box.checked) state.offering.add(box.dataset.chip)
+        else state.offering.delete(box.dataset.chip)
+        renderPanel()
+      }))
       document.getElementById('wait').addEventListener('click', () => act(() => api('POST', `/api/seat/${token}/orders`, { text: '' })))
-      document.getElementById('yield-held').addEventListener('click', () => act(() => api('POST', `/api/seat/${token}/orders`, { text: 'yield' })))
-      body.querySelectorAll('[data-bargain]').forEach(b => b.addEventListener('click', () => act(() => api('POST', `/api/seat/${token}/bargain`, { unit: b.dataset.bargain }))))
+      document.getElementById('make-offer')?.addEventListener('click', () => act(() => api('POST', `/api/seat/${token}/offer`, { units: c.chips.filter(u => state.offering.has(u.id)).map(u => u.id) })))
       return
     }
 
     const rb = state.readback
-    body.innerHTML = `
+    body.innerHTML = `${captiveCard()}
       <label for="orders" style="font-weight: 600; font-size: 14px">Your orders, as you would say them</label>
       <textarea id="orders" class="orders-box" spellcheck="false" placeholder="spears to the ford; if their horse is there, hold&#10;swords to C4, then on to the bridge&#10;archers shoot the horse">${esc(state.draft)}</textarea>
       <div style="display: flex; gap: 8px; flex-wrap: wrap">
@@ -745,6 +834,7 @@ async function tent(token) {
       <button class="btn btn-main btn-wide" type="button" id="send"${state.sending ? ' disabled' : ''}>${state.sending ? 'Sending…' : 'Send the orders'}</button>
       <p class="note" style="text-align: center">Units you give no order keep their last one. Units hold until ordered.</p>`
 
+    wireCaptive()
     body.querySelectorAll('[data-example]').forEach(b => b.addEventListener('click', () => {
       state.draft = state.draft ? `${state.draft.replace(/\s+$/, '')}\n${b.dataset.example}` : b.dataset.example
       saveDraft(token, state.draft)
@@ -837,11 +927,13 @@ async function tent(token) {
     const words = {
       free: '',
       freed: 'You were in the enemy\'s hands; your army\'s victory made them give you up.',
-      ransomed: `You went free at a price: the ${esc((c.price ?? 'unit').toLowerCase())} and their officer went to the enemy.`,
+      ransomed: c.prices?.length
+        ? `You went free at a price: ${esc(c.prices.map(p => `the ${p.toLowerCase()}`).join(', ').replace(/, ([^,]*)$/, ' and $1'))} went to the enemy, with their officers.`
+        : 'You gave the field for your freedom: the battle is lost, and your men are spared.',
+      stripped: 'The battle was lost with you still in the enemy\'s hands, and no deal struck. They let you go, a commander of none: every officer has left you, and your units must earn new ones. Your name goes on, and you may muster again.',
       killed: 'You were killed. Everything ends with you: your officers, their names and all they learned. Muster again with a new Commander.',
-      lost: 'You were in the enemy\'s hands with nothing left to bargain with. Everything ends with you: muster again with a new Commander.'
     }[c.fate]
-    return words ? `<p class="${c.fate === 'killed' || c.fate === 'lost' ? 'question' : 'note'}">${words}</p>` : ''
+    return words ? `<p class="${c.fate === 'killed' || c.fate === 'stripped' ? 'question' : 'note'}">${words}</p>` : ''
   }
 
   function officerLines(officers) {
@@ -867,13 +959,17 @@ async function tent(token) {
   // whenever you come back to the page.
   function watch() {
     stopPolling()
-    if (state.view.battle.status !== 'waiting') return
+    // Waiting on the turn; or across the table from a Commander held, for an
+    // offer or an answer that can come at any time.
+    const table = state.view.captive || state.view.commander?.status === 'held'
+    if (state.view.battle.status === 'finished' || (state.view.battle.status !== 'waiting' && !table)) return
     const check = async () => {
       try {
         const s = await api('GET', `/api/seat/${token}/summary`)
-        if (s.status !== state.view.battle.status || s.turn !== state.view.battle.turn) {
+        if (s.status !== state.view.battle.status || s.turn !== state.view.battle.turn || (s.table ?? null) !== (state.view.battle.table ?? null)) {
+          const turned = s.turn !== state.view.battle.turn
           await load()
-          if (s.status === 'your-orders') state.tab = 'dispatches'
+          if (s.status === 'your-orders' && turned) state.tab = 'dispatches'
           renderAll()
           watch()
         }

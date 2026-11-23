@@ -210,4 +210,26 @@ function settleBattle(company, battle, fates) {
   return next
 }
 
-module.exports = { createCompany, musterOfficers, settleBattle, leadUnit, ridesWith, HEADLESS }
+/**
+ * A Commander left "a commander of none" (ruled 2026-11-23: held when his
+ * battle was lost, and no deal struck; command/commander.js,
+ * heldWhenTheBattleEnds). Every officer leaves the company, those who sat
+ * the battle out too, and every unit's count toward an officer starts
+ * again. The roll of the fallen keeps who they were. Run after the battle
+ * is written in (settleBattle).
+ */
+function commanderOfNone(company, title) {
+  const next = copy(company)
+  for (const officer of next.officers) {
+    next.fallen.push({
+      name: officer.name, fate: 'left', at: title, led: officer.leads,
+      experience: officer.experience, personality: officer.personality, battles: officer.record.length
+    })
+  }
+  for (const kind of Object.keys(next.units)) next.units[kind] = 0
+  for (const officer of next.officers) if (officer.leads) next.units[officer.leads] = 0
+  next.officers = []
+  return next
+}
+
+module.exports = { createCompany, musterOfficers, settleBattle, commanderOfNone, leadUnit, ridesWith, HEADLESS }

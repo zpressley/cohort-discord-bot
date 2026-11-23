@@ -14,7 +14,8 @@
 
 const { resolveUnitReference } = require('../engine/movement/unitResolver')
 const ranged = require('../engine/combat/ranged')
-const { orderWords, OWN_EDGE, HOLD_THERE } = require('../narrator/words')
+const { orderWords, OWN_EDGE, HOLD_THERE, RIDE_WITH: RIDE_WORDS } = require('../narrator/words')
+const { RIDE } = require('../engine/combat/tables')
 const { matchesKind, edgeTarget } = require('../engine/battle/battle')
 const { KINDS } = require('./grammar')
 const { gradeOf, MAX_STEPS } = require('../engine/command/officers')
@@ -237,6 +238,13 @@ function resolveIntents(intents, context) {
     if (intent.kind === 'surrender') { surrender = true; continue }
     if (intent.kind === 'ask') { questions.push(intent.question); continue }
     if (intent.kind === 'note') { notes.push(intent.note); continue }
+    if (intent.kind === 'ride') {
+      const ride = resolveRide(intent, context)
+      if (ride.question) { questions.push(ride.question); continue }
+      orders.push({ ride: ride.unitId })
+      understood.push(`You: ${RIDE_WORDS.say} ${ride.unitId}`)
+      continue
+    }
     if (intent.kind !== 'order') continue
 
     let match = intent.unitIds
@@ -373,6 +381,33 @@ function resolveIntents(intents, context) {
   }
 
   return { orders, questions, notes, choices, surrender, understood, counsel }
+}
+
+// "I ride with the horse": one unit of his own, and whether he may go to it
+// (engine/command/commander.js, canRide; ruled 2026-11-23: "a commander
+// needed to be adjacent to another unit to switch").
+function resolveRide(intent, context) {
+  const all = context.allOwn ?? context.units
+  const match = resolveUnits(intent.unitRef, all)
+  if (match.units.length !== 1) {
+    return { question: match.units.length > 1
+      ? `You can ride with one unit at a time: which of ${match.units.map(u => u.id).join(', ')}?`
+      : `Who do you mean by "${match.unknown ?? intent.unitRef}"? Your units: ${all.map(u => u.id).join(', ')}.` }
+  }
+  const to = match.units[0]
+  if (!context.ride) return { question: 'You have no place on the field to ride from.' }
+  const can = context.ride(to.id)
+  if (can.ok) return { unitId: to.id }
+  const from = context.ridingWith
+  const why = {
+    held: 'You are held by the enemy: you ride with no one.',
+    'not free': 'You are not on the field to ride anywhere.',
+    same: `You ride with ${to.id} already.`,
+    gone: `${to.id} are no longer on the field.`,
+    broken: `${to.id} are broken and running: you cannot ride with them until they rally.`,
+    'too far': `${to.id} are ${can.tiles} tiles (about ${can.tiles * TILE_METRES} m) from ${from}, whom you ride with: you can ride over only to a unit beside them, within ${RIDE.REACH} tile (${RIDE.REACH * TILE_METRES} m). Bring them closer first.`
+  }[can.why] ?? `You cannot ride with ${to.id}.`
+  return { question: why }
 }
 
 // ── Depth ──────────────────────────────────────────────

@@ -24,18 +24,36 @@
 //     only when the unit is at a quarter of its strength or less (ruled
 //     2026-11-23: "should be lower for death, quarter or less").
 //   - Killed: the battle is lost, and (in a campaign) everything with it.
+//     The only total loss: a held Commander is never killed.
 //   - Taken: he gives no orders. His units fight on with the orders they
 //     have. He is free again if the unit that holds him breaks or is
 //     destroyed, or when his army wins.
-//   - While taken he may bargain: give up one of his units still on the
-//     field, and leave it. The battle is lost; he is free.
-//   - If the battle ends, not won, while he is still held, the enemy takes
-//     the best of his units still on the field as his price. With none
-//     left he has nothing to bargain with: he is lost, as if killed.
+//   - While taken he may bargain (ruled 2026-11-23: "The captive names a
+//     price, the captor rejects or asks for more, this continues each turn
+//     til the battle ends or the captive surrenders, or loses their army"):
+//     each player turn he may put one offer on the table, any of his units
+//     still on the field, or none (the field alone). The captor need not
+//     answer; if he accepts, the battle is lost as a yield, the units go to
+//     the enemy, and he is free. The game holds the table
+//     (orchestrator.js, `parley`); the computer's answers are
+//     opponent/captor.js.
+//   - While he is held his officers run their own units, each by his nature
+//     (ownCommand in command/officers.js; ruled 2026-11-23: "each commander
+//     is running his own unit at that point").
+//   - He sees only what can be seen from where he is held (heldSight).
+//   - If the battle ends, not won, while he is still held and no deal was
+//     struck, he goes free "a commander of none": his company is gone, he
+//     is not (heldWhenTheBattleEnds; ruled 2026-11-23). Held, he is never
+//     killed, and cannot yield by his own word: the field is his to offer.
+//   - Held, a disloyal officer's men desert; a loyal one goes for the men
+//     who hold him (battle.js; LOYALTY in tables.js).
+//   - Free, he may ride with another of his units, one within a tile of the
+//     unit he is with (canRide; ruled 2026-11-23).
 //
 // Pure: the caller supplies the random stream and the tick's events.
 
-const { COMMANDER, QUALITY_ORDER } = require('../combat/tables')
+const { COMMANDER, RIDE, QUALITY_ORDER } = require('../combat/tables')
+const { canSee } = require('../map/sight')
 
 /** side -> { unitId, status: 'free'|'held'|'killed'|'away', heldBy } */
 function createCommanders(spec) {
@@ -135,24 +153,100 @@ function stepCommanders({ commanders, world, broken, fledUnits, events, mustered
 }
 
 /**
+ * A Commander still in the enemy's hands when his battle ends, not won,
+ * with no deal struck. Ruled 2026-11-23: "Honor binds a commander from
+ * killing his foe, but if he won't surrender the field to save his men
+ * then he leaves a commander of none." He goes free, alive, with nothing:
+ * every officer leaves his company and every unit's count toward one
+ * starts again (web/battles.js, settle). He himself, his name, his faction
+ * and his battles, goes on, and may muster again.
+ *
+ * The one place this rule lives. (Before this ruling the enemy took his
+ * best unit left, and with none left he was lost as if killed.)
+ */
+function heldWhenTheBattleEnds() {
+  return { fate: 'stripped', price: null, prices: [] }
+}
+
+/**
  * What became of a side's Commander once the battle is decided.
  *
  * @param {Object} o  { commanders, world, outcome, bargained }
- *   bargained  { side, unitId } when he bought his freedom mid-battle
- * @returns {{ fate: 'free'|'freed'|'ransomed'|'killed'|'lost', price: string|null }|null}
+ *   bargained  { side, units } when a deal bought his freedom mid-battle
+ *              (units: the ids given; none when he gave the field alone)
+ * @returns {{ fate: 'free'|'freed'|'ransomed'|'killed'|'stripped', price: string|null, prices: string[] }|null}
  *   freed     held, and his army won: the enemy had to give him up
- *   ransomed  a unit was the price of his freedom (`price`, its id)
- *   lost      held, the battle not won, and nothing left to bargain with
+ *   ransomed  his freedom had a price: the units in `prices` (`price`, the
+ *             first; none when the field alone was the price)
+ *   stripped  held as the battle ended, not won, with no deal: free, a
+ *             commander of none (heldWhenTheBattleEnds)
  */
 function commanderFate({ commanders, world, outcome, bargained = null }, side) {
   const c = commanders?.[side]
   if (!c) return null
-  if (c.status === 'killed') return { fate: 'killed', price: null }
-  if (bargained?.side === side) return { fate: 'ransomed', price: bargained.unitId }
-  if (c.status !== 'held') return { fate: 'free', price: null }
-  if (outcome.winner === side) return { fate: 'freed', price: null }
-  const best = bargainChips(world, side)[0]
-  return best ? { fate: 'ransomed', price: best.id } : { fate: 'lost', price: null }
+  const none = { price: null, prices: [] }
+  if (c.status === 'killed') return { fate: 'killed', ...none }
+  if (bargained?.side === side) {
+    const prices = bargained.units ?? (bargained.unitId ? [bargained.unitId] : [])
+    return { fate: 'ransomed', price: prices[0] ?? null, prices: [...prices] }
+  }
+  if (c.status !== 'held') return { fate: 'free', ...none }
+  if (outcome.winner === side) return { fate: 'freed', ...none }
+  return heldWhenTheBattleEnds()
 }
 
-module.exports = { createCommanders, stepCommanders, commanderFate, bargainChips }
+// The eight tiles round a tile, and the tile itself.
+const tilesApart = (a, b) => Math.max(Math.abs(a.x - b.x), Math.abs(a.y - b.y))
+
+/**
+ * May a free Commander ride over to this unit of his? Only to one of his
+ * own on the field, not broken, within RIDE.REACH of the unit he is with.
+ *
+ * @returns {{ ok: true }|{ ok: false, why: 'held'|'not free'|'same'|'not yours'|'gone'|'broken'|'too far', tiles?: number }}
+ */
+function canRide(commanders, world, broken, side, unitId) {
+  const c = commanders?.[side]
+  if (!c || c.status === 'held') return { ok: false, why: 'held' }
+  if (c.status !== 'free') return { ok: false, why: 'not free' }
+  if (c.unitId === unitId) return { ok: false, why: 'same' }
+  const to = world.units.find(u => u.id === unitId)
+  if (!to || to.side !== side) return { ok: false, why: 'not yours' }
+  if (to.strength <= 0) return { ok: false, why: 'gone' }
+  if (broken.has(unitId)) return { ok: false, why: 'broken' }
+  const from = onField(world, c.unitId)
+  const tiles = from ? tilesApart(from.position, to.position) : Infinity
+  if (tiles > RIDE.REACH) return { ok: false, why: 'too far', tiles }
+  return { ok: true }
+}
+
+/**
+ * What a held Commander can see from where he is held (ruled 2026-11-23:
+ * "You see everything around your position, not everything. You get
+ * updates from the captors' point of view... as if you are sitting nearby
+ * as reports come in"): the unit that holds him, and every unit, his or
+ * theirs, that it can see. Hidden units are seen only as closely as their
+ * cover allows, as for any viewer.
+ *
+ * @returns {{ captor: Object|null, seen: Set<string> }|null}  null when he is not held
+ */
+function heldSight({ commanders, world, map, hidden = new Map(), fledUnits = [] }, side) {
+  const c = commanders?.[side]
+  if (!c || c.status !== 'held') return null
+  return sightFrom({ world, map, hidden, fledUnits }, c.heldBy)
+}
+
+/** Every unit one unit can see, and itself: heldSight from a given captor. */
+function sightFrom({ world, map, hidden = new Map(), fledUnits = [] }, captorId) {
+  const captor = world.units.find(u => u.id === captorId) ?? fledUnits.find(u => u.id === captorId) ?? null
+  const seen = new Set()
+  if (!captor) return { captor: null, seen }
+  seen.add(captor.id)
+  for (const u of world.units) {
+    if (u.id === captor.id) continue
+    const options = hidden.has(u.id) ? { seenWithin: hidden.get(u.id).seenWithin } : {}
+    if (canSee(map, captor, u, options)) seen.add(u.id)
+  }
+  return { captor, seen }
+}
+
+module.exports = { createCommanders, stepCommanders, commanderFate, bargainChips, heldWhenTheBattleEnds, canRide, heldSight, sightFrom }

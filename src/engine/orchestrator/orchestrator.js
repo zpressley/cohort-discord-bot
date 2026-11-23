@@ -44,6 +44,7 @@ const { samePosition } = require('../map/labels')
 const { createIntel, updateIntel, sideView: fogSideView } = require('./fogOfWar')
 const { evaluateVictory, objectiveController, objectiveArea, OBJECTIVE_HOLD_MINUTES } = require('./victory')
 const { bargainChips, commanderFate } = require('../command/commander')
+const { PARLEY } = require('../combat/tables')
 
 const MAX_TICKS_PER_TURN = 6   // one hour of battle time per decision
 const MINUTES_PER_TICK = 10    // locked decision 1
@@ -75,9 +76,11 @@ function createGame(spec, options = {}) {
     minutesElapsed: 0,
     submitted: {},              // side -> orders (this player turn)
     surrendered: null,
-    // { side, unitId } when a Commander in the enemy's hands gave up a unit
-    // to go free and left the field.
+    // { side, units } when a Commander in the enemy's hands bought his
+    // freedom: the battle lost, and those of his units given to the enemy.
     bargained: null,
+    // The table between a held Commander and his captors (see makeOffer).
+    parley: {},
     intel: {},
     startingStrength: {},
     objectiveHolds: {},         // objectiveId -> { side, turns }
@@ -102,27 +105,45 @@ function createGame(spec, options = {}) {
  *
  * @param {Object} game
  * @param {string} side
- * @param {Array|Object} orders  [{ unitRef, target }] or { surrender: true },
- *                               or { bargain: unitId }: a Commander held by
- *                               the enemy gives up that unit and leaves the
- *                               field (command/commander.js). Refused, as
- *                               no orders at all, unless he is held and the
- *                               unit is his and still on the field.
- * @returns {{ status: 'waiting'|'processed'|'finished', outcome? }}
+ * @param {Array|Object} orders  [{ unitRef, target }] (and { ride: unitId }:
+ *                               the Commander rides over to that unit), or
+ *                               { surrender: true } (not while he is held),
+ *                               or, between a held Commander and his
+ *                               captors (see makeOffer):
+ *                                 { offer: { units } }  his offer
+ *                                 { answer: { offer, accept | refuse | more: { units } } }
+ *                               or { bargain: unitId }: the bargain of
+ *                               before November 23, kept so that battles
+ *                               saved then replay.
+ * @returns {{ status: 'waiting'|'processed'|'finished'|'parley'|'refused', outcome?, refused? }}
  */
 function submitOrders(game, side, orders) {
   if (game.outcome.decided) return { status: 'finished', outcome: game.outcome }
   game.orderLog.push({ side, orders: copyOrders(orders) })
 
+  // The table between a held Commander and his captors. Neither an offer
+  // nor an answer is a side's orders for the turn: each is put down
+  // between turns, and the turn waits for orders as before. A deal struck
+  // ends the battle at once, as a yield does.
+  if (orders && (orders.offer || orders.answer)) {
+    const done = orders.offer ? makeOffer(game, side, orders.offer) : answerOffer(game, side, orders.answer)
+    if (!done.deal) return { status: done.refused ? 'refused' : 'parley', refused: done.refused ?? null }
+    const turnReport = processPlayerTurn(game)
+    return { status: 'finished', outcome: game.outcome, turn: turnReport }
+  }
+
   if (orders && orders.surrender === true) {
-    game.surrendered = side
+    // A Commander in the enemy's hands cannot yield by his own word (ruled
+    // 2026-11-23): his officers run their own units, and the field is his
+    // only to offer for his freedom. Read as no orders.
+    if (!captorOf(game, side)) game.surrendered = side
     game.submitted[side] = []
   } else if (orders && orders.bargain) {
+    // The bargain as it was before November 23 (one unit, always taken):
+    // kept so that battles saved then replay as they were played.
     const held = game.battle.commanders?.[side]?.status === 'held'
     if (held && bargainChips(game.battle.world, side).some(u => u.id === orders.bargain)) {
-      game.surrendered = side
-      game.bargained = { side, unitId: orders.bargain }
-      game.battle.commanders[side].status = 'free'
+      strikeDeal(game, side, [orders.bargain])
     }
     game.submitted[side] = []
   } else {
@@ -139,6 +160,128 @@ function submitOrders(game, side, orders) {
     status: game.outcome.decided ? 'finished' : 'processed',
     outcome: game.outcome,
     turn: turnReport
+  }
+}
+
+// ── The table: a held Commander's offers, and his captors' answers ──
+//
+// Ruled 2026-11-23: "The captive names a price, the captor rejects or asks
+// for more, this continues each turn til the battle ends or the captive
+// surrenders, or loses their army. Surrender is also an option. The captor
+// does not have to accept anything or even respond, they can just ignore
+// and keep fighting."
+//
+// game.parley[captiveSide] = {
+//   offer    { id, units, turn } on the table, or null. `units` are ids of
+//            his units still on the field; none means the field alone.
+//            Every deal is a yield of the field: the battle is lost.
+//   counter  { id, units, turn } what the captor asked for, or null. It
+//            stands for the player turn it was made in and PARLEY.COUNTER_LASTS
+//            more; an offer that gives all it names strikes the deal at once.
+//   answer   the captor's last answer, for the captive to read:
+//            { kind: 'refused'|'more', to: offer id, turn }
+//   nextId, last (the player turn of his last offer)
+// }
+
+
+/** The side holding a side's Commander, or null when he is not held. */
+function captorOf(game, side) {
+  const c = game.battle.commanders?.[side]
+  if (c?.status !== 'held') return null
+  const unit = game.battle.world.units.find(u => u.id === c.heldBy) ?? game.battle.fledUnits.find(u => u.id === c.heldBy)
+  return unit?.side ?? null
+}
+
+const table = (game, side) => (game.parley[side] ??= { offer: null, counter: null, answer: null, nextId: 1, last: null })
+const onTheField = (game, side) => new Set(bargainChips(game.battle.world, side).map(u => u.id))
+const counterStands = (game, counter) => counter && game.playerTurn <= counter.turn + PARLEY.COUNTER_LASTS
+
+/**
+ * Why an offer cannot be put on the table, or null if it can.
+ * @param {{ units?: string[] }} offer
+ */
+function checkOffer(game, side, offer) {
+  if (game.outcome.decided) return 'the battle is over'
+  if (!captorOf(game, side)) return 'you are not held'
+  const units = offer?.units ?? []
+  if (!Array.isArray(units) || new Set(units).size !== units.length) return 'name each unit once'
+  const mine = onTheField(game, side)
+  if (units.some(id => !mine.has(id))) return 'that is not yours to give'
+  if (game.parley[side]?.last === game.playerTurn) return 'one offer a turn: wait for the turn to run'
+  return null
+}
+
+/**
+ * Why a captor's answer cannot be given, or null if it can.
+ * @param {{ offer: number, accept?: true, refuse?: true, more?: { units: string[] } }} answer
+ */
+function checkAnswer(game, side, answer) {
+  if (game.outcome.decided) return 'the battle is over'
+  const captive = Object.keys(game.parley ?? {}).find(s => captorOf(game, s) === side && game.parley[s].offer)
+  const offer = captive ? game.parley[captive].offer : null
+  if (!offer || offer.id !== answer?.offer) return 'there is no such offer on the table'
+  const kinds = ['accept', 'refuse', 'more'].filter(k => answer[k])
+  if (kinds.length !== 1) return 'accept, refuse or ask for more'
+  if (answer.accept) {
+    const theirs = onTheField(game, captive)
+    if (offer.units.some(id => !theirs.has(id))) return 'what was offered is no longer theirs to give'
+  }
+  if (answer.more) {
+    const units = answer.more.units ?? []
+    // A captor may name only what his side has seen of the enemy, and what
+    // the captive himself put on the table.
+    const known = game.intel[side]?.known ?? {}
+    if (!Array.isArray(units) || new Set(units).size !== units.length) return 'name each unit once'
+    if (units.some(id => !known[id] && !offer.units.includes(id))) return 'you can ask only for enemy units your side has seen'
+    if (units.length === offer.units.length && units.every(id => offer.units.includes(id))) return 'that is what was offered: accept it'
+  }
+  return null
+}
+
+function makeOffer(game, side, offer) {
+  const refused = checkOffer(game, side, offer)
+  if (refused) return { refused }
+  const t = table(game, side)
+  const units = [...offer.units ?? []]
+  t.last = game.playerTurn
+  // Meeting what the captor asked for strikes the deal.
+  if (counterStands(game, t.counter) && t.counter.units.every(id => units.includes(id))) {
+    strikeDeal(game, side, units)
+    return { deal: true }
+  }
+  t.offer = { id: t.nextId++, units, turn: game.playerTurn }
+  return {}
+}
+
+function answerOffer(game, side, answer) {
+  const refused = checkAnswer(game, side, answer)
+  if (refused) return { refused }
+  const captive = Object.keys(game.parley).find(s => captorOf(game, s) === side && game.parley[s].offer?.id === answer.offer)
+  const t = game.parley[captive]
+  if (answer.accept) {
+    strikeDeal(game, captive, t.offer.units)
+    return { deal: true }
+  }
+  t.answer = { kind: answer.more ? 'more' : 'refused', to: t.offer.id, turn: game.playerTurn }
+  t.counter = answer.more ? { id: t.offer.id, units: [...answer.more.units], turn: game.playerTurn } : null
+  t.offer = null
+  return {}
+}
+
+// The battle is lost as a yield; he is free, and what he gave goes to the
+// enemy (web/battles.js: their officers are 'given up').
+function strikeDeal(game, side, units) {
+  game.surrendered = side
+  game.bargained = { side, units: [...units] }
+  game.battle.commanders[side].status = 'free'
+  if (game.parley[side]) Object.assign(game.parley[side], { offer: null, counter: null })
+}
+
+// The table is cleared when he is no longer held.
+function clearTable(game) {
+  for (const side of Object.keys(game.parley)) {
+    if (captorOf(game, side)) continue
+    Object.assign(game.parley[side], { offer: null, counter: null, answer: null })
   }
 }
 
@@ -211,6 +354,7 @@ function processPlayerTurn(game) {
     if (nothingMoved(turnRecord)) { interrupt = 'stalled'; break }
   }
 
+  clearTable(game)
   game.history.push({
     playerTurn: game.playerTurn,
     ticks,
@@ -370,6 +514,9 @@ function commanderOf(game, side) {
 module.exports = {
   createGame,
   commanderOf,
+  captorOf,
+  checkOffer,
+  checkAnswer,
   gameRecord,
   replayGame,
   submitOrders,

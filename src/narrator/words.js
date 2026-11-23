@@ -80,4 +80,8 @@ function moraleWords(morale) {
   return 'firm'
 }
 
-module.exports = { orderWords, moraleWords, ORDER, OWN_EDGE, HOLD_THERE }
+// The Commander himself going over to another of his units ("I ride with
+// the horse"): what he is read back, and what the Army tab says.
+const RIDE_WITH = { say: 'ride with', doing: 'riding with', did: 'rode over to' }
+
+module.exports = { orderWords, moraleWords, ORDER, OWN_EDGE, HOLD_THERE, RIDE_WITH }

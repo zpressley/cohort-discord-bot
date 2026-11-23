@@ -28,8 +28,11 @@
 //                                           only before the first turn runs
 //   POST /api/seat/:token/read   { text }   read orders back, send nothing
 //   POST /api/seat/:token/orders { text }   send orders
-//   POST /api/seat/:token/bargain { unit }  a Commander held by the enemy
-//                                           gives up a unit and leaves the field
+//   POST /api/seat/:token/offer { units }   a Commander held by the enemy
+//                                           offers units (none: the field
+//                                           alone) for his freedom
+//   POST /api/seat/:token/answer { offer, accept | refuse | more: [ids] }
+//                                           his captor answers the offer
 //   POST /api/commanders { faction }        a new Commander -> { token, name, faction }
 //   GET  /api/commander/:token              his company: officers, their
 //                                           records, those lost, and the
@@ -160,9 +163,16 @@ function createServer(store) {
             const body = await readBody(req)
             return send(res, 200, await store.readBack(token, String(body.text ?? '').slice(0, 4000)))
           }
-          if (req.method === 'POST' && parts[3] === 'bargain') {
+          if (req.method === 'POST' && parts[3] === 'offer') {
             const body = await readBody(req)
-            return send(res, 200, await store.bargain(token, String(body.unit ?? '')))
+            return send(res, 200, await store.offer(token, Array.isArray(body.units) ? body.units.slice(0, 50) : []))
+          }
+          if (req.method === 'POST' && parts[3] === 'answer') {
+            const body = await readBody(req)
+            return send(res, 200, await store.answer(token, {
+              offer: body.offer, accept: body.accept === true, refuse: body.refuse === true,
+              ...(Array.isArray(body.more) ? { more: body.more.slice(0, 50) } : {})
+            }))
           }
           if (req.method === 'POST' && parts[3] === 'orders') {
             const body = await readBody(req)

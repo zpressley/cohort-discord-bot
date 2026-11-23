@@ -39,8 +39,8 @@ const {
 } = require('../movement')
 const { createEventLog } = require('./events')
 const { normalizeOrder, planUnit, nextStep, isSeeking, NEAR_TILES } = require('./orders')
-const { grasp, losingTheThread } = require('../command/officers')
-const { createCommanders, stepCommanders } = require('../command/commander')
+const { grasp, losingTheThread, ownCommand, loyaltyOf } = require('../command/officers')
+const { createCommanders, stepCommanders, canRide } = require('../command/commander')
 const { canSee, visionRange } = require('../map/sight')
 const { coverFor } = require('./hiding')
 
@@ -330,12 +330,63 @@ function stepTurn(state, sideOrders = {}, { sameTurn = false } = {}) {
     return carried
   }
 
+  // His officers' own command, while their Commander is held: each unit's
+  // decision is logged when it changes.
+  const runOwnUnits = (side, effective) => {
+    state.ownCommand = state.ownCommand ?? new Map()
+    const inSight = (seenAtStart.get(side)?.size ?? 0) > 0
+    const captor = state.commanders[side].heldBy
+    for (const unit of effective) {
+      const did = ownCommand(unit.officer, inSight)
+      if (state.ownCommand.get(unit.id) === did) continue
+      state.ownCommand.set(unit.id, did)
+      // A loyal officer's men, shaken, take heart to go for him.
+      const heart = did === 'rescue' && state.isShaken(unit) ? resolver.hearten(unit, T.LOYALTY.RALLY_MORALE) : null
+      log.emit('ownCommand', turn, {
+        unitId: unit.id, officer: unit.officer?.name ?? null, nature: unit.officer?.headless ? null : (unit.officer?.personality ?? null), did,
+        ...(did === 'rescue' ? { on: captor } : {}),
+        ...(heart !== null ? { morale: heart } : {}),
+        ...(unit.officer?.headless || !unit.officer ? { headless: true } : {})
+      })
+      if (did === 'carry on') continue
+      state.orderBook.set(unit.id, did === 'rescue' ? normalizeOrder({ unitId: unit.id, action: 'attack', enemy: captor })
+        : did === 'advance' ? { ...ADVANCE } : { ...HOLD })
+      freshThisTurn.add(unit.id)
+    }
+  }
+  // A disloyal officer's men slip away, every ten minutes their Commander
+  // is held (ruled 2026-11-23).
+  const desert = (side) => {
+    for (const unit of unitsOnSide(world, side)) {
+      if (unit.strength <= 0 || loyaltyOf(unit.officer) > T.LOYALTY.DISLOYAL) continue
+      const men = Math.floor(unit.strength * T.LOYALTY.DESERTION)
+      if (men < 1) continue
+      unit.strength -= men
+      log.emit('deserted', turn, { unitId: unit.id, officer: unit.officer?.name ?? null, men, strength: unit.strength })
+    }
+  }
+
   for (const side of sides(world)) {
     const effective = unitsOnSide(world, side).filter(u => !broken.has(u.id))
-    // A Commander in the enemy's hands gives no orders: his units carry on
-    // with the ones they have.
+    // A Commander in the enemy's hands gives no orders.
     const held = state.commanders?.[side]?.status === 'held'
-    const { orders: expanded } = expandOrders(held ? [] : (sideOrders[side] ?? []), effective)
+    // "I ride with the horse": the Commander goes over to another of his
+    // units, one beside the unit he is with (command/commander.js, canRide).
+    // It is no order to the men, and is taken out of the list before theirs.
+    const given = (sideOrders[side] ?? []).filter(o => !o?.ride)
+    for (const o of (sideOrders[side] ?? []).filter(o => o?.ride)) {
+      if (!canRide(state.commanders, world, broken, side, o.ride).ok) continue
+      log.emit('commanderRode', turn, { side, unitId: o.ride, from: state.commanders[side].unitId })
+      state.commanders[side].unitId = o.ride
+    }
+    const { orders: expanded } = expandOrders(held ? [] : given, effective)
+    // While he is held each officer runs his own unit by his nature, as a
+    // player turn opens (command/officers.js, ownCommand). It ends when he
+    // is free: from then on his units keep what they were last doing until
+    // he gives them new orders.
+    if (held) desert(side)
+    if (held && !sameTurn) runOwnUnits(side, effective)
+    else if (!held && state.ownCommand) for (const u of effective) state.ownCommand.delete(u.id)
 
     // Orders given this turn replace each unit's standing order.
     // What its officer keeps of an order with more than one thing in it is
