@@ -20,6 +20,9 @@
 //                   ("steady" is kept for an officer's nature)
 //   broke, rallied, left the field, destroyed
 //                   what becomes of a unit
+//   raw, green, seasoned, veteran, legendary
+//                   a unit's veterancy: how many battles its men have come
+//                   through, on average (the steps an officer's grades use)
 //   a rider, word, cut off
 //                   how orders and news go between the Commander and a
 //                   unit beyond his immediate range: a rider carries an
@@ -141,6 +144,11 @@ const RIDE_WITH = { say: 'ride with', doing: 'riding with', did: 'rode over to' 
 const LOYALTY_WORDS = { loyal: 'loyal', disloyal: 'disaffected' }
 const VALUES_WORDS = { glory: 'lives for glory', survival: 'looks to his men' }
 
+// A unit's veterancy, its men's average experience (veterans/veterancy.js,
+// veterancyLevel): the officers' grade words, and "raw" for a unit below
+// the first (under four battles each, on average).
+const VETERANCY_WORDS = { raw: 'raw', green: 'green', seasoned: 'seasoned', veteran: 'veteran', legendary: 'legendary' }
+
 // Orders and news by rider (engine/command/messengers.js). Minutes in the
 // app's own way of telling time ("20 min", "1 h 20 min").
 const clock = (minutes) => {
@@ -181,4 +189,4 @@ const RIDER = {
   clock
 }
 
-module.exports = { orderWords, moraleWords, ORDER, OWN_EDGE, HOLD_THERE, KIT, RIDE_WITH, LOYALTY_WORDS, VALUES_WORDS, RIDER }
+module.exports = { orderWords, moraleWords, ORDER, OWN_EDGE, HOLD_THERE, KIT, RIDE_WITH, LOYALTY_WORDS, VALUES_WORDS, VETERANCY_WORDS, RIDER }

@@ -220,6 +220,11 @@ const LOYALTY_WORDS = { loyal: 'loyal to you', disloyal: 'disaffected' }
 const VALUES_WORDS = { glory: 'lives for glory', survival: 'looks to his men' }
 const GRADE_WORDS = { green: 'green', seasoned: 'seasoned', veteran: 'a veteran', legendary: 'a legend' }
 const RESULT_WORDS = { victory: 'a victory', defeat: 'a defeat', draw: 'a draw' }
+// A unit's veterancy, as battles its men have come through on average.
+const veteranOf = (v) => {
+  const n = Math.floor(Number(v) || 0)
+  return n === 0 ? 'new to battle' : `${n} battle${n === 1 ? '' : 's'} a man on average`
+}
 const FATE_WORDS = { killed: 'killed', captured: 'taken by the enemy', 'given up': 'given to the enemy for the Commander\'s freedom', left: 'left you when the battle left you a commander of none' }
 async function officers(note = null) {
   const commanders = await loadCommanders()
@@ -240,6 +245,7 @@ async function officers(note = null) {
   const card = (o, c) => `<div class="officer" data-officer-card="${esc(o.id)}">
       <strong>${esc(o.name)}</strong>
       <span>Leads the ${esc(o.leads)} · ${esc(GRADE_WORDS[o.grade] ?? o.grade)}, ${esc(o.personality)}${o.status === 'wounded' ? ' · wounded, back after the next battle' : ''}</span>
+      ${menLine(c, o.leads, 'His men')}
       ${o.values ? `<span>He ${esc(VALUES_WORDS[o.values] ?? o.values)}${o.loyalty ? `, and is ${esc(LOYALTY_WORDS[o.loyalty])}` : ''}.</span>` : ''}
       ${o.taken ? `<span class="taken-note">Given to you by Commander ${esc(o.taken.commander)} at ${esc(o.taken.battle)}, in a deal for his own freedom. He has every reason to hate you.</span>` : ''}
       ${o.record.length
@@ -247,6 +253,11 @@ async function officers(note = null) {
         : '<span>Yet to fight under you.</span>'}
       ${moves(o, c)}
     </div>`
+  // A unit's veterancy, its level in the server's words (words.js).
+  const menLine = (c, kind, who) => {
+    const u = (c.units ?? []).find(x => x.kind === kind)
+    return u?.level ? `<span class="veterancy">${who}: ${esc(u.level)}, ${veteranOf(u.veterancy)}.</span>` : ''
+  }
   const fallen = (f) => `<p class="note">${esc(f.name)}, who led the ${esc(f.led)}: ${esc(FATE_WORDS[f.fate] ?? f.fate)} at ${esc(f.at)}, after ${f.battles} battle${f.battles === 1 ? '' : 's'} with you.</p>`
   const company = (c) => `
       <h2 class="commander">Commander ${esc(c.name)}${c.factionTitle ? ` of ${esc(c.factionTitle)}` : ''}</h2>
@@ -258,7 +269,7 @@ async function officers(note = null) {
       ${!c.ended && c.faction ? `<a class="btn btn-wide" href="/army/${esc(c.token)}" data-link>${c.battle ? 'His army' : c.army?.own ? 'Change his army' : 'Buy his own army'}</a>` : ''}
       ${c.officers.map(o => card(o, c)).join('')}
       ${(c.units ?? []).filter(u => u.trained > 0).map(u => `<p class="note">The ${esc(u.kind)} have been trained up ${u.trained} level${u.trained === 1 ? '' : 's'} by an officer of thirty battles.</p>`).join('')}
-      ${(c.unled ?? []).map(u => `<p class="note">The ${esc(u.kind)} have no officer${u.battles >= c.earnedAt ? ': one of their own will step up after their next battle' : ` yet: ${u.battles} battle${u.battles === 1 ? '' : 's'} come through. One comes forward after ${c.earnedAt}`}.</p>`).join('')}
+      ${(c.unled ?? []).map(u => `<p class="note">The ${esc(u.kind)} have no officer${u.battles >= c.earnedAt ? ': one of their own will step up after their next battle' : ` yet: ${u.battles} battle${u.battles === 1 ? '' : 's'} come through. One comes forward after ${c.earnedAt}`}. ${menLine(c, u.kind, 'Their men')}</p>`).join('')}
       ${c.fallen.length ? `<p class="label-caps">Lost</p>${c.fallen.map(fallen).join('')}` : ''}`
   app.innerHTML = `
     <header class="bar"><a href="/battles" data-link>Your battles</a><strong style="font-family: var(--font-display); font-size: 18px">Your officers</strong><span></span></header>
@@ -571,9 +582,11 @@ async function armyScreen(token) {
   // What his company has for a unit: its officer, or its battles toward one.
   function officerLine(name) {
     const officer = commander.officers.find(o => o.leads === name && o.status !== 'lost')
-    if (officer) return `Officer: ${esc(officer.name)}${officer.status === 'wounded' ? ' (wounded)' : ''}`
+    const men = (commander.units ?? []).find(u => u.kind === name)
+    const level = men?.level ? ` · men: ${esc(men.level)}` : ''
+    if (officer) return `Officer: ${esc(officer.name)}${officer.status === 'wounded' ? ' (wounded)' : ''}${level}`
     const count = (commander.unled ?? []).find(u => u.kind === name)
-    return count ? `No officer yet: ${count.battles} battle${count.battles === 1 ? '' : 's'} toward one` : 'No officer yet: new to your army'
+    return count ? `No officer yet: ${count.battles} battle${count.battles === 1 ? '' : 's'} toward one${level}` : 'No officer yet: new to your army'
   }
 
   function budget(spent, total) {

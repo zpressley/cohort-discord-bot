@@ -20,6 +20,8 @@ const { PLAIN } = require('../data/officers')
 const { FACTIONS } = require('../data/factions')
 const { usualArmy } = require('../engine/army/standard')
 const { rosterView } = require('./roster')
+const { veterancyLevel } = require('../engine/veterans/veterancy')
+const { VETERANCY_WORDS } = require('../narrator/words')
 
 function createCommanderStore({ dir = null, now = () => Date.now() } = {}) {
   const folder = dir ? path.join(dir, 'commanders') : null
@@ -168,9 +170,9 @@ function createCommanderStore({ dir = null, now = () => Date.now() } = {}) {
       // Units with no officer yet, and the battles each has come through
       // toward one (he comes forward at `earnedAt` battles).
       unled: unitsOf(company).filter(u => !u.led).map(u => ({ kind: u.kind, battles: u.battles })),
-      // Every unit's own veterancy: the battles it has come through and
-      // the average experience of its men.
-      units: unitsOf(company).map(u => ({ kind: u.kind, battles: u.battles, veterancy: u.veterancy, trained: u.trained })),
+      // Every unit's own veterancy: the battles it has come through, the
+      // average experience of its men, and its level in the game's words.
+      units: unitsOf(company).map(u => ({ kind: u.kind, battles: u.battles, veterancy: u.veterancy, level: VETERANCY_WORDS[veterancyLevel(u.veterancy)], trained: u.trained })),
       earnedAt: EARNED_AT,
       fallen: [...company.fallen].reverse()
     }

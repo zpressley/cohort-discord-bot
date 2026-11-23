@@ -605,7 +605,14 @@ const VETERANCY = {
     { from: 8, fight: 0.5, survive: 0.10 },    // seasoned
     { from: 13, fight: 0.75, survive: 0.15 },  // veteran
     { from: 20, fight: 1, survive: 0.20 }      // legendary
-  ]
+  ],
+  // Against the computer, every unit of its army takes the average
+  // veterancy of the units the Commander fields in that battle, but never
+  // more than this: seasoned, the second step above. Ruled 2026-11-23,
+  // "Yes" to "take it, with the computer's army matching your average
+  // veterancy up to seasoned so it is never a pushover"
+  // (docs/design/army-balance.md, part 4, "The fairness problem").
+  MATCH_UP_TO: 8
 }
 
 // Training (command/company.js; ruled 2026-11-23: "Good perk for 30 is

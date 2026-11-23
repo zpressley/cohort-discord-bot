@@ -98,6 +98,7 @@ test('fog of war is held on the server: a side never receives an enemy it has no
     const raw = (await app.api('GET', `/api/seat/${seats.red}`)).body
     assert.deepEqual(raw.enemies, [], 'nothing seen yet')
     assert.equal(JSON.stringify(raw).includes('blue_'), false, 'not a single enemy id anywhere in the answer')
+    assert.equal(JSON.stringify(raw).includes('veterancy'), false, 'no unit\'s veterancy (src/web/tests/veterans.test.js has more)')
   } finally { await app.close() }
 })
 
