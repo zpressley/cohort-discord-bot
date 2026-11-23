@@ -561,6 +561,18 @@ const HEART = {
   MORALE: 8
 }
 
+// Training (command/company.js; ruled 2026-11-23: "Good perk for 30 is
+// training, each battle fought increase the level of the unit. A 30
+// officer over militia can have them eventually at professional level over
+// time"). Every so many battles a unit comes through under an officer of
+// the greatest experience, it rises one level of quality, up this ladder
+// and no further. Tribal warriors rise to professionals; the elite are the
+// elite already. Starting values.
+const TRAINING = {
+  BATTLES_PER_LEVEL: 5,
+  LADDER: ['levy', 'militia', 'professional', 'veteran_mercenary']
+}
+
 // The Commander on the field (command/commander.js; ruled 2026-11-22: "low
 // odds and not possible till a threshold"). The threshold is half because
 // units here break at about half strength: with the first, generic armies a
@@ -703,6 +715,7 @@ module.exports = {
   RALLY,
   HEART,
   COMMANDER,
+  TRAINING,
   MORALE,
   DAMAGE,
   CHARGE,

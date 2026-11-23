@@ -146,7 +146,7 @@ function createCommanderStore({ dir = null, now = () => Date.now() } = {}) {
       unled: unitsOf(company).filter(u => !u.led).map(u => ({ kind: u.kind, battles: u.battles })),
       // Every unit's own veterancy: the battles it has come through and
       // the average experience of its men.
-      units: unitsOf(company).map(u => ({ kind: u.kind, battles: u.battles, veterancy: u.veterancy })),
+      units: unitsOf(company).map(u => ({ kind: u.kind, battles: u.battles, veterancy: u.veterancy, trained: u.trained })),
       earnedAt: EARNED_AT,
       fallen: [...company.fallen].reverse()
     }

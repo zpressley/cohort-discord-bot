@@ -238,6 +238,7 @@ async function officers() {
         : 'His army is ready to muster.'}</p>
       ${!c.ended && c.faction ? `<a class="btn btn-wide" href="/army/${esc(c.token)}" data-link>${c.battle ? 'His army' : c.army?.own ? 'Change his army' : 'Buy his own army'}</a>` : ''}
       ${c.officers.map(card).join('')}
+      ${(c.units ?? []).filter(u => u.trained > 0).map(u => `<p class="note">The ${esc(u.kind)} have been trained up ${u.trained} level${u.trained === 1 ? '' : 's'} by an officer of thirty battles.</p>`).join('')}
       ${(c.unled ?? []).map(u => `<p class="note">The ${esc(u.kind)} have no officer${u.battles >= c.earnedAt ? ': one of their own will step up after their next battle' : ` yet: ${u.battles} battle${u.battles === 1 ? '' : 's'} come through. One comes forward after ${c.earnedAt}`}.</p>`).join('')}
       ${c.fallen.length ? `<p class="label-caps">Lost</p>${c.fallen.map(fallen).join('')}` : ''}`
   app.innerHTML = `

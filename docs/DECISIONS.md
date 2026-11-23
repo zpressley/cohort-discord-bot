@@ -1220,3 +1220,27 @@ Also changed: `formUp` is exported from `engine/army/factions.js` (one
 word; the faction data there and in `src/data/factions.js` are untouched);
 kit words are in `narrator/words.js` (`KIT`); the soak plays the bought
 armies, mirror matches among them, on every map.
+
+## Ruling, November 23, 2026 (the perk of thirty battles)
+
+"Good perk for 30 is training, each battle fought increase the level of the
+unit. A 30 officer over militia can have them eventually at professional
+level over time."
+
+### How training was built (Claude's choices, open to change)
+
+- A unit that comes through a battle under an officer of 30 battles is
+  drilled by him. **Every 5 such battles its quality rises one level**
+  (`tables.TRAINING`): levy, militia, professional, veteran mercenaries,
+  and no further. Tribal warriors become professionals. The elite are the
+  elite already.
+- The rise costs nothing and is over and above what was bought: the army
+  screen and its budget still show the unit as it was raised, and the
+  field shows it as it is now.
+- Numbers stay as raised: training makes better men, not more of them.
+- It belongs to the unit. A unit dismissed, destroyed or given to the
+  enemy loses it; an officer who moves to other men starts on them from
+  nothing.
+- An officer of thirty battles now has two perks: this, and a successor
+  ready at once.
+

@@ -24,7 +24,10 @@
 //             lost starts at the unit's own level (ruled 2026-11-23: "the
 //             veteran status of the unit, its average level, determines the
 //             officer's starting spot. A 30 officer in charge of a 24 unit
-//             gets a legendary successor").
+//             gets a legendary successor"). `drilled` counts its battles
+//             under an officer of MAX_EXPERIENCE: he trains his men, and
+//             their quality rises a level every TRAINING.BATTLES_PER_LEVEL
+//             of them (trainedQuality).
 //   fallen    those killed or taken, as a roll: the company keeps its dead,
 //             but not what they knew
 //   battles   how many the company has fought
@@ -35,7 +38,7 @@ const { createRng } = require('../rng')
 const { PERSONALITIES, EARNED_AT, MAX_EXPERIENCE } = require('./officers')
 const { assignOfficers } = require('./roster')
 const { NAMES, PLAIN } = require('../../data/officers')
-const { QUALITY_ORDER } = require('../combat/tables')
+const { QUALITY_ORDER, TRAINING } = require('../combat/tables')
 const { createVeteranState, averageExperience, applyBattle } = require('../veterans/veterancy')
 
 function createCompany() {
@@ -49,6 +52,23 @@ function copy(company) {
     if (typeof v === 'number') next.units[kind] = { ...createVeteranState({ strength: 0 }), battlesParticipated: v }
   }
   return next
+}
+
+/**
+ * A unit's quality after its training: the quality it was raised at, lifted
+ * one level of TRAINING.LADDER for every BATTLES_PER_LEVEL battles it has
+ * come through under an officer of the greatest experience.
+ */
+function trainedQuality(quality, drilled = 0) {
+  const levels = Math.floor(drilled / TRAINING.BATTLES_PER_LEVEL)
+  if (levels <= 0 || quality === 'elite') return quality
+  // Where it starts on the ladder: its own rung, or (tribal warriors) the
+  // rung below the first one better than it.
+  const rank = QUALITY_ORDER.indexOf(quality)
+  let at = TRAINING.LADDER.indexOf(quality)
+  if (at < 0) at = TRAINING.LADDER.findIndex(q => QUALITY_ORDER.indexOf(q) > rank) - 1
+  if (at < -1) return quality
+  return TRAINING.LADDER[Math.min(TRAINING.LADDER.length - 1, at + levels)] ?? quality
 }
 
 // The level an officer who comes forward from a unit's ranks starts at: the
@@ -142,6 +162,9 @@ function musterOfficers(company, units, seed) {
   const out = units.map(unit => {
     // Every unit the company fields has its own veterancy, from here.
     if (!(unit.kind in next.units)) next.units[unit.kind] = createVeteranState({ strength: unit.strength ?? 0 })
+    // What a great officer has made of them.
+    const quality = trainedQuality(unit.quality, next.units[unit.kind].drilled)
+    unit = quality === unit.quality ? unit : { ...unit, quality, raisedAs: unit.quality }
     const officer = lead.get(unit.id)
     if (!officer) return { ...unit, officer: { ...HEADLESS } }
     officer.leads = unit.kind
@@ -239,6 +262,8 @@ function settleBattle(company, battle, fates) {
       if (officer.experience >= MAX_EXPERIENCE && !gone && state.battlesParticipated >= EARNED_AT) comeForward(f, entry, state)
       continue
     }
+    // An officer of the greatest experience trains his men as they fight.
+    if (officer.experience >= MAX_EXPERIENCE && !gone) state.drilled = (state.drilled ?? 0) + 1
     officer.experience = Math.min(MAX_EXPERIENCE, officer.experience + 1)
     officer.status = f.fate === 'wounded' ? 'wounded' : 'fit'
   }
@@ -255,6 +280,8 @@ function unitsOf(company) {
       kind,
       battles: state.battlesParticipated,
       veterancy: averageExperience(state),
+      // Levels of quality gained under an officer of the greatest experience.
+      trained: Math.floor((state.drilled ?? 0) / TRAINING.BATTLES_PER_LEVEL),
       led: company.officers.some(o => o.leads === kind)
     }
   })
@@ -282,4 +309,4 @@ function armyChanged(company, names) {
   return next
 }
 
-module.exports = { createCompany, musterOfficers, settleBattle, unitsOf, leadUnit, ridesWith, armyChanged, HEADLESS }
+module.exports = { createCompany, musterOfficers, settleBattle, unitsOf, trainedQuality, leadUnit, ridesWith, armyChanged, HEADLESS }

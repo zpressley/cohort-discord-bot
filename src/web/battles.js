@@ -348,11 +348,14 @@ function createBattleStore({ dir = null, ai = null, now = () => Date.now() } = {
     const mine = spec.units.filter(u => u.side === side).map(u => ({ ...u, kind: unitName(u).toLowerCase() }))
     const led = musterOfficers(company, mine, seed)
     const officerOf = new Map(led.units.map(u => [u.id, u.officer]))
+    // The quality each unit takes the field at: what it was raised as, and
+    // what an officer of the greatest experience has since made of it.
+    const qualityOf = new Map(led.units.map(u => [u.id, u.quality]))
     return {
       company: led.company,
       spec: {
         ...spec,
-        units: spec.units.map(u => (officerOf.has(u.id) ? { ...u, officer: officerOf.get(u.id) } : u)),
+        units: spec.units.map(u => (officerOf.has(u.id) ? { ...u, officer: officerOf.get(u.id), quality: qualityOf.get(u.id) ?? u.quality } : u)),
         commanders: { ...(spec.commanders ?? {}), [side]: { unitId: ridesWith(led.units) } }
       }
     }

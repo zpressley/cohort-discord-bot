@@ -6,7 +6,8 @@
 const { test } = require('node:test')
 const assert = require('node:assert/strict')
 
-const { createCompany, musterOfficers, settleBattle, unitsOf, ridesWith, HEADLESS } = require('../company')
+const { createCompany, musterOfficers, settleBattle, unitsOf, trainedQuality, ridesWith, HEADLESS } = require('../company')
+const { TRAINING } = require('../../combat/tables')
 const { gradeOf, grasp, EARNED_AT, MAX_EXPERIENCE } = require('../officers')
 
 const units = () => [
@@ -203,3 +204,47 @@ test('a battle written into the company twice counts once', () => {
   assert.equal(settleBattle(once, battle(2), fates).battles, 2, 'another battle still counts')
 })
 
+
+// ── Training: the perk of an officer of thirty battles ─
+
+test('an officer of thirty battles trains his men: militia under him are professionals in time, and no one else\'s rise', () => {
+  const army = () => [
+    { id: 'red_militia', side: 'red', kind: 'militia', quality: 'militia', strength: 100 },
+    { id: 'red_elite', side: 'red', kind: 'elite', quality: 'elite', strength: 80 }
+  ]
+  // The veteran, grown old in the service, is given the militia: his own
+  // elite are not on this field.
+  let company = createCompany()
+  for (let n = 1; n <= 20; n++) company = through(company, n)
+  assert.equal(company.officers.find(o => o.leads === 'elite').experience, MAX_EXPERIENCE)
+  const field = [army()[0]]
+  const qualities = []
+  for (let n = 21; n <= 21 + TRAINING.BATTLES_PER_LEVEL * 3; n++) {
+    const mustered = musterOfficers(company, field, n)
+    qualities.push(mustered.units[0].quality)
+    company = settleBattle(mustered.company, battle(n), mustered.units.map(u => fate(u)))
+  }
+  const per = TRAINING.BATTLES_PER_LEVEL
+  assert.equal(qualities[0], 'militia')
+  assert.equal(qualities[per - 1], 'militia', 'not yet')
+  assert.equal(qualities[per], 'professional', `a level every ${per} battles under him`)
+  assert.equal(qualities[per * 2], 'veteran_mercenary')
+  assert.equal(qualities[per * 3], 'veteran_mercenary', 'and no further: the elite are born, not made')
+  assert.equal(unitsOf(company).find(u => u.kind === 'militia').trained, 3)
+
+  // Under a lesser officer the same battles teach them nothing more.
+  let plain = createCompany()
+  for (let n = 1; n <= 12; n++) plain = through(plain, n)
+  assert.ok(unitsOf(plain).every(u => u.trained === 0))
+  assert.equal(musterOfficers(plain, units(), 99).units[0].quality, 'professional', 'as they were raised')
+})
+
+test('what training makes of each quality', () => {
+  const per = TRAINING.BATTLES_PER_LEVEL
+  assert.equal(trainedQuality('levy', per), 'militia')
+  assert.equal(trainedQuality('levy', per * 2), 'professional')
+  assert.equal(trainedQuality('tribal_warriors', per), 'professional', 'tribal warriors become professionals')
+  assert.equal(trainedQuality('veteran_mercenary', per * 4), 'veteran_mercenary')
+  assert.equal(trainedQuality('elite', per * 4), 'elite')
+  assert.equal(trainedQuality('militia', per - 1), 'militia')
+})
