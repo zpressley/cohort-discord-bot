@@ -14,7 +14,12 @@
 //             defensive position."
 //   advance   press the nearest enemy, every tick, until told otherwise.
 //   attack    go to target looking for a fight (Stage 3); without a target
-//             it is advance.
+//             it is advance. Or (enemy: an enemy unit's id) go for that
+//             enemy: at it while the unit's side can see it, else at where
+//             its side last saw it (lastSeen), and when no one knows where
+//             it went, on the enemy as advance does, until it is seen again.
+//             An enemy destroyed, broken or gone from the field: the order
+//             becomes advance. It never finishes, as advance does not.
 //   withdraw  fall back toward your own home edge, or to target if given,
 //             then hold.
 //   hide      go to target if one is given, then hide there. Hiding takes a
@@ -131,6 +136,8 @@ function normalizeOne(order) {
     const then = order.then ?? (holdsAfter ? 'hold' : null)
     if (order.action === 'defend' && !target) return { action: 'hold', target: null, then: null }
     if (order.action === 'move' && !target) throw new Error('a move order needs a target')
+    // An attack on a named enemy goes where that enemy is, not to a place.
+    if (order.action === 'attack' && order.enemy) return withCareful({ action: 'attack', target: null, then: null }, order)
     if (order.action === 'attack' && !target) return withCareful({ action: 'advance', target: null, then: null }, order)
     return withCareful({ action: order.action, target, then }, order)
   }
@@ -143,9 +150,11 @@ function normalizeOne(order) {
  *
  * @param {Object} unit
  * @param {Object|undefined} order  normalized, from the battle's order book
- * @param {Object} context          { fresh, nearestEnemy(unit), homeTarget(unit) }
+ * @param {Object} context          { fresh, nearestEnemy(unit), homeTarget(unit), namedEnemy(unit, id) }
  *   fresh: the order was submitted this player turn
- * @returns {{ move: {unitId, target}|null, order: Object|undefined }}
+ *   namedEnemy: where the unit's side knows that enemy to be ({ position }),
+ *   null when it has lost it, { gone: true } when it is beaten or gone
+ * @returns {{ move: {unitId, target}|null, order: Object|undefined, quarryGone?: string }}
  *   move null means "use the side's standing orders"; order is what the
  *   unit's standing order becomes (undefined when it is done)
  */
@@ -172,8 +181,21 @@ function planUnit(unit, order, context) {
       return { move: { unitId: unit.id, target: 'hold' }, order }
     }
 
-    case 'move':
     case 'attack':
+      if (order.enemy) {
+        const quarry = context.namedEnemy?.(unit, order.enemy) ?? null
+        if (quarry?.gone) {
+          // Beaten or gone: press the enemy instead, as advance does.
+          const { enemy, ...rest } = order
+          return { ...planUnit(unit, { ...rest, action: 'advance', target: null }, context), quarryGone: enemy }
+        }
+        // In sight or last seen: at it. Lost: on the enemy, as advance does,
+        // still keeping the order, so it goes for it again once it is seen.
+        const at = quarry ?? context.nearestEnemy(unit)
+        return { move: at ? { unitId: unit.id, target: at.position } : { unitId: unit.id, target: 'hold' }, order }
+      }
+    // falls through: an attack on a place is a move looking for a fight
+    case 'move':
     case 'defend':
     case 'withdraw': {
       const target = order.target ?? context.homeTarget(unit)
@@ -210,6 +232,8 @@ function withCareful(normalized, order) {
   // Missile troops: hold their fire, or shoot a kind of enemy first.
   if (order.holdFire) out.holdFire = true
   if (order.against && normalized.action !== 'ambush') out.against = order.against
+  // The enemy unit an attack is aimed at.
+  if (order.enemy && normalized.action === 'attack') out.enemy = order.enemy
   if (normalized.action === 'ambush') {
     out.against = order.against ?? null
     out.letPass = Math.max(0, Math.floor(order.letPass ?? 0))

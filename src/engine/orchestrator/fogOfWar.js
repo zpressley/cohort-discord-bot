@@ -19,7 +19,7 @@ const { VISION, visionRange, canSee } = require('../map/sight')
 
 // One side's intel ledger. Serializable — it is part of what the DB persists.
 function createIntel() {
-  return { known: {} } // enemyId -> { status, position, strength, seenOnTurn }
+  return { known: {} } // enemyId -> { status, position, strength, seenOnTurn, role, mounted, primaryWeapon }
 }
 
 /**
@@ -49,7 +49,12 @@ function updateIntel(intel, world, side, turn, map, hidden = new Map()) {
       status: 'visible',
       position: { ...enemy.position },
       strength: enemy.strength,
-      seenOnTurn: turn
+      seenOnTurn: turn,
+      // What kind of troops they are, as anyone who saw them could tell:
+      // so a Commander can name them ("their archers", "the enemy horse").
+      role: enemy.role ?? null,
+      mounted: Boolean(enemy.mounted),
+      primaryWeapon: enemy.primaryWeapon ?? null
     }
   }
 
