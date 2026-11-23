@@ -139,3 +139,9 @@ test('counsel needs an experienced officer to give it, and warns of shaken men s
   assert.match(read('spears advance', shaken).counsel[0], /red_spears are at breaking point\. Sent at the enemy now, they will break at the first blow\.$/)
   assert.deepEqual(read('spears hold', shaken).counsel, [])
 })
+
+test('counsel on a unit with no officer', () => {
+  const withOfficer = (o) => ({ ...context, units: world.units.map(u => (u.id === 'red_spears' ? { ...u, officer: o } : u)) })
+  const headless = read('spears to C4, then on to the bridge', withOfficer({ headless: true, name: null, experience: 0, personality: 'steady' }))
+  assert.match(headless.counsel[0], /^Quintus of red_swords warns: red_spears have no officer yet\. They will keep "march to C4 \(C4-NW\)" and nothing more\.$/)
+})

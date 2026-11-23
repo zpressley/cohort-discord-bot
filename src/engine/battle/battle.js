@@ -40,6 +40,7 @@ const {
 const { createEventLog } = require('./events')
 const { normalizeOrder, planUnit, nextStep, isSeeking, NEAR_TILES } = require('./orders')
 const { grasp, losingTheThread } = require('../command/officers')
+const { createCommanders, stepCommanders } = require('../command/commander')
 const { canSee, visionRange } = require('../map/sight')
 const { coverFor } = require('./hiding')
 
@@ -66,6 +67,12 @@ function createBattleState(spec, options = {}) {
     // A stream of its own for what officers keep of their orders, so that
     // giving a deeper order never changes how the fighting falls out.
     officerRandom: createRng((Math.imul(seed, 2654435761) + 97) >>> 0),
+    // The Commanders on the field, where the battle has them (command/
+    // commander.js): side -> { unitId, status, heldBy }. A stream of their
+    // own, so that a Commander's fate never changes how the fighting goes.
+    commanders: createCommanders(spec),
+    commanderRandom: createRng((Math.imul(seed, 1597334677) + 211) >>> 0),
+    mustered: new Map(spec.units.map(u => [u.id, u.strength])),
     // Units given an order in the player turn now running, and those shot
     // at in the tick before this one.
     fresh: new Set(),
@@ -303,7 +310,7 @@ function stepTurn(state, sideOrders = {}, { sameTurn = false } = {}) {
   const loseThread = (unit, lost, current) => {
     const inSight = (seenAtStart.get(unit.side)?.size ?? 0) > 0
     const did = losingTheThread(unit.officer, lost, inSight)
-    log.emit('lostThread', turn, { unitId: unit.id, officer: unit.officer?.name ?? null, lost, did })
+    log.emit('lostThread', turn, { unitId: unit.id, officer: unit.officer?.name ?? null, lost, did, ...(unit.officer?.headless ? { headless: true } : {}) })
     if (did === 'advance') return { ...ADVANCE }
     if (did === 'hold') return { ...HOLD }
     const carried = { ...current }
@@ -313,7 +320,10 @@ function stepTurn(state, sideOrders = {}, { sameTurn = false } = {}) {
 
   for (const side of sides(world)) {
     const effective = unitsOnSide(world, side).filter(u => !broken.has(u.id))
-    const { orders: expanded } = expandOrders(sideOrders[side] ?? [], effective)
+    // A Commander in the enemy's hands gives no orders: his units carry on
+    // with the ones they have.
+    const held = state.commanders?.[side]?.status === 'held'
+    const { orders: expanded } = expandOrders(held ? [] : (sideOrders[side] ?? []), effective)
 
     // Orders given this turn replace each unit's standing order.
     // What its officer keeps of an order with more than one thing in it is
@@ -833,8 +843,18 @@ function stepTurn(state, sideOrders = {}, { sameTurn = false } = {}) {
     snapshot: cloneWorld(world)
   }
 
+  // ── The Commanders ──────────────────────────────
+  if (state.commanders) {
+    const fell = stepCommanders({
+      commanders: state.commanders, world, broken, fledUnits,
+      events: log.forTurn(turn), mustered: state.mustered, random: state.commanderRandom
+    })
+    for (const e of fell) log.emit(e.type, turn, e.fields)
+  }
+
   // ── Victory ─────────────────────────────────────
-  const outcome = checkBattleOutcome(world, broken, state.isShaken)
+  const outcome = commandersOutcome(state.commanders, [...new Set(spec.units.map(u => u.side))]) ??
+    checkBattleOutcome(world, broken, state.isShaken)
   if (outcome.decided) {
     state.outcome = outcome
     log.emit('victory', turn, { winner: outcome.winner, reason: outcome.reason })
@@ -1093,6 +1113,16 @@ function sightBySide(map, world, hidden = new Map()) {
 // with more men still in the ranks: someone won the last fight, and two
 // armies do not both run from each other. Only when neither has a formed
 // man left, or they are exactly even, is it a draw.
+// A Commander killed loses the battle for his side.
+function commandersOutcome(commanders, allSides) {
+  if (!commanders) return null
+  const dead = Object.keys(commanders).sort().filter(side => commanders[side].status === 'killed')
+  if (dead.length === 0) return null
+  const others = allSides.filter(side => !dead.includes(side))
+  if (others.length !== 1) return { decided: true, winner: 'draw', reason: 'both commanders killed' }
+  return { decided: true, winner: others[0], reason: 'enemy commander killed' }
+}
+
 function checkBattleOutcome(world, broken, isShaken = () => false) {
   const formed = (side) => unitsOnSide(world, side).filter(u => u.strength > 0 && !broken.has(u.id))
   const steady = (side) => formed(side).filter(u => !isShaken(u))
@@ -1142,6 +1172,7 @@ module.exports = {
   stepTurn,
   runBattle,
   checkBattleOutcome,
+  commandersOutcome,
   tileAwayFrom,
   edgeTarget,
   isOnEdge,

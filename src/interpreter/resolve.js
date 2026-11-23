@@ -345,7 +345,7 @@ function resolveDepth(intent, { map, units, own, from, target }) {
 // it never tells what the enemy is doing. With no experienced officer on the
 // field, no one speaks.
 function counselFor(ordered, all, { clauses, action, plain, shaken }) {
-  const sage = all.filter(u => u.officer && gradeOf(u.officer) !== 'green')
+  const sage = all.filter(u => u.officer?.name && gradeOf(u.officer) !== 'green')
     .sort((a, b) => (b.officer.experience ?? 0) - (a.officer.experience ?? 0) || a.id.localeCompare(b.id))[0]
   if (!sage) return []
   const out = []
@@ -356,7 +356,9 @@ function counselFor(ordered, all, { clauses, action, plain, shaken }) {
     if (clauses > 0 && unit.officer) {
       const grade = gradeOf(unit.officer)
       const self = unit.id === sage.id
-      if (grade === 'green') {
+      if (unit.officer.headless) {
+        says(unit, `${unit.id} have no officer yet. They will keep "${plain}" and nothing more.`)
+      } else if (grade === 'green') {
         says(unit, `${unit.officer.name} of ${unit.id} is green. Expect him to keep "${plain}" and lose the rest; ${losesTo(unit.officer)}.`)
       } else if (grade === 'seasoned' && clauses > 1) {
         says(unit, self

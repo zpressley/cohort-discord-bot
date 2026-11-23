@@ -431,3 +431,176 @@ itself the two sides come out even (31 to 33 in 64).
 be searched for, so the soak's cap went from 60 player turns to 150. The
 soak also plays the computer's side against three kinds of commander on
 every map.
+
+### How officers who go from battle to battle were built (Claude's choices, open to change)
+
+"The game is about keeping your people alive across battles, not winning
+one." The code is `src/engine/command/company.js` (the rules, pure) and
+`src/web/commanders.js` (where they are kept).
+
+- **A Commander is a private link**, as a battle's seat is: no account. The
+  browser is given one when it musters with a new Commander and keeps it;
+  the server keeps the company under it (`data/web/commanders/`). A browser
+  can hold several, and the muster asks which one leads.
+- **One battle at a time for each army** (ruled November 22). A Commander
+  whose army is in an unfinished battle cannot muster; the muster offers
+  the others, or a new one. Yielding a battle frees the army.
+- **A Commander has a name** from the plain list of names, only to tell
+  one from another. It stands in until how a Commander is made is settled
+  (`docs/design/commanders-lore-and-tutorial.md`).
+- **The company leads the mustering player's side.** Each unit gets the
+  officer who led that kind of unit last time; failing that the most
+  experienced named officer whose own men are not on the field.
+- **The first company** has one named officer, a veteran, with the elite
+  unit; every other unit's officer is unknown (ruled November 22, below).
+  The battles in the web app have no elite unit yet, so there the veteran
+  is with the best unit, the first listed.
+- **After a battle,** by the fates the engine already decides (October 21):
+  one who came through gains one battle's experience (the grades are
+  unchanged: green 0 to 1, seasoned 2 to 4, veteran 5 and more); one
+  wounded gains it too, and sits out the next battle; one killed or taken
+  leaves the company, which keeps who he was on a roll and nothing else.
+  His men fight their next battle headless (below).
+- **His record is his memory.** For each battle: which it was and how it
+  ended, what his men did (from the engine's log, the same facts the
+  dispatches are written from), what became of him, and the orders the
+  Commander gave him, in the words they were read back in. Nothing uses the
+  record yet but the Officers page; it is what memory and callbacks will
+  read.
+- **Not settled, and asked of Zach:** how loyalty is earned and what it
+  does; what a callback does; whether a friend who joins by link brings his
+  own company (for now only the player who musters does). Whether an
+  officer may be in two battles at once was settled on November 22: no.
+
+## Rulings, November 22, 2026 (Commanders)
+
+Zach, on reading how officers go from battle to battle:
+
+1. **A new player comes in through the tutorial, and the tutorial is woven
+   into the lore.**
+2. **"When your commander dies you actually lose everything and have to
+   restart."**
+3. **"You can only have 1 commander at a time."** Relaxed the same day:
+   "people can have more than one game going at a time but that army can
+   only fight one battle at a time." So a player may keep several
+   Commanders, each with an army of his own; an army in a battle cannot be
+   mustered for another until that battle ends.
+
+4. **A new Commander's officers.** "There will be a tutorial and the new
+   commander gets a veteran officer for the unique elite unit, you meet
+   during the tutorial and win over that officer, the rest you earn
+   throughout the game." Built as: one veteran, with the elite unit; every
+   other officer starts green and earns his grade in battle. (Claude's
+   reading of "the rest you earn"; the other reading, that the other units
+   have no officer at all until one is earned, is open to Zach.) Until the
+   tutorial is built the veteran is there from the first muster.
+   *Answered by ruling 7.*
+
+5. **What kills a Commander.** "If a commander's unit is attacked and it
+   gets below a threshold the commander can be killed or captured. It's low
+   odds and not possible till a threshold."
+6. **Capture.** "Capture means he has to negotiate with the enemy team he
+   can bargain units. But the other side of this is the units are still in
+   a battle, the captured commander can negotiate and leave the field or
+   wait and his units may win the battle and force a surrender even with
+   their commander captured.... the risk is if you lose all your troops and
+   get captured you don't have much to bargain with or for."
+7. **New officers are unknown.** "Worse than green, unknown. Named officers
+   come with veterancy so new units are completely green. There is an
+   officer but he is just as green, can die early and leave the unit
+   headless or just be a liability. Officers are named (created after a few
+   battles)."
+8. **The ten kinds of commander, and glory or survival,** "are to introduce
+   the lore and create the name. The name is unique and when we do stats
+   and such each name must live on in the record books. Sort of a final
+   addition but know it's coming if we need to build towards it."
+
+What the earlier docs say on each, and where the web app stands against
+them, is in `docs/design/commanders-lore-and-tutorial.md`.
+
+### How the Commander on the field and unknown officers were built (Claude's choices, open to change)
+
+The code is `src/engine/command/commander.js`, `src/engine/command/company.js`
+and `src/web/battles.js`. The numbers are in `tables.COMMANDER`.
+
+**The Commander on the field (rulings 5 and 6).**
+- He rides with his best unit: the elite, else the best, the first listed.
+  It is the unit his veteran leads. He cannot yet be told to ride with
+  another.
+- **The threshold is half strength**, not the quarter of the old design:
+  units in this engine break at about half, and over 160 battles a
+  Commander's unit was struck under a quarter in only 4. Each ten minutes
+  his unit is struck hand to hand, or cut down as it runs, while at or
+  under half, he falls on a 10% roll; arrows alone never take him. Of those
+  who fall, one in four is killed and the rest are taken.
+- If his unit is destroyed around him the roll is 50%; if he comes through
+  it, or his unit leaves the field, he gets away to another of his units.
+- **Measured over 720 battles** (three kinds of player against the
+  computer): taken in about 1 battle in 30, killed in about 1 in 150. A
+  Commander whose unit stays out of the fight cannot fall.
+- **Killed:** the battle is lost at once, the Commander and his company are
+  ended, and he can never be mustered again. He and his company stay on
+  the server, for the record books.
+- **Taken:** he sends no orders; his units carry on with the ones they
+  have. He is free again if the unit that holds him breaks or is
+  destroyed, or when his army wins ("force a surrender").
+- **Bargaining:** while held he may give up one of his units still on the
+  field and leave it. The battle is lost; the unit's officer goes to the
+  enemy and is gone from the company.
+- **Held when the battle is lost:** the enemy takes the best unit he has
+  left on the field as his price. With none left he has nothing to bargain
+  with, and is lost exactly as if killed.
+- **Not built:** haggling between two players (the captor asking for more,
+  or refusing). The price is always one unit, and the enemy always takes
+  it. Only the player who musters has a Commander on the field; a friend
+  who joins by link has none yet.
+
+**Units with no officer (ruling 7, and the ruling of November 23 below).**
+- A new Commander has one officer: the veteran with his elite unit. No
+  other unit has an officer until it has earned one.
+- **A unit with no officer keeps the plain order and nothing more.** That
+  is "worse than green": a green officer keeps a first clause one time in
+  three.
+- **Earning one:** each battle a unit comes through with no officer counts
+  toward one. At 3 battles an officer may come forward from its ranks (an
+  even chance); at 4 one does (`EARNED_AT` in `command/officers.js`). He
+  has a name, a nature, and the unit's battles for his experience, so he
+  comes as a seasoned officer. A unit destroyed in a battle starts its
+  count again.
+- **Losing one:** a unit whose officer is killed, taken or given up to the
+  enemy must earn another from nothing. One whose officer is wounded fights
+  the next battle without him, and he comes back.
+- An officer whose own men are not on the field takes a unit that has none.
+- What this replaced, built the day before and gone: officers who were
+  there from the start but unnamed until seasoned.
+
+**Names (ruling 8).** No two Commanders on a server ever share a name,
+living or fallen; when the plain names run out they come round as
+"Garrick II". A fallen Commander is kept with his company and their
+records. The two questions that make a Commander, and the record books
+themselves, are not built.
+
+## Rulings, November 23, 2026
+
+1. **"The rest you earn": no officer until the unit has 3 to 4 battles of
+   veterancy.** Asked whether the other units start with green officers or
+   with none: "yes no officer until 3-4 battles of veterancy."
+2. **"The elite unit is the unique unit of the faction, you get it for
+   free."** This is the army builder's rule already (`engine/army/builder.js`:
+   one elite arrives free with each army, by culture). The web app's muster
+   does not use the army builder yet: its battles are fixed armies with no
+   faction and no elite unit, so the veteran and the Commander ride with
+   the best unit there is. Bringing factions and built armies to the muster
+   is the work that makes this ruling visible.
+3. **"Don't start tutorials till the game is solid."**
+4. **"Reminder the commander represents the player's pov."** What happens
+   to the Commander is now told to his own side as "you" (`toTheCommander`
+   in `narrator/turnNarrator.js`); the other side hears it as its own men's
+   doing. Still true of the app, and not yet squared with this ruling: a
+   Commander sees everything any of his units can see, at once, wherever he
+   is, and goes on seeing it while he is in the enemy's hands.
+5. **"Merge a pull what you need", and work with other agents in
+   parallel**, with instructions left in the folders that matter: the
+   `CLAUDE.md` at the top of the repository and in `src/engine`, `src/web`,
+   `src/interpreter`, `src/narrator` and `src/opponent`.
+

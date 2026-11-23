@@ -42,7 +42,7 @@ function involved(event) {
 
 // Events only the unit's own side knows of: its hiding, its search, an
 // ambush it held back, how packed its ranks are.
-const PRIVATE = new Set(['hidden', 'hideFailed', 'ambushHeld', 'checked', 'crowding', 'heartened', 'reacted', 'lostThread'])
+const PRIVATE = new Set(['hidden', 'hideFailed', 'ambushHeld', 'checked', 'crowding', 'heartened', 'reacted', 'lostThread', 'commanderMoved'])
 // The engine's own record of a roll, which no commander is told of.
 const UNTOLD = new Set(['grasp'])
 
@@ -208,12 +208,18 @@ function plainFact(map, event) {
     case 'push': return `${event.by} drove ${event.unitId} back${event.lostHighGround ? ' off the high ground' : ''}`
     case 'crush': return `${event.unitId} was pinned with nowhere to give way`
     case 'reacted': return `${event.unitId} ${REACTED_TO[event.when] ?? 'saw the moment come'}${event.when === 'sees' && event.kind ? ` (${event.kind})` : ''} and, as ordered, ${didWords(map, event)}`
-    case 'lostThread': return `${event.officer ? `${event.officer} of ${event.unitId}` : `the officer of ${event.unitId}`} lost the thread of his orders` +
+    case 'lostThread': return (event.headless
+      ? `${event.unitId}, with no officer, had only the first of their orders`
+      : `${event.officer ? `${event.officer} of ${event.unitId}` : `the officer of ${event.unitId}`} lost the thread of his orders`) +
       (event.lost === 'condition' ? ' when the moment came' : ' once the first part was done') +
       (event.did === 'advance' ? ' and advanced on the enemy' : event.did === 'hold' ? ' and held where he stood' : ' and carried on as he was')
     case 'volley': return `${event.by} shot at ${event.unitId}` + (event.killed ? `, felling ${men(event.killed)}` : ', to little effect')
     case 'rout': return `${event.unitId} broke and fled from ${event.by}`
     case 'pursuit': return `${event.by} cut down ${event.killed} of the fleeing ${event.unitId}` + (event.trapped ? ', who were cornered' : '')
+    case 'commanderTaken': return `the Commander riding with ${event.unitId} was taken by ${event.by}`
+    case 'commanderKilled': return `the Commander riding with ${event.unitId} was killed in the fight with ${event.by}`
+    case 'commanderFreed': return `the Commander held by ${event.by} got free and reached ${event.unitId}`
+    case 'commanderMoved': return `the Commander got away from ${event.from} to ${event.unitId}`
     case 'fled': return `${event.unitId} left the field with ${men(event.strength)}`
     case 'rallied': return `${event.unitId} rallied ${whereAt(map, event.at)} with ${event.strength} men` +
       (moraleWords(event.morale) === 'at breaking point' ? ', at breaking point: it will not stand long without a success near it' : '')
@@ -249,7 +255,7 @@ function plainFact(map, event) {
 
 // How much a commander needs to hear of each kind of event: lower is sooner.
 const WEIGHT = {
-  victory: 0, destroyed: 1, rout: 1, fled: 1, rallied: 1, pursuit: 2, ambush: 1, surprise: 2, objective: 2,
+  victory: 0, commanderKilled: 0, commanderTaken: 0, commanderFreed: 0, commanderMoved: 1, destroyed: 1, rout: 1, fled: 1, rallied: 1, pursuit: 2, ambush: 1, surprise: 2, objective: 2,
   volley: 3, lostThread: 1, reacted: 2,
   heartened: 5,
   revealed: 3, exchange: 3, standoff: 3, push: 4, crush: 4, disengage: 4, contact: 4,
@@ -362,6 +368,25 @@ function digest(events, { map, ownIds, whereIs = () => null }) {
  * @param {Object} turn  { map, ownIds, seenEnemyIds, events, whereIs?, nameOf? }
  * @returns {Array<string>}
  */
+// The Commander is the player: what happens to him is told to him as "you"
+// (ruled 2026-11-23: "the commander represents the player's pov"). The
+// other side hears of it as its own men's doing.
+function toTheCommander(event, ownIds) {
+  if (!event.type.startsWith('commander')) return null
+  const mine = event.type === 'commanderFreed' ? !ownIds.has(event.by) : ownIds.has(event.unitId)
+  switch (event.type) {
+    case 'commanderTaken': return mine
+      ? `You were taken by ${event.by}. You can send no orders; your officers fight on with the ones they have`
+      : `${event.by} took the enemy Commander`
+    case 'commanderKilled': return mine ? `You were killed in the fight with ${event.by}` : `${event.by} killed the enemy Commander`
+    case 'commanderFreed': return mine
+      ? `${event.by} broke, and you got free and reached ${event.unitId}`
+      : `the enemy Commander got free of ${event.by}`
+    case 'commanderMoved': return `With ${event.from} gone you got away to ${event.unitId}`
+    default: return null
+  }
+}
+
 function report(turn) {
   const { map, ownIds, seenEnemyIds, events } = turn
   const nameOf = turn.nameOf ?? ((text) => text)
@@ -373,7 +398,7 @@ function report(turn) {
   const busy = fights.length > 0 || rest.some(e => weight(e) <= 4)
   const others = rest
     .filter(e => !busy || weight(e) < 6)
-    .map(e => ({ weight: weight(e), text: plainFact(map, e) }))
+    .map(e => ({ weight: weight(e), text: toTheCommander(e, ownIds) ?? plainFact(map, e) }))
     .filter(f => f.text)
 
   return [...fights, ...others]

@@ -72,8 +72,8 @@ captured.
 | Losing the thread | Built for personality: the bold go at the enemy, the cautious stop and hold, the steady carry on with what they remember. Experience weights the roll. |
 | Loyalty | Not built. How it is earned is open. |
 | Counsel | Built for two things: an order deeper than its officer can hold, and shaken men sent at the enemy. Given only when a seasoned or veteran officer is on the field. |
-| Memory, callbacks | Not built. They need officers who persist from battle to battle in the web app. |
-| Officers persisting across a campaign | Not built in the web app. For now each battle draws its officers from its seed. The veterans engine keeps a record across battles, and decides who is killed, captured or wounded. |
+| Memory, callbacks | The record is built: each officer keeps, for every battle with his Commander, how it ended, what his men did, what became of him and what he was told. Nothing reads it yet: what a callback does is open. |
+| Officers persisting across a campaign | Built in the web app. A Commander's company goes with him from battle to battle: survivors gain experience, the wounded sit one battle out, and every unit but the elite must earn its officer by coming through 3 or 4 battles (`docs/DECISIONS.md`). Only the player who musters brings a company. |
 
 Answered already by earlier rulings (`docs/DECISIONS.md`): officers can be
 killed, captured or wounded (October 21), and an officer's quality is

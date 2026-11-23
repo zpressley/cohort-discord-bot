@@ -20,7 +20,7 @@
 
 const { unitsOnSide, sides } = require('../world')
 const { tileDistance } = require('../world')
-const { checkBattleOutcome } = require('../battle/battle')
+const { checkBattleOutcome, commandersOutcome } = require('../battle/battle')
 const { toPosition, positionKey } = require('../map/labels')
 const { parseGridRef } = require('../map/grid')
 const { detectFeatures } = require('../map/features')
@@ -109,8 +109,13 @@ function evaluateVictory(ctx) {
 
   if (surrendered) {
     const winner = sides(world).find(s => s !== surrendered) ?? 'draw'
-    return { decided: true, winner, reason: 'enemy surrendered' }
+    // A Commander in the enemy's hands who gave up a unit to go free.
+    return { decided: true, winner, reason: ctx.bargained ? 'enemy commander bargained' : 'enemy surrendered' }
   }
+
+  // A Commander killed loses the battle for his side.
+  const fell = commandersOutcome(ctx.commanders, ctx.allSides ?? sides(world))
+  if (fell) return fell
 
   const broken_ = checkBattleOutcome(world, broken, ctx.isShaken)
   if (broken_.decided) return broken_

@@ -13,6 +13,11 @@
 //                thread. Readable, so a failure is one the Commander could
 //                have seen coming.
 //
+// A unit may have no officer at all: { headless: true }. It has no one to
+// carry more than the plain order. In a campaign every unit but the elite
+// starts so, and an officer comes forward once the unit has 3 or 4 battles
+// of veterancy (ruled 2026-11-23; command/company.js).
+//
 // Orders come in depths (docs/design/officers-memory-delegation.md). The
 // plain order is level 1 and every officer carries it. Each thing more is a
 // clause: a condition ("if their horse is there, hold") or a further step
@@ -38,6 +43,10 @@ const GRASP = {
 
 const PERSONALITIES = ['bold', 'steady', 'cautious']
 
+// Battles a unit comes through before an officer comes forward from its
+// ranks: at the first number he may, at the second he does.
+const EARNED_AT = [3, 4]
+
 // The most an order may hold: steps after the first, and one condition.
 const MAX_STEPS = 3
 
@@ -49,6 +58,7 @@ function gradeOf(officer) {
 }
 
 function chanceToKeep(officer, nth) {
+  if (officer?.headless) return 0
   const table = GRASP[gradeOf(officer)]
   return table[Math.min(nth, table.length) - 1]
 }
@@ -116,4 +126,4 @@ function losingTheThread(officer, lost, enemyInSight) {
   return lost === 'condition' ? 'carry on' : 'hold'
 }
 
-module.exports = { GRADES, GRASP, PERSONALITIES, MAX_STEPS, gradeOf, chanceToKeep, clauses, grasp, losingTheThread }
+module.exports = { GRADES, GRASP, PERSONALITIES, MAX_STEPS, EARNED_AT, gradeOf, chanceToKeep, clauses, grasp, losingTheThread }
