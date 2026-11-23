@@ -135,6 +135,7 @@ function officerFates(game, side) {
       officer: spec.officer?.name ?? null,
       officerId: spec.officer?.id ?? null,
       ...(spec.officer?.headless ? { headless: true } : {}),
+      destroyed: (unit?.strength ?? 0) <= 0,
       fate,
       ...(fate === 'wounded' ? { how: woundReason(exposure) } : {})
     }
@@ -391,11 +392,10 @@ function createBattleStore({ dir = null, ai = null, now = () => Date.now() } = {
         hidden: battle.hidden.has(u.id),
         crowding: battle.crowding.get(u.id) ?? 'organized',
         // The officer who carries your orders to this unit.
-        // One not yet named is unknown; a unit can have none at all.
+        // A unit can have none: it has yet to earn one.
         officer: !u.officer ? null
           : u.officer.headless ? { headless: true }
-            : u.officer.name ? { name: u.officer.name, grade: gradeOf(u.officer), personality: u.officer.personality }
-              : { name: null, grade: 'unknown', personality: null },
+            : { name: u.officer.name, grade: gradeOf(u.officer), personality: u.officer.personality },
         // Missile troops: how far they shoot, and whether they are holding fire.
         shootsTo: missileRangeMetres(u) || null,
         holdingFire: Boolean(battle.orderBook.get(u.id)?.holdFire),
@@ -597,11 +597,15 @@ function createBattleStore({ dir = null, ai = null, now = () => Date.now() } = {
       const result = game.outcome.winner === 'draw' ? 'draw' : game.outcome.winner === side ? 'victory' : 'defeat'
       const events = summarise(game.battle.log.all())
       const said = (entry.said?.[side] ?? []).flatMap(s => s.lines)
-      const fates = officerFates(game, side).filter(f => f.officerId).map(f => {
+      const price = commanderOf(game, side)?.price ?? null
+      // Every unit that fought: an officer's fate, or (officerId null) a
+      // unit with none, which is a battle nearer to earning one.
+      const fates = officerFates(game, side).map(f => {
         const deeds = digest(events, { map: game.battle.map, ownIds: new Set([f.unitId]) })[0]?.text ?? ''
         return {
-          unitId: f.unitId,
-          officerId: f.officerId, unit: f.unit.toLowerCase(), fate: f.fate, ...(f.how ? { how: f.how } : {}),
+          unitId: f.unitId, culture: game.spec.units.find(u => u.id === f.unitId)?.culture ?? null,
+          officerId: f.officerId, unit: f.unit.toLowerCase(), destroyed: f.destroyed,
+          fate: f.headless && price === f.unitId ? 'given up' : f.fate, ...(f.how ? { how: f.how } : {}),
           deeds: name(deeds).replace(/^[^:]+:\s*/, '').replace('BROKE', 'broke'),
           // "Spears, Swords: advance on the enemy" was said to both.
           orders: said

@@ -15,7 +15,7 @@ const path = require('path')
 const crypto = require('crypto')
 
 const { createCompany } = require('../engine/command/company')
-const { gradeOf } = require('../engine/command/officers')
+const { gradeOf, EARNED_AT } = require('../engine/command/officers')
 const { PLAIN } = require('../data/officers')
 
 function createCommanderStore({ dir = null, now = () => Date.now() } = {}) {
@@ -99,14 +99,14 @@ function createCommanderStore({ dir = null, now = () => Date.now() } = {}) {
       ended: commander.ended ? { how: commander.ended.how, at: commander.ended.at } : null,
       battles: company.battles,
       officers: company.officers.map(o => ({
-        // Until he has a name he is unknown, his nature with him.
-        name: o.name ?? null, grade: o.name ? gradeOf(o) : 'unknown', experience: o.experience,
-        personality: o.name ? o.personality : null,
+        name: o.name, grade: gradeOf(o), experience: o.experience, personality: o.personality,
         leads: o.leads, status: o.status,
         record: [...o.record].reverse()
       })),
-      // Units with no officer for their next battle.
-      headless: [...new Set([...(company.headless ?? []), ...company.officers.filter(o => o.status === 'wounded').map(o => o.leads)])],
+      // Units with no officer yet, and the battles each has come through
+      // toward one (he comes forward at `earnedAt` battles).
+      unled: Object.entries(company.units ?? {}).map(([kind, battles]) => ({ kind, battles })),
+      earnedAt: EARNED_AT,
       fallen: [...company.fallen].reverse()
     }
   }

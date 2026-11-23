@@ -357,10 +357,7 @@ function counselFor(ordered, all, { clauses, action, plain, shaken }) {
       const grade = gradeOf(unit.officer)
       const self = unit.id === sage.id
       if (unit.officer.headless) {
-        says(unit, `${unit.id} have no officer. They will keep "${plain}" and nothing more.`)
-      } else if (!unit.officer.name) {
-        // Not yet named: no battles behind him, and no one knows his nature.
-        says(unit, `The officer of ${unit.id} is unproven. Expect him to keep "${plain}" and lose the rest; what he does then, no one knows yet.`)
+        says(unit, `${unit.id} have no officer yet. They will keep "${plain}" and nothing more.`)
       } else if (grade === 'green') {
         says(unit, `${unit.officer.name} of ${unit.id} is green. Expect him to keep "${plain}" and lose the rest; ${losesTo(unit.officer)}.`)
       } else if (grade === 'seasoned' && clauses > 1) {

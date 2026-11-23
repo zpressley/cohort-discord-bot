@@ -6,11 +6,6 @@
 // confused with veterans/officers.js, the roster inside an elite unit.)
 //
 // An officer is { name, experience, personality }:
-//   name         null until he has earned one (ruled 2026-11-22: "named
-//                officers come with veterancy"). A new unit's officer is
-//                unknown: as green as his men, and no one yet knows what he
-//                will do when it goes wrong. He is named when he becomes
-//                seasoned.
 //   experience   battles he has come through. It is the only thing that
 //                makes one officer better than another, and what it buys is
 //                depth: how much of an order he can carry.
@@ -18,8 +13,10 @@
 //                thread. Readable, so a failure is one the Commander could
 //                have seen coming.
 //
-// A unit whose officer is lost is headless for a battle: { headless: true }.
-// It has no one to carry more than the plain order.
+// A unit may have no officer at all: { headless: true }. It has no one to
+// carry more than the plain order. In a campaign every unit but the elite
+// starts so, and an officer comes forward once the unit has 3 or 4 battles
+// of veterancy (ruled 2026-11-23; command/company.js).
 //
 // Orders come in depths (docs/design/officers-memory-delegation.md). The
 // plain order is level 1 and every officer carries it. Each thing more is a
@@ -46,8 +43,9 @@ const GRASP = {
 
 const PERSONALITIES = ['bold', 'steady', 'cautious']
 
-// Battles come through before an officer has a name: when he is seasoned.
-const NAMED_AT = GRADES[1].from
+// Battles a unit comes through before an officer comes forward from its
+// ranks: at the first number he may, at the second he does.
+const EARNED_AT = [3, 4]
 
 // The most an order may hold: steps after the first, and one condition.
 const MAX_STEPS = 3
@@ -128,4 +126,4 @@ function losingTheThread(officer, lost, enemyInSight) {
   return lost === 'condition' ? 'carry on' : 'hold'
 }
 
-module.exports = { GRADES, GRASP, PERSONALITIES, MAX_STEPS, NAMED_AT, gradeOf, chanceToKeep, clauses, grasp, losingTheThread }
+module.exports = { GRADES, GRASP, PERSONALITIES, MAX_STEPS, EARNED_AT, gradeOf, chanceToKeep, clauses, grasp, losingTheThread }

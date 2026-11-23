@@ -555,22 +555,42 @@ and `src/web/battles.js`. The numbers are in `tables.COMMANDER`.
   it. Only the player who musters has a Commander on the field; a friend
   who joins by link has none yet.
 
-**Unknown officers and headless units (ruling 7).**
-- A new unit's officer has no name and no battles. He carries orders as a
-  green officer does; his nature is not shown, and counsel says only that
-  no one knows what he will do when he loses the thread.
-- **He is named when he becomes seasoned:** two battles come through. That
-  is where "a few battles" was set (`NAMED_AT` in `command/officers.js`);
-  it moves with the grades.
-- **Headless:** a unit whose officer is killed, taken or given up fights
-  its next battle with no officer, and so does one whose officer is
-  wounded. A headless unit keeps the plain order and nothing more. After
-  that battle one of its own steps up, unknown again. A named officer whose
-  own men are not on the field takes a headless unit first.
+**Units with no officer (ruling 7, and the ruling of November 23 below).**
+- A new Commander has one officer: the veteran with his elite unit. No
+  other unit has an officer until it has earned one.
+- **A unit with no officer keeps the plain order and nothing more.** That
+  is "worse than green": a green officer keeps a first clause one time in
+  three.
+- **Earning one:** each battle a unit comes through with no officer counts
+  toward one. At 3 battles an officer may come forward from its ranks (an
+  even chance); at 4 one does (`EARNED_AT` in `command/officers.js`). He
+  has a name, a nature, and the unit's battles for his experience, so he
+  comes as a seasoned officer. A unit destroyed in a battle starts its
+  count again.
+- **Losing one:** a unit whose officer is killed, taken or given up to the
+  enemy must earn another from nothing. One whose officer is wounded fights
+  the next battle without him, and he comes back.
+- An officer whose own men are not on the field takes a unit that has none.
+- What this replaced, built the day before and gone: officers who were
+  there from the start but unnamed until seasoned.
 
 **Names (ruling 8).** No two Commanders on a server ever share a name,
 living or fallen; when the plain names run out they come round as
 "Garrick II". A fallen Commander is kept with his company and their
 records. The two questions that make a Commander, and the record books
 themselves, are not built.
+
+## Rulings, November 23, 2026
+
+1. **"The rest you earn": no officer until the unit has 3 to 4 battles of
+   veterancy.** Asked whether the other units start with green officers or
+   with none: "yes no officer until 3-4 battles of veterancy."
+2. **"The elite unit is the unique unit of the faction, you get it for
+   free."** This is the army builder's rule already (`engine/army/builder.js`:
+   one elite arrives free with each army, by culture). The web app's muster
+   does not use the army builder yet: its battles are fixed armies with no
+   faction and no elite unit, so the veteran and the Commander ride with
+   the best unit there is. Bringing factions and built armies to the muster
+   is the work that makes this ruling visible.
+3. **"Don't start tutorials till the game is solid."**
 

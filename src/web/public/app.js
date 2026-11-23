@@ -205,21 +205,21 @@ async function battles() {
 }
 
 // ── Your officers ──────────────────────────────────────
-const GRADE_WORDS = { unknown: 'unproven', green: 'green', seasoned: 'seasoned', veteran: 'a veteran' }
+const GRADE_WORDS = { green: 'green', seasoned: 'seasoned', veteran: 'a veteran' }
 const RESULT_WORDS = { victory: 'a victory', defeat: 'a defeat', draw: 'a draw' }
 const FATE_WORDS = { killed: 'killed', captured: 'taken by the enemy', 'given up': 'given to the enemy for the Commander\'s freedom' }
 async function officers() {
   const commanders = await loadCommanders()
   const battleLine = (r) => `<li><strong>${esc(r.title)}</strong>, ${esc(RESULT_WORDS[r.result] ?? r.result)}${
-    r.fate === 'wounded' ? `; wounded${r.how ? ` (${esc(r.how)})` : ''}` : ''}.${r.deeds ? ` His men ${esc(r.deeds)}.` : ''}${r.named ? ' Here he earned his name.' : ''}</li>`
+    r.fate === 'wounded' ? `; wounded${r.how ? ` (${esc(r.how)})` : ''}` : ''}.${r.deeds ? ` His men ${esc(r.deeds)}.` : ''}${r.named ? ' Here he came forward to lead them.' : ''}</li>`
   const card = (o) => `<div class="officer">
-      <strong>${o.name ? esc(o.name) : 'An officer not yet named'}</strong>
-      <span>Leads the ${esc(o.leads)} · ${esc(GRADE_WORDS[o.grade] ?? o.grade)}${o.personality ? `, ${esc(o.personality)}` : ''}${o.status === 'wounded' ? ' · wounded, back after the next battle' : ''}</span>
+      <strong>${esc(o.name)}</strong>
+      <span>Leads the ${esc(o.leads)} · ${esc(GRADE_WORDS[o.grade] ?? o.grade)}, ${esc(o.personality)}${o.status === 'wounded' ? ' · wounded, back after the next battle' : ''}</span>
       ${o.record.length
         ? `<details><summary>${o.record.length} battle${o.record.length === 1 ? '' : 's'} with you</summary><ul>${o.record.map(battleLine).join('')}</ul></details>`
         : '<span>Yet to fight under you.</span>'}
     </div>`
-  const fallen = (f) => `<p class="note">${f.name ? `${esc(f.name)}, who led the ${esc(f.led)}` : `The officer of the ${esc(f.led)}, not yet named`}: ${esc(FATE_WORDS[f.fate] ?? f.fate)} at ${esc(f.at)}, after ${f.battles} battle${f.battles === 1 ? '' : 's'} with you.</p>`
+  const fallen = (f) => `<p class="note">${esc(f.name)}, who led the ${esc(f.led)}: ${esc(FATE_WORDS[f.fate] ?? f.fate)} at ${esc(f.at)}, after ${f.battles} battle${f.battles === 1 ? '' : 's'} with you.</p>`
   const company = (c) => `
       <h2 class="commander">Commander ${esc(c.name)}</h2>
       <p class="note">${c.battles} battle${c.battles === 1 ? '' : 's'} fought. ${c.ended
@@ -228,14 +228,14 @@ async function officers() {
         ? `His army is in the field${c.battle.seat ? `: <a href="/b/${esc(c.battle.seat)}" data-link>${esc(c.battle.title)}</a>` : ` (${esc(c.battle.title)})`}.`
         : 'His army is ready to muster.'}</p>
       ${c.officers.map(card).join('')}
-      ${(c.headless ?? []).map(kind => `<p class="note">The ${esc(kind)} have no officer for their next battle.</p>`).join('')}
+      ${(c.unled ?? []).map(u => `<p class="note">The ${esc(u.kind)} have no officer yet: ${u.battles} battle${u.battles === 1 ? '' : 's'} come through. One comes forward after ${c.earnedAt[0]} or ${c.earnedAt[1]}.</p>`).join('')}
       ${c.fallen.length ? `<p class="label-caps">Lost</p>${c.fallen.map(fallen).join('')}` : ''}`
   app.innerHTML = `
     <header class="bar"><a href="/battles" data-link>Your battles</a><strong style="font-family: var(--font-display); font-size: 18px">Your officers</strong><span></span></header>
     <main class="page">
       ${commanders.length === 0
-        ? '<p class="note">No officers yet. They join a Commander at his first battle, and those who live go with him to the next: they learn, and they remember.</p>'
-        : '<p class="note">An officer earns his name by living through battles. Until then he keeps to the first thing you tell him; a veteran follows a longer order. An army fights one battle at a time.</p>'}
+        ? '<p class="note">No officers yet. A Commander starts with one, a veteran with his best unit. The rest are earned: a unit that comes through enough battles finds an officer in its own ranks.</p>'
+        : '<p class="note">A unit with no officer keeps only a plain order. One that comes through enough battles finds an officer in its own ranks; a veteran follows a longer order. An army fights one battle at a time.</p>'}
       ${commanders.map(company).join('')}
       <a class="btn btn-main btn-wide" href="/muster" data-link>Muster a new battle</a>
     </main>`
@@ -493,9 +493,8 @@ async function tent(token) {
         <span class="note">${esc([u.quality, u.role].filter(Boolean).join(' ').replace(/_/g, ' '))}, ${u.strength} of ${u.maxStrength} men</span>
         ${v.commander?.unitId === u.id ? '<p class="unit-order"><strong>You ride with them.</strong> If they are cut to half and still in the fight, you can be taken or killed.</p>' : ''}
         <div class="bars">${meter('Men', u.strength, u.maxStrength)}${meter('Morale', u.morale, 100)}${meter('Wind', u.stamina, u.staminaPool)}</div>
-        ${!u.officer ? '' : u.officer.headless ? '<p class="unit-order"><strong>No officer:</strong> they will keep a plain order and nothing more</p>'
-          : u.officer.name ? `<p class="unit-order"><strong>Officer:</strong> ${esc(u.officer.name)}, ${esc(u.officer.grade)} and ${esc(u.officer.personality)}</p>`
-            : '<p class="unit-order"><strong>Officer:</strong> not yet named, unproven</p>'}
+        ${!u.officer ? '' : u.officer.headless ? '<p class="unit-order"><strong>No officer yet:</strong> they keep a plain order and nothing more</p>'
+          : `<p class="unit-order"><strong>Officer:</strong> ${esc(u.officer.name)}, ${esc(u.officer.grade)} and ${esc(u.officer.personality)}</p>`}
         <p class="unit-order"><strong>Orders:</strong> ${esc(u.order)}${u.shootsTo ? esc(u.holdingFire ? '; holding fire' : `; shoots at enemies within ${u.shootsTo} m`) : ''}</p>
         <div class="flags">${flags(u)}</div>
         ${v.battle.status === 'finished' || u.broken ? '' : `<div style="display: flex; gap: 8px; flex-wrap: wrap">
