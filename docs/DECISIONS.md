@@ -593,4 +593,14 @@ themselves, are not built.
    the best unit there is. Bringing factions and built armies to the muster
    is the work that makes this ruling visible.
 3. **"Don't start tutorials till the game is solid."**
+4. **"Reminder the commander represents the player's pov."** What happens
+   to the Commander is now told to his own side as "you" (`toTheCommander`
+   in `narrator/turnNarrator.js`); the other side hears it as its own men's
+   doing. Still true of the app, and not yet squared with this ruling: a
+   Commander sees everything any of his units can see, at once, wherever he
+   is, and goes on seeing it while he is in the enemy's hands.
+5. **"Merge a pull what you need", and work with other agents in
+   parallel**, with instructions left in the folders that matter: the
+   `CLAUDE.md` at the top of the repository and in `src/engine`, `src/web`,
+   `src/interpreter`, `src/narrator` and `src/opponent`.
 

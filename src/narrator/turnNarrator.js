@@ -255,7 +255,7 @@ function plainFact(map, event) {
 
 // How much a commander needs to hear of each kind of event: lower is sooner.
 const WEIGHT = {
-  victory: 0, destroyed: 1, rout: 1, fled: 1, rallied: 1, pursuit: 2, ambush: 1, surprise: 2, objective: 2,
+  victory: 0, commanderKilled: 0, commanderTaken: 0, commanderFreed: 0, commanderMoved: 1, destroyed: 1, rout: 1, fled: 1, rallied: 1, pursuit: 2, ambush: 1, surprise: 2, objective: 2,
   volley: 3, lostThread: 1, reacted: 2,
   heartened: 5,
   revealed: 3, exchange: 3, standoff: 3, push: 4, crush: 4, disengage: 4, contact: 4,
@@ -368,6 +368,25 @@ function digest(events, { map, ownIds, whereIs = () => null }) {
  * @param {Object} turn  { map, ownIds, seenEnemyIds, events, whereIs?, nameOf? }
  * @returns {Array<string>}
  */
+// The Commander is the player: what happens to him is told to him as "you"
+// (ruled 2026-11-23: "the commander represents the player's pov"). The
+// other side hears of it as its own men's doing.
+function toTheCommander(event, ownIds) {
+  if (!event.type.startsWith('commander')) return null
+  const mine = event.type === 'commanderFreed' ? !ownIds.has(event.by) : ownIds.has(event.unitId)
+  switch (event.type) {
+    case 'commanderTaken': return mine
+      ? `You were taken by ${event.by}. You can send no orders; your officers fight on with the ones they have`
+      : `${event.by} took the enemy Commander`
+    case 'commanderKilled': return mine ? `You were killed in the fight with ${event.by}` : `${event.by} killed the enemy Commander`
+    case 'commanderFreed': return mine
+      ? `${event.by} broke, and you got free and reached ${event.unitId}`
+      : `the enemy Commander got free of ${event.by}`
+    case 'commanderMoved': return `With ${event.from} gone you got away to ${event.unitId}`
+    default: return null
+  }
+}
+
 function report(turn) {
   const { map, ownIds, seenEnemyIds, events } = turn
   const nameOf = turn.nameOf ?? ((text) => text)
@@ -379,7 +398,7 @@ function report(turn) {
   const busy = fights.length > 0 || rest.some(e => weight(e) <= 4)
   const others = rest
     .filter(e => !busy || weight(e) < 6)
-    .map(e => ({ weight: weight(e), text: plainFact(map, e) }))
+    .map(e => ({ weight: weight(e), text: toTheCommander(e, ownIds) ?? plainFact(map, e) }))
     .filter(f => f.text)
 
   return [...fights, ...others]
