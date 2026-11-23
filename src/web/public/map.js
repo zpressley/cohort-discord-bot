@@ -66,7 +66,7 @@ const SCALE = 1.35
 
 // One counter: a square in the side's colour with the role's mark, a
 // strength bar for your own, and (on the top counter of a stack) the name.
-function counter(unit, { side, own, selected, ghost, label, shift = 0 }) {
+function counter(unit, { side, own, selected, ghost, label, nameAbove = null, shift = 0 }) {
   const kind = kindOf(unit)
   const fill = ghost ? 'none' : `var(--side-${side})`
   const ink = ghost ? 'var(--ghost)' : `var(--side-${side}-on)`
@@ -85,11 +85,38 @@ function counter(unit, { side, own, selected, ghost, label, shift = 0 }) {
         <g style="stroke: ${ink}; fill: ${ink}" stroke-width="1.3" stroke-linecap="square">${ghost ? '<text y="4" text-anchor="middle" font-size="11" style="stroke: none">?</text>' : symbol(kind)}</g>
         ${strength}
       </g>
+      ${nameAbove ? `<text y="-19" text-anchor="middle" font-size="11" font-weight="600" class="unit-name" style="fill: var(--ink); font-family: var(--font-ui)">${esc(nameAbove)}</text>` : ''}
       ${label ? `<text y="${own ? 27 : 24}" text-anchor="middle" font-size="10" class="unit-name" style="fill: var(--ink); font-family: var(--font-ui)">${esc(label)}</text>` : ''}
     </g>`
 }
 
-// Units on one tile cascade a little, with one label naming them all.
+// Units on one tile cascade a little. Units on neighbouring tiles would pile
+// their names on top of each other, so a cluster of them (tiles touching) is
+// named once: by name for one or two units, by number for more. The picked
+// unit always carries its own name.
+function clusters(list) {
+  const left = [...list]
+  const out = []
+  while (left.length) {
+    const group = [left.pop()]
+    for (let i = 0; i < group.length; i++) {
+      for (let j = left.length - 1; j >= 0; j--) {
+        if (Math.abs(left[j].position.x - group[i].position.x) <= 1 && Math.abs(left[j].position.y - group[i].position.y) <= 1) group.push(left.splice(j, 1)[0])
+      }
+    }
+    out.push(group)
+  }
+  return out
+}
+
+function clusterLabel(group, ghost) {
+  if (ghost) {
+    const ago = Math.min(...group.map(u => u.minutesAgo ?? 0))
+    return `${group.length > 1 ? `${group.length} units, ` : ''}last seen ${ago ? `${ago} min ago` : 'just now'}`
+  }
+  return group.length <= 2 ? group.map(g => g.name).join(', ') : `${group.length} units`
+}
+
 function drawUnits(list, opts) {
   const byTile = new Map()
   for (const u of list) {
@@ -97,14 +124,19 @@ function drawUnits(list, opts) {
     if (!byTile.has(key)) byTile.set(key, [])
     byTile.get(key).push(u)
   }
+  // The label hangs under the lowest counter of its cluster.
+  const labelAt = new Map()
+  for (const group of clusters(list)) {
+    const lowest = group.reduce((a, b) => (b.position.y > a.position.y || (b.position.y === a.position.y && b.position.x > a.position.x) ? b : a))
+    labelAt.set(`${lowest.position.x},${lowest.position.y}`, clusterLabel(group, opts.ghost))
+  }
   const out = []
   for (const group of byTile.values()) {
     group.forEach((u, i) => {
       const top = i === group.length - 1
-      const label = !top ? null : opts.ghost
-        ? `last seen ${u.minutesAgo ? `${u.minutesAgo} min ago` : 'just now'}`
-        : group.map(g => g.name).join(', ')
-      out.push(counter(u, { ...opts, ghost: opts.ghost, selected: opts.selectedId === u.id, label, shift: i * 5 }))
+      const selected = opts.selectedId === u.id
+      const label = top ? labelAt.get(`${u.position.x},${u.position.y}`) ?? null : null
+      out.push(counter(u, { ...opts, ghost: opts.ghost, selected, label, nameAbove: selected && !opts.ghost ? u.name : null, shift: i * 5 }))
     })
   }
   return out.join('')
@@ -227,33 +259,78 @@ export function drawMap(view, { selectedId = null } = {}) {
 }
 
 // ── Gestures ───────────────────────────────────────────
+// A fingertip is wider than a counter, so a tap picks the nearest of your
+// units within REACH screen pixels. When more than one is that close (a
+// stack, or neighbours), the map hands back the list to choose from.
+const REACH = 26
+
 /**
  * Wire the map up. handlers:
  *   onPick(unitId | null)        a unit of yours was tapped (or the pick cleared)
+ *   onStack(units)               a tap fell on several of your units: choose one
  *   onOrder(unit, x, y)          a picked unit was pointed at a place
  *   onPlace(x, y)                a place was tapped with no unit picked
+ *   onPinch(factor, x, y)        two fingers moved: scale by factor about the
+ *                                client point x, y
  */
 export function attachGestures(svg, view, getPicked, handlers) {
-  const tileAt = (event) => {
+  const toMap = (event) => {
     const pt = svg.createSVGPoint()
     pt.x = event.clientX
     pt.y = event.clientY
-    const p = pt.matrixTransform(svg.getScreenCTM().inverse())
+    return pt.matrixTransform(svg.getScreenCTM().inverse())
+  }
+  const tileAt = (event) => {
+    const p = toMap(event)
     const x = Math.floor((p.x - MARGIN) / TILE)
     const y = Math.floor((p.y - MARGIN) / TILE)
     if (x < 0 || y < 0 || x >= view.map.width || y >= view.map.height) return null
     return { x, y }
   }
-  const ownAt = (t) => view.own.find(u => !u.broken && u.position.x === t.x && u.position.y === t.y)
+  const standing = view.own.filter(u => !u.broken)
+  const ownAt = (t) => standing.filter(u => u.position.x === t.x && u.position.y === t.y)
+  // Units whose counter is within reach of the finger, nearest first.
+  const ownNear = (event) => {
+    const p = toMap(event)
+    const scale = svg.getScreenCTM().a || 1
+    return standing
+      .map(u => ({ u, d: Math.hypot(cx(u.position.x) - p.x, cy(u.position.y) - p.y) * scale }))
+      .filter(c => c.d <= REACH)
+      .sort((a, b) => a.d - b.d)
+      .map(c => c.u)
+  }
 
+  const touches = new Map()
+  let pinch = null
   let down = null
+  const gap = () => { const [a, b] = [...touches.values()]; return Math.hypot(a.x - b.x, a.y - b.y) }
   svg.addEventListener('pointerdown', (event) => {
+    if (event.pointerType === 'touch') {
+      touches.set(event.pointerId, { x: event.clientX, y: event.clientY })
+      if (touches.size >= 2) { down = null; pinch = { last: gap() }; return }
+    }
     const t = tileAt(event)
     if (!t) return
-    down = { t, unit: ownAt(t), x: event.clientX, y: event.clientY }
+    const near = ownNear(event)
+    down = { t, unit: near.length === 1 ? near[0] : null, x: event.clientX, y: event.clientY }
   })
+  svg.addEventListener('pointermove', (event) => {
+    if (!touches.has(event.pointerId)) return
+    touches.set(event.pointerId, { x: event.clientX, y: event.clientY })
+    if (!pinch || touches.size < 2) return
+    const [a, b] = [...touches.values()]
+    const now = gap()
+    if (pinch.last > 0 && now > 0) handlers.onPinch?.(now / pinch.last, (a.x + b.x) / 2, (a.y + b.y) / 2)
+    pinch.last = now
+  })
+  const lift = (event) => {
+    touches.delete(event.pointerId)
+    if (touches.size === 0) setTimeout(() => { pinch = null }, 0)
+  }
   svg.addEventListener('pointerup', (event) => {
-    if (!down) return
+    const wasPinch = pinch !== null
+    lift(event)
+    if (wasPinch || !down) return
     const start = down
     down = null
     const t = tileAt(event)
@@ -265,16 +342,17 @@ export function attachGestures(svg, view, getPicked, handlers) {
     if (start.unit && moved && !sameTile) return handlers.onOrder(start.unit, t.x, t.y)
     // A drag that was not from a unit is the map being scrolled.
     if (moved) return
-    // Tapped one of yours: pick it (tap again to let it go).
-    const here = ownAt(t)
     const picked = getPicked()
-    if (here) return handlers.onPick(picked === here.id ? null : here.id)
-    // A unit is picked and a place is tapped: that is an order.
+    // With a unit picked, a tap on a unit's own tile picks again; anywhere
+    // else it is an order. With none picked, a tap near units picks one.
+    const here = picked ? ownAt(t) : ownNear(event)
+    if (here.length > 1) return handlers.onStack(here)
+    if (here.length === 1) return handlers.onPick(picked === here[0].id ? null : here[0].id)
     if (picked) {
       const unit = view.own.find(u => u.id === picked)
       if (unit) return handlers.onOrder(unit, t.x, t.y)
     }
     handlers.onPlace(t.x, t.y)
   })
-  svg.addEventListener('pointercancel', () => { down = null })
+  svg.addEventListener('pointercancel', (event) => { down = null; lift(event) })
 }
