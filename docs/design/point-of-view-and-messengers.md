@@ -110,6 +110,27 @@ seen); that is the next step for it, and is said plainly in the notes.
 
 Each step leaves the game playable and is merged on its own.
 
+Where the build stands:
+- **Step 1 is built** (`engine/command/messengers.js`; the queue is
+  `battle.riders`, filled as orders are given; `riderSent` and
+  `riderBlocked` in the log; the read-back's time in
+  `interpreter/resolve.js`). Measured with
+  `node src/harness/messenger-league.js`. See `docs/DECISIONS.md`, "How the
+  Commander's point of view and messengers were built".
+- **Step 2 is built** (`engine/orchestrator/word.js`: what each Commander
+  on the field knows and when, `game.word`; the tent, the read-back, the
+  Army tab and the dispatch read it in `web/battles.js`; the map marks the
+  Commander, his immediate range, and his units known by rider, faded with
+  their age). Cut-off units already show "no word since" here, as the
+  path rule blocks news as it blocks orders.
+- **Step 3 is built.** A unit cut off, and back in touch, is told to its
+  Commander (`cutOff`, `inTouch`), marked on the map with a cross and on
+  the Army tab. The computer's orders, marked as from its command post
+  (`byCommandPost`, in `web/battles.js` and the soak), go by rider from its
+  best unit; what it knows is not delayed. That is the next step for it.
+
+All three steps are built. Not built: everything under "What comes after".
+
 ## What comes after, not in this build
 
 - **Reports that say more as an officer rises, and never say anything

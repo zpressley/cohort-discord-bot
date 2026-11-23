@@ -152,7 +152,9 @@ test('every bought unit has a distinct name, and the order reader finds each one
         const text = tent.own.map(u => `${u.name.toLowerCase()} hold`).join('\n')
         const read = (await app.api('POST', `/api/seat/${seat}/read`, { text })).body
         assert.deepEqual(read.questions, [], `${faction} ${kind}`)
-        assert.deepEqual(read.understood, tent.own.map(u => `${u.name}: hold`), `${faction} ${kind}`)
+        // (A unit beyond the Commander's immediate range is told how long a
+        // rider takes: command/messengers.js.)
+        assert.deepEqual(read.understood.map(l => l.replace(/\. (A rider|Riders|No rider) .*$/, '')), tent.own.map(u => `${u.name}: hold`), `${faction} ${kind}`)
       }
     }
     // A name the game would not give that kit is refused: none says "everyone".

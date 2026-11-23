@@ -175,7 +175,9 @@ test('each officer runs his own unit by his nature: the bold go at the enemy, th
   assert.equal(ownCommand(null, true), 'hold')
 
   const units = [
-    unit({ id: 'guard', position: { x: 2, y: 2 }, officer: officer('steady') }),
+    // The Commander rides with the guard, near enough the rest that his
+    // orders reach them at once (command/messengers.js).
+    unit({ id: 'guard', position: { x: 4, y: 14 }, officer: officer('steady') }),
     unit({ id: 'bold', position: { x: 10, y: 14 }, officer: officer('bold') }),
     unit({ id: 'cautious', position: { x: 4, y: 18 }, officer: officer('cautious') }),
     unit({ id: 'steady', position: { x: 6, y: 18 }, officer: officer('steady') }),

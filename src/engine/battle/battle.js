@@ -41,6 +41,7 @@ const { createEventLog } = require('./events')
 const { normalizeOrder, planUnit, nextStep, isSeeking, NEAR_TILES } = require('./orders')
 const { grasp, losingTheThread, ownCommand, wouldYield, loyaltyOf } = require('../command/officers')
 const { createCommanders, stepCommanders, canRide } = require('../command/commander')
+const { byRider, riders } = require('../command/messengers')
 const { canSee, visionRange } = require('../map/sight')
 const { coverFor } = require('./hiding')
 
@@ -409,8 +410,9 @@ function stepTurn(state, sideOrders = {}, { sameTurn = false } = {}) {
 
     // Orders given this turn replace each unit's standing order.
     // What its officer keeps of an order with more than one thing in it is
-    // rolled here, once, as the order is given.
-    for (const order of expanded) {
+    // rolled here, once, as the order reaches him.
+    const give = (sent) => {
+      const { fromPost, ...order } = sent
       let given = normalizeOrder(order)
       const officer = getUnit(world, order.unitId)?.officer
       if (officer) {
@@ -420,6 +422,35 @@ function stepTurn(state, sideOrders = {}, { sameTurn = false } = {}) {
       }
       state.orderBook.set(order.unitId, given)
       freshThisTurn.add(order.unitId)
+    }
+    // Orders marked as from a command post (the computer's, in the app)
+    // go by rider from then on.
+    if (given.some(o => o?.fromPost)) (state.posts ??= new Set()).add(side)
+    if (!byRider(state, side)) {
+      for (const order of expanded) give(order)
+    } else {
+      // A side whose Commander is on the field sends its orders by rider
+      // (command/messengers.js). Those on the road arrive first, in the
+      // order given; a unit broken or gone by then never gets its order.
+      state.riders = state.riders ?? []
+      const due = state.riders.filter(r => r.side === side && r.arrives <= turn)
+      state.riders = state.riders.filter(r => !due.includes(r))
+      for (const r of due) if (effective.some(u => u.id === r.unitId)) give(r.order)
+      const road = expanded.length > 0 ? riders(state, side) : null
+      for (const order of expanded) {
+        const unit = getUnit(world, order.unitId)
+        const ticks = road ? road.ticks(unit) : Infinity
+        if (ticks === Infinity) {
+          log.emit('riderBlocked', turn, { side, unitId: order.unitId })
+          continue
+        }
+        // A newer order does not overtake one still on the road.
+        const behind = Math.max(0, ...state.riders.filter(r => r.unitId === order.unitId).map(r => r.arrives))
+        const arrives = Math.max(turn + ticks, behind)
+        if (arrives <= turn) { give(order); continue }
+        state.riders.push({ side, unitId: order.unitId, order, sent: turn, arrives })
+        log.emit('riderSent', turn, { side, unitId: order.unitId, minutes: (arrives - turn) * 10 })
+      }
     }
     const fresh = freshThisTurn
 
