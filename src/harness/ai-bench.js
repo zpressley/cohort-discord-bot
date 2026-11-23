@@ -116,8 +116,10 @@ const CASES = [
   { say: 'spring the trap!', expect: [{ units: ALL, action: 'advance' }], grammar: true },
 
   // Enemies as targets, directions, distances.
-  { say: 'horse, charge the enemy archers', expect: [{ units: ['red_horse'], action: ['attack', 'advance'], where: [null, 'D2'] }] },
-  { say: 'swords attack their swordsmen', expect: [{ units: ['red_swords'], action: ['attack', 'advance'], where: [null, 'D2'] }] },
+  { say: 'horse, charge the enemy archers', expect: [{ units: ['red_horse'], action: 'attack', enemy: 'blue_archers' }], grammar: true },
+  { say: 'swords attack their swordsmen', expect: [{ units: ['red_swords'], action: 'attack', enemy: 'blue_swords' }], grammar: true },
+  { say: 'Send the horse after those bowmen and keep at them', expect: [{ units: ['red_horse'], action: 'attack', enemy: 'blue_archers' }] },
+  { say: 'spears charge their horse', ask: true },
   { say: 'archers fall back 100 metres to the west', expect: [{ units: ['red_archers'], action: ['withdraw', 'move'], test: t => t.x < 3 }] },
   { say: 'move the spears a little to the south', expect: [{ units: ['red_spears'], action: 'move', test: t => t.y > 6 && t.y <= 12 && Math.abs(t.x - 4) <= 1 }] },
   { say: 'horse go east about 300m', expect: [{ units: ['red_horse'], action: 'move', test: t => t.x >= 14 && t.x <= 18 }] },
@@ -157,6 +159,7 @@ function matches(order, want) {
   if (want.regardless !== undefined && Boolean(order.regardless) !== want.regardless) return false
   if (want.steps !== undefined && (order.steps?.length ?? 0) !== want.steps) return false
   if (want.when !== undefined && order.when?.type !== want.when) return false
+  if (want.enemy !== undefined && (order.enemy ?? null) !== want.enemy) return false
   return true
 }
 
@@ -176,7 +179,7 @@ function judge(testCase, read) {
     for (const { unit, want } of wanted) {
       const order = read.orders.find(o => o.unitRef === unit)
       if (!order) return `no order for ${unit}`
-      if (!matches(order, want)) return `${unit}: got ${order.action}${order.target ? ' ' + gridLabel(order.target, { quarter: true }) : ''}${order.careful ? ' careful' : ''}${order.against ? ' vs ' + order.against : ''}${order.letPass ? ' pass ' + order.letPass : ''}${order.regardless ? ' regardless' : ''}`
+      if (!matches(order, want)) return `${unit}: got ${order.action}${order.target ? ' ' + gridLabel(order.target, { quarter: true }) : ''}${order.careful ? ' careful' : ''}${order.against ? ' vs ' + order.against : ''}${order.enemy ? ' at ' + order.enemy : ''}${order.letPass ? ' pass ' + order.letPass : ''}${order.regardless ? ' regardless' : ''}`
     }
     return null
   }

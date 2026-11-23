@@ -14,7 +14,9 @@
 
 const { resolveUnitReference } = require('../engine/movement/unitResolver')
 const ranged = require('../engine/combat/ranged')
-const { orderWords } = require('../narrator/words')
+const { orderWords, OWN_EDGE, HOLD_THERE } = require('../narrator/words')
+const { matchesKind, edgeTarget } = require('../engine/battle/battle')
+const { KINDS } = require('./grammar')
 const { gradeOf, MAX_STEPS } = require('../engine/command/officers')
 const { findPlace, DIRECTIONS, TILE_METRES } = require('../engine/map/places')
 const { isGridRef, gridTarget, gridLabel } = require('../engine/map/grid')
@@ -23,6 +25,95 @@ const { coverFor } = require('../engine/battle/hiding')
 // The extra parts of an order the engine reads (Stage 3), carried through
 // unchanged when set.
 const EXTRAS = ['careful', 'against', 'letPass', 'regardless', 'holdFire']
+
+// ── An enemy named in an attack ────────────────────────
+//
+// "their archers", "the enemy horse", "swords": which of the enemy units this
+// side has seen (context.enemies, its intel: in sight or last seen) the
+// words mean. Only those: an enemy never seen cannot be named, and the true
+// field is never looked at. "archers at E5" picks the one seen nearest E5.
+
+const AT_SQUARE = /\s+(?:at|in|near|by)\s+(\S+)$/i
+const sansSide = (id) => String(id).replace(/^(?:red|blue)_/, '').replace(/_/g, ' ')
+
+// Is this seen enemy of that kind? By what was seen of it when the intel
+// says (role, mounted, weapon); else by its name.
+function looksLike(enemy, kind) {
+  if ('role' in enemy || 'mounted' in enemy) return matchesKind({ id: enemy.id, role: enemy.role, mounted: enemy.mounted, primaryWeapon: enemy.primaryWeapon }, kind)
+  const words = KINDS.find(([k]) => k === kind)?.[1]
+  return Boolean(words && words.test(sansSide(enemy.id)))
+}
+
+function seenWhere(enemy) {
+  const square = gridLabel(enemy.position, { quarter: true })
+  return enemy.status === 'visible' ? `in sight at ${square}` : `last seen at ${square}`
+}
+
+/**
+ * @param {string} words  what the Commander called the enemy ("archers")
+ * @param {Array} enemies  his side's intel
+ * @returns {{ enemy } | { question, choice? }}
+ */
+function resolveEnemy(words, enemies, map) {
+  const seen = (enemies ?? []).filter(e => e.position && (e.strength === undefined || e.strength > 0))
+  let ref = String(words).trim()
+  let near = null
+  const at = ref.match(AT_SQUARE)
+  if (at && isGridRef(at[1])) {
+    const square = gridTarget(map, at[1])
+    if (!square.none) near = square.position
+    ref = ref.slice(0, at.index).trim()
+  }
+  const kind = KINDS.find(([, pattern]) => pattern.test(ref))?.[0] ?? null
+  const anyone = /^(?:everyone|everybody|all|army|the army)$/i.test(ref)
+  // "swordsmen" for the enemy swords, "spearmen" for their spears.
+  const stem = (w) => w.toLowerCase().replace(/s$/, '')
+  const byStem = () => seen.filter(e => sansSide(e.id).split(' ').some(w => w.length > 3 && stem(ref).startsWith(stem(w))))
+  const named = () => {
+    const found = resolveUnitReference(ref, seen.map(e => ({ ...e, aliases: [sansSide(e.id)] }))).units
+    return found.length > 0 ? found : byStem()
+  }
+  const matches = kind ? seen.filter(e => looksLike(e, kind)) : anyone ? [] : named()
+  if (matches.length === 0) {
+    if (seen.length === 0) return { question: `You have seen no enemy to attack. To go and find them, say "advance".` }
+    return {
+      question: `None of the enemy you have seen is "${ref}". You have seen: ` +
+        seen.map(e => `${e.id} (${seenWhere(e)})`).join(', ') + '.'
+    }
+  }
+  let pick = matches
+  if (near && matches.length > 1) {
+    const d = (e) => Math.max(Math.abs(e.position.x - near.x), Math.abs(e.position.y - near.y))
+    const best = Math.min(...matches.map(d))
+    pick = matches.filter(e => d(e) === best)
+  }
+  if (pick.length === 1) return { enemy: pick[0] }
+  const question = `Which ${ref} do you mean? You have seen ${pick.length}: ` + pick.map(e => `${e.id} (${seenWhere(e)})`).join(', ') + '.'
+  return {
+    question,
+    choice: {
+      question,
+      place: ref,
+      options: pick.map(e => {
+        const square = gridLabel(e.position, { quarter: true })
+        return { label: `${ref} ${seenWhere(e)}`, square, text: `${ref} at ${square}` }
+      })
+    }
+  }
+}
+
+// Where a unit falling back toward home will stop (review item L11): the
+// engine's own home target (battle.edgeTarget), each unit straight back to
+// its side's edge of the field. Without the side's edge, the words alone.
+function withdrawHomeWords(map, units, homeEdge, careful) {
+  const order = { action: 'withdraw', careful }
+  if (!homeEdge) return orderWords('say', order, OWN_EDGE) + `, ${HOLD_THERE}`
+  const stops = units.map(u => ({ unit: u, at: edgeTarget(map, u.position, homeEdge) }))
+  const metres = stops.map(s => Math.max(Math.abs(s.at.x - s.unit.position.x), Math.abs(s.at.y - s.unit.position.y)) * TILE_METRES)
+  const squares = [...new Set(stops.map(s => gridLabel(s.at, { quarter: true })))]
+  const far = Math.min(...metres) === Math.max(...metres) ? `${metres[0]} m` : `${Math.min(...metres)} to ${Math.max(...metres)} m`
+  return orderWords('say', order, `${OWN_EDGE} at ${squares.join(', ')}, ${far} ${homeEdge}`) + `, ${HOLD_THERE}`
+}
 
 // How well a unit will hide there, in words for the read-back: the engine's
 // own table (battle/hiding.js), so the player hears what the engine will do.
@@ -192,6 +283,31 @@ function resolveIntents(intents, context) {
       continue
     }
 
+    // "horse attack their archers": an enemy this side has seen.
+    if (intent.action === 'attack' && intent.enemyRef) {
+      const found = resolveEnemy(intent.enemyRef, context.enemies, map)
+      if (found.question) {
+        questions.push(found.question)
+        if (found.choice) choices.push(found.choice)
+        continue
+      }
+      const extras = {}
+      for (const key of ['careful']) if (intent[key]) extras[key] = intent[key]
+      const deep = resolveDepth(intent, { map, units, own: match.units, from: groupOrigin(match.units), target: null })
+      if (deep.question) {
+        questions.push(deep.question)
+        if (deep.choice) choices.push(deep.choice)
+        continue
+      }
+      for (const unit of match.units) {
+        orders.push({ unitRef: unit.id, action: 'attack', enemy: found.enemy.id, ...extras, ...deep.order })
+      }
+      const plain = orderWords('say', { action: 'attack', careful: extras.careful }, found.enemy.id)
+      understood.push(`${match.units.map(u => u.id).join(', ')}: ${plain}, ${seenWhere(found.enemy)}${deep.words}`)
+      counsel.push(...counselFor(match.units, units, { clauses: deep.clauses, action: 'attack', plain, shaken: context.shaken ?? [] }))
+      continue
+    }
+
     let target = null
     let where = ''
     let relative = false
@@ -243,7 +359,9 @@ function resolveIntents(intents, context) {
     // The order in the app's one vocabulary (narrator/words.js): "march to
     // Miller's Crossing 250 m east (F6-NW)", "fall back", "search the woods".
     const place = !target ? null : perUnit ? where : `${where} (${gridLabel(target, { quarter: true })})`
-    const plain = orderWords('say', { ...intent, careful: extras.careful }, place, { relative })
+    const plain = intent.action === 'withdraw' && !target
+      ? withdrawHomeWords(map, match.units, context.homeEdge, extras.careful)
+      : orderWords('say', { ...intent, careful: extras.careful }, place, { relative })
     let line = `${who}: ${plain}`
     if (intent.action === 'hide' || intent.action === 'ambush') {
       line += ` — ${coverWords(map, match.units[0], target ?? match.units[0].position)}`
