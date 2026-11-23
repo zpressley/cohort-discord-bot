@@ -90,7 +90,7 @@ function inWorkers(armies, { seeds, policy = 'planner', workers }) {
   const chunks = Array.from({ length: workers }, () => [])
   armies.forEach((a, i) => chunks[i % workers].push(a))
   return Promise.all(chunks.filter(c => c.length).map(jobs => new Promise((resolve, reject) => {
-    const child = fork(__filename, ['--worker'])
+    const child = fork(__filename, ['--worker', ...L.SETS.flatMap(set => ['--set', set])])
     child.on('message', resolve)
     child.on('error', reject)
     child.send({ jobs, seeds, policy })
@@ -128,6 +128,7 @@ async function main() {
   const out = arg('--out', null)
   const t0 = Date.now()
   const armies = Object.keys(FACTIONS).flatMap((f, i) => drawArmies(f, per, 4242 + i))
+  if (L.SETS.length) console.log(`Changed for this run: ${L.SETS.join(', ')}`)
   console.log(`${armies.length} armies drawn (${per} a faction); screening at 32 battles each...`)
   const screened = (await inWorkers(armies, { seeds: 1, workers })).sort((a, b) => b.rate - a.rate)
   console.log(`screened in ${Math.round((Date.now() - t0) / 1000)} s`)
