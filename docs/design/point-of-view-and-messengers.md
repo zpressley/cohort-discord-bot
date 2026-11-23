@@ -110,6 +110,14 @@ seen); that is the next step for it, and is said plainly in the notes.
 
 Each step leaves the game playable and is merged on its own.
 
+Where the build stands:
+- **Step 1 is built** (`engine/command/messengers.js`; the queue is
+  `battle.riders`, filled as orders are given; `riderSent` and
+  `riderBlocked` in the log; the read-back's time in
+  `interpreter/resolve.js`). Measured with
+  `node src/harness/messenger-league.js`. See `docs/DECISIONS.md`, "How the
+  Commander's point of view and messengers were built".
+
 ## What comes after, not in this build
 
 - **Reports that say more as an officer rises, and never say anything

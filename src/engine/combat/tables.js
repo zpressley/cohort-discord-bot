@@ -689,6 +689,17 @@ const RIDE = {
   REACH: 1
 }
 
+// Orders and news by rider (docs/design/point-of-view-and-messengers.md;
+// ruled 2026-11-23: "there is an immediate range around the commander then
+// outside that range every turn of movement by a messenger on horseback is
+// a delay in the order"; the ranges approved the same day: "Go with the
+// proposed pov/messenger ranges"). command/messengers.js reads them.
+const COMMAND = {
+  IMMEDIATE: 6,        // tiles (150 m) from the Commander: an order arrives at once, and he sees for himself
+  RIDER_PACE: 10,      // ground a lone rider covers in ten minutes, in move cost (a formed unit of horse: 5)
+  CLEARANCE: 1         // a rider will not cross a tile within this many of an enemy unit
+}
+
 // ── Morale ─────────────────────────────────────────────
 //
 // [locked decision 5, replaced 2026-11-21] Morale falls in a fight and rises
@@ -815,6 +826,7 @@ module.exports = {
   PARLEY,
   LOYALTY,
   RIDE,
+  COMMAND,
   MORALE,
   DAMAGE,
   CHARGE,

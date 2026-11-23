@@ -20,6 +20,12 @@
 //                   ("steady" is kept for an officer's nature)
 //   broke, rallied, left the field, destroyed
 //                   what becomes of a unit
+//   a rider, word, cut off
+//                   how orders and news go between the Commander and a
+//                   unit beyond his immediate range: a rider carries an
+//                   order; word is what reaches him of a unit, and how old
+//                   it is ("20 min ago"); a unit no rider can get through
+//                   to is cut off ("no word since 1 h 20")
 //
 // Presentation only: nothing here decides anything.
 
@@ -134,4 +140,39 @@ const RIDE_WITH = { say: 'ride with', doing: 'riding with', did: 'rode over to' 
 const LOYALTY_WORDS = { loyal: 'loyal', disloyal: 'disaffected' }
 const VALUES_WORDS = { glory: 'lives for glory', survival: 'looks to his men' }
 
-module.exports = { orderWords, moraleWords, ORDER, OWN_EDGE, HOLD_THERE, KIT, RIDE_WITH, LOYALTY_WORDS, VALUES_WORDS }
+// Orders and news by rider (engine/command/messengers.js). Minutes in the
+// battle's own way of telling time ("20 min", "1 h 20").
+const clock = (minutes) => {
+  const h = Math.floor(minutes / 60)
+  const m = minutes % 60
+  return h === 0 ? `${m} min` : m === 0 ? `${h} h` : `${h} h ${String(m).padStart(2, '0')}`
+}
+const RIDER = {
+  // The read-back: how long each order takes. `minutes` per unit named: 0
+  // at once, Infinity when no rider can get through.
+  readBack(minutes, names) {
+    const blocked = names.filter((n, i) => minutes[i] === Infinity)
+    const riding = minutes.filter(m => m > 0 && m !== Infinity)
+    const parts = []
+    if (riding.length > 0) {
+      const lo = Math.min(...riding)
+      const hi = Math.max(...riding)
+      const who = blocked.length > 0 || riding.length < minutes.length - blocked.length ? 'the rest' : 'them'
+      parts.push(lo === hi ? `A rider reaches ${who} in about ${lo} minutes` : `Riders reach ${who} in ${lo} to ${hi} minutes`)
+    }
+    if (blocked.length > 0) parts.unshift(`No rider can get through to ${blocked.join(', ')}: ${blocked.length === minutes.length ? 'the order is not sent' : 'they are not sent it'}`)
+    return parts.join('. ')
+  },
+  // A dispatch line for an order that could not be sent.
+  blocked: (unit) => `no rider could get through to ${unit}: your order did not reach them`,
+  sent: (unit, minutes) => `a rider set out for ${unit}, ${minutes} minutes' ride away`,
+  // How old word of a unit is, on the map and the Army tab.
+  age: (minutes) => (minutes <= 0 ? 'now' : `${clock(minutes)} ago`),
+  // A unit no rider can get through to.
+  cutOff: (minutesIntoBattle) => `cut off: no word since ${clock(minutesIntoBattle)} into the battle`,
+  // A dispatch's news from far off.
+  from: (minutes) => `Word from ${clock(minutes)} ago`,
+  clock
+}
+
+module.exports = { orderWords, moraleWords, ORDER, OWN_EDGE, HOLD_THERE, KIT, RIDE_WITH, LOYALTY_WORDS, VALUES_WORDS, RIDER }

@@ -32,6 +32,7 @@ const { assignOfficers } = require('../engine/command/roster')
 const { planTurn } = require('../opponent/planner')
 const { musterOfficers, settleBattle, ridesWith, createCompany } = require('../engine/command/company')
 const { bargainChips, canRide, heldSight, sightFrom } = require('../engine/command/commander')
+const { orderDelays } = require('../engine/command/messengers')
 const { captorAnswer } = require('../opponent/captor')
 const { createCommanderStore } = require('./commanders')
 const { digest, summarise } = require('../narrator/turnNarrator')
@@ -586,6 +587,10 @@ function createBattleStore({ dir = null, ai = null, now = () => Date.now() } = {
       // "I ride with the horse": may he, and if not, why (canRide).
       ride: (unitId) => canRide(game.battle.commanders, game.battle.world, game.battle.broken, side, unitId),
       ridingWith: game.battle.commanders?.[side]?.status === 'free' ? game.battle.commanders[side].unitId : null,
+      // How long a rider takes to each unit (engine/command/messengers.js),
+      // for the read-back: from the unit he rides with, or the one he is
+      // riding over to first.
+      messengers: (ids, from) => orderDelays(game.battle, side, ids, { from }),
       allOwn: game.battle.world.units.filter(u => u.side === side && u.strength > 0)
         .map(u => ({ ...u, aliases: [unitName(u).toLowerCase(), ...(u.aliases ?? [])] }))
     }

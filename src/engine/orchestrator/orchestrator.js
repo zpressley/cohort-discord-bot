@@ -456,6 +456,8 @@ function ordersCarriedOut(battle) {
 
   const working = (unit) => {
     if (doneIds.has(unit.id) || battle.broken.has(unit.id) || unit.strength <= 0) return false
+    // An order still on the road to it (command/messengers.js): not done.
+    if (battle.riders?.some(r => r.unitId === unit.id)) return true
     const order = battle.orderBook.get(unit.id)
     if (!order) return false
     // Going for a named enemy never finishes, as pressing the enemy does not.
