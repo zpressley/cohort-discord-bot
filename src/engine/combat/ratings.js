@@ -100,16 +100,32 @@ function armorClass(unit) {
 // [Q4] `effectiveness` is a damage multiplier, divided by 100. The tables were
 // authored as percentages, so using them raw would inflate damage 100x.
 function effectivenessAgainst(striker, target) {
-  const weapon = resolveWeapon(striker)
+  const weapon = handWeapon(striker)
   const cls = armorClass(target)
   return (weapon.effectiveness[cls] ?? 50) / 100
+}
+
+// PROPOSAL (docs/design/army-balance.md): what a missile unit fights with
+// hand to hand. With MISSILES.SIDEARM set, a unit whose weapon shoots
+// fights a melee with that weapon instead (it does not swing its sling);
+// unset, it fights with its missile weapon's numbers, as before.
+function handWeapon(unit) {
+  const weapon = resolveWeapon(unit)
+  const sidearm = T.MISSILES.SIDEARM
+  if (sidearm && (weapon.range ?? 0) >= T.MISSILES.MIN_RANGE_M) return T.WEAPONS[sidearm] ?? weapon
+  return weapon
+}
+
+// The same, for the missile weapon itself (combat/ranged.js).
+function missileEffectiveness(shooter, target) {
+  return (resolveWeapon(shooter).effectiveness[armorClass(target)] ?? 50) / 100
 }
 
 // [notebook] "Spears good vs horses. Cavalry charge bonus suppressed against
 // braced spears." A weapon braces when its anti-cavalry effectiveness is at or
 // above the threshold, which picks out the spear/sarissa/framea family exactly.
 function isAntiCavalry(unit) {
-  return resolveWeapon(unit).effectiveness.cavalry >= T.ANTI_CAVALRY_THRESHOLD
+  return handWeapon(unit).effectiveness.cavalry >= T.ANTI_CAVALRY_THRESHOLD
 }
 
 // Ranged weapons carry a range in metres. [notebook] Archers cannot use ranged
@@ -212,7 +228,7 @@ function chaosMultiplier(chaos) {
 //   prepared         this unit set and braced for the attack
 
 function baseAttackRating(unit) {
-  return resolveQuality(unit).attack + resolveWeapon(unit).damage
+  return resolveQuality(unit).attack + handWeapon(unit).damage
 }
 
 function baseDefenseRating(unit) {
@@ -307,6 +323,8 @@ module.exports = {
   moraleResistance,
   armorClass,
   effectivenessAgainst,
+  handWeapon,
+  missileEffectiveness,
   isAntiCavalry,
   isRanged,
   chargeMultiplier,
