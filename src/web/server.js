@@ -22,6 +22,10 @@
 //   GET  /api/seat/:token/summary           just the status line (to poll)
 //   GET  /api/seat/:token/replay?turn=n     a finished battle as this side saw it
 //                                           after turn n
+//   POST /api/seat/:token/join { commander, faction }  the friend who joined by link
+//                                           chooses who leads their side: a
+//                                           Commander's token, or null for none;
+//                                           only before the first turn runs
 //   POST /api/seat/:token/read   { text }   read orders back, send nothing
 //   POST /api/seat/:token/orders { text }   send orders
 //   POST /api/seat/:token/bargain { unit }  a Commander held by the enemy
@@ -76,7 +80,11 @@ function readBody(req) {
     })
     req.on('end', () => {
       if (chunks.length === 0) return resolve({})
-      try { resolve(JSON.parse(Buffer.concat(chunks).toString('utf8'))) } catch { reject(Object.assign(new Error('bad json'), { status: 400 })) }
+      try {
+        // A body that is JSON but not an object ("null", a number) is no body.
+        const body = JSON.parse(Buffer.concat(chunks).toString('utf8'))
+        resolve(body && typeof body === 'object' && !Array.isArray(body) ? body : {})
+      } catch { reject(Object.assign(new Error('bad json'), { status: 400 })) }
     })
     req.on('error', reject)
   })
@@ -142,6 +150,11 @@ function createServer(store) {
           if (req.method === 'GET' && parts[3] === 'replay') {
             const shown = store.replay(token, url.searchParams.get('turn'))
             return shown ? send(res, 200, shown) : send(res, 409, { error: 'the battle is not over yet' })
+          }
+          if (req.method === 'POST' && parts[3] === 'join') {
+            const body = await readBody(req)
+            return send(res, 200, store.join(token, typeof body.commander === 'string' ? body.commander : null,
+              typeof body.faction === 'string' && body.faction ? body.faction : null))
           }
           if (req.method === 'POST' && parts[3] === 'read') {
             const body = await readBody(req)

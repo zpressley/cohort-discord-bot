@@ -33,3 +33,21 @@ test('the other side hears what its own men did, and never where he went', () =>
     'blue_horse killed the enemy Commander'
   ])
 })
+
+test('with a Commander on each side, each hears his own fate as "you" and the other\'s as his men\'s doing', () => {
+  const both = [
+    { type: 'commanderMoved', turn: 4, side: 'blue', unitId: 'blue_horse', from: 'blue_spears' },
+    { type: 'commanderTaken', turn: 4, side: 'red', unitId: 'red_spears', by: 'blue_swords' },
+    { type: 'commanderKilled', turn: 4, side: 'blue', unitId: 'blue_horse', by: 'red_horse' }
+  ]
+  const tell = (own, seen) => report({ map, ownIds: new Set(own), seenEnemyIds: new Set(seen), events: both })
+  assert.deepEqual(tell(['red_spears', 'red_horse'], ['blue_swords', 'blue_horse', 'blue_spears']), [
+    'You were taken by blue_swords. You can send no orders; your officers fight on with the ones they have',
+    'red_horse killed the enemy Commander'
+  ])
+  assert.deepEqual(tell(['blue_swords', 'blue_horse', 'blue_spears'], ['red_spears', 'red_horse']), [
+    'blue_swords took the enemy Commander',
+    'You were killed in the fight with red_horse',
+    'With blue_spears gone you got away to blue_horse'
+  ])
+})

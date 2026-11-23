@@ -21,6 +21,8 @@
 //   fallen    those killed or taken, as a roll: the company keeps its dead,
 //             but not what they knew
 //   battles   how many the company has fought
+//   settled   the ids of the battles already written in, so that writing
+//             one in twice (a server that stopped half way) changes nothing
 
 const { createRng } = require('../rng')
 const { PERSONALITIES, EARNED_AT } = require('./officers')
@@ -29,10 +31,10 @@ const { NAMES, PLAIN } = require('../../data/officers')
 const { QUALITY_ORDER } = require('../combat/tables')
 
 function createCompany() {
-  return { officers: [], units: {}, fallen: [], battles: 0, nextId: 1 }
+  return { officers: [], units: {}, fallen: [], battles: 0, settled: [], nextId: 1 }
 }
 
-const copy = (company) => ({ units: {}, ...JSON.parse(JSON.stringify(company)) })
+const copy = (company) => ({ units: {}, settled: [], ...JSON.parse(JSON.stringify(company)) })
 
 // What a unit with no officer takes into battle: no one.
 const HEADLESS = { headless: true, name: null, experience: 0, personality: 'steady' }
@@ -49,10 +51,21 @@ function freshName(company, culture, random) {
   return `${pool[start]} the Younger`
 }
 
-/** The unit a Commander's veteran leads, and he rides with: the elite, else the best, the first listed. */
+/** A new Commander's veteran leads this unit: the elite, else the best, the first listed. */
 function leadUnit(units) {
   const rank = (u) => QUALITY_ORDER.indexOf(u.quality)
   return units.reduce((best, u, i) => (rank(u) > rank(units[best]) ? i : best), 0)
+}
+
+/**
+ * The unit the Commander rides with, once officers are given out
+ * (musterOfficers' units): the one his most experienced officer leads. With
+ * no officer on the field, his best unit.
+ */
+function ridesWith(units) {
+  const led = units.filter(u => u.officer && !u.officer.headless)
+    .sort((a, b) => b.officer.experience - a.officer.experience || units.indexOf(a) - units.indexOf(b))[0]
+  return (led ?? units[leadUnit(units)]).id
 }
 
 /**
@@ -90,12 +103,23 @@ function musterOfficers(company, units, seed) {
       record: []
     })
   }
-  const taken = new Set()
+  // Each officer to his own men first. Then those whose men are not on this
+  // field take the units with no officer, the most experienced officer to
+  // the best unit: so a veteran on a strange field leads its elite.
+  const fit = next.officers.filter(o => o.status !== 'wounded')
+  const lead = new Map()
+  for (const unit of units) {
+    const own = fit.find(o => o.leads === unit.kind && ![...lead.values()].includes(o))
+    if (own) lead.set(unit.id, own)
+  }
+  const spare = fit.filter(o => ![...lead.values()].includes(o) && !units.some(u => u.kind === o.leads))
+    .sort((a, b) => b.experience - a.experience || a.id.localeCompare(b.id))
+  const rank = (u) => QUALITY_ORDER.indexOf(u.quality)
+  const wanting = units.filter(u => !lead.has(u.id)).sort((a, b) => rank(b) - rank(a) || units.indexOf(a) - units.indexOf(b))
+  for (const unit of wanting) if (spare.length) lead.set(unit.id, spare.shift())
+
   const out = units.map(unit => {
-    const free = next.officers.filter(o => !taken.has(o.id) && o.status !== 'wounded')
-    const officer = free.find(o => o.leads === unit.kind) ??
-      free.filter(o => !units.some(u => u.kind === o.leads))
-        .sort((a, b) => b.experience - a.experience || a.id.localeCompare(b.id))[0]
+    const officer = lead.get(unit.id)
     if (!officer) {
       // No officer: the unit's own count of battles runs (unless its
       // officer is only wounded, and will be back).
@@ -104,7 +128,6 @@ function musterOfficers(company, units, seed) {
     }
     officer.leads = unit.kind
     delete next.units[unit.kind]
-    taken.add(officer.id)
     return { ...unit, officer: { id: officer.id, name: officer.name, experience: officer.experience, personality: officer.personality } }
   })
   return { company: next, units: out }
@@ -132,6 +155,8 @@ function musterOfficers(company, units, seed) {
  */
 function settleBattle(company, battle, fates) {
   const next = copy(company)
+  // Already written in: nothing changes.
+  if (battle.id != null && next.settled.includes(battle.id)) return next
   const fought = new Set(fates.map(f => f.officerId).filter(Boolean))
   const random = createRng((Math.imul((battle.seed ?? next.battles) + 1, 48271) + next.nextId) >>> 0)
   // A wounded man who sat this one out is fit again.
@@ -181,7 +206,8 @@ function settleBattle(company, battle, fates) {
     officer.status = f.fate === 'wounded' ? 'wounded' : 'fit'
   }
   next.battles += 1
+  if (battle.id != null) next.settled.push(battle.id)
   return next
 }
 
-module.exports = { createCompany, musterOfficers, settleBattle, leadUnit, HEADLESS }
+module.exports = { createCompany, musterOfficers, settleBattle, leadUnit, ridesWith, HEADLESS }

@@ -29,3 +29,7 @@ tests/         the API tests (part of npm test)
 
 A seat's link is the only key to it: whoever holds the link plays that
 side. Battles are JSON files; delete one and that battle is gone.
+
+A friend who opens their link to a two-player battle first sees "Who
+leads?": their Commanders whose armies are free, a new Commander, or none.
+Their orders wait on that choice; once the first turn has run it is closed.

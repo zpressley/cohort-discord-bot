@@ -81,7 +81,7 @@ function factionUnits(key, side, homeEdge = side === 'red' ? 'west' : 'east') {
     return {
       ...spec,
       id: `${side}_${slug(name)}${numbered ? `_${nth}` : ''}`,
-      aliases: numbered ? [name] : [],
+      aliases: numbered ? [`${name} ${nth}`, name] : [name],
       faction: key
     }
   })
@@ -113,13 +113,22 @@ function formUp(units, homeEdge) {
  * map, where each side forms up (its home edge and the map's deployment
  * ground), objectives and the time limit; the factions bring the armies.
  *
+ * A side not named keeps its army where it stands: so one side's army can
+ * be changed (the friend who joins with a Commander of another faction).
+ *
  * @param {Object} spec      a scenario spec (with `map` and `sides`)
  * @param {Object} factions  { [side]: faction key }
  */
 function fieldFactions(spec, factions) {
-  const units = Object.entries(factions)
-    .flatMap(([side, key]) => factionUnits(key, side, spec.sides?.[side]?.homeEdge))
-  return { ...spec, units: deployArmies(resolveMap(spec.map ?? 'crownhill'), units, spec.sides) }
+  const map = resolveMap(spec.map ?? 'crownhill')
+  let units = spec.units
+  for (const [side, key] of Object.entries(factions)) {
+    const army = deployArmies(map, factionUnits(key, side, spec.sides?.[side]?.homeEdge), { [side]: spec.sides?.[side] ?? {} })
+    const at = units.findIndex(u => u.side === side)
+    const rest = units.filter(u => u.side !== side)
+    units = at < 0 ? [...rest, ...army] : [...rest.slice(0, at), ...army, ...rest.slice(at)]
+  }
+  return { ...spec, units }
 }
 
 /** The enemy's faction when none is chosen: another one, drawn from the battle's seed. */

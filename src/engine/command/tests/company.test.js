@@ -6,7 +6,7 @@
 const { test } = require('node:test')
 const assert = require('node:assert/strict')
 
-const { createCompany, musterOfficers, settleBattle, HEADLESS } = require('../company')
+const { createCompany, musterOfficers, settleBattle, ridesWith, HEADLESS } = require('../company')
 const { gradeOf, grasp, EARNED_AT } = require('../officers')
 
 const units = () => [
@@ -43,7 +43,7 @@ test('the same officer leads the same men in the next battle, a battle older', (
   assert.equal(two.units[2].officer.experience, one.units[2].officer.experience + 1)
   assert.equal(after.battles, 1)
   assert.deepEqual(after.officers[0].record[0], { battle: 'b1', title: 'Battle 1', result: 'victory', unit: 'elite', fate: 'unhurt', deeds: 'held the ford', orders: ['hold'] })
-  assert.deepEqual(createCompany(), { officers: [], units: {}, fallen: [], battles: 0, nextId: 1 }, 'nothing is changed in place')
+  assert.deepEqual(createCompany(), { officers: [], units: {}, fallen: [], battles: 0, settled: [], nextId: 1 }, 'nothing is changed in place')
 })
 
 test('a unit earns its officer: none for two battles, one by the fourth, named and seasoned', () => {
@@ -125,3 +125,36 @@ test('on a different field an officer without his own kind of unit takes what th
   assert.equal(two.units[0].officer.id, after.officers[0].id, 'the veteran, not no one')
   assert.equal(two.company.officers.length, 1)
 })
+
+// ── From the review of November 23 ─────────────────────
+
+test('on a strange field the veteran takes its best unit, and the Commander rides with him', () => {
+  const after = through(createCompany(), 1)
+  const legion = [
+    { id: 'red_unit_1', side: 'red', kind: 'heavy infantry 1', quality: 'professional' },
+    { id: 'red_unit_2', side: 'red', kind: 'heavy infantry 2', quality: 'professional' },
+    { id: 'red_elite', side: 'red', kind: 'praetorians', quality: 'elite' }
+  ]
+  const two = musterOfficers(after, legion, 3)
+  assert.equal(two.units[2].officer.id, after.officers[0].id, 'not the first unit listed: the elite')
+  assert.deepEqual([two.units[0].officer, two.units[1].officer], [HEADLESS, HEADLESS])
+  assert.equal(ridesWith(two.units), 'red_elite')
+})
+
+test('the Commander rides with his most experienced officer; with none on the field, his best unit', () => {
+  const one = musterOfficers(createCompany(), units(), 7)
+  assert.equal(ridesWith(one.units), 'red_elite')
+  const hurt = settleBattle(one.company, battle(1), [fate(one.units[0]), fate(one.units[1]), fate(one.units[2], 'wounded')])
+  const two = musterOfficers(hurt, units(), 8)
+  assert.ok(two.units.every(u => u.officer.headless), 'his veteran is wounded: no officer on the field')
+  assert.equal(ridesWith(two.units), 'red_elite')
+})
+
+test('a battle written into the company twice counts once', () => {
+  const one = musterOfficers(createCompany(), units(), 7)
+  const fates = one.units.map(u => fate(u))
+  const once = settleBattle(one.company, battle(1), fates)
+  assert.deepEqual(settleBattle(once, battle(1), fates), once)
+  assert.equal(settleBattle(once, battle(2), fates).battles, 2, 'another battle still counts')
+})
+

@@ -183,6 +183,14 @@ test('a line that says two things goes to the AI even though the grammar could r
   assert.deepEqual(read.orders.map(o => [o.unitRef, o.action]), [['red_spears', 'move'], ['red_archers', 'hide']])
 })
 
+test('two units named with "and" are both ordered, even when one name is also a kind of unit', async () => {
+  const read = await interpretText('spears and archers hold', context, {})
+  assert.deepEqual(read.orders.map(o => [o.unitRef, o.action]), [['red_spears', 'hold'], ['red_archers', 'hold']])
+  assert.deepEqual(read.questions, [])
+  // A kind alone still answers for every unit of that kind.
+  assert.deepEqual((await interpretText('archers hold', context, {})).orders.map(o => o.unitRef), ['red_archers'])
+})
+
 test('AI: down, missing or slow, the grammar takes over', async () => {
   const down = createAiClient({ transport: scriptedTransport(() => { throw new Error('503') }), retries: 0 })
   assert.equal((await interpretText('spears hold', context, { ai: down })).source, 'grammar')
