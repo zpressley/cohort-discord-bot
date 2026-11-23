@@ -977,3 +977,19 @@ Built at once: **5** (a Commander who falls can be killed only when his
 unit is at a quarter of its strength or less, or destroyed; above that he
 is taken: `COMMANDER.DEATH_THRESHOLD`) and **7**.
 
+## Rulings, November 23, 2026 (factions and the battle)
+
+Zach, on the four questions the factions work raised:
+
+1. **Buying the army.** "They should buy standard army with a set budget,
+   use the army builder that the original discord app ran."
+2. **The factions.** "I have a doc for factions and elite units for 20
+   factions." It is `docs/Context/final_20_cultures_complete.txt`.
+3. **Whose faction.** Asked whether a friend's own faction should override
+   the mustering player's choice of enemy: "No, your faction is just the
+   starting place, it can be the same (Romans fought Romans all the time)."
+   Read as: each player brings his own faction, the mustering player does
+   not choose a friend's, and both sides may be the same faction.
+4. **The kind of battle.** "One type right now, a deathmatch. Victory
+   condition is surrendering the field, army loss, or commander death."
+
