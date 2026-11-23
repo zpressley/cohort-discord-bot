@@ -583,7 +583,30 @@ const DAY = { TURNS: 40 }
 // men fall first). The experience the fallen take with them, as a share of
 // the unit's average: at 1 they die evenly; at 0.5 the men who fall have on
 // average half the unit's experience. Starting value.
-const VETERANCY = { FALLEN_SHARE: 0.5 }
+//
+// PROPOSAL (docs/design/army-balance.md, part 4): what a unit's veterancy
+// does in a battle. A unit carries its average experience, 0 to 30
+// (command/company.js, unitsOf), as `veterancy`. At each step it adds
+// `fight` to its attack and defence ratings (a professional has 4 of each
+// over a levy's 1) and `stand` to its morale resistance (a quality tier's
+// morale point is 0.38); and of the men a blow would fell it loses only
+// 1 - `survive` (they know how to keep alive), though it is shaken as if
+// it had lost them all. The steps fall where an officer's levels do:
+// green 4, seasoned 8, veteran 13, legendary 20. A unit with none fights
+// as before.
+// Measured (src/harness/army-study/veterans.js, a usual army against
+// itself, 128 battles a row): legendary veterans win 60% (none: 48%) and
+// lose 35% of their men a battle (none: 39%). Harder to break alone gave
+// 78% and 35%; a lift to the fight alone, 72% and 35%.
+const VETERANCY = {
+  FALLEN_SHARE: 0.5,
+  STEPS: [
+    { from: 4, fight: 0.25, survive: 0.05 },   // green
+    { from: 8, fight: 0.5, survive: 0.10 },    // seasoned
+    { from: 13, fight: 0.75, survive: 0.15 },  // veteran
+    { from: 20, fight: 1, survive: 0.20 }      // legendary
+  ]
+}
 
 // Training (command/company.js; ruled 2026-11-23: "Good perk for 30 is
 // training, each battle fought increase the level of the unit. A 30

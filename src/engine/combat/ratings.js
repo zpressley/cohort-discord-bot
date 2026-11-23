@@ -84,7 +84,18 @@ function fatigueMultiplier(staminaPct) {
 // see it.
 function moraleResistance(unit) {
   return 1 + resolveQuality(unit).morale * T.MORALE.RESISTANCE_PER_POINT +
-    (unit.veteranResistance ?? 0)
+    (unit.veteranResistance ?? 0) + (veteranEdge(unit).stand ?? 0)
+}
+
+// PROPOSAL (docs/design/army-balance.md, part 4): what a unit's earned
+// veterancy (its men's average experience) gives it: the highest step of
+// tables.VETERANCY.STEPS it has reached, or nothing.
+const NO_EDGE = { fight: 0, stand: 0, survive: 0 }
+function veteranEdge(unit) {
+  const v = unit.veterancy ?? 0
+  let edge = NO_EDGE
+  for (const step of T.VETERANCY.STEPS ?? []) if (v >= step.from) edge = step
+  return edge
 }
 
 // ── Rock-paper-scissors ────────────────────────────────
@@ -263,7 +274,7 @@ function attackRating(unit, ctx = {}) {
   } = ctx
 
   const terrainMod = terrainModifier(terrain, enemyTerrain, prepared).attack
-  const base = Math.max(0, baseAttackRating(unit) + terrainMod + bonusAttack - crowding)
+  const base = Math.max(0, baseAttackRating(unit) + (veteranEdge(unit).fight ?? 0) + terrainMod + bonusAttack - crowding)
 
   return base
     * fatigueMultiplier(stamina / staminaPool(unit))
@@ -283,7 +294,7 @@ function defenseRating(unit, ctx = {}) {
   } = ctx
 
   const terrainMod = terrainModifier(terrain, enemyTerrain, prepared).defense
-  const base = Math.max(0, baseDefenseRating(unit) + terrainMod - crowding)
+  const base = Math.max(0, baseDefenseRating(unit) + (veteranEdge(unit).fight ?? 0) + terrainMod - crowding)
 
   // Defense does not scale with the strength snowball. A thinner line is
   // easier to kill because there are fewer men in it, which the casualty
@@ -321,6 +332,7 @@ module.exports = {
   staminaDrainPerRound,
   fatigueMultiplier,
   moraleResistance,
+  veteranEdge,
   armorClass,
   effectivenessAgainst,
   handWeapon,
