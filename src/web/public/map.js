@@ -44,8 +44,10 @@ const cy = (y) => MARGIN + y * TILE + TILE / 2
 // ── Unit counters ──────────────────────────────────────
 function kindOf(unit) {
   if (unit.mounted) return 'horse'
-  const role = String(unit.role ?? '')
-  if (/archer|bow|sling|skirmish/.test(role)) return 'bow'
+  // Your own are marked by what kind of men they are (words.js, kindWords);
+  // the enemy by the kind his reports told.
+  const role = String(unit.kind ?? unit.role ?? '')
+  if (/archer|bow|sling|skirmish|crossbow/.test(role)) return 'bow'
   if (/scout/.test(role)) return 'scout'
   if (/spear|pike/.test(role)) return 'spear'
   return 'foot'
@@ -68,7 +70,7 @@ const SCALE = 1.35
 // strength bar for your own, and (on the top counter of a stack) the name.
 // An enemy whose kind no report has told (unknownKind) is marked "?", not
 // with a kind's mark it might not be.
-function counter(unit, { side, own, selected, ghost, aged = false, commander = false, label, nameAbove = null, shift = 0 }) {
+function counter(unit, { side, own, selected, ghost, aged = false, commander = false, nameAbove = null, shift = 0 }) {
   const kind = kindOf(unit)
   const fill = ghost ? 'none' : `var(--side-${side})`
   const ink = ghost ? 'var(--ghost)' : `var(--side-${side}-on)`
@@ -85,6 +87,9 @@ function counter(unit, { side, own, selected, ghost, aged = false, commander = f
   const strength = own && unit.maxStrength
     ? `<rect x="-10" y="8.5" width="20" height="2.4" style="fill: var(--paper-edge)"/><rect x="-10" y="8.5" width="${Math.max(0, Math.round(20 * unit.strength / unit.maxStrength))}" height="2.4" style="fill: var(--ink)"/>`
     : ''
+  // The enemy's counters carry a mark of their own, a corner cut in ink,
+  // so they are told from yours by more than colour.
+  const mark = own ? '' : `<path d="M3 -7H10V0Z" style="fill: ${ghost ? 'var(--ghost)' : 'var(--ink)'}" aria-hidden="true"/>`
   const x = cx(unit.position.x) + shift
   const y = cy(unit.position.y) + shift
   return `
@@ -94,10 +99,9 @@ function counter(unit, { side, own, selected, ghost, aged = false, commander = f
         <rect x="-10" y="-7" width="20" height="14" style="fill: ${fill}; stroke: ${ghost ? 'var(--ghost)' : 'var(--ink)'}" stroke-width="1.1"${dash}/>
         <g style="stroke: ${ink}; fill: ${ink}" stroke-width="1.3" stroke-linecap="square">${ghost || unit.unknownKind ? '<text y="4" text-anchor="middle" font-size="11" style="stroke: none">?</text>' : symbol(kind)}</g>
         ${strength}
-        ${pennant}${cut}
+        ${pennant}${cut}${mark}
       </g>
       ${nameAbove ? `<text y="-19" text-anchor="middle" font-size="11" font-weight="600" class="unit-name" style="fill: var(--ink); font-family: var(--font-ui)">${esc(nameAbove)}</text>` : ''}
-      ${label ? `<text y="${own ? 27 : 24}" text-anchor="middle" font-size="10" class="unit-name" style="fill: var(--ink); font-family: var(--font-ui)">${esc(label)}</text>` : ''}
     </g>`
 }
 
@@ -120,7 +124,7 @@ function clusters(list) {
   return out
 }
 
-function clusterLabel(group, ghost, aged = false) {
+function clusterLabel(group, ghost, aged = false, own = true) {
   if (aged) {
     // Your units known by rider: their names, and how old the word is (the
     // server's words: "20 min ago", or cut off).
@@ -130,12 +134,43 @@ function clusterLabel(group, ghost, aged = false) {
   }
   if (ghost) {
     const ago = Math.min(...group.map(u => u.minutesAgo ?? 0))
-    return `${group.length > 1 ? `${group.length} units, ` : ''}last seen ${ago ? `${ago} min ago` : 'just now'}`
+    return `${group.length > 1 ? `${group.length} enemy units` : 'enemy'}, last seen ${ago ? `${ago} min ago` : 'just now'}`
   }
+  // The enemy's as the rest of the app names them: "enemy spears".
+  if (!own) return group.length <= 2 ? group.map(enemyName).join(', ') : `${group.length} enemy units`
   return group.length <= 2 ? group.map(g => g.name).join(', ') : `${group.length} units`
 }
+const enemyName = (u) => {
+  const name = String(u.name ?? '')
+  return /^enemy\b/i.test(name) ? name.charAt(0).toLowerCase() + name.slice(1) : `enemy ${name.toLowerCase()}`
+}
 
-function drawUnits(list, opts) {
+// Labels are placed last, all together, so names do not pile on each
+// other where units meet: each goes under its cluster if there is room,
+// else a line lower, two lines lower, or above it, wherever it covers
+// least of the labels already placed. Yours are placed first.
+const LABEL_LINE = 12
+function placeLabels(labels, taken = []) {
+  const placed = [...taken]
+  const overlap = (a, b) => Math.max(0, Math.min(a.x1, b.x1) - Math.max(a.x0, b.x0)) * Math.max(0, Math.min(a.y1, b.y1) - Math.max(a.y0, b.y0))
+  const out = []
+  for (const l of [...labels].sort((a, b) => a.rank - b.rank)) {
+    const w = l.text.length * 5.6 + 6
+    const box = (dy) => ({ x0: l.x - w / 2, x1: l.x + w / 2, y0: l.y + dy - 9, y1: l.y + dy + 3 })
+    let best = null
+    for (const dy of [0, LABEL_LINE, 2 * LABEL_LINE, -l.above]) {
+      const b = box(dy)
+      const cost = placed.reduce((n, p) => n + overlap(b, p), 0)
+      if (!best || cost < best.cost) best = { dy, b, cost }
+      if (cost === 0) break
+    }
+    placed.push(best.b)
+    out.push(`<text x="${l.x}" y="${l.y + best.dy}" text-anchor="middle" font-size="10" class="unit-name" style="fill: var(--ink); font-family: var(--font-ui)">${esc(l.text)}</text>`)
+  }
+  return out.join('')
+}
+
+function drawUnits(list, opts, labels = []) {
   const byTile = new Map()
   for (const u of list) {
     const key = `${u.position.x},${u.position.y}`
@@ -146,7 +181,7 @@ function drawUnits(list, opts) {
   const labelAt = new Map()
   for (const group of clusters(list)) {
     const lowest = group.reduce((a, b) => (b.position.y > a.position.y || (b.position.y === a.position.y && b.position.x > a.position.x) ? b : a))
-    labelAt.set(`${lowest.position.x},${lowest.position.y}`, clusterLabel(group, opts.ghost, opts.aged))
+    labelAt.set(`${lowest.position.x},${lowest.position.y}`, clusterLabel(group, opts.ghost, opts.aged, opts.own))
   }
   const out = []
   for (const group of byTile.values()) {
@@ -154,7 +189,8 @@ function drawUnits(list, opts) {
       const top = i === group.length - 1
       const selected = opts.selectedId === u.id
       const label = top ? labelAt.get(`${u.position.x},${u.position.y}`) ?? null : null
-      out.push(counter(u, { ...opts, ghost: opts.ghost, commander: opts.commanderId === u.id, selected, label, nameAbove: selected && !opts.ghost ? u.name : null, shift: i * 5 }))
+      if (label) labels.push({ text: label, x: cx(u.position.x) + i * 5, y: cy(u.position.y) + i * 5 + (opts.own ? 27 : 24), above: opts.own ? 50 : 42, rank: opts.rank ?? 0 })
+      out.push(counter(u, { ...opts, ghost: opts.ghost, commander: opts.commanderId === u.id, selected, nameAbove: selected && !opts.ghost ? u.name : null, shift: i * 5 }))
     })
   }
   return out.join('')
@@ -241,7 +277,9 @@ export function drawMap(view, { selectedId = null } = {}) {
     (landmarks ?? []).filter(l => l.kind !== 'road' && l.kind !== 'river').map(l => `<text x="${cx(l.centre.x)}" y="${cy(l.centre.y) - 12}" class="landmark">${esc(l.name)}</text>`).join('')
   }</g>`)
 
-  // Objectives: a dashed ring round the ground, and its name.
+  // Objectives: a dashed ring round the ground, and its name (which unit
+  // labels keep clear of: groundNames).
+  const groundNames = []
   for (const o of view.objectives ?? []) {
     const xs = o.tiles.map(t => t.x)
     const ys = o.tiles.map(t => t.y)
@@ -250,6 +288,8 @@ export function drawMap(view, { selectedId = null } = {}) {
     const w = (Math.max(...xs) - Math.min(...xs) + 1) * TILE + 6
     const h = (Math.max(...ys) - Math.min(...ys) + 1) * TILE + 6
     const held = o.holder ? ` (held by ${o.holder === side ? 'you' : 'the enemy'})` : ''
+    const half = (o.name + held).length * 3.3 + 4
+    groundNames.push({ x0: x0 + w / 2 - half, x1: x0 + w / 2 + half, y0: y0 + h + 3, y1: y0 + h + 16 })
     // A faint wash over the ground itself, so it reads at a phone's zoom.
     for (const t of o.tiles) parts.push(`<rect aria-hidden="true" x="${MARGIN + t.x * TILE}" y="${MARGIN + t.y * TILE}" width="${TILE}" height="${TILE}" style="fill: var(--objective)" fill-opacity="0.18"/>`)
     parts.push(`<g aria-hidden="true"><rect x="${x0}" y="${y0}" width="${w}" height="${h}" rx="6" fill="none" style="stroke: var(--objective)" stroke-width="2.5" stroke-dasharray="6 4"/>
@@ -280,11 +320,13 @@ export function drawMap(view, { selectedId = null } = {}) {
   // Units: enemies as known, then yours on top: those known by rider faded,
   // where word last put them, then those about you as they are.
   const enemies = view.enemies ?? []
-  parts.push(drawUnits(enemies.filter(e => e.status !== 'visible'), { side: enemySide, own: false, ghost: true }))
-  parts.push(drawUnits(enemies.filter(e => e.status === 'visible'), { side: enemySide, own: false, ghost: false }))
+  const names = []
+  parts.push(drawUnits(enemies.filter(e => e.status !== 'visible'), { side: enemySide, own: false, ghost: true, rank: 3 }, names))
+  parts.push(drawUnits(enemies.filter(e => e.status === 'visible'), { side: enemySide, own: false, ghost: false, rank: 1 }, names))
   const aged = (u) => u.word && !u.word.live
-  parts.push(drawUnits(view.own.filter(aged), { side, own: true, ghost: false, aged: true, selectedId, commanderId }))
-  parts.push(drawUnits(view.own.filter(u => !aged(u)), { side, own: true, ghost: false, selectedId, commanderId }))
+  parts.push(drawUnits(view.own.filter(aged), { side, own: true, ghost: false, aged: true, selectedId, commanderId, rank: 2 }, names))
+  parts.push(drawUnits(view.own.filter(u => !aged(u)), { side, own: true, ghost: false, selectedId, commanderId, rank: 0 }, names))
+  parts.push(placeLabels(names, groundNames))
 
   const seen = (view.enemies ?? []).filter(e => e.status === 'visible').length
   const label = `Map of ${view.map.name}. Your ${view.own.length} units are shown; ${seen} enemy units in sight` +

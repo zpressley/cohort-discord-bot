@@ -189,7 +189,7 @@ test('alone, on a phone: muster, an order written on the map, turns to a verdict
     assert.match(p.url(), /\/commander\/new/, 'his army is in the field: a new Commander must be made to muster')
     await p.goto(base + '/officers')
     await p.waitForSelector('.commander')
-    assert.match(await p.textContent('main'), /His army is in the field/)
+    assert.match(await p.textContent('main'), /Your army is in the field/, 'you, not he: the Commander is the player')
   })
 })
 
@@ -224,10 +224,9 @@ test('two players by link, on desktops: the turn waits for both, then both read 
     // A new Commander's faction, for life: the army the muster gave this side first.
     await blue.selectOption('select[name="faction"]', 'sarmatia')
     await blue.click('#make button[type="submit"]')
-    await blue.waitForSelector('#who-leads')
-    assert.equal(await blue.locator('[data-lead]').count(), 3, 'he is offered first, and a new one still')
-    await blue.click('[data-lead] >> nth=0')
+    // The Commander he has just made leads: no second tap on "Who leads?".
     await blue.waitForSelector('#map-scroll svg')
+    assert.equal(await blue.locator('#who-leads').count(), 0, 'the Commander just made leads at once')
     assert.match(await blue.textContent('.bar-title'), /Blue/)
     assert.equal((await blue.evaluate(() => JSON.parse(localStorage.getItem('cohort.commanders')))).length, 1, 'his link is kept in this browser')
     await blue.click('[data-tab="army"]')
@@ -256,7 +255,7 @@ test('two players by link, on desktops: the turn waits for both, then both read 
     // And his Commander, whose army is in the field.
     await blue.goto(base + '/officers')
     await blue.waitForSelector('.commander')
-    assert.match(await blue.textContent('main'), /His army is in the field/)
+    assert.match(await blue.textContent('main'), /Your army is in the field/)
 
     // Choosing is the friend's alone, and only once: the link opens the tent now.
     await blue.goto(link)
@@ -818,7 +817,7 @@ test('on a phone: a new Commander is made on one screen, two questions and a nam
     assert.match(await p.textContent('main'), /The Wall, for survival\./)
     assert.match(await p.textContent('.officer'), /cautious[\s\S]*looks to his men/)
     await shot('officers')
-    await p.click('text=His record')
+    await p.click('text=Your record')
     await p.waitForSelector('#commander-page')
     assert.match(await p.textContent('#his-answers'), /You are the Wall: nothing breaks your line\. You fight for survival\./)
     assert.match(await p.textContent('.record'), /a defeat/)
@@ -994,5 +993,148 @@ test('on a phone: the way back in the top bar is a finger\'s size, and a horse p
     assert.match(await p.textContent('#refused'), /On foot: Sarmatia fights on horseback/)
     const evenSo = await p.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)
     assert.ok(evenSo, 'no sideways scroll')
+  })
+})
+
+// The app's rough spots (docs/REVIEW-2026-11.md, playthrough of November 24).
+const roughShot = (p, name) => process.env.SHOT ? p.screenshot({ path: process.env.SHOT.replace('.png', `-${name}.png`), fullPage: true }) : null
+
+test('on a phone: changes to your army not yet kept are not lost by leaving the screen or a reload; the muster says they are not kept, and they can be undone', { skip }, async () => {
+  await withApp(async ({ base, browser, errors }) => {
+    const p = await page(browser, errors, { width: 390, height: 844 })
+    await toMuster(p, base, { faction: 'rome' })
+    await p.click('#to-army')
+    await p.waitForSelector('#army-screen')
+    const units = await p.locator('[data-dismiss]').count()
+    await p.click('[data-dismiss] >> nth=0')
+    await p.waitForFunction((was) => document.querySelectorAll('[data-dismiss]').length < was, units)
+    // Away by the top bar's "Muster": the muster says the change is not kept.
+    await p.click('.bar a')
+    await p.waitForSelector('form#muster')
+    assert.match(await p.textContent('#army-not-kept'), /have not kept the changes/)
+    await roughShot(p, 'army-not-kept-muster')
+    // Back again, and after a reload: the change is still there.
+    await p.click('#to-army')
+    await p.waitForSelector('#army-screen')
+    assert.equal(await p.locator('[data-dismiss]').count(), units - 1, 'the unit is still dismissed')
+    assert.match(await p.textContent('#army-screen'), /Your changes from last time are here, not yet kept/)
+    await p.reload()
+    await p.waitForSelector('#army-screen')
+    assert.equal(await p.locator('[data-dismiss]').count(), units - 1, 'and after a reload')
+    await roughShot(p, 'army-changes-kept')
+    assert.ok(await p.evaluate(() => document.documentElement.scrollWidth <= 390), 'no sideways scroll')
+    // Undone: the army as it was kept, and nothing waiting.
+    await p.click('#undo')
+    await p.waitForFunction((was) => document.querySelectorAll('[data-dismiss]').length === was, units)
+    await p.click('.bar a')
+    await p.waitForSelector('form#muster')
+    assert.equal(await p.locator('#army-not-kept').count(), 0)
+    // Kept: it is his army, and nothing waits either.
+    await p.click('#to-army')
+    await p.waitForSelector('#army-screen')
+    await p.click('[data-dismiss] >> nth=-1')
+    await p.waitForFunction((was) => document.querySelectorAll('[data-dismiss]').length < was, units)
+    await p.click('#keep')
+    await p.waitForSelector('form#muster')
+    assert.equal(await p.locator('#army-not-kept').count(), 0)
+    assert.match(await p.textContent('#army-line'), /Your own army/)
+  })
+})
+
+test('on the map, the enemy\'s units are labelled "enemy" and marked, and labels of units that meet do not lie on each other', { skip }, async () => {
+  await withApp(async ({ base, browser, errors, store }) => {
+    const seat = store.muster({ opponent: 'standing', side: 'red', seed: 5, map: 'ashford', faction: 'rome', enemyFaction: 'rome' }).seats.red
+    const p = await page(browser, errors, { width: 390, height: 844 })
+    await p.goto(`${base}/b/${seat}`)
+    await p.waitForSelector('#map-scroll svg')
+    // A fight drawn from a made-up view: two of yours and two of the
+    // enemy's, of one faction, on touching tiles.
+    const drawn = await p.evaluate(async () => {
+      const { drawMap } = await import('/static/map.js')
+      const terrain = Array.from({ length: 12 }, () => 'p'.repeat(12))
+      const unit = (id, name, x, y, more = {}) => ({ id, name, position: { x, y }, role: 'heavy_infantry', strength: 80, maxStrength: 80, ...more })
+      const view = {
+        battle: { side: 'red', sides: ['red', 'blue'] },
+        map: { width: 12, height: 12, terrain, landmarks: [], name: 'test' },
+        own: [unit('r1', 'Praetorian guard', 5, 5), unit('r2', 'Legionaries', 6, 6)],
+        enemies: [unit('b1', 'Praetorian guard', 5, 6, { status: 'visible' }), unit('b2', 'Legionaries', 7, 5, { status: 'visible' })],
+        objectives: []
+      }
+      const holder = document.createElement('div')
+      holder.id = 'label-test'
+      holder.innerHTML = drawMap(view)
+      document.body.appendChild(holder)
+      const texts = [...holder.querySelectorAll('text.unit-name')]
+      return {
+        texts: texts.map(t => t.textContent),
+        boxes: texts.map(t => { const b = t.getBBox(); return { x0: b.x, y0: b.y, x1: b.x + b.width, y1: b.y + b.height } }),
+        marks: holder.querySelectorAll('.counter path[d="M3 -7H10V0Z"]').length
+      }
+    })
+    assert.ok(drawn.texts.some(t => /^enemy praetorian guard/.test(t)), `the enemy is named as the app names him: ${drawn.texts.join(' | ')}`)
+    assert.ok(drawn.texts.some(t => /(^|, )Praetorian guard/.test(t)), 'yours by name')
+    assert.equal(drawn.marks, 2, 'each enemy counter carries a mark, not only a colour')
+    for (let i = 0; i < drawn.boxes.length; i++) {
+      for (let j = i + 1; j < drawn.boxes.length; j++) {
+        const a = drawn.boxes[i]
+        const b = drawn.boxes[j]
+        const over = Math.max(0, Math.min(a.x1, b.x1) - Math.max(a.x0, b.x0)) * Math.max(0, Math.min(a.y1, b.y1) - Math.max(a.y0, b.y0))
+        assert.equal(over, 0, `"${drawn.texts[i]}" and "${drawn.texts[j]}" do not overlap`)
+      }
+    }
+    await p.evaluate(() => document.getElementById('label-test').remove())
+  })
+})
+
+test('the big map on a phone: after a turn it comes back to your army unless you moved it yourself, and one tap finds your army or you', { skip }, async () => {
+  await withApp(async ({ base, browser, errors, store }) => {
+    const commander = store.commanders.create({ faction: 'rome' })
+    const seat = store.muster({ opponent: 'standing', side: 'red', seed: 5, map: 'greywater', commander: commander.token, enemyFaction: 'celts' }).seats.red
+    const p = await page(browser, errors, { width: 390, height: 844 })
+    await p.goto(`${base}/b/${seat}`)
+    await p.waitForSelector('#map-scroll svg')
+    // Whether the window is centred on these units (as far as the map's edge allows).
+    const centredOn = async (units) => p.evaluate((units) => {
+      const scroll = document.getElementById('map-scroll')
+      const svg = scroll.querySelector('svg')
+      const scale = svg.clientWidth / Number(svg.getAttribute('width'))
+      const mx = units.reduce((s, u) => s + u.position.x, 0) / units.length
+      const my = units.reduce((s, u) => s + u.position.y, 0) / units.length
+      const want = {
+        left: Math.max(0, Math.min(scroll.scrollWidth - scroll.clientWidth, (26 + mx * 24) * scale - scroll.clientWidth / 2)),
+        top: Math.max(0, Math.min(scroll.scrollHeight - scroll.clientHeight, (26 + my * 24) * scale - scroll.clientHeight / 2))
+      }
+      return Math.abs(scroll.scrollLeft - want.left) < 3 && Math.abs(scroll.scrollTop - want.top) < 3
+    }, units)
+    const view = async () => (await p.request.get(`${base}/api/seat/${seat}`)).json()
+    const own = async () => (await view()).own.filter(u => u.position)
+    const send = async (text) => {
+      const turn = await p.textContent('.bar-title span')
+      await p.click('[data-tab="orders"]')
+      await p.fill('#orders', text)
+      await p.click('#send')
+      await p.waitForFunction((was) => document.querySelector('.bar-title span').textContent !== was, turn)
+    }
+    await send('everyone advance')
+    await send('everyone advance')
+    assert.ok(await centredOn(await own()), 'he did not move the map: it follows his army')
+    await roughShot(p, 'map-follows')
+
+    // He moves the map himself: it stays where he put it.
+    await p.evaluate(() => { const s = document.getElementById('map-scroll'); s.scrollLeft = 0; s.scrollTop = 0 })
+    await p.waitForTimeout(200)
+    await send('everyone advance')
+    assert.deepEqual(await p.evaluate(() => [document.getElementById('map-scroll').scrollLeft, document.getElementById('map-scroll').scrollTop]), [0, 0], 'the map stays where he moved it')
+
+    // One tap: his army; another: himself.
+    const tap = await p.locator('#find-army').boundingBox()
+    assert.ok(tap.height >= 44, 'a finger\'s size')
+    await p.click('#find-army')
+    assert.ok(await centredOn(await own()), 'Your army: the map is on his army')
+    const tent = await view()
+    await p.click('#find-you')
+    assert.ok(await centredOn(tent.own.filter(u => u.id === tent.commander.unitId)), 'You: the map is on the unit he rides with')
+    await roughShot(p, 'map-find-you')
+    assert.ok(await p.evaluate(() => document.documentElement.scrollWidth <= 390), 'no sideways scroll')
   })
 })

@@ -39,9 +39,9 @@ Their orders wait on that choice; once the first turn has run it is closed.
 "A new Commander" (`/commander/new?then=...`) is one screen: what kind of
 commander you are (ten), what you fight for (glory or survival), your
 faction for life, and your name (a plain one offered). Every answer is
-already chosen; "Take command" makes him and goes on to the muster, or back
-to "Who leads?". A browser with no Commander free to lead is sent there
-from the muster. His own page (`/commander/<his link>`, "His record" on
+already chosen; "Take command" makes him and goes on to the muster, or,
+from a friend's link, straight into that battle with him leading. A browser with no Commander free to lead is sent there
+from the muster. His own page (`/commander/<his link>`, "Your record" on
 Your officers) shows his answers, his title, his battles and how he fell.
 `docs/DECISIONS.md`, "How making a Commander was built".
 
@@ -56,7 +56,9 @@ Every choice is priced and judged by the server through the engine's
 builder (`armies.js`, `POST /api/factions/:id/appraise`); a refused one is
 struck through, and tapping it gives the builder's reason. The army is
 kept with the Commander on the server (`POST /api/commander/:token/army`),
-checked again there, and changed only while his army is home. With none
+checked again there, and changed only while his army is home. Changes
+not yet kept wait in the browser as they are made (a reload or a link loses
+none), the muster says so, and "Undo your changes" drops them. With none
 bought, or with "Take the usual army", he musters with his faction's
 default army.
 
@@ -85,8 +87,15 @@ your army. It moves by finger (drag to pan, pinch to zoom) or by mouse
 (drag to pan, the wheel to zoom about the pointer), and by its buttons:
 + and − zoom, ⤢ shows the whole field in the window and, pressed again,
 goes back to your army at the zoom you had; ⇕ (phone) makes the map
-taller. On a desktop the tent fills the window and the map scrolls inside
-its own box.
+taller. "Your army" and "You" (top left) bring your army, or the unit you
+ride with, into the window; after a turn the map comes back to your army by
+itself unless you moved it since the turn began. Labels are placed so they
+do not lie on each other; the enemy's read "enemy spears", and his counters
+carry a cut corner as well as his colour. On a desktop the tent fills the
+window and the map scrolls inside its own box.
+
+A battle fought on the next day is one battle in Your battles, on the
+record and in the officers' records ("fought over two days").
 
 ```
 armies.js      buying an army: each choice priced and judged, the
