@@ -1231,6 +1231,7 @@ module.exports.FOLLOW = {
   BEHIND: 2,       // tiles (50 m) behind the unit followed, away from the enemy as its side knows him
   BESIDE: 1,       // tiles (25 m) to one side of it, across the way to the enemy
   SLACK: 1         // tiles off its station a unit may stand and not shuffle over (it holds there)
+}
 
 // A unit sent to the ground to fight for fights for it (battle.js,
 // groundFoe): it goes at an enemy on that ground (as near as holds it:
