@@ -301,5 +301,6 @@ function rosterView(commander) {
 }
 
 module.exports = {
-  AVENUES, rosterOf, rosterView, marchingOf, checkMarching, fieldingOf, benchedOf, plainName, nameRefusal, renamed, without, addToRoster, eliteOf, unitNoun
+  AVENUES, rosterOf, rosterView, marchingOf, checkMarching, fieldingOf, benchedOf, plainName, nameRefusal, renamed, without, addToRoster, eliteOf, unitNoun,
+  RESERVED
 }

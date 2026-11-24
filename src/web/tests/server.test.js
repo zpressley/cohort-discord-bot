@@ -323,8 +323,11 @@ test('a Commander starts with one officer, his veteran; the other units earn the
     app = await start(createBattleStore({ dir }))
     const made = (await app.api('POST', '/api/commanders')).body
     const commander = made.token
-    assert.deepEqual((await app.api('GET', `/api/commander/${commander}`)).body,
-      { name: made.name, faction: null, factionTitle: null, ended: null, battles: 0, officers: [], unled: [], units: [], earnedAt: 4, fallen: [], battle: null })
+    const { createdAt, ...fresh } = (await app.api('GET', `/api/commander/${commander}`)).body
+    assert.equal(typeof createdAt, 'number')
+    // (Made with no answers, as every Commander was before the two questions.)
+    assert.deepEqual(fresh,
+      { name: made.name, kind: null, holds: null, title: null, faction: null, factionTitle: null, ended: null, battles: 0, officers: [], unled: [], units: [], earnedAt: 4, fallen: [], battle: null, record: [] })
 
     // (No ground to fight for: the seed was chosen for its deeds before the
     // maps had their own.)
@@ -503,8 +506,11 @@ test('a Commander killed loses the battle and everything with it; his name stays
     assert.equal(tent.verdict.commander.fate, 'killed')
 
     const company = (await app.api('GET', `/api/commander/${made.token}`)).body
-    assert.deepEqual(company.ended, { how: 'killed', at: 'Crownhill: the meeting battle' })
+    const { when, ...ended } = company.ended
+    assert.deepEqual(ended, { how: 'killed', at: 'Crownhill: the meeting battle' })
+    assert.equal(typeof when, 'number', 'and when he fell')
     assert.equal(company.name, made.name, 'the name lives on in the record')
+    assert.deepEqual(company.record.map(r => [r.title, r.result, r.fate]), [['Crownhill: the meeting battle', 'defeat', 'killed']], 'his record ends with the battle he fell in')
     const refused = await app.api('POST', '/api/battles', { opponent: 'standing', side: 'red', seed: 4, commander: made.token })
     assert.equal(refused.status, 409)
     assert.match(refused.body.error, /was killed at Crownhill/)
@@ -772,7 +778,8 @@ test('both Commanders killed: a draw, each side told its own fate, and both comp
       const tent = (await app.api('GET', `/api/seat/${seats[side]}`)).body
       assert.deepEqual([tent.battle.outcome.winner, tent.battle.outcome.reason], ['draw', 'both commanders killed'])
       assert.deepEqual(tent.verdict.commander, { fate: 'killed', price: null, prices: [] })
-      assert.deepEqual((await app.api('GET', `/api/commander/${c.token}`)).body.ended, { how: 'killed', at: 'Crownhill: the meeting battle' })
+      const { when: _when, ...ended } = (await app.api('GET', `/api/commander/${c.token}`)).body.ended
+      assert.deepEqual(ended, { how: 'killed', at: 'Crownhill: the meeting battle' })
     }
   } finally { await app.close() }
 })

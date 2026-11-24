@@ -38,7 +38,13 @@
 //                                           alone) for his freedom
 //   POST /api/seat/:token/answer { offer, accept | refuse | more: [ids] }
 //                                           his captor answers the offer
-//   POST /api/commanders { faction }        a new Commander -> { token, name, faction }
+//   GET  /api/commanders/new                what making a Commander asks: the
+//                                           two questions, their answers, and
+//                                           a plain name offered
+//   POST /api/commanders { faction, kind, holds, name }
+//                                           a new Commander -> { token, name,
+//                                           faction, kind, holds }; a name
+//                                           refused says why (400)
 //   GET  /api/commander/:token              his company: officers, their
 //                                           records, those lost, his army,
 //                                           and the battle his army is in
@@ -168,7 +174,14 @@ function createServer(store) {
         // A Commander and his company of officers, kept from battle to battle.
         if (req.method === 'POST' && parts[1] === 'commanders' && parts.length === 2) {
           const body = await readBody(req)
-          return send(res, 201, store.commanders.create({ faction: typeof body.faction === 'string' && body.faction ? body.faction : null }))
+          const asked = (key) => (typeof body[key] === 'string' && body[key] ? body[key] : null)
+          return send(res, 201, store.commanders.create({
+            faction: asked('faction'), kind: asked('kind'), holds: asked('holds'),
+            name: typeof body.name === 'string' ? body.name.slice(0, 80) : null
+          }))
+        }
+        if (req.method === 'GET' && parts[1] === 'commanders' && parts[2] === 'new' && parts.length === 3) {
+          return send(res, 200, store.commanders.making())
         }
         // Buying an army: every choice priced, and why any is refused.
         if (req.method === 'POST' && parts[1] === 'factions' && parts[2] && parts[3] === 'appraise' && parts.length === 4) {

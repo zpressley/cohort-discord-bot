@@ -320,4 +320,53 @@ const SKIRMISH_WORDS = {
   gaveGround: (unit, before) => `${unit} ${ORDER.withdraw.did} before ${before}, keeping out of their reach`
 }
 
-module.exports = { orderWords, moraleWords, ORDER, OWN_EDGE, HOLD_THERE, KIT, RIDE_WITH, LOYALTY_WORDS, VALUES_WORDS, VETERANCY_WORDS, RIDER, NIGHT, REPORT, GROUND, windWords, SKIRMISH_WORDS }
+// Making a Commander (data/commanders.js): the two questions, asked once,
+// and what each answer means for him. The ten kinds are the design's
+// (docs/design/commanders-lore-and-tutorial.md), each with its old line
+// from archive/src/commanderName/profile/profileFlow.js in plain words.
+const MAKING = {
+  kindAsked: 'What kind of commander are you?',
+  holdsAsked: 'What do you fight for?',
+  nameAsked: 'Your name',
+  nameSaid: 'Your own, or this one. No other Commander has borne it, and none will.'
+}
+const COMMANDER_KINDS = {
+  engineer: { title: 'the Engineer', said: 'Victory through preparation.' },
+  mountain: { title: 'the Mountain', said: 'The high ground is yours.' },
+  ghost: { title: 'the Ghost', said: 'Were you even there?' },
+  mirage: { title: 'the Mirage', said: 'Strike from the sands, and be gone.' },
+  hero: { title: 'the Hero', said: 'Lead from the front.' },
+  wall: { title: 'the Wall', said: 'Nothing breaks your line.' },
+  wind: { title: 'the Wind', said: 'Swift on horse.' },
+  threshold: { title: 'the Threshold', said: 'None shall pass.' },
+  serpent: { title: 'the Serpent', said: 'Strike, and vanish.' },
+  storm: { title: 'the Storm', said: 'Every arm at once.' }
+}
+// The nature of the veteran a kind brings (command/officers.js,
+// losingTheThread), told as what he does.
+const NATURE_SAID = {
+  bold: 'Your veteran officer is bold: if he loses the thread of an order, he goes at the enemy.',
+  steady: 'Your veteran officer is steady: if he loses the thread of an order, he carries on with what he remembers.',
+  cautious: 'Your veteran officer is cautious: if he loses the thread of an order, he stops and holds.'
+}
+const HOLDS_DEAR = {
+  glory: { title: 'Glory', said: 'Your veteran lives for glory, as you do: he thinks the better of you when his men fight and win, the worse when they stand by.' },
+  survival: { title: 'Survival', said: 'Your veteran looks to his men, as you do: he thinks the better of you when few of them fall, the worse when many do.' }
+}
+// The title a Commander is known by after his first battle, by what he
+// fights for and his kind (archive/src/commanderName/titles, tier 1). Two
+// are changed: the Wall's for glory is "the Unbroken" (the old word is one
+// of the two banned roles), and the Storm's for glory, "the Commander"
+// there, is "the Thunder" (he is a Commander already).
+const COMMANDER_TITLES = {
+  glory: {
+    engineer: 'the Builder', mountain: 'the Climber', ghost: 'the Silent', mirage: 'the Swift', hero: 'the Brave',
+    wall: 'the Unbroken', wind: 'the Rider', threshold: 'the Guardian', serpent: 'the Guerrilla', storm: 'the Thunder'
+  },
+  survival: {
+    engineer: 'the Trapper', mountain: 'the Lurker', ghost: 'the Shadow', mirage: 'the Harrier', hero: 'the Relentless',
+    wall: 'the Patient', wind: 'the Endless', threshold: 'the Grinder', serpent: 'the Drowner', storm: 'the Ruthless'
+  }
+}
+
+module.exports = { orderWords, moraleWords, ORDER, OWN_EDGE, HOLD_THERE, KIT, RIDE_WITH, LOYALTY_WORDS, VALUES_WORDS, VETERANCY_WORDS, RIDER, NIGHT, REPORT, GROUND, windWords, SKIRMISH_WORDS, MAKING, COMMANDER_KINDS, NATURE_SAID, HOLDS_DEAR, COMMANDER_TITLES }

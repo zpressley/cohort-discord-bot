@@ -3291,3 +3291,115 @@ and `attack-named-unchanged` retaken, the old values in their headers.
 infantry and pikes above 70% against the usual armies. Part 7 lists the
 levers that fit the ruling, each measured once or not at all, and the
 questions.
+
+### How making a Commander was built (Claude's choices, open to change)
+
+Builds ruling 8 of November 22 ("The ten kinds of commander, and glory or
+survival, are to introduce the lore and create the name. The name is unique
+and when we do stats and such each name must live on in the record books")
+and the row "Making a Commander" in
+`docs/design/commanders-lore-and-tutorial.md`. No tutorial (ruled November
+23). The code: `src/data/commanders.js` (new: the kinds and what each
+brings), `narrator/words.js` (`MAKING`, `COMMANDER_KINDS`, `NATURE_SAID`,
+`HOLDS_DEAR`, `COMMANDER_TITLES`), `web/commanders.js` (`making`, `create`,
+`commanderNameRefusal`, `titleOf`), `command/company.js` (a company's
+`founder`), `web/battles.js` (`recordOf`), the screen "A new Commander"
+(`/commander/new`) and his own page (`/commander/<his link>`) in
+`public/app.js`.
+
+**The screen.** One screen, phone first, every answer already chosen, so one
+tap ("Take command") makes a good Commander and brings him to the muster (or
+back to "Who leads?" for a friend who joined by link). A browser with no
+Commander free to lead is sent there from the muster; "A new Commander" in
+the muster's list goes there too. It asks, in this order:
+
+1. **What kind of commander are you?** The ten kinds of the design, each a
+   button: the Engineer, the Mountain, the Ghost, the Mirage, the Hero, the
+   Wall, the Wind, the Threshold, the Serpent, the Storm. Under them, the
+   one chosen in a line ("The Wall: Nothing breaks your line.") and what it
+   does.
+2. **What do you fight for?** Glory or Survival, and what it does.
+3. **Your faction, for life** (asked here now, not at the muster), with its
+   elite.
+4. **Your name**, the plain name offered already in the box.
+
+**What each answer does.** Nothing new is built for them: each is mapped
+onto what the game has.
+- **His kind gives his veteran officer his nature** (the one officer a new
+  Commander has, with his elite): bold for the Hero, the Storm, the Wind and
+  the Mirage; steady for the Engineer, the Ghost and the Serpent; cautious
+  for the Wall, the Mountain and the Threshold. Before, the nature was drawn
+  from the battle's seed. Bold, steady and cautious are what an officer does
+  when he loses the thread of an order (and while his Commander is held), and
+  none is simply better. The screen says it: "Your veteran officer is
+  cautious: if he loses the thread of an order, he stops and holds."
+- **What he fights for is what his veteran holds dear** (before, drawn): so
+  his first officer's loyalty is won and lost as he would want it
+  (`tables.LOYALTY.MOVES`). Glory and survival are already balanced against
+  each other there.
+- **Together they make his title**, the design's "titles follow battles
+  fought": after his first battle he is "Aurelian the Patient" (the Wall,
+  for survival) on the muster's list, Your officers, "Who leads?" and his
+  page. The twenty titles are the old ones (`archive/src/commanderName/
+  titles`, the first tier), with two changed: the Wall's for glory is "the
+  Unbroken" (the old word is one of the two roles the engine bans) and the
+  Storm's for glory is "the Thunder" (it was "the Commander").
+- Only the founding veteran is touched: his name, experience and unit are
+  drawn exactly as before (tested equal), and officers who come forward
+  later draw theirs as they always did. A battle with no Commander made with
+  the answers runs as before: the whole-battle fingerprint tests, `npm run
+  soak` and the last table of `npm run balance` are unchanged.
+
+**His name.** His own, or the plain one offered (as before, one no Commander
+here bears or bore; a plain name a player typed is passed over). Kept with a
+capital to each word, as typed otherwise ("hannibal barca" is kept "Hannibal
+Barca"). Refused, with the reason, by the guards a unit's name has that fit
+a man's name: 3 to 24 letters, one to three words of plain letters (no
+numbers, marks or other scripts), each word two letters or more, none of the
+words the game uses for something else (`RESERVED` in `roster.js`: "the",
+"enemy", "commander", the order words). "Garrick the Bold" is refused: a
+title is earned. Unique among Commanders living and fallen on the server,
+in any case of letters. **Not guarded:** what a name means. Names are still
+not moderated. A Commander's name reaches another player only on a captured
+officer's card ("Given to you by Commander ..."), always through `esc()`; it
+is never in a battle's spec or handed to the AI (tested with a name typed to
+steer it). The unit-name guards that keep the order reader right (kinds of
+troops, places, ground) are not applied: a Commander's name is never read in
+an order.
+
+**His page, and the record.** "His record" on Your officers opens his own
+page: his name and title, his faction, the day he took command, his two
+answers in his own voice ("You are the Wall: nothing breaks your line. You
+fight for survival."), each battle written into his company (its title, the
+day, how it ended, and what became of him in it: taken and freed, ransomed,
+let go, killed), the officers he lost, and, fallen, where and when he fell.
+All of it from what is kept: the battles are found from his company's
+`settled` ids; a battle the server no longer has is left out. A Commander
+made before the questions shows no answers and no title, and works as
+before; nothing about him changed.
+
+**Guessed at.**
+- Which nature each kind brings. The other reading of ruling 8 is that the
+  kinds are lore and name only, with no effect; the brief asked for a real
+  one, and the veteran's nature was the smallest true one.
+- That the veteran shares what his Commander holds dear (the other reading:
+  officers drawn to a glory Commander lean to glory, all of them; not built).
+- That ten choices are "a few": the design names ten, and they fit one
+  phone screen as a grid.
+- That the name offered is a plain one, not "a name from his kind" (the
+  design's old pools by kind and cause are Roman for the Engineer,
+  Carthaginian for the Mountain and so on, which no longer matches a
+  faction chosen apart). His kind makes his title instead.
+- Only the first title (1 battle): the words for 3, 10 and 30 battles were
+  never written ("Add tier2 ... See full specification").
+
+**Left undone.** A server-wide record book of every fallen Commander (it
+would put unmoderated names in front of strangers); titles at 3, 10 and 30
+battles; the computer's Commanders (another agent's work).
+
+**For Zach.**
+1. Should a Commander's kind do more than give his first veteran his nature
+   (for instance, what his officers who come forward later are like), or is
+   it meant to be lore and name only?
+2. Before any record book open to every player: are Commanders' names to be
+   moderated, and how?

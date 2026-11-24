@@ -823,7 +823,27 @@ function createBattleStore({ dir = null, ai = null, now = () => Date.now() } = {
     if (!commander) return null
     const entry = fighting(commander)
     const side = entry && Object.keys(entry.commanders ?? {}).find(s => entry.commanders[s] === commander.id)
-    return { ...commanders.view(token), battle: entry ? { title: entry.title, seat: entry.seats[side] ?? null, ...calledOut(entry, side) } : null }
+    return { ...commanders.view(token), battle: entry ? { title: entry.title, seat: entry.seats[side] ?? null, ...calledOut(entry, side) } : null, record: recordOf(commander) }
+  }
+
+  /**
+   * His record: the battles written into his company, oldest first, as
+   * this server still has them: each one's title, when it was fought, how
+   * it ended for him, and what became of him in it (taken and ransomed,
+   * freed, let go, killed; nothing when he came through untouched).
+   */
+  function recordOf(commander) {
+    return (commander.company.settled ?? []).map(id => battles.get(id)).filter(Boolean).flatMap(entry => {
+      const side = Object.keys(entry.commanders ?? {}).find(s => entry.commanders[s] === commander.id)
+      const game = entry.game
+      if (!side || !game?.outcome?.decided) return []
+      const fate = commanderOf(game, side)?.fate
+      return [{
+        title: entry.title, when: entry.createdAt ?? null,
+        result: game.outcome.winner === 'draw' ? 'draw' : game.outcome.winner === side ? 'victory' : 'defeat',
+        ...(fate && fate !== 'free' ? { fate } : {})
+      }]
+    })
   }
 
   // ── Reading ───────────────────────────────────────

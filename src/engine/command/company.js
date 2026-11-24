@@ -34,6 +34,10 @@
 //   fallen    those killed or taken, as a roll: the company keeps its dead,
 //             but not what they knew
 //   battles   how many the company has fought
+//   founder   (a Commander made with the two questions) { personality,
+//             values }: the nature and what he holds dear of the veteran
+//             he starts with, in place of the ones drawn. Without it they
+//             are drawn from the seed, as before.
 //   settled   the ids of the battles already written in, so that writing
 //             one in twice (a server that stopped half way) changes nothing
 
@@ -144,8 +148,8 @@ function musterOfficers(company, units, seed, { benched = [] } = {}) {
       id: `o${next.nextId++}`,
       name: drawn.name,
       experience: 13 + (drawn.experience % 4),
-      personality: drawn.personality,
-      values: LOYALTY.VALUES[drawn.experience % LOYALTY.VALUES.length],
+      personality: PERSONALITIES.includes(next.founder?.personality) ? next.founder.personality : drawn.personality,
+      values: LOYALTY.VALUES.includes(next.founder?.values) ? next.founder.values : LOYALTY.VALUES[drawn.experience % LOYALTY.VALUES.length],
       loyalty: LOYALTY.NEUTRAL,
       leads: units[at].kind,
       status: 'fit',
