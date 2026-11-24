@@ -16,6 +16,7 @@
 
 const D = require('./data')
 const { tables: T } = require('../combat')
+const { FACTIONS } = require('../../data/factions')
 
 // The purchase ladder (Q8: quality IS training; elites are not purchasable —
 // one arrives free per army, culture-assigned).
@@ -30,6 +31,20 @@ const PURCHASABLE = ['levy', 'militia', 'tribal_warriors', 'professional', 'vete
 
 function qualityRank(quality) {
   return T.QUALITY_ORDER.indexOf(quality)
+}
+
+// What troops of a quality cost this culture: the tier's price, or its
+// people's own where a perk makes them cheaper (Tibet's mercenaries:
+// tables.PERKS, `price`).
+function qualityCost(quality, culture) {
+  const base = T.QUALITY_TIERS[quality]?.cost ?? 0
+  const faction = Object.values(FACTIONS).find(f => f.culture === culture)
+  let cost = base
+  for (const k of Array.isArray(faction?.perks) ? faction.perks : []) {
+    const perk = T.PERKS?.[k]
+    if (perk?.price && perk.quality === quality) cost = Math.round(base * perk.price)
+  }
+  return cost
 }
 
 function mountCost(culture) {
@@ -191,7 +206,7 @@ function buildUnit(pick, culture, { elite = false } = {}) {
 
   if (errors.length > 0) return { ok: false, errors, cost: 0, unit: null }
 
-  const cost = tier.cost + weaponData.sp + (secondData ? secondPrice(second) : 0) +
+  const cost = qualityCost(quality, culture) + weaponData.sp + (secondData ? secondPrice(second) : 0) +
     D.ARMOR_SP[armor] + D.SHIELD_SP[shield] +
     (mounted ? mountCost(culture) : 0)
 
@@ -302,4 +317,4 @@ function roleFor(weapon) {
   return 'heavy_infantry'
 }
 
-module.exports = { buildUnit, buildArmy, toBattleUnits, roleFor, unitSize, mountCost, secondKind, secondFields, secondPrice, PURCHASABLE }
+module.exports = { buildUnit, buildArmy, toBattleUnits, roleFor, unitSize, mountCost, qualityCost, secondKind, secondFields, secondPrice, PURCHASABLE }

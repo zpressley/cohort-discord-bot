@@ -34,6 +34,7 @@ const { toPosition, samePosition, positionKey } = require('../map/labels')
 const { inInitiativeOrder, tierName } = require('./initiative')
 const { buildOccupancy, canEnter, moveUnit, crowdingByUnit, crowdedRange } = require('./occupancy')
 const { getUnit, isAlive } = require('../world')
+const { moveCost } = require('../combat/perks')
 
 // A unit blocked this many ticks in a row gives up for the turn.
 const BLOCKED_TICKS_TO_STOP = 2
@@ -154,7 +155,9 @@ function resolveSimultaneousMovement(world, orders, map, options = {}) {
 
       const nextCoord = plan.steps[plan.stepIndex]
       const terrain = map.terrainAt(nextCoord)
-      const cost = map.moveCost(nextCoord)
+      // (Its people may cross woods or marsh at a cost of their own:
+      // combat/perks.js.)
+      const cost = moveCost(unit, terrain, map.moveCost(nextCoord))
 
       // A unit can always make one tile of ground in a turn, however slow
       // it is and however rough the tile: without this, a careful or

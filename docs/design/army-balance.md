@@ -1628,3 +1628,276 @@ archetype carries a second weapon). `npm run soak`: every battle ended.
 This worktree's branch, on `integration-14`: the rule, the builder, the
 screen and the words; the usual armies, the throw at 1.5 and the sidearm's
 price; throwing spears at 2 and this report.
+
+## Part 9. Each people's perks (built 2026-11-24)
+
+Zach's factions document (`docs/Context/final_20_cultures_complete.txt`)
+gives every people "Cultural Perks", "Cultural Restrictions" and an
+"Adaptation Perk". Asked for as a roadmap piece, with the details mine to
+decide; built inside the rulings of November 23 ("The balance needs to come
+from the units themselves ... It should have a grounding in history").
+
+### What a player meets
+
+- **Where he chooses his faction, and on the army screen**, each of his
+  people's perks in a line: "**Woodsmen:** your men cross woods as easily as
+  open ground." The words are `words.js`, `PERK_WORDS`.
+- **In battle** the perks act on their own; nothing new to order. They are
+  not told in the dispatch (the cheap way to tell them would be a line each
+  time one acts, and most act every round).
+- **When he buys an army**, a restriction refuses it as the builder's other
+  refusals do: on the screen the choice is struck through and tapping it
+  says why ("Sarmatia fights on horseback: no foot"); a rule on the army as
+  a whole ("Rome fights with heavy foot: at least half of the army must be
+  foot with hand weapons in medium or heavy armour (it has 1 of 3, the elite
+  counted)") is said of the army, and it cannot be kept until it is met.
+- **An army he bought before** keeps its units, and musters and marches as
+  it did. The rules hold the next time he changes it.
+
+| Faction | The perk he meets in battle or at the muster | Restrictions on the army he buys |
+|---|---|---|
+| Rome | Discipline: his men hold their nerve a little longer | half the army heavy foot |
+| Macedon | Veterans of war: the Silver Shields fight as seasoned men from their first battle | no levy or militia |
+| Sparta | To the last man: his men break later than others; the perioeci: his levy and militia fight as seasoned men | no veteran mercenaries |
+| Carthage | Merchant wealth: 32 supply points, where most have 30 (true before) | at most two units of professionals or veteran mercenaries |
+| Kush | Men of the hot lands: his men tire more slowly in a fight; bow and horse: his bowmen and slingers shoot harder with his horse beside them | no heavy armour |
+| Berbers | Small bands: his men fight harder against a bigger unit; and, against him, woods and marsh slow his men more | |
+| Sarmatia | Feigned retreat: his horse break off a fight with little harm | no foot |
+| Han | Many hands: every unit he buys comes a fifth larger; crossbows his alone (true before) | |
+| Maurya | Wootz steel: his blades bite through a tenth of the enemy's armour | foot, shooters and horse all in the army |
+| Silla | Mountain fighters: on a hill his men fight harder and stand firmer | (25 supply points, true before) |
+| Persia | Surgeons: of the men who would fall, one in twenty is saved | |
+| Parthia | Horse of the plains: his horse fight harder on open ground, and more of their charge breaks into a wall of spears; the Parthian shot: his horse archers shoot as hard riding as standing | 10 supply points on levy; half the army on horses |
+| Germania | Woodsmen: his men cross woods as easily as open ground | |
+| Thrace | Hill men: on a hill his men stand firmer; the rhomphaia his alone (true before) | no veteran mercenaries; nothing above light armour and light shields |
+| Samnium | Hill and forest fighters: his men fight harder on hills and in woods; Samnite courage: his men break later, his elite later still | (26 supply points, true before) |
+| Tibet | Homeland militia: his militia fight as seasoned men; hired swords: veteran mercenaries cost him 7, not 9 | (25 supply points, true before) |
+| Mongolia | The Parthian shot: his horse archers shoot as hard riding as standing | no foot |
+| Celts | Woodsmen: woods as easily as open ground; fury: an enemy he catches by surprise is shaken half as much again | no bowmen or slingers of professional training or better |
+| Bactria | Noble horse: his horse fight harder against an enemy already in a fight | heavy foot no more than 30% of the army |
+| Yayoi | Bow and spear: his archers shoot harder with his spearmen beside them; quick to dig in: men who stand to meet the enemy are harder to break into | at most one unit of horse; no heavy armour |
+
+### Every perk and restriction, sorted
+
+"True" is true of the game already; "built" is built here (the numbers are
+`tables.PERKS`); "left out" needs something the game has not got, or was
+left out for the reason given. No adaptation perk is built (below).
+
+| Faction | Doc | Kind | What became of it |
+|---|---|---|---|
+| Rome | Engineering mastery: field fortifications | perk | left out: no fortifications or siege |
+| Rome | Professional discipline: higher morale | perk | built: morale resistance +0.02 (`discipline`) |
+| Rome | Heavy infantry at least 50% | restriction | built (`heavyFoot`), the elite counted |
+| Rome | Units without officers lose heart faster | restriction | left out: in a first campaign every unit but the elite has no officer, so it would fall on a new Roman player's whole army |
+| Macedon | Silver Shields start as 10-battle veterans | perk | built: veterancy 10, seasoned (`old_soldiers`) |
+| Macedon | Sarissa or spear as the day demands | perk | left out: no changing weapons in battle |
+| Macedon | No militia | restriction | built: no levy or militia (`noQuality`) |
+| Macedon | Higher unit costs | restriction | left out: the usual army (28 of 30, three units) would go over its budget |
+| Sparta | Fight to the last man, until 50% casualties | perk | built as men who break later: the rout line 15, not 25 (`last_man`). Read literally (no break until half are down) Sparta won 97% (round 1) |
+| Sparta | Perioeci fight better than militia | perk | built: levy and militia fight as seasoned men (`perioeci`) |
+| Sparta | Allied Greek recruitment | perk | left out: no allies |
+| Sparta | No mercenaries | restriction | built: no veteran mercenaries |
+| Sparta | Supply staff +2 SP | restriction | left out: no supply staff |
+| Carthage | War elephants | perk | left out: no elephants |
+| Carthage | Merchant wealth, 32 SP | perk | true |
+| Carthage | At most 2 SP (200 men) of professionals | restriction | built: at most two units of professionals or veteran mercenaries (`mostOfQuality`) |
+| Carthage | Hired units retreat first | restriction | left out: no hired units as such |
+| Kush | Desert mastery: movement and heat resistance | perk | no desert or heat; built as the nearest honest thing, men who tire more slowly: wind spent fighting x0.75 (`sun_hardened`) |
+| Kush | Archer-cavalry coordination within a tile | perk | built: a missile unit with its own horse within a tile shoots x1.25 (`bow_and_horse`). The usual army has no horse, so it acts only in an army a player buys with some |
+| Kush | No large heavy infantry formations | restriction | built: no heavy armour (`noArmor`) |
+| Berbers | Desert navigation | perk | left out: no desert |
+| Berbers | Small unit effectiveness | perk | built: +0.5 attack against a unit with more men (`small_bands`) |
+| Berbers | Slowed in forest and swamp | restriction | built: woods and marsh cost half as much again to cross (`dense_ground`) |
+| Sarmatia | Switch between lance and bow | perk | left out: no changing weapons; a bow beside a lance is not sold (part 8) |
+| Sarmatia | Feigned retreat | perk | built as the nearest thing: its horse take the parting blow at half weight as they leave a fight (`feigned_retreat`) |
+| Sarmatia | No foot; at least 70% mounted | restriction | built: no foot (`noFoot`), which is both |
+| Han | Crossbows | perk | true (crossbows are Han's alone); cloud ladders and catapults left out (siege) |
+| Han | Units 20% larger | perk | built: bought units x1.2 men (`larger_units`) |
+| Han | +2 SP for administrators; lost administrators | restriction | left out: no support staff |
+| Maurya | War elephants | perk | left out: no elephants |
+| Maurya | Wootz steel: ignores 10% of armour | perk | built: the enemy keeps 0.9 of his armour's defence (`wootz`), for every unit, free (the doc's "expensive upgrade" read as the people's steel) |
+| Maurya | May not pursue the routed | restriction | left out: an engine rule against a faction already near the bottom (43%) |
+| Maurya | At least three unit types | restriction | built: foot, shooters and horse all in the army, the elite counted (`kinds`) |
+| Silla | Military academy: veteran leadership from the first battle | perk | left out: it would change how officers come forward in a campaign (`command/company.js`) |
+| Silla | Hill and mountain bonuses | perk | built: on a hill +0.5 attack, +0.5 defence (`mountain_warfare`) |
+| Silla | 25 SP | restriction | true |
+| Silla | 10 SP for allies only | restriction | left out: no allies |
+| Persia | Supply train replaced | perk | left out: no supply train |
+| Persia | Superior support staff (medical) | perk | built as the nearest thing: of the men a blow would fell, 0.05 saved (`surgeons`); siege engineers left out |
+| Persia | Satrap command dependency; no reorganising | restriction | left out: no satraps, no reorganising |
+| Parthia | Heavy cavalry plains mastery: break defensive lines, attack on plains | perk | built: horse +0.5 attack on open ground, and half a charge's spike lives through braced spears, not 0.15 (`plains_horse`) |
+| Parthia | Parthian shot at full effectiveness | perk | built: horse archers lose nothing for shooting on the move (`parthian_shot`) |
+| Parthia | At least 10 SP of levy; at least half horsemen | restriction | built (`levySp`, `horse`) |
+| Germania | Comitatus: the warband never breaks | perk | buildable (the lower rout line); left out: Germania is at the top of the league (62 to 64%), and the strong get their gentler perk |
+| Germania | Forest mobility | perk | built: woods at the cost of open ground (`woodland`) |
+| Germania | Heroes from the ranks | perk | left out: no champions |
+| Germania | No siege engineers; no complex formations | restriction | left out: neither exists |
+| Thrace | Rhomphaia for any foot | perk | true |
+| Thrace | Hill defence | perk | built: on a hill +1 defence (`hill_defence`) |
+| Thrace | Veterans from the start | perk | buildable (as Macedon's); left out: Thrace is above the middle (55%), and has the hill |
+| Thrace | No mercenaries; no heavy kit | restriction | built: no veteran mercenaries; nothing above light armour and light shields (`lightKit`) |
+| Samnium | Guerrilla: attack and stealth in hills and woods | perk | built: +0.5 attack on hills and in woods (`guerrilla`); stealth left out |
+| Samnium | Bravery: break at 30%, the elite at 40% | perk | built as men who break later: rout line 22, the elite 20 (`samnite_bravery`) |
+| Samnium | 26 SP; no siege engineers | restriction | true; left out (no siege) |
+| Tibet | Roof of the World: no cold or mountain penalties | perk | left out: no cold or altitude |
+| Tibet | Militia fight as veterans | perk | built: militia fight as seasoned men (`militia_veterans`) |
+| Tibet | 25 SP | restriction | true |
+| Tibet | Mercenaries 25% cheaper | restriction (a perk) | built: veteran mercenaries 7 SP, not 9 (`cheap_mercenaries`) |
+| Mongolia | Horse archery perfection | perk | built (`parthian_shot`) |
+| Mongolia | Nomadic endurance | perk | left out: no supply |
+| Mongolia | 100-man elite, other units 20% larger | perk | the elite of 100 is true; the larger units buildable (Han has them), left out: Mongolia is above the middle (54 to 55%) |
+| Mongolia | No baggage train | restriction | left out: none exists |
+| Mongolia | 100% mounted | restriction | built: no foot |
+| Celts | Berserker fury: ambushes cause fear | perk | built: their surprise shakes x1.5 (`berserker`) |
+| Celts | Light troops better flanking and ambushing | perk | left out: the Celts have two perks already |
+| Celts | Woodland mobility | perk | built: woods at the cost of open ground (`woodland`); "rough" ground left out |
+| Celts | No mercy to prisoners | restriction | left out: no prisoners to spare |
+| Celts | No professional archers | restriction | built: no bowmen or slingers of professional training or better (`noTrainedShooters`) |
+| Bactria | Fusion army as professionals | perk | partly true (sarissa and kontos); elephants and horse archers left out |
+| Bactria | Noble cavalry on the flanks | perk | built: horse +0.5 attack on an enemy already fighting another unit (`noble_cavalry`) |
+| Bactria | Heavy infantry at most 30% | restriction | built (`heavyFoot`), the elite counted |
+| Bactria | Long supply lines | restriction | left out: no supply |
+| Yayoi | Archer-spear mastery | perk | built: archers with their own spearmen within a tile shoot x1.25 (`bow_and_spear`) |
+| Yayoi | Rapid fortification | perk | built as the nearest thing: men who held their ground to meet the enemy +0.5 defence (`rapid_fortification`) |
+| Yayoi | At most one cavalry unit | restriction | built (`mostHorse`) |
+| Yayoi | Light and medium armour only | restriction | built: no heavy armour |
+
+**Adaptation perks: none built.** Each takes something from a beaten
+people, so each needs the campaign to know whom a Commander beat and what
+he took. What each would need:
+- Hire, recruit or take units from the beaten (Rome's auxiliaries, Macedon's
+  companion cavalry, Sarmatia's one unit type a people, Han's assimilation,
+  Parthia's feudal levies, Silla's allies, Tibet's sanctuary, Yayoi's
+  cultural exchange, Celts' single combat): a new avenue in
+  `web/roster.js` (`AVENUES`), beside capture, with what the beaten army
+  was. The nearest to free; not done, as the lean was to leave them out.
+- Take kit or kit rules from the beaten (Kush's forgers, Thrace's cultural
+  crossroads, Samnium's battlefield kit, the Berbers' raiders, Maurya's
+  gifts to the elite): a culture's permitted kit that grows with its
+  record, per Commander.
+- Learn tactics or heroes (Germania's champions, Bactria's synthesis,
+  Mongolia's captured specialists, Persia's satrap troops, Carthage's
+  mercenaries mid-battle): reinforcements, champions or support staff,
+  none of which exist.
+
+### The code
+
+- `src/data/factions.js`: `perks` and `restrictions` on each faction.
+- `engine/combat/tables.js`, `PERKS`: each perk's numbers and whom it is
+  for, with where each came from.
+- `engine/army/perks.js`: at the muster, each of the faction's own units
+  gets the keys of its perks (`perks` on the unit; a unit taken from
+  another people gets none), and bought units are raised larger where a
+  perk says so. Both the usual army (`factions.js`) and a bought one
+  (`standard.js`).
+- `engine/combat/perks.js`: what each does in battle, read by
+  `ratings.js` (morale, veterancy, attack and defence on its ground, armour
+  bitten, the charge, wind), `resolve.js` (the rout line, surprise, men
+  saved), `ranged.js` (shooting riding, archers beside their friends),
+  `battle.js` (the parting blow), `movement/simultaneous.js` (woods and
+  marsh). A unit with no perks gets 0 or 1 from each, so a battle with no
+  faction armies (the balance duels, the scenarios) runs exactly as before.
+- `engine/army/builder.js`: Tibet's mercenaries' price (`qualityCost`).
+- `engine/army/restrictions.js`: the rules, checked by `web/armies.js`
+  when an army is bought (`checkArmy`), and on each choice on the army
+  screen (`appraise`). Not at the muster (`battles.js`, `musterArmies`).
+- `words.js`, `PERK_WORDS`; `public/app.js` (`perkList`), `app.css`.
+
+### Measured
+
+As in Parts 5 to 8: the computer's planner on both sides, all four maps,
+both ways round, every battle its own seed; a battle the day ends is no
+win. "Before" is `integration-16`.
+
+**Rounds** (`usual.js league --seeds 4`, 6,080 battles, 32 a pairing; each
+round switches perks on with `--set factions.<key>.perks=`):
+
+| Round | Change | Range | Pairings past 75/25 | Kept |
+|---|---|---|---|---|
+| 0 | none (`integration-16`) | Sparta 39% to Rome, Germania 64% | 30 | |
+| 1 | The six weakest get their perks (Sparta, Han, Parthia, Maurya, Kush, Yayoi); Sparta does not break until half its men are down | Sparta **97%** | 46 | no |
+| 2 | Sparta breaks at morale 15, not 25 | Kush 42% to Rome 63%; Sparta 55, Han 46, Maurya 45, Yayoi 45, Parthia 41 | 29 | yes |
+| 3 | The middle eight get theirs | Kush, Parthia 42% to Rome 62%; Celts 51 -> 55, Tibet 48 | 31 | yes |
+| 4 | The strong six get theirs: Rome's discipline 0.19, Samnium breaks at 20 (elite 15) | Parthia 39% to **Rome 73%**; Samnium 60 | 40 | no |
+| 5 | Rome 0.05; Samnium 22 (elite 20); Kush tires slowly (x0.75); Parthia's horse +1 on the plain; Yayoi's archers x1.5 | Parthia 40% to Rome 65%; Samnium 55, Kush 47; Parthia and Yayoi no better | 35 | Rome, Samnium, Kush |
+| 6 | Parthia's horse back to +0.5, and half the charge through braced spears; Yayoi back to x1.25 | Yayoi 42% to Rome 65%; Parthia 45 | 32 | yes |
+| 7 | Yayoi dig in, +0.5 defence when they held their ground | Han, Yayoi, Maurya, Sarmatia, Parthia 44% to Rome 65% | 32 | yes |
+| 8 | (Rome without its perk, to see) | Rome 62% | | |
+| 9 | Rome's discipline 0.02 | **Han 44% to Rome 64%** | **31** | yes |
+
+**The usual armies' league**, before and after:
+
+| Faction | Before | After | | Faction | Before | After |
+|---|---|---|---|---|---|---|
+| Germania | 64% | 62% | | Sarmatia | 48% | 44% |
+| Rome | 64% | 64% | | Silla | 48% | 45% |
+| Macedon | 56% | 56% | | Tibet | 47% | 47% |
+| Mongolia | 55% | 54% | | Yayoi | 46% | 44% |
+| Thrace | 55% | 51% | | Kush | 44% | 46% |
+| Samnium | 52% | 55% | | Maurya | 43% | 44% |
+| Celts | 51% | 54% | | Parthia | 42% | 45% |
+| Bactria | 50% | 45% | | Han | 40% | 44% |
+| Persia | 50% | 45% | | Sparta | 39% | 50% |
+| Berbers | 49% | 48% | | | | |
+| Carthage | 48% | 47% | | | | |
+
+Every faction between 35 and 65%, before and after; the band is narrower
+(39-64 to 44-64). Pairings past 75/25: 30 of 190 before, 31 after. Ended by
+the day: 62 before, 67 after; 14.0 player turns on average, both.
+Commanders taken 1 in 31 before, 1 in 32 after; killed 1 in 338 and 1 in
+329. No usual army was re-picked: every one keeps to its own restrictions.
+
+**The random search** (`search.js --per 30`, 600 legal armies, now kept to
+each people's restrictions, each against the twenty usual armies):
+
+| | Before (part 8) | After |
+|---|---|---|
+| Best army (96 battles) | 2 professional axe units in heavy armour with heavy javelins (Macedon): 93%; the same with throwing spears (Carthage): 92% | the same Macedonian army: 92%; Maurya's 3 professional spear units in medium armour 91%; the Carthaginian 91% |
+| Over 70% / under 20% | 47 / 166 of 600 | 45 / 170 |
+| Mean win, by faction, lowest | | Kush 10%, Thrace 17%, Silla 18% (Thrace and Kush may no longer buy heavy kit) |
+
+The best army did not rise; nor did the number of strong ones.
+
+**The Commander's odds** (`captive-league.js --battles 2000 --policy
+wait`): taken in 1 battle in 21.7 (92 of 2,000), where `integration-16`
+gives 1 in 19.0 (105). Within what chance moves it (a few battles either
+way), though steadier and seasoned elites (Macedon's, Sparta's line) may
+take a little of it. `tables.COMMANDER` is not retuned.
+
+**`npm run balance`**: the same, line for line, the mirror ladder
+included. Its duels have no faction, so no unit carries a perk.
+
+**`npm run soak`**: every battle ended, after one change outside the
+perks. With the perks one battle of 480 with a cautious computer never
+ended (Persia against Han on ravenridge, the player giving no orders): the
+cautious Commander's crossbowmen, his only men fit to fight, marched to and
+fro short of the enemy for ever. Part 7 has the computer's foot missile
+troops press any enemy within 7 tiles; since the computer was given
+character, they pressed within the Commander's own `engage`, 5 for a
+cautious one, short of a crossbow's reach (6). Now within 7 at the least
+(`opponent/planner.js`, one line): the battle ends, and in the character
+league (`character-league.js --rounds 4`, 2,880 battles) the cautious
+Commander wins 49% (48% before), steady 51% (52%), bold 50% (50%). The
+usual armies' league and the search are played by the steady Commander,
+whose `engage` is 7: untouched.
+
+### What is still out of line
+
+- **The middle sank a little**: the six that gained most (Sparta +11,
+  Han, Parthia +3 or 4, Celts, Samnium +3) took it from the middle
+  (Bactria, Persia -5, Sarmatia -4, Thrace -4). All are inside the band.
+- **Some perks do little in the league** because the usual army does not
+  use them: Kush's bow and horse (no horse), the Berbers' slowness in woods,
+  Tibet's cheap mercenaries (none bought). They are for a player's army.
+- **Morale is the strong lever.** A little morale resistance (Rome) or a
+  lower rout line (Sparta, Samnium) moves a faction more than any
+  attack or defence perk; they are set small for it.
+- **A battle can stall at a ford** (found while retaking the fingerprints):
+  two armies on either side of the ashford ford march up and down beside
+  it and never cross. Not the perks' doing (it happens without them:
+  Mongolia against Tibet on ashford, seed 77), and the day ends it in the
+  app. For whoever owns the maps or the planner.
+
+### Where it is
+
+This worktree's branch, on `integration-16`.
