@@ -43,9 +43,9 @@ const { digest, summarise, placeName } = require('../narrator/turnNarrator')
 const { gradeOf, DEATH_ODDS, loyaltyBand } = require('../engine/command/officers')
 const T = require('../engine/combat/tables')
 const { narrateTurn, report } = require('../narrator/turnNarrator')
-const { orderWords, RIDER, NIGHT, REPORT } = require('../narrator/words')
+const { orderWords, RIDER, NIGHT, REPORT, GROUND } = require('../narrator/words')
 const { loadScenario, SCENARIOS, mapChoices } = require('../adapters/hotseat/scenarios')
-const { MAPS } = require('../data/maps')
+const { MAPS, groundOf } = require('../data/maps')
 const { FACTIONS, factionChoices } = require('../engine/army/factions')
 const { fieldArmies, anyFaction, usualArmy, kitOf, baseOf } = require('../engine/army/standard')
 const { armyChanged, handOver, takeIn, moveOfficer, renameUnit } = require('../engine/command/company')
@@ -87,6 +87,17 @@ function describeOrder(order, standing = null, name = (id) => id) {
       (order.regardless ? ', whatever happens' : '') + more
     default: return doing + more
   }
+}
+
+// One piece of the ground to fight for as one side is told it: who holds
+// it, and, when one side holds all of it, how long it has left to hold.
+function groundStatus(game, objective, side) {
+  const holder = game.objectiveHolds[objective.id]?.side ?? null
+  const holds = game.objectives.map(o => game.objectiveHolds[o.id])
+  const length = game.spec.objectiveHoldMinutes ?? T.GROUND.HOLD_MINUTES
+  const all = !game.outcome.decided && !game.spec.objectiveTurnsToWin && holder && holds.every(h => h?.side === holder)
+  const left = all ? Math.max(0, length - Math.min(...holds.map(h => game.minutesElapsed - h.sinceMinute))) : null
+  return GROUND.status(objective.name, holder === null ? null : holder === side, left)
 }
 
 // Text for one side with unit ids swapped for names: its own units by name
@@ -363,7 +374,11 @@ function createBattleStore({ dir = null, ai = null, now = () => Date.now() } = {
    *   opponent    'standing' (play alone) | 'friend' (a second link)
    *   side        the side the mustering player takes
    *   timeLimitMinutes  null or minutes of battle
-   *   objectives  ground to hold: grid squares or feature names
+   *   objectives  ground to hold: grid squares or feature names; with
+   *               none given, the map's own ground to fight for
+   *               (src/data/maps, groundOf); [] for none at all
+   *   ground      the ground as a spec's objectives (the next day: the
+   *               same ground as the day before)
    *   seed        optional
    *   commander   the mustering player's Commander token: his company's
    *               officers lead his side, and the battle is written into
@@ -398,9 +413,13 @@ function createBattleStore({ dir = null, ai = null, now = () => Date.now() } = {
     spec = Number.isInteger(m.turnLimit) && m.turnLimit > 0
       ? { ...spec, turnLimit: m.turnLimit }
       : { ...spec, dayMinutes: Number.isInteger(m.dayMinutes) && m.dayMinutes > 0 ? m.dayMinutes : T.DAY.MINUTES }
-    const objectives = (m.objectives ?? []).filter(Boolean).map((ground, i) => isGridRef(ground)
-      ? { id: `objective-${i + 1}`, square: ground }
-      : { id: `objective-${i + 1}`, feature: ground })
+    // Every map comes with its own ground to fight for, unless the player
+    // named his own (or none).
+    const objectives = Array.isArray(m.ground) ? m.ground
+      : !Array.isArray(m.objectives) ? groundOf(mapName)
+        : m.objectives.filter(Boolean).map((ground, i) => isGridRef(ground)
+          ? { id: `objective-${i + 1}`, square: ground }
+          : { id: `objective-${i + 1}`, feature: ground })
     if (objectives.length) spec = { ...spec, objectives }
 
     const seed = m.seed ?? crypto.randomInt(1, 1_000_000)
@@ -843,7 +862,9 @@ function createBattleStore({ dir = null, ai = null, now = () => Date.now() } = {
       turn: turnOf(game, side),
       minutes: game.minutesElapsed,
       // (Who was ahead when night fell is the harness's, not the player's.)
-      outcome: game.outcome.decided ? { decided: true, winner: game.outcome.winner, reason: game.outcome.reason, ...(game.outcome.reason === 'night fell' ? { title: NIGHT.title, said: NIGHT.ended } : {}) } : null,
+      outcome: game.outcome.decided ? { decided: true, winner: game.outcome.winner, reason: game.outcome.reason, ...(game.outcome.reason === 'night fell' ? { title: NIGHT.title, said: NIGHT.ended } : {}),
+        // The ground decided it: the verdict names it.
+        ...(game.outcome.reason === 'objectives held' ? { said: GROUND.won(game.objectives.map(o => o.name), game.outcome.winner === side, game.spec.objectiveHoldMinutes ?? T.GROUND.HOLD_MINUTES) } : {}) } : null,
       updatedAt: entry.updatedAt,
       sentAt: entry.pending[side]?.at ?? null,
       // How the table between a held Commander and his captors stands, as
@@ -1054,11 +1075,14 @@ function createBattleStore({ dir = null, ai = null, now = () => Date.now() } = {
       return enemyView(game, e, unit, battle.turn)
     })
 
+    // The ground to fight for: who holds it is known to every side at once
+    // (ruled); not who stands on it.
     const objectives = (game.objectives ?? []).map(o => ({
       id: o.id,
       name: o.name,
       tiles: o.tiles,
-      holder: game.objectiveHolds[o.id]?.side ?? null
+      holder: game.objectiveHolds[o.id]?.side ?? null,
+      said: groundStatus(game, o, side)
     }))
 
     const landmarks = detectFeatures(map).filter(f => f.name).map(f => ({ name: f.name, kind: f.kind, centre: f.centre }))
@@ -1299,6 +1323,7 @@ function createBattleStore({ dir = null, ai = null, now = () => Date.now() } = {
       enemyFaction: sideFaction(game.spec, other),
       ...(game.spec.turnLimit ? { turnLimit: game.spec.turnLimit } : { dayMinutes: game.spec.dayMinutes }),
       nightBefore: night.units,
+      ground: game.spec.objectives ?? [],
       day: (entry.day ?? 1) + 1
     })
     const next = battles.get(made.id)
@@ -1715,6 +1740,11 @@ function createBattleStore({ dir = null, ai = null, now = () => Date.now() } = {
         turn.seenEnemyIds = knownIds
         turn.whereIs = (id) => word.units[id]?.position ?? null
       }
+      // His first dispatch of a battle tells him the ground to fight for.
+      if (entry.dispatches[side].length === 0 && game.objectives.length > 0) {
+        const names = game.objectives.map(o => o.name)
+        lines.unshift(`${GROUND.toFightFor(names)} ${GROUND.rule(names, game.spec.objectiveHoldMinutes ?? T.GROUND.HOLD_MINUTES, game.objectives.some(o => (o.reach ?? (o.single ? 1 : 0)) > 0))}`)
+      }
       if (captivity?.captor) {
         lines.unshift(`You are held by ${name(captivity.captor.id)} ${where(captivity.captor.position)}, and hear the reports as they come in to your captors`)
       }
@@ -1754,7 +1784,12 @@ function createBattleStore({ dir = null, ai = null, now = () => Date.now() } = {
     commanders,
     commanderView,
     scenarios: () => Object.keys(SCENARIOS).map(id => ({ id, title: SCENARIO_TITLES[id] ?? id })),
-    maps: () => mapChoices(),
+    // Each field with its own ground to fight for, in the muster's words.
+    maps: () => mapChoices().map(m => {
+      const ground = groundOf(m.id)
+      const names = ground.map(g => g.name)
+      return { ...m, ground: names, said: names.length ? `${GROUND.toFightFor(names)} ${GROUND.rule(names, T.GROUND.HOLD_MINUTES, ground.some(g => g.reach > 0))}` : '' }
+    }),
     factions: () => factionChoices(),
     setArmy,
     transfer,

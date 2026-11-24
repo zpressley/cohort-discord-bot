@@ -108,7 +108,7 @@ test('AI: free text is read into orders, then resolved exactly like the grammar'
     question: null, note: null,
     surrender: false
   })
-  const read = await interpretText('Spears, take the eastern heights and dig in. Archers stay where you are.', context, { ai })
+  const read = await interpretText('Spears, get up onto the eastern heights and dig in. Archers stay where you are.', context, { ai })
   assert.equal(read.source, 'ai')
   assert.equal(read.questions.length, 0)
   assert.deepEqual(read.orders.map(o => [o.unitRef, o.action, o.target && toLabel(o.target)]),
@@ -227,4 +227,29 @@ test('the reply schema allows exactly the actions the engine knows', () => {
   // The engine's actions, plus the two the reader turns into a hold for
   // missile troops (shooting, or holding fire).
   assert.deepEqual([...REPLY_SCHEMA.properties.orders.items.properties.action.enum].sort(), [...ACTIONS, 'shoot', 'hold_fire'].sort())
+})
+
+test('grammar: an order can name the ground to fight for: take it, occupy it, or hold it (to seize or storm it is to attack it)', () => {
+  const cases = {
+    'spears take the Old Mill Bridge': ['spears', 'defend', 'the Old Mill Bridge'],
+    'hold the bridge': ['everyone', 'defend', 'the bridge'],
+    'swords take Raven Gap': ['swords', 'defend', 'Raven Gap'],
+    'everyone occupy the Crownhill': ['everyone', 'defend', 'the Crownhill'],
+    'horse hold the ford': ['horse', 'defend', 'the ford']
+  }
+  for (const [line, [unitRef, action, place]] of Object.entries(cases)) {
+    assert.deepEqual(parseLine(line), { kind: 'order', unitRef, action, place, then: null }, line)
+  }
+  // Holding still is still holding still.
+  for (const line of ['hold', 'archers hold', 'spears hold the line', 'hold fast']) assert.equal(parseLine(line).action, 'hold', line)
+})
+
+test('a map\'s ground is found by its name: the Old Mill Bridge, Raven Gap (on the road, not the nearest stretch of it), Thorn Knoll and the knoll', () => {
+  const spears = (at) => createWorld({ units: [{ id: 'red_spears', side: 'red', role: 'spearmen', position: at }] }).units
+  const target = (name, line, at = { x: 8, y: 22 }) => interpretLines([line], { map: resolveMap(name), units: spears(at), enemies: [] }).orders[0]?.target
+  assert.deepEqual(target('ashford', 'spears take the Old Mill Bridge'), { x: 20, y: 20 })
+  assert.deepEqual(target('ravenridge', 'spears take Raven Gap'), { x: 20, y: 20 })
+  assert.ok(target('thornwood', 'spears hold the knoll'))
+  assert.deepEqual(target('thornwood', 'spears take Thorn Knoll'), target('thornwood', 'spears hold the knoll'))
+  assert.deepEqual(target('crownhill', 'spears take the Crownhill'), { x: 19, y: 1 })
 })

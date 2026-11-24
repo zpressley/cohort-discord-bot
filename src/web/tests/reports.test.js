@@ -47,7 +47,9 @@ const OFFICER = {
 // forward, until word of the enemy has reached him.
 async function sighting(app, store, grade = null, seed = 7) {
   const made = (await app.api('POST', '/api/commanders', { faction: 'rome' })).body
-  const seat = (await app.api('POST', '/api/battles', { opponent: 'standing', side: 'red', seed, commander: made.token, faction: 'rome', enemyFaction: 'parthia' })).body.seats.red
+  // (No ground to fight for: the seeds were chosen for their sightings
+  // before the maps had their own.)
+  const seat = (await app.api('POST', '/api/battles', { opponent: 'standing', side: 'red', seed, commander: made.token, faction: 'rome', enemyFaction: 'parthia', objectives: [] })).body.seats.red
   const game = store.seatOf(seat).entry.game
   const guard = game.battle.commanders.red.unitId
   if (grade) for (const u of game.battle.world.units.filter(u => u.side === 'red' && u.id !== guard)) u.officer = OFFICER[grade]

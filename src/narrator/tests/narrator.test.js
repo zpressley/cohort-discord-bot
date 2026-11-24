@@ -204,3 +204,24 @@ test('when night ends the battle, each side is told plainly that night has ended
     assert.match(told.text, /neither side has won/)
   }
 })
+
+test('the ground to fight for is told to each side as its own or the enemy\'s: taken, lost, and close to deciding the battle', () => {
+  const ground = [
+    { type: 'objective', turn: 3, objectiveId: 'ground-1', name: 'the Old Mill Bridge', side: 'blue', was: null },
+    { type: 'objective', turn: 6, objectiveId: 'ground-1', name: 'the Old Mill Bridge', side: 'blue', was: 'blue', close: 30 },
+    { type: 'objective', turn: 7, objectiveId: 'ground-1', name: 'the Old Mill Bridge', side: null, was: 'blue' }
+  ]
+  const told = (side, ownIds) => report({ map, side, ownIds: new Set(ownIds), seenEnemyIds: new Set(), events: ground })
+  assert.deepEqual(told('red', ['red_spears']), [
+    'the enemy took the Old Mill Bridge: take it from him, or the field is his',
+    'the enemy has held the Old Mill Bridge long: unless you take it from him within 30 min, the field is his',
+    'the enemy no longer holds the Old Mill Bridge'
+  ])
+  assert.deepEqual(told('blue', ['blue_swords']), [
+    'you took the Old Mill Bridge: hold it alone and the field is yours',
+    'hold the Old Mill Bridge 30 min more and the field is yours',
+    'you no longer hold the Old Mill Bridge'
+  ])
+  // Every side hears of it at once, whatever it can see.
+  assert.equal(visibleEvents(ground, { ownIds: new Set(), seenEnemyIds: new Set() }).length, 3)
+})

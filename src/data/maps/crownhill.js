@@ -185,5 +185,11 @@ module.exports = {
   // Where each side's army forms up when asked to deploy (the web app): the
   // open ground either side of the river, south of the Merchant Road, with
   // Miller's Crossing between them.
-  deploy: { west: { x: 11, y: 23 }, east: { x: 27, y: 23 } }
+  deploy: { west: { x: 11, y: 23 }, east: { x: 27, y: 23 } },
+  // The ground to fight for (engine/orchestrator/victory.js, objectiveArea):
+  // the hill commanding the north, held from on it. (Miller's Crossing, the
+  // ford between the two armies, was tried first: the east army reaches it
+  // first and won 88 battles in 100. docs/DECISIONS.md, "How each map's
+  // ground to fight for was built".)
+  ground: [{ feature: 'The Crownhill', name: 'the Crownhill' }]
 }

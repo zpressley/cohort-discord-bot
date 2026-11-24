@@ -685,3 +685,44 @@ test('on a phone: a friend called out to a next day is told on the old verdict w
     assert.match(p.url(), new RegExp(`/b/${next.seats.blue}$`))
   })
 })
+
+test('on a phone: the muster names the field\'s ground to fight for; the tent marks it on the map and says who holds it; the verdict says it decided the battle', { skip }, async () => {
+  await withApp(async ({ base, browser, errors, store }) => {
+    const p = await page(browser, errors, { width: 390, height: 844 })
+    const shot = (name) => process.env.SHOT ? p.screenshot({ path: process.env.SHOT.replace('.png', `-${name}.png`), fullPage: true }) : null
+    await p.goto(base + '/muster')
+    await p.waitForSelector('form#muster')
+    assert.match(await p.textContent('#ground-note'), /^The ground to fight for: the Crownhill\. Hold it alone for 1 h/)
+    await p.selectOption('select[name="map"]', 'ashford')
+    assert.match(await p.textContent('#ground-note'), /^The ground to fight for: the Old Mill Bridge\./)
+    await shot('ground-muster')
+
+    // A battle he will not come out of (its seed chosen, so the computer
+    // takes the bridge before night): he holds, and loses the field by it.
+    const seat = store.muster({ opponent: 'standing', side: 'red', seed: 5, map: 'ashford', faction: 'rome', enemyFaction: 'rome' }).seats.red
+    await p.goto(base + `/b/${seat}`)
+    await p.waitForSelector('#map-scroll svg')
+    assert.equal(await p.textContent('#ground-line'), 'The ground to fight for, the Old Mill Bridge, is held by no one.')
+    assert.match(await p.locator('#map-scroll svg').innerHTML(), /the Old Mill Bridge/)
+    const width = await p.evaluate(() => document.documentElement.scrollWidth)
+    assert.ok(width <= 390, `no sideways scroll (${width} px)`)
+    let taken = false
+    for (let i = 0; i < 40 && !(await p.locator('.verdict').count()); i++) {
+      await p.click('[data-tab="orders"]')
+      if (await p.locator('.verdict').count()) break
+      await p.fill('#orders', 'everyone hold')
+      await p.click('#send')
+      await p.waitForSelector('.dispatch')
+      if (!taken && /^The enemy holds the Old Mill Bridge/.test(await p.textContent('#ground-line'))) {
+        taken = true
+        await shot('ground-map')
+      }
+    }
+    assert.ok(taken, 'the tent said the enemy held it')
+    await p.click('[data-tab="orders"]')
+    await p.waitForSelector('.verdict h2')
+    assert.equal(await p.textContent('.verdict h2'), 'Defeat')
+    assert.match(await p.textContent('.verdict'), /The enemy held the Old Mill Bridge alone for 1 h, and the field is his/)
+    await shot('ground-verdict')
+  })
+})

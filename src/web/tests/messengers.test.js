@@ -24,10 +24,12 @@ async function start(store = createBattleStore({})) {
   return { server, base, api, close: () => new Promise(resolve => server.close(resolve)) }
 }
 
-// A battle against the computer with a Commander of Rome on the field.
+// A battle against the computer with a Commander of Rome on the field (no
+// ground to fight for: these battles were chosen for their news before the
+// maps had their own).
 async function solo(app, { seed = 3, map = 'crownhill' } = {}) {
   const made = (await app.api('POST', '/api/commanders', { faction: 'rome' })).body
-  const seat = (await app.api('POST', '/api/battles', { opponent: 'standing', side: 'red', seed, map, commander: made.token, faction: 'rome' })).body.seats.red
+  const seat = (await app.api('POST', '/api/battles', { opponent: 'standing', side: 'red', seed, map, commander: made.token, faction: 'rome', objectives: [] })).body.seats.red
   return seat
 }
 

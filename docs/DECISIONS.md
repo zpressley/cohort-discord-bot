@@ -2936,3 +2936,136 @@ and "attack the horse" is asked back.
 2. Should a unit that has fought them for an hour still not know what
    they are? (As built, a fight tells him nothing more than the sighting
    did, but the men killed on each side.)
+
+### How each map's ground to fight for was built (Claude's choices, open to change)
+
+From the standing work list (`docs/REVIEW-2026-11.md`, section 5, item 3:
+"Each map should come with its own ('hold the Old Mill Bridge'), so there
+is a reason to cross the field"), inside the rulings on objectives
+(October 29: "holding objectives as a way to win or score ... direction,
+for testing"), on ground changing hands (all sides know at once), and on
+the day (twelve hours; night ends an undecided battle with no winner,
+November 24).
+
+**What a player sees.** At the muster, under the field chosen: "The ground
+to fight for: the Old Mill Bridge. Hold it alone for 1 h, with no enemy on
+it, and the field is yours, as surely as if the enemy's army broke. Let the
+enemy hold it as long, and the field is his." In the tent, a line under the
+top bar ("The enemy holds the Old Mill Bridge, the ground to fight for:
+take it within 40 min, or the field is his."), and on the map the ground
+washed in its colour inside the dashed ring it already had. His first
+dispatch opens with the muster's two sentences. When it changes hands:
+"The enemy took the Old Mill Bridge: take it from him, or the field is his"
+/ "You took ...: hold it alone and the field is yours" / "... no longer
+holds ...". Half an hour before it decides the battle: "The enemy has held
+the Old Mill Bridge long: unless you take it from him within 30 min, the
+field is his" / "Hold ... 30 min more and the field is yours". The verdict:
+"Victory / Defeat: You held (The enemy held) the Old Mill Bridge alone for
+1 h, and the field is yours (his)". All words in `narrator/words.js`,
+`GROUND`.
+
+**1. The rule is the one that was there, kept and told.** Holding every
+named objective alone (effective units of one side on it, none of the
+other's) for an hour of battle wins: `'objectives held'` in
+`orchestrator/victory.js` since Stage 3. It was decisive already, so no new
+rule; the hour moved to `tables.GROUND.HOLD_MINUTES` (60) with where it
+came from. Night still ends an undecided battle with no winner (the ground
+is checked before night, as before). Measured, the hour is neither too
+short nor too long: between equal armies the side that held the ground
+first went on to win 57% of the battles, not all (an enemy has time to
+come and take it back), and a player who never comes out loses 95 in 100.
+
+**2. Each map's ground** (`src/data/maps/*.js`, `ground`; the muster gets
+it from `groundOf` in `src/data/maps/index.js`, and it is in the battle's
+spec when the battle is made, so a saved battle replays with it). One
+piece of ground each; none of the maps asked for two (two crossings on
+Crownhill, tried, ended 80 battles in 80 in night: each side sat on one).
+
+| Map | The ground | Held from | Why there |
+|---|---|---|---|
+| Crownhill | the Crownhill (the hill, north) | on it | Miller's Crossing, the ford between the armies, was tried first: the east army is 1.5 moves nearer, reaches it first in 69 of 75 and won 88% |
+| Ashford Vale | the Old Mill Bridge: the bridge and the open ground of the mill at its west end | on them | The bridge alone (from either end): the west army's way lies through the woods, the east reached it first 72 of 72 and won 82%. The bridge and its west end: 50/50 |
+| Thornwood | Thorn Knoll | on it or beside it | The brook cuts its eastern foot: held from on it alone, the west won 63% |
+| Raven Ridge | Raven Gap: the open tiles of the saddle, x 19 to 22 | on them | The ridge (87 tiles, far north) 64% west; the gap with its westmost column 66% west |
+
+A crossing or a spot beside water is held "from on it or beside it" with a
+new, optional `reach` on an objective (`objectiveArea`); without one,
+everything is as before. Neither army starts within 6 tiles of its ground
+(tested).
+
+**3. Is either side favoured?** `src/harness/ground-league.js` plays the
+same faction on both sides, both by the computer, every faction on every
+map, a day of twelve hours; 20 battles a faction, 400 a map. Wins of the
+west army among battles won:
+
+| Map | No ground (as before) | With its ground | Decided by the ground | Night | Minutes on average (before / now) |
+|---|---|---|---|---|---|
+| Crownhill | 58% | 44% | 199 of 400 | 1 | 157 / 235 |
+| Ashford Vale | 52% | 50% | 145 | 35 | 328 / 184 |
+| Thornwood | 67% | 51% | 60 | 0 | 158 / 129 |
+| Raven Ridge | 45% | 50% | 67 | 18 | 251 / 157 |
+| All | | | 471 of 1,600 (29%) | 54 (was 88) | 224 / 176 |
+
+Crownhill at 44/56 is at the edge of "about 55/45"; every other piece of
+its ground tried was worse (the western half of the hill 60%, two thirds of
+it 26%; the hill held from beside it 18%). The numbers swing hard with
+small moves of the ground, because the side that gets there first matters.
+
+As the app plays it (`--mode app`: the west a Commander on the field whose
+orders go by rider, the computer's by rider from its best unit, unequal
+factions; 100 a map): the ground decided 31% of battles, which now run 146
+minutes on average (211 before), and none reached night (16 in 400
+before). West wins: Crownhill 38% (300 battles; 55% before), Ashford 48%,
+Thornwood 54%, Raven Ridge 55% (300). The Crownhill is far from both
+armies, and orders by rider cost the player time there.
+
+The soak (`npm run soak`) has a new section: every faction's army on every
+map fighting for the map's ground, red played three ways: 240 of 240
+finished, 142 decided by the ground, 5 by night, 142 battle minutes on
+average. `npm run balance`'s output is unchanged, every line.
+
+**4. The computer** (`src/opponent/planner.js`; two changes, both only
+when the battle has ground to fight for). It already went for an objective
+and held it for ever, but (a) its line formed only on dry ground, so it
+stood beside a bridge or ford and never held it: now, when the ground's
+middle is water, the line forms on the first dry tile back from it on its
+own side (`strongpoint`); and (b) it went for an enemy only when he stood
+on the spot it meant to hold and none of its own units were near: now any
+enemy it can see on the ground, or near enough to contest it
+(`onTheGround`), is gone for at once (`taken`). It does not march its whole
+army onto the ground: the line forms about it as it did about good ground
+before, archers behind, horse on a flank, and goes in when the enemy is
+close.
+
+**5. Orders.** "spears take the Old Mill Bridge", "hold the bridge",
+"everyone occupy the Crownhill" read as going there and holding it
+(`grammar.js`: take, occupy, hold with a place; "seize" and "capture" were
+already to attack a place, and still are). "Raven Gap" was found as the
+nearest stretch of the road it lies on; a landmark tagged `pass` is now
+gone to itself (`places.js`). "knoll" reads as a hill. "the gap" is still
+asked back (only exact names are names).
+
+**6. Fog of war.** The tent is told, for each piece of ground, where it
+is, who holds it and for how long it has to go (all sides know at once
+when it changes hands, ruled); nothing of who stands on it (the fog test
+checks the keys).
+
+**Guessed, and the other reading.**
+- *Moving the ground off the obvious feature to make it fair* (the bridge
+  with the mill's ground on its west bank; the Crownhill rather than
+  Miller's Crossing). The other reading is to keep the obvious feature and
+  move the armies' forming-up ground (`deploy`) so both reach it at once;
+  that changes every battle on the map, so I did not.
+- *Half an hour's warning stops the battle for every side*, like ground
+  changing hands; the other reading is to tell it only in the next
+  dispatch.
+- *The next day is fought for the same ground* as the day before (even
+  ground a player named himself).
+- *A player may still name his own* ground through the API (`objectives`),
+  or none (`[]`); the form has no box for it, as ruled before.
+- Web tests chosen for other things (a volley, a sighting, an officer's
+  deeds) muster with `objectives: []`, as their battles were before.
+
+**Left undone.** The hotseat terminal and the leagues other than the new
+one still fight without ground. The AI dispatch has no new instruction:
+it is given the same lines.

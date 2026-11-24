@@ -147,3 +147,33 @@ test('it plays every map to a verdict against a commander who only holds, and ag
     assert.ok(game.outcome.decided, `${map} ${scenario} against ${foe}: no verdict after ${turns} turns`)
   }
 })
+
+test('it goes for the map\'s ground to fight for: a bridge from its own end, a hill or a pass from on it', () => {
+  const { groundOf } = require('../../data/maps')
+  for (const { id: map } of mapChoices()) {
+    const spec = { ...loadScenario('meeting-battle', { map, deploy: true }), standingOrders: {}, objectives: groundOf(map) }
+    const game = createGame(spec, { seed: 1 })
+    const ground = game.objectives[0]
+    for (const [side, forward] of [['red', { x: 1, y: 0 }], ['blue', { x: -1, y: 0 }]]) {
+      const { anchor, objective } = strongpoint(game, side, forward, { x: 0, y: 1 })
+      assert.equal(objective, true, map)
+      const near = Math.min(...ground.tiles.map(t => tileDistance(anchor, t)))
+      assert.ok(near <= (ground.reach ?? 0) + 1, `${map} ${side}: the line stands ${near} tiles from ${ground.name}`)
+      assert.ok(!['river', 'ford', 'bridge', 'marsh'].includes(game.battle.map.terrainAt(anchor)), `${map} ${side}: not in the water`)
+    }
+  }
+})
+
+test('it does not leave the enemy on the ground to fight for: an enemy seen on it is gone for, one off it is waited for', () => {
+  const ground = [{ id: 'ground-1', name: 'the knoll', tiles: [{ x: 12, y: 12 }, { x: 13, y: 12 }] }]
+  const blue = [unit({ id: 'b1', side: 'blue', position: { x: 17, y: 12 } }), unit({ id: 'b2', side: 'blue', position: { x: 17, y: 13 } })]
+  const game = (redAt) => createGame({
+    name: 'plain', map: PLAIN, seed: 1, turns: [], objectives: ground,
+    units: [unit({ id: 'r1', position: redAt }), ...blue],
+    sides: { red: { homeEdge: 'west' }, blue: { homeEdge: 'east' } }
+  }, { seed: 1 })
+  const onIt = planTurn(game({ x: 12, y: 12 }), 'blue')
+  assert.ok(onIt.every(o => o.action === 'advance'), JSON.stringify(onIt))
+  const offIt = planTurn(game({ x: 6, y: 12 }), 'blue')
+  assert.ok(offIt.every(o => o.action === 'defend' || o.action === 'hold'), JSON.stringify(offIt))
+})

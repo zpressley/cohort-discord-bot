@@ -155,7 +155,7 @@ function createServer(store) {
           const body = await readBody(req)
           return send(res, 201, store.muster({
             scenario: body.scenario, map: body.map, opponent: body.opponent, side: body.side,
-            timeLimitMinutes: body.timeLimitMinutes, objectives: Array.isArray(body.objectives) ? body.objectives.map(String) : [],
+            timeLimitMinutes: body.timeLimitMinutes, objectives: Array.isArray(body.objectives) ? body.objectives.map(String) : undefined,
             seed: Number.isInteger(body.seed) ? body.seed : undefined,
             turnLimit: Number.isInteger(body.turnLimit) ? body.turnLimit : undefined,
             dayMinutes: Number.isInteger(body.dayMinutes) ? body.dayMinutes : undefined,
