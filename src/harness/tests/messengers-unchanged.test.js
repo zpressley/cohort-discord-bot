@@ -30,6 +30,12 @@
 // down either side of the ford; not the perks' doing (it happens without
 // them, Mongolia against Tibet on ashford, seed 77), and in the app the
 // day ends such a battle.
+//
+// Retaken when the east army on Crownhill was moved to form up further
+// south, at (30, 29), so that both armies are as long marching to the
+// Crownhill (docs/DECISIONS.md, "How the first battle, being asked, and
+// forming up were built"). Nothing else changed these battles: with the old
+// forming-up place they were as before. On crownhill they were 889c9e1e 18 and 27381837 24.
 
 const { test } = require('node:test')
 const assert = require('node:assert/strict')
@@ -47,8 +53,8 @@ function fingerprint(text) {
 }
 
 const BEFORE = {
-  'crownhill 1': '889c9e1e 18',
-  'crownhill 2': '27381837 24',
+  'crownhill 1': 'e8ac75d4 17',
+  'crownhill 2': 'e8d758f7 20',
   'ashford 1': '9de62f89 150',
   'ashford 2': '6d782516 150'
 }

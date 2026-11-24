@@ -17,6 +17,12 @@
 // 7dd10867, 987939aa, aeded69a, b2a4ce2b, df860211, ade1ebaa, 29c7796a (the
 // skirmish proposal, part 6, not taken, had made them e2b2495b, 9d3ccd07,
 // 8b775320, ec175c50, 4edc2f02, 6e08eb2f, 29c7796a).
+//
+// Retaken when the east army on Crownhill was moved to form up further
+// south, at (30, 29), so that both armies are as long marching to the
+// Crownhill (docs/DECISIONS.md, "How the first battle, being asked, and
+// forming up were built"). Nothing else changed these battles: with the old
+// forming-up place they were as before. On crownhill they were d99dbaa6 and 9d3ccd07.
 
 const { test } = require('node:test')
 const assert = require('node:assert/strict')
@@ -35,8 +41,8 @@ function fingerprint(text) {
 }
 
 const BEFORE = {
-  'crownhill 1': 'd99dbaa6',
-  'crownhill 2': '9d3ccd07',
+  'crownhill 1': '669fa1f3',
+  'crownhill 2': 'b261c53b',
   'thornwood 1': '7ceeb2cc',
   'thornwood 2': 'a9616de5',
   'meeting 1': 'df860211',

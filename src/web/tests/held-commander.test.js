@@ -139,7 +139,11 @@ test('fog of war, held: his map holds only what can be seen from where he is hel
     const theirs = (await app.api('GET', `/api/seat/${seats.blue}`)).body.dispatches[0]
     assert.equal(theirs.turn, dispatch.turn)
     assert.ok(theirs.lines.length > 0)
-    assert.equal(dispatch.lines.length - 1, theirs.lines.length, 'line for line, after the heading')
+    // Line for line, after the heading; and he may have more, for he hears
+    // what reaches the captors about him at once, before a rider takes it
+    // to their own Commander (since the east army forms up further south
+    // on Crownhill, November 24, this battle has one such line).
+    assert.ok(dispatch.lines.length - 1 >= theirs.lines.length, 'line for line, after the heading')
     assert.ok(dispatch.lines.slice(1).some(l => /^Enemy /.test(l)), 'their units are "enemy" to him still')
     // His far unit, which no enemy can see, is in neither.
     const blueSees = new Set(sideView(game, 'blue').intel.filter(e => e.status === 'visible').map(e => e.id))

@@ -36,6 +36,14 @@
 // never cross. That is not the perks' doing (the same happens without
 // them, Mongolia against Tibet on ashford, seed 77); in the app the day
 // ends such a battle.
+//
+// Retaken when the east army on Crownhill was moved to form up further
+// south, at (30, 29), so that both armies are as long marching to the
+// Crownhill (docs/DECISIONS.md, "How the first battle, being asked, and
+// forming up were built"). Nothing else changed these battles: with the old
+// forming-up place they were as before. On crownhill they were ae680b96
+// 18, 6261aa5e 26 (everyone asked) and 889c9e1e 18, 27381837 24 (no
+// Commander).
 
 const { test } = require('node:test')
 const assert = require('node:assert/strict')
@@ -74,8 +82,8 @@ function play(extra, { commander }) {
 
 test('a battle saved before the riders rulings (marked everyoneAsked) plays back exactly as it was played, event for event', () => {
   assert.deepEqual(play({ everyoneAsked: true }, { commander: true }), {
-    'crownhill 1': 'ae680b96 18',
-    'crownhill 2': '6261aa5e 26',
+    'crownhill 1': 'da034438 17',
+    'crownhill 2': '67f2663e 20',
     'ashford 1': 'c401099d 33',
     'ashford 2': '556641ef 31'
   })
@@ -83,8 +91,8 @@ test('a battle saved before the riders rulings (marked everyoneAsked) plays back
 
 test('a battle with no Commander on the field runs exactly as before the riders rulings, event for event', () => {
   assert.deepEqual(play({}, { commander: false }), {
-    'crownhill 1': '889c9e1e 18',
-    'crownhill 2': '27381837 24',
+    'crownhill 1': 'e8ac75d4 17',
+    'crownhill 2': 'e8d758f7 20',
     'ashford 1': '9de62f89 150',
     'ashford 2': '6d782516 150'
   })

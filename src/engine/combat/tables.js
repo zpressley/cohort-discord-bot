@@ -1194,3 +1194,24 @@ const PERKS = {
 }
 
 module.exports.PERKS = PERKS
+
+// Units sent to one place by one order form up beside one another
+// (battle/formUp.js; the playthrough of November 24, D11). Claude's values,
+// open to change (docs/DECISIONS.md, "How the first battle, being asked,
+// and forming up were built"):
+module.exports.FORM_UP = {
+  REACH: 3,        // tiles (75 m) about the place a unit may form up on
+  DEPTH: 3,        // a tile a rank back (or forward) costs as much as three along the line
+  AHEAD: 2,        // and one toward the enemy more again: the line forms on the spot or behind it
+  OFF_GROUND: 2    // a tile not of the place's own kind of ground (off the hill): as two along the line
+}
+
+// Shooting that does not call a free Commander back again (orchestrator.js,
+// smallFire; the playthrough of November 24, D2). Claude's values, open to
+// change (docs/DECISIONS.md, "How the first battle, being asked, and
+// forming up were built"):
+module.exports.FIRE_NEWS = {
+  QUIET: 6,        // ten minutes (an hour) after he was told of shooting, more of it calls him only if it grows
+  HEAVY: 0.05,     // ... a unit of his losing this share of its mustered men in one ten minutes of it
+  SHAKEN: 50       // ... or a unit of his down to this heart (of 100) as its report has it
+}

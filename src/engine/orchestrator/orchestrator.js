@@ -46,7 +46,7 @@ const { createWord, updateWord, wordFromCaptivity, arrivalOf } = require('./word
 const { conditionOf } = require('./reports')
 const { evaluateVictory, objectiveController, objectiveArea, OBJECTIVE_HOLD_MINUTES } = require('./victory')
 const { bargainChips, commanderFate } = require('../command/commander')
-const { PARLEY, COMMAND, GROUND } = require('../combat/tables')
+const { PARLEY, COMMAND, GROUND, FIRE_NEWS } = require('../combat/tables')
 
 const MAX_TICKS_PER_TURN = 6   // one hour of battle time per decision
 const MINUTES_PER_TICK = 10    // locked decision 1
@@ -515,6 +515,9 @@ function wantedNow(game, turnRecord, sightedBy, heard, objectiveChanges) {
     const reasons = []
     if (game.word[side] && c?.status === 'free') {
       reasons.push(...newsFor(game, side, recent, heard))
+      // Light shooting by an enemy he knows of, told him once, does not
+      // call him back again for a spell unless it grows (smallFire).
+      if (reasons.includes('fire') && smallFire(game, side, recent)) reasons.splice(reasons.indexOf('fire'), 1)
       // A rider back with word that he could not get through: he has
       // commands to give (ruled 2026-11-24: "the rider should return with
       // that news"). Now that the hour does not call him back, it must.
@@ -539,8 +542,42 @@ function wantedNow(game, turnRecord, sightedBy, heard, objectiveChanges) {
     if (battle.turn - (game.askedAt[side] ?? 0) >= COMMAND.LONGEST) reasons.push('long')
     const why = [...order, 'long'].find(r => reasons.includes(r))
     if (why) by[side] = why
+    // The shooting he is told of as he is called, whatever called him: the
+    // spell of quiet runs from then.
+    if (why && reasons.includes('fire')) (game.firedAt ??= {})[side] = battle.turn
   }
   return Object.keys(by).length > 0 ? by : null
+}
+
+// Is the shooting that reached a free Commander this tick small news, not
+// worth calling him back for? (The playthrough of November 24, D2: on Raven
+// Ridge he was asked eight turns running for "was shot at by enemy
+// slingers, losing 1 man".) Small: he was told of shooting less than
+// FIRE_NEWS.QUIET ago, and none of it grew since: no unit of his lost
+// FIRE_NEWS.HEAVY of its men to it, none is down to FIRE_NEWS.SHAKEN in
+// heart as its report has it, and every enemy shooting at his men was known
+// to him before. (A new enemy, a fight hand to hand and a rout call him as
+// before, on their own account.)
+function smallFire(game, side, recent) {
+  const { battle } = game
+  const last = game.firedAt?.[side]
+  if (last === undefined || battle.turn - last >= FIRE_NEWS.QUIET) return false
+  const word = game.word[side]
+  const volleys = recent.filter(e => e.type === 'volley' && arrivalOf(game, side, e) === battle.turn)
+  const lost = new Map()
+  for (const v of volleys) {
+    if (!word.units[v.unitId]) continue
+    lost.set(v.unitId, (lost.get(v.unitId) ?? 0) + (v.killed ?? 0))
+    const shooter = word.enemies[v.by]
+    if (!shooter || (shooter.first?.turn ?? battle.turn) >= battle.turn) return false
+  }
+  for (const [id, men] of lost) {
+    const mustered = battle.mustered.get(id) ?? 0
+    if (mustered > 0 && men >= FIRE_NEWS.HEAVY * mustered) return false
+    const morale = word.units[id]?.morale
+    if (morale !== null && morale !== undefined && morale <= FIRE_NEWS.SHAKEN) return false
+  }
+  return true
 }
 
 // Objective control is measured once per TICK but victory counts consecutive

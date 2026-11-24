@@ -47,6 +47,7 @@ const { actsAlone, initiative } = require('../command/initiative')
 const { canSee, visionRange } = require('../map/sight')
 const { coverFor } = require('./hiding')
 const { canSkirmish, fallBack } = require('./skirmish')
+const { formUp } = require('./formUp')
 
 const DEFAULT_MAX_TURNS = 20
 
@@ -229,10 +230,30 @@ function stepTurn(state, sideOrders = {}, { sameTurn = false } = {}) {
       if (gone || watchers.some(w => tileDistance(w.position, position) <= STOOD_THERE)) memory.delete(id)
     }
   }
+  // The tile of the ground to fight for that a unit advancing on it makes
+  // for: the nearest it can stand on that no other unit of its side has
+  // taken or is making for, so that they come up beside one another; its
+  // own, once it is on it.
+  const groundBound = new Map()
+  const groundFor = (unit) => {
+    if (groundBound.has(unit.id)) return groundBound.get(unit.id)
+    const tiles = state.ground.flatMap(area => area.tiles).filter(t => map.passable(t) && map.terrainAt(t) !== 'river')
+    const mine = tiles.find(t => samePosition(t, unit.position))
+    const claimed = new Set([
+      ...unitsOnSide(world, unit.side).filter(u => u.id !== unit.id && u.strength > 0).map(u => positionKey(u.position)),
+      ...[...groundBound.entries()].filter(([id]) => getUnit(world, id)?.side === unit.side).map(([, t]) => positionKey(t))
+    ])
+    const free = tiles.filter(t => !claimed.has(positionKey(t)))
+    const pick = mine ?? [...(free.length ? free : tiles)]
+      .sort((a, b) => tileDistance(unit.position, a) - tileDistance(unit.position, b) || a.y - b.y || a.x - b.x)[0] ?? unit.position
+    groundBound.set(unit.id, pick)
+    return pick
+  }
   // Whom a unit pressing the enemy makes for: the nearest enemy its side
-  // can see; else the nearest place one was last seen; else the enemy's
-  // side of the field. Returns something with a `position`, or null.
-  const toPress = (unit) => {
+  // can see; else the nearest place one was last seen; else, told to
+  // advance, the ground to fight for; else the enemy's side of the field.
+  // Returns something with a `position`, or null.
+  const toPress = (unit, { toGround = false } = {}) => {
     const seen = seenAtStart.get(unit.side) ?? new Set()
     const nearest = (candidates) => candidates
       .map(c => ({ ...c, distance: tileDistance(unit.position, c.position) }))
@@ -243,6 +264,10 @@ function stepTurn(state, sideOrders = {}, { sameTurn = false } = {}) {
     if (inSight) return inSight
     const remembered = nearest([...(state.lastSeen.get(unit.side) ?? [])].map(([id, position]) => ({ id, position })))
     if (remembered) return remembered
+    // Told to advance, with no enemy known: on to the ground to fight for,
+    // where there is some (the playthrough of November 24, D1). Not a
+    // side's standing order to advance: that still goes looking.
+    if (toGround && state.ground?.length > 0) return { id: 'the ground to fight for', position: groundFor(unit) }
     // No one knows where the enemy is: go and look. First straight ahead to
     // their side of the field; then the ground no one has yet looked over,
     // nearest first.
@@ -514,7 +539,16 @@ function stepTurn(state, sideOrders = {}, { sameTurn = false } = {}) {
       log.emit('commanderRode', turn, { side, unitId: o.ride, from: state.commanders[side].unitId })
       state.commanders[side].unitId = o.ride
     }
-    const { orders: expanded } = expandOrders(held ? [] : given, effective)
+    const { orders: spelled } = expandOrders(held ? [] : given, effective)
+    // Units sent to one place together form up beside one another there
+    // (formUp.js), toward the enemy as the side knows of him.
+    const expanded = formUp(spelled, {
+      map,
+      units: effective,
+      others: new Set(effective.filter(u => !spelled.some(o => o.unitId === u.id)).map(u => positionKey(u.position))),
+      enemies: [...(state.lastSeen.get(side)?.values() ?? [])],
+      enemyEdge: Object.entries(spec.sides ?? {}).find(([s]) => s !== side)?.[1]?.homeEdge ?? null
+    })
     // While he is held each officer runs his own unit by his nature, as a
     // player turn opens (command/officers.js, ownCommand). It ends when he
     // is free: from then on his units keep what they were last doing until
@@ -596,7 +630,7 @@ function stepTurn(state, sideOrders = {}, { sameTurn = false } = {}) {
     const edge = spec.sides?.[side]?.homeEdge ?? 'west'
     const context = (unit) => ({
       fresh: fresh.has(unit.id),
-      nearestEnemy: (u) => toPress(u),
+      nearestEnemy: (u) => toPress(u, { toGround: true }),
       namedEnemy: (u, id) => toFollow(u, id),
       homeTarget: (u) => edgeTarget(map, u.position, edge)
     })
