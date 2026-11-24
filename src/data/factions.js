@@ -108,10 +108,15 @@ const FACTIONS = {
     culture: 'Kingdom of Kush',
     title: 'Kush',
     fights: 'Archers with great bows, and spearmen to keep the enemy off them.',
-    // Doc: six-foot Nubian bows, leather armour.
+    // Doc: six-foot Nubian bows, leather armour. A sword for the melee
+    // (ruled 2026-11-24: "They can have a sword"): Kush has no sword of its
+    // own in the builder, so the standard sword (the straight iron sword of
+    // Meroe's smiths) stands in. Every other missile unit fights hand to
+    // hand with MISSILES.SIDEARM, a knife.
     elite: {
       name: 'golden bows', size: 80,
-      weapon: 'self_bow_professional', armor: 'light_armor', shield: 'no_shield'
+      weapon: 'self_bow_professional', armor: 'light_armor', shield: 'no_shield',
+      sidearm: 'sword_standard'
     },
     army: [
       { name: 'spearmen', quality: 'professional', weapon: 'spear_professional', armor: 'medium_armor', shield: 'medium_shield' },

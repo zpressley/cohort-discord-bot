@@ -44,13 +44,14 @@ async function league(armies = Object.fromEntries(Object.keys(FACTIONS).map(f =>
   const results = await runBattles(jobs)
   const record = Object.fromEntries(Object.keys(armies).map(k => [k, { won: 0, lost: 0, battles: 0 }]))
   const pairs = {}
-  let turns = 0, commanders = 0, taken = 0, killed = 0, ended = 0
+  let turns = 0, commanders = 0, taken = 0, killed = 0, ended = 0, dayEnded = 0
   jobs.forEach((j, i) => {
     const r = results[i]
     const key = [j.a, j.b].sort().join(' v ')
     const p = pairs[key] ?? (pairs[key] = { a: [j.a, j.b].sort()[0], b: [j.a, j.b].sort()[1], wins: {}, battles: 0 })
     p.battles++
     if (r.decided) ended++
+    if (r.dayEnded) dayEnded++
     turns += r.turns
     const winner = r.winner === 'red' ? j.a : r.winner === 'blue' ? j.b : null
     if (winner) p.wins[winner] = (p.wins[winner] ?? 0) + 1
@@ -65,14 +66,14 @@ async function league(armies = Object.fromEntries(Object.keys(FACTIONS).map(f =>
       if (r.fates[side] === 'killed') killed++
     }
   })
-  return { record, pairs, battles: jobs.length, ended, turns: turns / jobs.length, commanders, taken, killed }
+  return { record, pairs, battles: jobs.length, ended, dayEnded, turns: turns / jobs.length, commanders, taken, killed }
 }
 
 const worst = (p) => Math.max(...Object.values(p.wins), 0) / Math.max(1, p.battles)
 
 function printLeague(r) {
   const pct = L.pct
-  console.log(`${r.battles} battles, ${r.ended} ended; ${r.turns.toFixed(1)} player turns on average.\n`)
+  console.log(`${r.battles} battles, ${r.ended} ended (${r.dayEnded ?? 0} by the day, with no winner); ${r.turns.toFixed(1)} player turns on average.\n`)
   console.log('| Faction | Won | Lost |')
   console.log('|---|---|---|')
   for (const [f, x] of Object.entries(r.record).sort((a, b) => b[1].won / b[1].battles - a[1].won / a[1].battles)) {

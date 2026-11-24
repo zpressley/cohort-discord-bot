@@ -11,7 +11,7 @@
 const { featuresAt, detectFeatures } = require('../engine/map/features')
 const { distance } = require('../engine/map/labels')
 const { compassWord, TILE_METRES } = require('../engine/map/places')
-const { orderWords, moraleWords, ORDER, RIDER, NIGHT, GROUND } = require('./words')
+const { orderWords, moraleWords, ORDER, RIDER, NIGHT, GROUND, SKIRMISH_WORDS } = require('./words')
 const { gridLabel } = require('../engine/map/grid')
 
 // Where a tile is, in words: the feature it is part of, or the nearest
@@ -97,6 +97,7 @@ function fromCaptivity(events, { seen, side }) {
  *     ended; a unit that got nowhere is not said to have moved
  *   - the rounds two units fought become one fight with the losses summed,
  *     and "came to blows" is dropped when the fight itself is reported
+ *   - a unit that fell back before the enemy tick after tick is told once
  *   - crowding is reported once per unit, as it stood at the end, and not at
  *     all if the ranks had room again by then
  * Order is kept: each merged event stands where its first part stood.
@@ -108,6 +109,7 @@ function summarise(events) {
   const crowds = new Map()
   const hearts = new Map()
   const shots = new Map()
+  const falls = new Map()
   const pair = (a, b) => [a, b].sort().join('|')
 
   for (const e of events) {
@@ -137,6 +139,14 @@ function summarise(events) {
       if (seen) { seen.killed += e.killed; seen.remaining = e.remaining; seen.volleys += 1; continue }
       const merged = { ...e, volleys: 1 }
       shots.set(key, merged)
+      out.push(merged)
+    } else if (e.type === 'gaveGround') {
+      // A unit that fell back tick after tick, as one line: before whom, and
+      // where it ended.
+      const seen = falls.get(e.unitId)
+      if (seen) { seen.from = [...new Set([...seen.from, ...e.from])].sort(); seen.to = e.to; continue }
+      const merged = { ...e, from: [...e.from] }
+      falls.set(e.unitId, merged)
       out.push(merged)
     } else if (e.type === 'heartened') {
       // Everyone who took heart at the same enemy's breaking, in one line.
@@ -271,6 +281,7 @@ function plainFact(map, event, howMany = countAll) {
       : event.side
       ? `${capital(event.side)} took ${event.name}`
       : `${event.name} was no longer held${event.was ? ` by ${capital(event.was)}` : ''}`
+    case 'gaveGround': return SKIRMISH_WORDS.gaveGround(event.unitId, listOf(event.from))
     case 'disengage': return `${event.unitId} broke off the fight` +
       (event.orderly ? ' in good order' : '') +
       (event.killed ? `, losing ${event.killed} men to the parting blows` : ' cleanly')
@@ -311,7 +322,7 @@ const WEIGHT = {
   victory: 0, nightfall: 0, commanderKilled: 0, commanderTaken: 0, commanderFreed: 0, commanderMoved: 1, destroyed: 1, rout: 1, fled: 1, rallied: 1, pursuit: 2, ambush: 1, surprise: 2, objective: 2,
   volley: 3, lostThread: 1, reacted: 2, quarryGone: 2, ownCommand: 1, officerYielded: 0, deserted: 1, commanderRode: 1, riderBlocked: 2, riderSent: 6, cutOff: 1, inTouch: 3,
   heartened: 5,
-  revealed: 3, exchange: 3, standoff: 3, push: 4, crush: 4, disengage: 4, contact: 4,
+  revealed: 3, exchange: 3, standoff: 3, push: 4, crush: 4, disengage: 4, gaveGround: 4, contact: 4,
   hidden: 5, hideFailed: 5, checked: 5, ambushHeld: 5, crowding: 6, arrived: 6, halted: 6, move: 7
 }
 const weight = (event) => WEIGHT[event.type] ?? 5

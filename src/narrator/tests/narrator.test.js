@@ -225,3 +225,14 @@ test('the ground to fight for is told to each side as its own or the enemy\'s: t
   // Every side hears of it at once, whatever it can see.
   assert.equal(visibleEvents(ground, { ownIds: new Set(), seenEnemyIds: new Set() }).length, 3)
 })
+
+test('missile troops falling back are told once a turn, in the order\'s own words, and the enemy hears of it only if he sees them', () => {
+  // (Fire and retreat, docs/design/army-balance.md part 7.)
+  const fell = (turn, from, to) => ({ type: 'gaveGround', turn, unitId: 'red_archers', from, to: at(to) })
+  const told = summarise([fell(5, ['blue_swords'], 'E7'), fell(6, ['blue_swords', 'blue_horse'], 'D7')])
+  assert.equal(told.length, 1)
+  assert.equal(fact(map, told[0]), 'red_archers fell back before blue_horse and blue_swords, keeping out of their reach')
+  const blue = { ownIds: new Set(['blue_swords']), seenEnemyIds: new Set() }
+  assert.equal(visibleEvents([fell(5, ['blue_swords'], 'E7')], blue).length, 0, 'blue did not see the archers go')
+  assert.equal(visibleEvents([fell(5, ['blue_swords'], 'E7')], { ...blue, seenEnemyIds: new Set(['red_archers']) }).length, 1)
+})

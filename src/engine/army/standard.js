@@ -155,6 +155,7 @@ function standardUnits(key, units, side, homeEdge = side === 'red' ? 'west' : 'e
     shield: e.shield ?? 'no_shield',
     mounted: Boolean(e.mounted),
     movementRange: e.mounted ? 5 : 3,
+    ...(e.sidearm ? { sidearm: e.sidearm } : {}),
     role: e.mounted ? 'cavalry' : roleFor(e.weapon)
   })
   // The name alone orders every unit of it, where all of them are numbered.

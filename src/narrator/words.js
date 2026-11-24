@@ -313,4 +313,11 @@ const REPORT = {
   }
 }
 
-module.exports = { orderWords, moraleWords, ORDER, OWN_EDGE, HOLD_THERE, KIT, RIDE_WITH, LOYALTY_WORDS, VALUES_WORDS, VETERANCY_WORDS, RIDER, NIGHT, REPORT, GROUND, windWords }
+// Fire and retreat: missile troops falling back before men they can
+// outmarch (engine/battle/skirmish.js; ruled 2026-11-24). "Fell back" is the order's own
+// word (ORDER.withdraw): it is the same thing, done unasked.
+const SKIRMISH_WORDS = {
+  gaveGround: (unit, before) => `${unit} ${ORDER.withdraw.did} before ${before}, keeping out of their reach`
+}
+
+module.exports = { orderWords, moraleWords, ORDER, OWN_EDGE, HOLD_THERE, KIT, RIDE_WITH, LOYALTY_WORDS, VALUES_WORDS, VETERANCY_WORDS, RIDER, NIGHT, REPORT, GROUND, windWords, SKIRMISH_WORDS }

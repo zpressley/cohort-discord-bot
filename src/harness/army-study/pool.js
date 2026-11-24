@@ -16,7 +16,7 @@ if (process.argv.includes('--pool-worker')) {
   process.on('message', (jobs) => {
     const out = jobs.map(j => {
       const r = L.battle(j.red, j.blue, { map: j.map, seed: j.seed })
-      return { winner: r.winner, turns: r.turns, lost: r.lost, fates: r.fates, reason: r.reason, decided: r.decided }
+      return { winner: r.winner, turns: r.turns, lost: r.lost, fates: r.fates, reason: r.reason, decided: r.decided, dayEnded: r.dayEnded }
     })
     // Exit only once the answer is sent: a large one is cut off otherwise.
     process.send(out, () => process.exit(0))

@@ -84,18 +84,21 @@ async function field() {
   const score = {}
   jobs.forEach((j, i) => {
     const key = j.a.kind
-    const sc = score[key] ?? (score[key] = { won: 0, battles: 0, by: {} })
+    const sc = score[key] ?? (score[key] = { won: 0, battles: 0, by: {}, atDusk: 0, unended: 0 })
     const w = results[i].winner === (j.flip ? 'blue' : 'red')
     sc.battles++; if (w) sc.won++
+    // Ended by the day: no winner (lib.battle).
+    if (results[i].dayEnded) sc.atDusk++
+    if (!results[i].decided) sc.unended++
     const b = sc.by[j.a.f] ?? (sc.by[j.a.f] = { won: 0, battles: 0 })
     b.battles++; if (w) b.won++
   })
   console.log(`\n### The classic armies against the usual armies (${jobs.length / list.length} battles each)\n`)
-  console.log(`| Army | Won | ${FACTIONS_USED.map(f => FACTIONS[f].title).join(' | ')} | Units (${FACTIONS_USED[0]}) |`)
-  console.log(`|---|---|${FACTIONS_USED.map(() => '---').join('|')}|---|`)
+  console.log(`| Army | Won | ${FACTIONS_USED.map(f => FACTIONS[f].title).join(' | ')} | Units (${FACTIONS_USED[0]}) | Ended by the day | Not ended |`)
+  console.log(`|---|---|${FACTIONS_USED.map(() => '---').join('|')}|---|---|---|`)
   for (const [kind, sc] of Object.entries(score)) {
     const first = list.find(a => a.kind === kind && a.f === FACTIONS_USED[0]).army.units.length
-    console.log(`| ${kind} | ${L.pct(sc.won / sc.battles)} | ${FACTIONS_USED.map(f => L.pct(sc.by[f].won / sc.by[f].battles)).join(' | ')} | ${first} |`)
+    console.log(`| ${kind} | ${L.pct(sc.won / sc.battles)} | ${FACTIONS_USED.map(f => L.pct(sc.by[f].won / sc.by[f].battles)).join(' | ')} | ${first} | ${sc.atDusk} | ${sc.unended} |`)
   }
   return score
 }
@@ -116,21 +119,22 @@ async function kinds() {
   jobs.forEach((j, i) => {
     const r = results[i]
     for (const [me, them, side] of [[j.a, j.b, 'red'], [j.b, j.a, 'blue']]) {
-      const cell = (grid[me.kind] ??= {})[them.kind] ??= { won: 0, battles: 0 }
+      const cell = (grid[me.kind] ??= {})[them.kind] ??= { won: 0, battles: 0, dayEnded: 0 }
       cell.battles++; if (r.winner === side) cell.won++
+      if (r.dayEnded) cell.dayEnded++
     }
   })
   console.log(`\n### Kind against kind (row's wins against column; ${FACTIONS_USED.length * FACTIONS_USED.length * L.MAPS.length * 2 * SEEDS} battles a cell)\n`)
-  console.log(`| | ${kindsList.join(' | ')} | All |`)
-  console.log(`|---|${kindsList.map(() => '---').join('|')}|---|`)
+  console.log(`| | ${kindsList.join(' | ')} | All | Ended by the day |`)
+  console.log(`|---|${kindsList.map(() => '---').join('|')}|---|---|`)
   for (const r of kindsList) {
-    let w = 0, n = 0
+    let w = 0, n = 0, d = 0
     const cells = kindsList.map(c => {
       if (c === r) return '-'
-      const x = grid[r][c]; w += x.won; n += x.battles
+      const x = grid[r][c]; w += x.won; n += x.battles; d += x.dayEnded
       return L.pct(x.won / x.battles)
     })
-    console.log(`| ${r} | ${cells.join(' | ')} | ${L.pct(w / n)} |`)
+    console.log(`| ${r} | ${cells.join(' | ')} | ${L.pct(w / n)} | ${d} of ${n} |`)
   }
   return grid
 }
