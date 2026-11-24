@@ -32,7 +32,6 @@ function canSkirmish(unit) {
 
 /** Can this unit get away from that enemy: does its march beat his? */
 function outruns(unit, enemy) {
-  if (T.SKIRMISH.FROM === 'any') return true
   return unit.movementRange > enemy.movementRange
 }
 
