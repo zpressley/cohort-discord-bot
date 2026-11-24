@@ -161,8 +161,11 @@ test('the next day, men who ran come back to the standards in the night; the dea
   const app = await start(store)
   try {
     // (Mongolia, not Rome: with their pila the legions no longer ran in the
-    // day; docs/design/army-balance.md, part 8. Found by search.)
-    const made = (await app.api('POST', '/api/battles', { opponent: 'standing', side: 'red', seed: 1, map: 'ashford', faction: 'mongolia', enemyFaction: 'han', turnLimit: 10 })).body
+    // day; docs/design/army-balance.md, part 8. Found by search. Rome
+    // against Carthage since a unit rallied with no heart holds rather than
+    // go in again: Mongolia's riders no longer broke a second time and ran;
+    // "How taking ground, news of the ground, and rallying were mended".)
+    const made = (await app.api('POST', '/api/battles', { opponent: 'standing', side: 'red', seed: 1, map: 'ashford', faction: 'rome', enemyFaction: 'carthage', turnLimit: 10 })).body
     const game = await untilNight(app, store, made.seats, 'everyone advance on the enemy')
     assert.equal(game.outcome.reason, 'night fell')
     const ran = game.battle.fledUnits.filter(u => u.side === 'red' && u.strength > 0)

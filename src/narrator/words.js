@@ -611,3 +611,12 @@ module.exports.kindWords = kindWords
 const COUNT_WORDS = { 2: 'two', 3: 'three', 4: 'four', 5: 'five', 6: 'six', 7: 'seven', 8: 'eight', 9: 'nine', 10: 'ten' }
 NIGHT.overDays = (days) => `fought over ${COUNT_WORDS[days] ?? days} days`
 NIGHT.listed = 'Night fell, and neither side had won'
+
+// A unit rallied with no heart left that will not go at the enemy
+// (engine/battle/battle.js, 'heldBack'; "How taking ground, news of the
+// ground, and rallying were mended"): the Commander's order is kept, and
+// why it is not carried out is told him in plain words.
+const HELD_BACK = {
+  line: (unit) => `${unit} rallied with no heart left, and will not go at the enemy: they hold where they stand, keeping your order, until a success near them puts heart back in them`
+}
+module.exports.HELD_BACK = HELD_BACK

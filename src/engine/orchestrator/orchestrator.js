@@ -498,12 +498,14 @@ function nightFalls(game) {
 //     every COMMAND.QUIET, for he always has an offer to make;
 //   - with no Commander on the field (the computer): on its own side's
 //     news, as every side was before, and every COMMAND.QUIET;
-//   - every side: when ground changes hands (all know at once).
+//   - every side: when ground changes hands (all know at once), as
+//     groundCalls says: the first time, and after that only when it
+//     matters.
 // Who was wanted, and why, is history[i].wanted (side -> reason).
 function wantedNow(game, turnRecord, sightedBy, heard, objectiveChanges) {
   const { battle } = game
   const all = sides(battle.world)
-  if (objectiveChanges) return Object.fromEntries(all.map(s => [s, 'objective']))
+  const groundNews = objectiveChanges ? groundCalls(game) : new Set()
   const recent = battle.log.all().filter(e => e.turn > battle.turn - NEWS_LOOKBACK)
   const now = recent.filter(e => e.turn === battle.turn)
   const quiet = (side) => battle.turn - (game.askedAt[side] ?? 0) >= COMMAND.QUIET
@@ -513,6 +515,7 @@ function wantedNow(game, turnRecord, sightedBy, heard, objectiveChanges) {
   for (const side of all) {
     const c = battle.commanders?.[side]
     const reasons = []
+    if (groundNews.has(side)) { by[side] = 'objective'; continue }
     if (game.word[side] && c?.status === 'free') {
       reasons.push(...newsFor(game, side, recent, heard))
       // Light shooting by an enemy he knows of, told him once, does not
@@ -547,6 +550,40 @@ function wantedNow(game, turnRecord, sightedBy, heard, objectiveChanges) {
     if (why && reasons.includes('fire')) (game.firedAt ??= {})[side] = battle.turn
   }
   return Object.keys(by).length > 0 ? by : null
+}
+
+// Which sides the ground changing hands this tick calls (the loose ends
+// of November 24: in a fight on the ground it changed hands several times
+// an hour, and called every side each time). Every side knows at once, and
+// is told in the next dispatch, whatever; it is called:
+//   - the first time the ground is taken, lost or contested;
+//   - when the enemy comes to hold it alone and the side was last called
+//     about it for something else (he took it, or it was first contested);
+//   - when the side takes it alone, having last been called because the
+//     enemy held it (he won it back);
+//   - when a side holding it alone is close to taking the field by it
+//     (GROUND.CLOSE_MINUTES left), as before.
+// Not when a fight sways over it: contested, the enemy's again, contested,
+// his own again. game.groundTold: side -> objectiveId -> what the side was
+// last called about ('mine', 'theirs', 'none').
+function groundCalls(game) {
+  const { battle } = game
+  const events = battle.log.forTurn(battle.turn).filter(e => e.type === 'objective')
+  const called = new Set()
+  game.groundTold ??= {}
+  for (const side of sides(battle.world)) {
+    const told = (game.groundTold[side] ??= {})
+    for (const e of events) {
+      if (e.close) { called.add(side); continue }
+      const now = e.side === null ? 'none' : e.side === side ? 'mine' : 'theirs'
+      const last = told[e.objectiveId]
+      if (last === undefined || (now === 'theirs' && last !== 'theirs') || (now === 'mine' && last === 'theirs')) {
+        called.add(side)
+        told[e.objectiveId] = now
+      }
+    }
+  }
+  return called
 }
 
 // Is the shooting that reached a free Commander this tick small news, not
@@ -818,5 +855,6 @@ module.exports = {
   askedWhenWanted,
   sideView,
   MAX_TICKS_PER_TURN,
-  MINUTES_PER_TICK
+  MINUTES_PER_TICK,
+  groundCalls
 }

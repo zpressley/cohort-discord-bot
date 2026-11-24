@@ -16,6 +16,7 @@ const { gridLabel } = require('../engine/map/grid')
 const { RIDER_TAKEN } = require('./words')
 const { BATTLE_OVER } = require('./words')
 const { PLACE } = require('./words')
+const { HELD_BACK } = require('./words')
 
 // Where a tile is, in words: the feature it is part of, or the nearest
 // feature with a name, or open ground near the nearest feature.
@@ -45,7 +46,7 @@ function involved(event) {
 
 // Events only the unit's own side knows of: its hiding, its search, an
 // ambush it held back, how packed its ranks are.
-const PRIVATE = new Set(['hidden', 'hideFailed', 'ambushHeld', 'checked', 'crowding', 'heartened', 'reacted', 'lostThread', 'commanderMoved', 'quarryGone', 'ownCommand', 'deserted', 'commanderRode', 'riderSent', 'riderBlocked', 'cutOff', 'inTouch', 'initiative', 'riderTaken'])
+const PRIVATE = new Set(['hidden', 'hideFailed', 'ambushHeld', 'checked', 'crowding', 'heartened', 'reacted', 'lostThread', 'commanderMoved', 'quarryGone', 'ownCommand', 'deserted', 'commanderRode', 'riderSent', 'riderBlocked', 'cutOff', 'inTouch', 'initiative', 'riderTaken', 'heldBack'])
 // The engine's own record of a roll, which no commander is told of.
 const UNTOLD = new Set(['grasp'])
 
@@ -288,6 +289,7 @@ function plainFact(map, event, howMany = countAll) {
     case 'fled': return `${event.unitId} left the field` + (howMany(event.unitId, event.strength) ? ` with ${howMany(event.unitId, event.strength)}` : '')
     case 'rallied': return `${event.unitId} rallied ${whereAt(map, event.at)}` + (howMany(event.unitId, event.strength) ? ` with ${howMany(event.unitId, event.strength)}` : '') +
       (moraleWords(event.morale) === 'at breaking point' ? ', at breaking point: it will not stand long without a success near it' : '')
+    case 'heldBack': return HELD_BACK.line(event.unitId)
     case 'heartened': return `${listOf(event.units ?? [event.unitId])} took heart at the breaking of ${event.by}`
     case 'destroyed': return `${event.unitId} was destroyed`
     case 'crowding': return event.tier === 'organized'
@@ -337,7 +339,7 @@ function ownCommandWords(event) {
 const WEIGHT = {
   victory: 0, nightfall: 0, commanderKilled: 0, commanderTaken: 0, commanderFreed: 0, commanderMoved: 1, destroyed: 1, rout: 1, fled: 1, rallied: 1, pursuit: 2, ambush: 1, surprise: 2, objective: 2,
   volley: 3, thrown: 3, lostThread: 1, reacted: 2, quarryGone: 2, ownCommand: 1, initiative: 1, officerYielded: 0, deserted: 1, commanderRode: 1, riderBlocked: 2, riderSent: 6, cutOff: 1, inTouch: 3, riderTaken: 1,
-  heartened: 5,
+  heartened: 5, heldBack: 1,
   revealed: 3, exchange: 3, standoff: 3, push: 4, crush: 4, disengage: 4, gaveGround: 4, contact: 4,
   hidden: 5, hideFailed: 5, checked: 5, ambushHeld: 5, crowding: 6, arrived: 6, halted: 6, move: 7
 }

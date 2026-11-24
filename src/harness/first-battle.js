@@ -76,13 +76,18 @@ async function play({ map, faction, seed, how }) {
   const enemyHeld = objectives.find(e => e.side === 'blue' && !e.close)
   const heldAt = enemyHeld ? enemyHeld.turn * 10 : null
   const askedWhileHeld = heldAt !== null && askedAt.some(m => m >= heldAt && m < game.minutesElapsed)
+  // And during the enemy's last hold, the one that decided the battle:
+  // asked after it began, while there was still time to contest it.
+  const lastHeld = [...objectives].reverse().find(e => !e.close)
+  const lastHeldAt = lastHeld?.side === 'blue' ? lastHeld.turn * 10 : null
+  const askedInLastHold = lastHeldAt !== null && askedAt.some(m => m >= lastHeldAt && m < game.minutesElapsed)
   const why = {}
   for (const h of game.history) if (h.wanted?.red) why[h.wanted.red] = (why[h.wanted.red] ?? 0) + 1
   return {
     decided: game.outcome.decided, winner: game.outcome.winner, reason: game.outcome.reason,
     minutes: game.minutesElapsed, turns: game.calls.red, firstAsked,
     lostRed: lost('red'), lostBlue: lost('blue'), blows: lost('red') + lost('blue') > 0,
-    heldAt, askedWhileHeld,
+    heldAt, askedWhileHeld, askedInLastHold,
     crowded: game.battle.log.all().filter(e => e.type === 'crowding' && e.tier !== 'organized').length,
     // Packed together on the ground to fight for itself (not on the road there).
     packed: game.battle.log.all().filter(e => e.type === 'crowding' && e.tier !== 'organized' && e.unitId.startsWith('red') && game.objectives.some(o => o.tiles.some(t => Math.abs(t.x - e.at.x) <= 1 && Math.abs(t.y - e.at.y) <= 1))).length,
@@ -94,7 +99,7 @@ async function league({ battles = 40, how = 'advance', only = null } = {}) {
   const factions = Object.keys(FACTIONS)
   const rows = []
   for (const { id: map } of mapChoices({ big: false }).filter(m => !only || m.id === only)) {
-    const r = { map, n: 0, won: 0, lost: 0, night: 0, reasons: {}, lostRed: 0, lostBlue: 0, noBlows: 0, firstAsked: [], turns: 0, minutes: 0, groundLostUnasked: 0, crowded: 0, packed: 0, why: {} }
+    const r = { map, n: 0, won: 0, lost: 0, night: 0, reasons: {}, lostRed: 0, lostBlue: 0, noBlows: 0, firstAsked: [], turns: 0, minutes: 0, groundLostUnasked: 0, lastHoldUnasked: 0, asked: 0, crowded: 0, packed: 0, why: {} }
     for (let i = 0; i < battles; i++) {
       const out = await play({ map, faction: factions[i % factions.length], seed: 101 + i * 977, how })
       r.n++
@@ -112,6 +117,7 @@ async function league({ battles = 40, how = 'advance', only = null } = {}) {
       r.crowded += out.crowded
       r.packed += out.packed
       if (out.reason === 'objectives held' && out.winner === 'blue' && !out.askedWhileHeld) r.groundLostUnasked++
+      if (out.reason === 'objectives held' && out.winner === 'blue' && !out.askedInLastHold) r.lastHoldUnasked++
       for (const [k, v] of Object.entries(out.why)) r.why[k] = (r.why[k] ?? 0) + v
     }
     rows.push(r)
@@ -128,7 +134,7 @@ if (require.main === module) {
       console.log(`${r.map.padEnd(11)} ${how}: won ${r.won} of ${r.n} (${pct(r.won, r.n)}), lost ${r.lost}, night ${r.night}; ` +
         `no blow struck in ${r.noBlows}; men lost a battle: his ${Math.round(r.lostRed / r.n)}, the computer's ${Math.round(r.lostBlue / r.n)}`)
       console.log(`            first asked again after ${f[0] ?? '-'} to ${f.at(-1) ?? '-'} min (median ${f[Math.floor(f.length / 2)] ?? '-'}); ` +
-        `${(r.turns / r.n).toFixed(1)} turns, ${Math.round(r.minutes / r.n)} min a battle; lost by the ground without being asked while the enemy held it: ${r.groundLostUnasked}; times units packed together ${r.crowded} (${r.packed} his, on or beside the ground)`)
+        `${(r.turns / r.n).toFixed(1)} turns, ${Math.round(r.minutes / r.n)} min a battle; lost by the ground without being asked while the enemy held it: ${r.groundLostUnasked} (in the hold that won it: ${r.lastHoldUnasked}); ${(r.turns / Math.max(1, r.minutes / 60)).toFixed(1)} asked an hour; times units packed together ${r.crowded} (${r.packed} his, on or beside the ground)`)
       console.log(`            ${Object.entries(r.reasons).sort((a, b) => b[1] - a[1]).map(([k, v]) => `${k} ${v}`).join(', ')}`)
       console.log(`            asked for: ${Object.entries(r.why).sort((a, b) => b[1] - a[1]).map(([k, v]) => `${k} ${v}`).join(', ')}`)
     }
