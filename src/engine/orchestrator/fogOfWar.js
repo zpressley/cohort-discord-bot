@@ -16,7 +16,7 @@
 // of them stands on high ground.
 
 const { VISION, visionRange, canSee } = require('../map/sight')
-const { reportGrade, reportOf, join, fuller } = require('./reports')
+const { reportGrade, reportOf, join, fuller, kitSeen } = require('./reports')
 
 // One side's intel ledger. Serializable — it is part of what the DB persists.
 // Each entry's `told` is what his side's reports of it hold, by the
@@ -81,6 +81,7 @@ function updateIntel(intel, world, side, turn, map, hidden = new Map(), stateOf 
       role: enemy.role ?? null,
       mounted: Boolean(enemy.mounted),
       primaryWeapon: enemy.primaryWeapon ?? null,
+      ...kitSeen(enemy),
       // What the reports of it tell, by the best officer who saw it.
       told: join(previous?.told, reportOf(enemy, seers.reduce((g, f) => fuller(g, reportGrade(f)), null), turn, () => stateOf(enemy)))
     }

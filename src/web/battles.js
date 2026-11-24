@@ -81,7 +81,7 @@ function unitName(unit) {
 function describeOrder(order, standing = null, name = (id) => id) {
   if (!order) return standing === 'advance' ? 'advancing on the enemy (standing orders)' : 'holding (no orders yet)'
   // The same words the read-back and the dispatches use (narrator/words.js).
-  const doing = orderWords('doing', order, order.enemy ? name(order.enemy) : order.target ? where(order.target) : null)
+  const doing = orderWords('doing', order, order.enemy ? name(order.enemy) : order.friend ? name(order.friend) : order.target ? where(order.target) : null)
   const more = order.steps?.length ? `, then ${order.steps.length} more ${order.steps.length === 1 ? 'step' : 'steps'}` : ''
   switch (order.action) {
     case 'ambush': return doing +
@@ -213,7 +213,7 @@ function enemyForOrders(e) {
   const told = toldOf(e)
   const base = { id: e.id, status: e.status, position: e.position, seenOnTurn: e.seenOnTurn, ...(e.strength !== undefined ? { strength: e.strength } : {}) }
   return told.kind
-    ? { ...base, role: told.kind.role, mounted: told.kind.mounted, primaryWeapon: told.kind.primaryWeapon }
+    ? { ...base, role: told.kind.role, mounted: told.kind.mounted, primaryWeapon: told.kind.primaryWeapon, thrown: told.kind.thrown, armor: told.kind.armor, shield: told.kind.shield }
     : { ...base, name: REPORT.troops }
 }
 

@@ -23,6 +23,8 @@
 //                    a named place; 'home' toward his own edge
 //            fire    'shoot' | 'hold'   enemy: true (an enemy unit)
 //            steps   how many steps after the first   when: its condition
+//            friend  for a follow: the unit(s) kept by (any one of them)
+//            keep    for a follow: 'beside' | 'behind'
 //   anyQuestion  with 'ask': the bare "I don't follow" will do (the words
 //          are no order at all); else the question must say what is wrong
 //   army   'rome' (default), 'macedon', 'parthia'
@@ -237,10 +239,11 @@ const PLAIN_ORDERS = [
   { say: 'velites hide in c5', want: [{ who: [V], action: 'hide', place: 'C5' }] },
 
   // ── Following another unit ────────────────────────────
-  { say: 'stay with the legionaries', want: 'ask' },
-  { say: 'velites follow the legionaries', want: 'ask' },
-  { say: 'velites support the hastati', want: 'ask' },
-  { say: 'velites cover the legionaries', want: 'ask' },
+  // (A question until the follow order was built: now an order.)
+  { say: 'stay with the legionaries', want: [{ who: '*-Legionaries', action: 'follow', friend: [L], keep: 'beside' }] },
+  { say: 'velites follow the legionaries', want: [{ who: [V], action: 'follow', friend: [L], keep: 'behind' }] },
+  { say: 'velites support the hastati', want: [{ who: [V], action: 'follow', friend: [H], keep: 'beside' }] },
+  { say: 'velites cover the legionaries', want: [{ who: [V], action: 'follow', friend: [L], keep: 'beside' }] },
 
   // ── Flanks ────────────────────────────────────────────
   { say: 'go around the left flank', want: 'ask' },
@@ -352,7 +355,7 @@ const PLAIN_ORDERS = [
     { say: 'legionaries attack!', want: [{ who: [L], action: 'advance' }] },
     { say: 'legionaries stand firm', want: [{ who: [L], action: 'hold' }] },
     { say: 'praetorian guard wait here', want: [{ who: [P], action: 'hold' }] },
-    { say: 'hastati follow legionaries', want: 'ask' },
+    { say: 'hastati follow legionaries', want: [{ who: [H], action: 'follow', friend: [L], keep: 'behind' }] },
     { say: 'everyone take the high ground', want: [{ who: '*', action: 'defend', place: 'kind:hill' }] },
     { say: 'legionaries march to the bridge and hold it', maps: ['crownhill', 'ashford', 'greywater'], want: [{ who: [L], action: 'defend', place: 'kind:bridge' }] },
     { say: 'velites search c5', want: [{ who: [V], action: 'check', place: 'C5' }] },
@@ -379,7 +382,7 @@ const PLAIN_ORDERS = [
     { say: 'everybody attack the enemy', want: [{ who: '*', action: 'advance' }] },
     { say: 'praetorian guard go round the right', want: 'ask' },
     { say: 'legionaries outflank the enemy', want: 'ask' },
-    { say: 'hastati support legionaries', want: 'ask' },
+    { say: 'hastati support legionaries', want: [{ who: [H], action: 'follow', friend: [L], keep: 'beside' }] },
     { say: 'legionaries hold\neveryone else advance', want: [{ who: [L], action: 'hold' }, { who: '*-Legionaries', action: 'advance' }] },
     { say: 'legionaries hold. everyone else advance', want: [{ who: [L], action: 'hold' }, { who: '*-Legionaries', action: 'advance' }] },
     { say: 'the rest advance', want: 'ask' },
@@ -430,7 +433,54 @@ const PLAIN_ORDERS = [
     { say: 'legionaries keep going', want: 'ask' },
     { say: 'legionaries march north then east', want: [{ who: [L], action: 'move', place: 'N', steps: 1 }] },
     { say: 'take the ground and hold it', want: [{ who: '*', action: 'defend', place: 'ground' }] }
-  ].map(entry => ({ ...entry, heldOut: true }))
+  ].map(entry => ({ ...entry, heldOut: true })),
+
+  // ── Kinds as the Army tab shows them, and keeping by a unit ──
+  // Written with the work on both (docs/DECISIONS.md, "How kinds of unit in
+  // orders and the follow order were built"), so tuned for (`kinds`).
+  // 'shown:' in who: every unit the Army tab shows as that kind.
+  ...[
+    { say: 'skirmishers advance', want: [{ who: 'shown:skirmishers', action: 'advance' }] },
+    { say: 'the skirmishers hold', want: [{ who: 'shown:skirmishers', action: 'hold' }] },
+    { say: 'levy skirmishers to c5', want: [{ who: 'shown:skirmishers', action: 'move', place: 'C5' }] },
+    { say: 'heavy infantry advance', want: [{ who: 'shown:heavy infantry', action: 'advance' }] },
+    { say: 'the heavy infantry hold', want: [{ who: 'shown:heavy infantry', action: 'hold' }] },
+    { say: 'the infantry hold', want: [{ who: '*', action: 'hold' }] },
+    { say: 'skirmishers follow the legionaries', want: [{ who: 'shown:skirmishers', action: 'follow', friend: [L], keep: 'behind' }] },
+    { say: 'velites stay with the legionaries', want: [{ who: [V], action: 'follow', friend: [L], keep: 'beside' }] },
+    { say: 'velites keep behind the legionaries', want: [{ who: [V], action: 'follow', friend: [L], keep: 'behind' }] },
+    { say: 'velites stay behind the hastati', want: [{ who: [V], action: 'follow', friend: [H], keep: 'behind' }] },
+    { say: 'hastati guard the legionaries', want: [{ who: [H], action: 'follow', friend: [L], keep: 'beside' }] },
+    { say: 'praetorian guard escort the legionaries', want: [{ who: [P], action: 'follow', friend: [L], keep: 'beside' }] },
+    { say: 'velites stick with the hastati', want: [{ who: [V], action: 'follow', friend: [H], keep: 'beside' }] },
+    { say: 'velites protect the praetorian guard', want: [{ who: [V], action: 'follow', friend: [P], keep: 'beside' }] },
+    { say: 'everyone else follow the legionaries', want: [{ who: '*-Legionaries', action: 'follow', friend: [L], keep: 'behind' }] },
+    { say: 'skirmishers stay with the heavy infantry', maps: ['crownhill', 'ashford', 'thornwood', 'ravenridge'], want: [{ who: [V], action: 'follow', friend: [L, H, P], keep: 'beside' }] },
+    { say: 'velites follow the legionaries, if attacked, fall back', want: [{ who: [V], action: 'follow', friend: [L], when: 'attacked' }] },
+    { say: 'velites stay with the legionaries\neveryone else hold', want: [{ who: [V], action: 'follow', friend: [L] }, { who: '*-Velites-Legionaries', action: 'hold' }] },
+    { say: 'attack their crossbowmen', want: [{ who: '*', action: 'attack', enemy: true }] },
+    { say: 'velites attack the enemy crossbowmen', want: [{ who: [V], action: 'attack', enemy: true }] },
+    { say: 'the pikes advance', army: 'macedon', want: [{ who: 'kind:pikes', action: 'advance' }] },
+    { say: 'pikemen hold', army: 'macedon', want: [{ who: 'kind:pikes', action: 'hold' }] },
+    { say: 'the pikemen to c5', army: 'macedon', want: [{ who: 'kind:pikes', action: 'move', place: 'C5' }] },
+    { say: 'skirmishers hold', army: 'macedon', want: [{ who: 'shown:skirmishers', action: 'hold' }] },
+    { say: 'professional skirmishers advance', army: 'macedon', want: [{ who: 'shown:skirmishers', action: 'advance' }] },
+    { say: 'spearmen hold', army: 'macedon', want: [{ who: ['Silver shields'], action: 'hold' }] },
+    { say: 'elite spearmen advance', army: 'macedon', want: [{ who: ['Silver shields'], action: 'advance' }] },
+    { say: 'peltasts follow the pikes', army: 'macedon', want: [{ who: ['Peltasts'], action: 'follow', friend: ['Sarissa foot 1', 'Sarissa foot 2'], keep: 'behind' }] },
+    { say: 'skirmishers keep behind the pikemen', army: 'macedon', want: [{ who: 'shown:skirmishers', action: 'follow', friend: 'shown:pikemen', keep: 'behind' }] },
+    { say: 'silver shields guard sarissa foot 2', army: 'macedon', want: [{ who: ['Silver shields'], action: 'follow', friend: ['Sarissa foot 2'], keep: 'beside' }] },
+    { say: 'lancers advance', army: 'parthia', want: [{ who: ['Savaran'], action: 'advance' }] },
+    { say: 'the lancers hold', army: 'parthia', want: [{ who: ['Savaran'], action: 'hold' }] },
+    { say: 'elite lancers advance', army: 'parthia', want: [{ who: ['Savaran'], action: 'advance' }] },
+    { say: 'levy spearmen hold', army: 'parthia', want: [{ who: 'shown:spearmen', action: 'hold' }] },
+    { say: 'spearmen advance', army: 'parthia', want: [{ who: 'shown:spearmen', action: 'advance' }] },
+    { say: 'the cavalry advance', army: 'parthia', want: [{ who: 'kind:cavalry', action: 'advance' }] },
+    { say: 'the foot hold', army: 'parthia', want: [{ who: 'kind:foot', action: 'hold' }] },
+    { say: 'lancers stay with the horse archers', army: 'parthia', want: [{ who: ['Savaran'], action: 'follow', friend: ['Horse archers'], keep: 'beside' }] },
+    { say: 'horse follow the spears', army: 'parthia', want: [{ who: 'kind:cavalry', action: 'follow', friend: 'shown:spearmen', keep: 'behind' }] },
+    { say: 'cavalry guard the levy spears', army: 'parthia', want: [{ who: 'kind:cavalry', action: 'follow', friend: ['Levy spears 1', 'Levy spears 2'], keep: 'beside' }] }
+  ].map(entry => ({ ...entry, kinds: true }))
 ]
 
 module.exports = { PLAIN_ORDERS }

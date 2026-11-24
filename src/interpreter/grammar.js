@@ -415,9 +415,9 @@ function readStage3(text, extra) {
 //   horse archers skirmish / harass the enemy / fire and fall back fire and
 //                                                                  retreat
 //   velites throw javelins                                         throw
-//   velites follow the legionaries / stay with / support / cover   no such
-//   go around their left / flank them / hit them in the flank      order: a
-//                                                                  question
+//   velites follow the legionaries / keep behind the pikes         keep by
+//   velites stay with / support / escort / guard the legionaries   a unit
+//   go around their left / flank them / hit them in the flank      a question
 //
 // "everyone else", "the rest", "the others", "everyone except the velites",
 // "the first line", "the foot", "the pikes" are unit words, left to the
@@ -619,9 +619,12 @@ const SKIRMISH = /^(?:(.+?)\s+)?(?:skirmish(?:\s+with)?|harass|harry|pepper|hit 
 // Throwing javelins, pila, darts: missile troops shoot; others throw them as
 // they come to blows, which the resolver says.
 const THROW = /^(?:(.+?)\s+)?(?:throw|hurl|cast|chuck|launch)(?:\s+(?:your|their|its|the|them|some))?(?:\s+(?:javelins?|pila|pilum|darts|plumbatae|axes|throwing axes|spears|weapons|missiles))?(?:\s+(?:at|on|into)\s+(.+))?$/i
-// Keeping with another of his units, which the engine has no order for: a
-// question, with what he can do instead.
-const FOLLOW = /^(?:(.+?)\s+)?(?:follow|stay with|keep with|keep up with|keep close to|stay close to|stick with|go with|march with|move with|support|escort|accompany|shadow)\s+(?!\d)(.+)$/i
+// Keeping by another of his units as it moves (engine/battle/orders.js,
+// follow): behind it and out of its fight ("follow", "keep behind"), or
+// beside it, going at any enemy who fights it ("stay with", "support",
+// "escort"; "guard" and "cover" a unit of his are read by the resolver).
+const FOLLOW_BEHIND = /^(?:(.+?)\s+)?(?:follow behind|follow on behind|follow|keep behind|stay behind|keep in behind|stay in behind|keep to the rear of|stay to the rear of|trail behind|trail|shadow)\s+(?!\d)(.+)$/i
+const FOLLOW = /^(?:(.+?)\s+)?(?:stay with|keep with|keep up with|keep close to|stay close to|stick with|stick close to|go with|march with|move with|ride with|support|escort|accompany|stay beside|keep beside|stay next to|keep next to|stay alongside|keep alongside|keep by|stay by)\s+(?!\d)(.+)$/i
 // Going round a flank: which way round is not his officers' to guess.
 const FLANK = [
   /^(?:(.+?)\s+)?(?:go|move|march|swing|wheel|get|sweep|circle|come|ride|head)?\s*(?:a?round|round to|to)\s+(?:the|their|his|its|our|your|the enemy's)\s+(?:left|right)(?:\s+(?:flank|wing|side))?(?:\s+.*)?$/i,
@@ -650,8 +653,10 @@ function readWidened(text, extra) {
     m = text.match(pattern)
     if (m) return order(m[1], 'flank', null, null, { ...extra, said: clean(text) })
   }
+  m = text.match(FOLLOW_BEHIND)
+  if (m) return order(m[1], 'follow', null, null, { ...extra, friendRef: clean(m[2]).replace(/^(?:the|our|my)\s+/i, ''), keep: 'behind', said: clean(text) })
   m = text.match(FOLLOW)
-  if (m) return order(m[1], 'follow', null, null, { ...extra, friendRef: clean(m[2]).replace(/^(?:the|our|my)\s+/i, ''), said: clean(text) })
+  if (m) return order(m[1], 'follow', null, null, { ...extra, friendRef: clean(m[2]).replace(/^(?:the|our|my)\s+/i, ''), keep: 'beside', guard: true, said: clean(text) })
   m = text.match(ADVANCE_TOO)
   if (m) return order(m[1], 'advance', null, null, extra)
   // "velites scout ahead": go forward carefully, on their guard.

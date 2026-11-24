@@ -47,6 +47,15 @@ function aboutHowMany(strength) {
   return { band: i, from, to: to === Infinity ? null : to }
 }
 
+// What else anyone seeing a unit could tell of its kit: javelins in hand,
+// how much armour, how big a shield. So that he may call them as his own
+// Army tab would ("their skirmishers"); only what is there is written.
+function kitSeen(enemy) {
+  const out = {}
+  for (const key of ['thrown', 'armor', 'shield']) if (enemy[key]) out[key] = enemy[key]
+  return out
+}
+
 /**
  * One report of one enemy unit, as an officer of that grade tells it.
  *
@@ -58,7 +67,7 @@ function aboutHowMany(strength) {
 function reportOf(enemy, grade, turn, state = null) {
   const tells = REPORTS.TELLS[grade] ?? REPORTS.TELLS.none
   const out = { grade, on: turn }
-  if (tells.kind) out.kind = { role: enemy.role ?? null, mounted: Boolean(enemy.mounted), primaryWeapon: enemy.primaryWeapon ?? null, on: turn }
+  if (tells.kind) out.kind = { role: enemy.role ?? null, mounted: Boolean(enemy.mounted), primaryWeapon: enemy.primaryWeapon ?? null, ...kitSeen(enemy), on: turn }
   if (tells.count) out.count = { exact: true, strength: enemy.strength, on: turn }
   else if (tells.about) out.count = { exact: false, ...aboutHowMany(enemy.strength), on: turn }
   const now = tells.state && state ? state() : null
@@ -108,4 +117,4 @@ function conditionOf(battle, enemy) {
   return { morale: state?.morale ?? MORALE.START, stamina: state?.stamina ?? pool, staminaPool: pool, broken: battle.broken.has(enemy.id) }
 }
 
-module.exports = { reportGrade, reportOf, join, fuller, aboutHowMany, conditionOf }
+module.exports = { kitSeen, reportGrade, reportOf, join, fuller, aboutHowMany, conditionOf }

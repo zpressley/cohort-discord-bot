@@ -16,6 +16,7 @@ const { gridLabel } = require('../engine/map/grid')
 const { RIDER_TAKEN } = require('./words')
 const { BATTLE_OVER } = require('./words')
 const { PLACE } = require('./words')
+const { FOLLOW_WORDS } = require('./words')
 
 // Where a tile is, in words: the feature it is part of, or the nearest
 // feature with a name, or open ground near the nearest feature.
@@ -45,7 +46,7 @@ function involved(event) {
 
 // Events only the unit's own side knows of: its hiding, its search, an
 // ambush it held back, how packed its ranks are.
-const PRIVATE = new Set(['hidden', 'hideFailed', 'ambushHeld', 'checked', 'crowding', 'heartened', 'reacted', 'lostThread', 'commanderMoved', 'quarryGone', 'ownCommand', 'deserted', 'commanderRode', 'riderSent', 'riderBlocked', 'cutOff', 'inTouch', 'initiative', 'riderTaken'])
+const PRIVATE = new Set(['hidden', 'hideFailed', 'ambushHeld', 'checked', 'crowding', 'heartened', 'reacted', 'lostThread', 'commanderMoved', 'quarryGone', 'ownCommand', 'deserted', 'commanderRode', 'riderSent', 'riderBlocked', 'cutOff', 'inTouch', 'initiative', 'riderTaken', 'followLost'])
 // The engine's own record of a roll, which no commander is told of.
 const UNTOLD = new Set(['grasp'])
 
@@ -266,6 +267,7 @@ function plainFact(map, event, howMany = countAll) {
       (event.lost === 'condition' ? ' when the moment came' : ' once the first part was done') +
       (event.did === 'advance' ? ' and advanced on the enemy' : event.did === 'hold' ? ' and held where he stood' : ' and carried on as he was')
     case 'quarryGone': return `${event.on}, whom ${event.unitId} were sent to attack, are beaten or gone; ${event.unitId} ${ORDER.advance.did} instead`
+    case 'followLost': return (FOLLOW_WORDS.lost[event.why] ?? FOLLOW_WORDS.lost.gone)(event.unitId, event.on)
     case 'volley': return `${event.by} shot at ${event.unitId}` + (event.killed ? `, felling ${men(event.killed)}` : ', to little effect')
     case 'thrown': return `${event.by} ${THROWN_WORDS.threw(event.weapon, event.unitId)}` + (event.killed ? `, felling ${men(event.killed)}` : ', to little effect')
     case 'rout': return `${event.unitId} broke and fled from ${event.by}`
@@ -336,7 +338,7 @@ function ownCommandWords(event) {
 // How much a commander needs to hear of each kind of event: lower is sooner.
 const WEIGHT = {
   victory: 0, nightfall: 0, commanderKilled: 0, commanderTaken: 0, commanderFreed: 0, commanderMoved: 1, destroyed: 1, rout: 1, fled: 1, rallied: 1, pursuit: 2, ambush: 1, surprise: 2, objective: 2,
-  volley: 3, thrown: 3, lostThread: 1, reacted: 2, quarryGone: 2, ownCommand: 1, initiative: 1, officerYielded: 0, deserted: 1, commanderRode: 1, riderBlocked: 2, riderSent: 6, cutOff: 1, inTouch: 3, riderTaken: 1,
+  volley: 3, thrown: 3, lostThread: 1, reacted: 2, quarryGone: 2, followLost: 2, ownCommand: 1, initiative: 1, officerYielded: 0, deserted: 1, commanderRode: 1, riderBlocked: 2, riderSent: 6, cutOff: 1, inTouch: 3, riderTaken: 1,
   heartened: 5,
   revealed: 3, exchange: 3, standoff: 3, push: 4, crush: 4, disengage: 4, gaveGround: 4, contact: 4,
   hidden: 5, hideFailed: 5, checked: 5, ambushHeld: 5, crowding: 6, arrived: 6, halted: 6, move: 7

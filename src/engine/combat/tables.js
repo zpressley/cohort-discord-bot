@@ -1221,3 +1221,14 @@ module.exports.FIRE_NEWS = {
 // computer's planner (TUNING.CROSSING_NEAR, "How armies were made to come
 // to grips"), where it was 3; in the engine for every unit since.
 module.exports.CROSSING = { NEAR: 3 }
+
+// A unit told to keep by another of its own side (battle/orders.js,
+// follow). Claude's values, open to change (docs/DECISIONS.md, "How kinds
+// of unit in orders and the follow order were built"): a tile or two off,
+// as the owner asked; behind is the 50 m "behind the legionaries" already
+// meant in the read-back (resolve.js).
+module.exports.FOLLOW = {
+  BEHIND: 2,       // tiles (50 m) behind the unit followed, away from the enemy as its side knows him
+  BESIDE: 1,       // tiles (25 m) to one side of it, across the way to the enemy
+  SLACK: 1         // tiles off its station a unit may stand and not shuffle over (it holds there)
+}

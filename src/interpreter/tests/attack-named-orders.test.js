@@ -88,12 +88,12 @@ test('an enemy on the field that the side has never seen cannot be named', () =>
 
 test('if two seen enemy units match, it asks which, with a choice that reads back to one', () => {
   const enemies = [seen.archers, seen.slingers]
-  const r = read('horse attack their archers', enemies)
+  const r = read('horse attack their missile troops', enemies)
   assert.deepEqual(r.orders, [])
   assert.equal(r.choices.length, 1)
   const choice = r.choices[0]
-  assert.equal(choice.place, 'archers')
-  assert.deepEqual(choice.options.map(o => o.label), ['archers in sight at D2-SE', 'archers last seen at F1-SE'])
+  assert.equal(choice.place, 'missile troops')
+  assert.deepEqual(choice.options.map(o => o.label), ['missile troops in sight at D2-SE', 'missile troops last seen at F1-SE'])
   // Written in place of the words, each choice picks out one unit.
   const picked = read(`horse attack their ${choice.options[1].text}`, enemies)
   assert.deepEqual(picked.questions, [])
@@ -172,4 +172,20 @@ test('falling back together, each unit stops on its own edge square, and the rea
 
 test('a fall back to a place named still says that place', () => {
   assert.match(read('spears fall back to C7', [], { homeEdge: 'west' }).understood[0], /^red_spears: fall back to C7/)
+})
+
+test('"their archers" are the enemy his Army tab would call archers: the bowmen, not the slingers beside them', () => {
+  const r = read('horse attack their archers', [seen.archers, seen.slingers])
+  assert.deepEqual(r.questions, [])
+  assert.deepEqual(r.orders.map(o => o.enemy), ['blue_archers'])
+  assert.deepEqual(read('horse attack their slingers', [seen.archers, seen.slingers]).orders.map(o => o.enemy), ['blue_unit_3'])
+})
+
+test('"their skirmishers" are the enemy seen with javelins and light kit, as the reports of them tell it', () => {
+  const velites = { id: 'blue_velites', role: 'heavy_infantry', mounted: false, primaryWeapon: 'sword_standard', thrown: 'light_javelin', armor: 'light_armor', shield: 'light_shield', position: fromLabel('N7'), status: 'visible', strength: 80, seenOnTurn: 2 }
+  const r = read('horse attack their skirmishers', [velites, seen.swords])
+  assert.deepEqual(r.orders.map(o => o.enemy), ['blue_velites'])
+  // An enemy whose kind no report has told is not named by kind.
+  const untold = { id: 'enemy-1', name: 'troops', position: fromLabel('N7'), status: 'visible', seenOnTurn: 2 }
+  assert.equal(read('horse attack their skirmishers', [untold]).orders.length, 0)
 })

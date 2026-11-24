@@ -22,10 +22,11 @@ const { gradeOf, MAX_STEPS, loyaltyBand } = require('../engine/command/officers'
 const { findPlace, DIRECTIONS, TILE_METRES } = require('../engine/map/places')
 const { isGridRef, gridTarget, gridLabel } = require('../engine/map/grid')
 const { coverFor } = require('../engine/battle/hiding')
-const { ORDERS_READ, PLACE, KIT } = require('../narrator/words')
+const { ORDERS_READ, PLACE, KIT, FOLLOW_WORDS } = require('../narrator/words')
 const { lettersApart } = require('./grammar')
 const { detectFeatures } = require('../engine/map/features')
 const { compassWord, KIND_WORDS: GROUND_KIND_WORDS } = require('../engine/map/places')
+const { unitsByKind, enemiesByKind } = require('./kinds')
 
 // The extra parts of an order the engine reads (Stage 3), carried through
 // unchanged when set.
@@ -86,7 +87,12 @@ function resolveEnemy(words, enemies, map) {
   }
   // "attack the enemy at the bridge": whichever enemy he has seen is nearest.
   const bare = ref === '' || /^(?:troops|men|enemy|enemies|foe|foes|them)$/i.test(ref)
-  const kind = KINDS.find(([, pattern]) => pattern.test(ref))?.[0] ?? null
+  // "their skirmishers": by the kind his Army tab would show them as, as
+  // the reports of them tell it; else by the older, wider kinds.
+  // (A seen enemy called by its own name, "their spears", keeps it.)
+  const byName = resolveUnitReference(ref, seen.map(e => ({ ...e, aliases: [calledBy(e)] })))
+  const shown = ['id', 'alias'].includes(byName.matchedBy) ? byName.units : enemiesByKind(ref, seen)
+  const kind = shown ? null : KINDS.find(([, pattern]) => pattern.test(ref))?.[0] ?? null
   const anyone = /^(?:everyone|everybody|all|army|the army)$/i.test(ref)
   // "swordsmen" for the enemy swords, "spearmen" for their spears.
   const stem = (w) => w.toLowerCase().replace(/s$/, '')
@@ -95,7 +101,7 @@ function resolveEnemy(words, enemies, map) {
     const found = resolveUnitReference(ref, seen.map(e => ({ ...e, aliases: [calledBy(e)] }))).units
     return found.length > 0 ? found : byStem()
   }
-  const matches = kind ? seen.filter(e => looksLike(e, kind)) : bare && near ? seen : anyone ? [] : named()
+  const matches = shown ?? (kind ? seen.filter(e => looksLike(e, kind)) : bare && near ? seen : anyone ? [] : named())
   if (bare && near && ref === '') ref = 'enemy'
   if (matches.length === 0) {
     if (seen.length === 0) return { question: `You have seen no enemy to attack. To go and find them, say "advance".` }
@@ -328,11 +334,11 @@ function resolveIntents(intents, context) {
 
     // "Cover the legionaries", "guard the hastati": keeping with a unit of
     // his own, which no order does.
-    const guarding = intent.action === 'defend' && intent.place && !intent.steps && !intent.when &&
-      ['id', 'alias', 'name'].includes(resolveUnitReference(intent.place, known.units).matchedBy)
+    const guarding = intent.action === 'defend' && intent.place && !intent.steps &&
+      (['id', 'alias', 'name'].includes(resolveUnitReference(intent.place, known.units).matchedBy) || Boolean(unitsByKind(intent.place, known.units)))
     // Orders the engine has no order for, and skirmishing and throwing: a
     // question with what he can do instead, or what the engine does.
-    const widened = resolveWidened(guarding ? { ...intent, action: 'follow', friendRef: intent.place, said: intent.said ?? null } : intent, match.units, { ...context, known })
+    const widened = resolveWidened(guarding ? { ...intent, action: 'follow', friendRef: intent.place, keep: 'beside', guard: true, said: intent.said ?? null } : intent, match.units, { ...context, known })
     if (widened) {
       if (widened.question) {
         questions.push(widened.question)
@@ -341,7 +347,7 @@ function resolveIntents(intents, context) {
       }
       orders.push(...widened.orders)
       understood.push(widened.understood + carried(widened.orders.map(o => o.unitRef)))
-      counsel.push(...counselFor(match.units, units, { clauses: 0, action: 'advance', plain: widened.understood, shaken: context.shaken ?? [] }))
+      counsel.push(...counselFor(match.units, units, { clauses: widened.clauses ?? 0, action: intent.action === 'follow' || guarding ? 'follow' : 'advance', plain: widened.understood, shaken: context.shaken ?? [] }))
       continue
     }
 
@@ -726,6 +732,10 @@ function resolveUnitsWide(reference, units, { named = [] } = {}) {
   if (EVERYONE_TOO.test(ref)) return { units: [...units], matchedBy: 'everyone' }
   const exact = resolveUnitReference(ref, units)
   if (['everyone', 'id', 'alias'].includes(exact.matchedBy)) return exact
+  // The kind the Army tab shows for them ("skirmishers", "levy spearmen",
+  // "the pikes"): the word on the screen, before the engine's older role.
+  const shown = unitsByKind(ref, units)
+  if (shown) return shown
   const bare = bareRef(ref)
   for (const [kind, words] of OWN_KINDS) {
     if (!words.test(bare)) continue
@@ -805,6 +815,8 @@ function namedIn(intents, units, extra = []) {
   const ids = new Set(extra)
   for (const intent of intents) {
     if (intent.kind !== 'order') continue
+    // (The unit kept by is named too: "everyone else follow the legionaries".)
+    if (intent.action === 'follow' && intent.friendRef) for (const u of resolveUnitsWide(intent.friendRef, units).units) ids.add(u.id)
     if (intent.unitIds) { intent.unitIds.forEach(id => ids.add(id)); continue }
     const ref = String(intent.unitRef ?? '')
     if (!ref || EVERYONE_WORDS.test(ref) || OTHERS.test(ref) || EXCEPT.test(ref)) continue
@@ -982,33 +994,46 @@ function flankEnds(map, own, enemies) {
   return out.filter((p, i) => out.findIndex(q => gridLabel(q.point, { quarter: true }) === gridLabel(p.point, { quarter: true })) === i)
 }
 
+// "velites stay with the legionaries", "archers keep behind the pikes",
+// "cavalry guard the archers": each keeps by the unit named (the nearest of
+// them, when several are), beside it and going at any enemy who fights it,
+// or behind it and out of its fight (engine/battle/orders.js, follow).
+function resolveFollow(intent, units, context) {
+  const all = context.known.units
+  const found = resolveUnitsWide(intent.friendRef, all)
+  if (found.units.length === 0) {
+    return { question: `Who do you mean by "${found.unknown ?? intent.friendRef}"? Your units: ${all.map(u => u.id).join(', ')}.` }
+  }
+  const friends = found.units
+  const mine = units.filter(u => !friends.some(f => f.id === u.id))
+  if (mine.length === 0) return { question: FOLLOW_WORDS.self(units.map(u => u.id).join(', ')) }
+  const keep = intent.keep === 'behind' ? 'behind' : 'beside'
+  const guard = keep === 'beside' && intent.guard !== false
+  const deep = resolveDepth({ when: intent.when }, { map: context.map, units: context.units, own: mine, from: groupOrigin(mine), target: null, known: context.known })
+  if (deep.question) return deep
+  const far = (a, b) => Math.max(Math.abs(a.position.x - b.position.x), Math.abs(a.position.y - b.position.y))
+  const byWhom = new Map()
+  const orders = mine.map(u => {
+    const friend = [...friends].sort((a, b) => far(u, a) - far(u, b) || a.id.localeCompare(b.id))[0]
+    byWhom.set(friend.id, [...(byWhom.get(friend.id) ?? []), u.id])
+    return {
+      unitRef: u.id, action: 'follow', friend: friend.id, keep,
+      ...(guard ? { guard: true } : {}),
+      ...(intent.careful ? { careful: true } : {}),
+      ...deep.order
+    }
+  })
+  const how = guard ? FOLLOW_WORDS.guard : keep === 'behind' ? FOLLOW_WORDS.behind : FOLLOW_WORDS.beside
+  const understood = FOLLOW_WORDS.nearest([...byWhom].map(([friend, who]) =>
+    `${who.join(', ')}: ${orderWords('say', { action: 'follow', keep, careful: intent.careful }, friend)} ${how}${deep.words}`))
+  return { orders, understood, clauses: deep.clauses + (guard ? 1 : 0) }
+}
+
 function resolveWidened(intent, units, context) {
   const { map } = context
   const who = units.map(u => u.id).join(', ')
   const said = intent.unitRef === 'everyone' ? 'everyone' : units.map(sayOf).join(' and ')
-  if (intent.action === 'follow') {
-    const friends = resolveUnitsWide(intent.friendRef, context.known.units).units
-    const friendIds = friends.map(u => u.id)
-    const mine = units.filter(u => !friendIds.includes(u.id))
-    if (friends.length === 0 || mine.length === 0) return { question: ORDERS_READ.followNoOne(who, intent.said ?? intent.friendRef) }
-    const square = gridLabel(groupOrigin(friends), { quarter: true })
-    const sayThem = friends.map(sayOf).join(' and ')
-    const sayMine = intent.unitRef === 'everyone' ? `everyone except ${sayThem}` : mine.map(sayOf).join(' and ')
-    const question = ORDERS_READ.follow(mine.map(u => u.id).join(', '), friendIds.join(', '))
-    if (!intent.said) return { question }
-    const both = intent.unitRef === 'everyone' ? 'everyone advance' : `${sayMine} and ${sayThem} advance`
-    return {
-      question,
-      choice: {
-        question,
-        place: intent.said,
-        options: [
-          { label: ORDERS_READ.followTo(sayThem), square, text: `${sayMine} to ${square}` },
-          { label: `${ORDERS_READ.bothSame}: "${both}"`, text: both }
-        ]
-      }
-    }
-  }
+  if (intent.action === 'follow') return resolveFollow(intent, units, context)
   if (intent.action === 'carryOn') return { question: ORDERS_READ.carryOn(who) }
   if (intent.action === 'flank') {
     const seen = (context.enemies ?? []).filter(e => e.position && (e.strength === undefined || e.strength > 0))

@@ -20,6 +20,7 @@ const { gridLabel, parseGridRef } = require('../../../engine/map/grid')
 const { detectFeatures } = require('../../../engine/map/features')
 const { missileRange } = require('../../../engine/combat/ranged')
 const { PLAIN_ORDERS } = require('./plain-orders')
+const { kindParts } = require('../../../narrator/words')
 
 const MAPS = ['crownhill', 'ashford', 'thornwood', 'ravenridge', 'greywater']
 const ARMIES = ['rome', 'macedon', 'parthia']
@@ -85,6 +86,8 @@ function whoMet(who, ids, context) {
   else if (who === '*/first') want = all.filter(u => !second(u))
   else if (who === 'kind:cavalry') want = all.filter(u => u.mounted)
   else if (who === 'kind:archers') want = all.filter(u => missileRange(u) > 0)
+  else if (typeof who === 'string' && who.startsWith('shown:')) want = all.filter(u => kindParts(u).kind.endsWith(who.slice(6)))
+  else if (who === 'kind:foot') want = all.filter(u => !u.mounted)
   else if (who === 'kind:pikes') want = all.filter(u => ['macedonian_sarissa', 'two_handed_spear'].includes(u.primaryWeapon))
   else if (typeof who === 'string' && who.startsWith('*-')) {
     const out = who.slice(2).split('-')
@@ -108,6 +111,11 @@ function orderMet(want, orders, context) {
     if (want.fire === 'hold' && !o.holdFire) return false
     if (want.steps && (o.steps ?? []).length < want.steps) return false
     if (want.when && o.when?.type !== want.when) return false
+    const friend = context.units.find(u => u.id === o.friend)
+    if (want.friend && !friend) return false
+    if (typeof want.friend === 'string' && !kindParts(friend).kind.endsWith(want.friend.slice(6))) return false
+    if (Array.isArray(want.friend) && !want.friend.includes(unitName(friend))) return false
+    if (want.keep && o.keep !== want.keep) return false
     return true
   }
   const ids = mine.filter(fits).map(o => o.unitRef)
@@ -176,6 +184,8 @@ if (require.main === module) {
     console.log(`of which fresh (not tuned for): ${fresh.total} readings, right ${fresh.right}, asked which ${fresh.asked}, wrong ${fresh.wrong}, not read ${fresh.unread}`)
     const held = tally(results.filter(r => r.entry.heldOut))
     console.log(`of which held out (written last, run once): ${held.total} readings, right ${held.right}, asked which ${held.asked}, wrong ${held.wrong}, not read ${held.unread}`)
+    const kinds = tally(results.filter(r => r.entry.kinds))
+    console.log(`of which kinds and keeping by a unit: ${kinds.total} readings, right ${kinds.right}, asked which ${kinds.asked}, wrong ${kinds.wrong}, not read ${kinds.unread}`)
     if (process.argv.includes('--by-order')) {
       for (const e of PLAIN_ORDERS) {
         const mine = results.filter(r => r.entry === e)

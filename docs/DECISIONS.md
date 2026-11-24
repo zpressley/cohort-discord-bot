@@ -4980,3 +4980,148 @@ to every unit (it is how men cross water, not how the computer thinks);
 the other reading keeps it the computer's alone, and a player's own units
 may pace the banks until he names the ford. That the field's forming-up
 places are known to both Commanders (the planner's own reading, kept).
+
+### How kinds of unit in orders and the follow order were built (Claude's choices, open to change)
+
+Two gaps in orders, asked for on November 24 (Zach: decide, keep it simple,
+record it). No rule of combat changed: `npm run balance` is the same to
+the character, the soak ends every battle, and battles with no follow order
+are the same event for event (`harness/tests/follow-unchanged.test.js`,
+three faction battles fingerprinted on main at 832d94e; the older
+fingerprint tests pass unchanged).
+
+**1. The words on the Army tab work in orders** (`interpreter/kinds.js`;
+`words.js`, `kindParts`). The unit lookup reads the kind the Army tab
+shows (`kindWords`) before the engine's older role. The engine's `role`
+is not changed: the planner and the duel matrix use it.
+- *What he may type.* Each kind the screen shows, singular and plural, with
+  or without "the", and the everyday forms: horse archers (mounted
+  archers), light horse (light cavalry), lancers (lances), heavy infantry
+  (heavy foot), archers (bowmen, bows), crossbowmen (crossbows), slingers
+  (slings), skirmishers (javelinmen), pikemen (the pikes, pike, phalanx),
+  spearmen (spears). A quality word before it narrows it: "levy
+  skirmishers", "elite lancers", "professional skirmishers".
+- *A kind word finds every unit whose shown kind ends in it*: "archers" is
+  archers and horse archers; "heavy infantry" only those.
+- *The screen wins over the old role.* Rome's velites (role heavy
+  infantry, shown "levy skirmishers") answer to "skirmishers", not "heavy
+  infantry"; Macedon's peltasts are skirmishers, not spearmen; "spearmen"
+  in Macedon is the Silver shields alone, not the sarissa foot. The
+  read-back names the units taken, as always.
+- *A unit's own name keeps it*, as ruled when the grammar was widened:
+  Thrace's unit called Spearmen (shown as skirmishers) is "spearmen";
+  Germania's Skirmishers (slingers) are "skirmishers"; Parthia's "horse
+  archers" is the unit of that name, not its Light horse, which the screen
+  also shows as horse archers.
+- *The enemy*: "attack their skirmishers" finds the enemy his side has seen
+  by the kind his Army tab would show them as, from what the reports of
+  them tell (weapon, javelins, armour, shield: reports now carry the last
+  three where a unit has them, `orchestrator/reports.js`, `kitSeen`; the
+  app passes them to the reader, one line in `web/battles.js`). Never how
+  good the men are, which no report tells: "their levy skirmishers" is
+  their skirmishers. An enemy called by its own name keeps it ("their
+  spears" is the unit called spears). An enemy whose kind no report has
+  told is not found by kind.
+- **Guessed, and the other reading.** "Infantry", "the foot", "cavalry"
+  and "the horse" stay every unit on foot and every unit on horse. The
+  task read "the infantry" as the units shown as infantry; but every foot
+  soldier is infantry whatever else the screen calls him, the fixture
+  already wanted Rome's velites in "the infantry", and "the cavalry" that
+  left out a Parthian's horse archers and lancers would surprise anyone.
+  The other reading is the screen's word exactly: "infantry" the infantry
+  and heavy infantry, "cavalry" the plain cavalry. "Archers" is no longer
+  slingers and javelinmen too ("missile troops", "shooters" still are);
+  where no unit is shown as archers, it falls back to the old, wider
+  reading. "Spears" is spearmen, not pikemen; the other reading puts the
+  pikes in it.
+- Checked for every unit word on every one of the twenty factions' usual
+  armies and elites, and a bought army (`interpreter/tests/kinds.test.js`).
+
+**2. The follow order** (`battle/orders.js`, `follow`; `battle.js`,
+`followed` and `stationBy`; numbers in `tables.js`, `FOLLOW`).
+- *What he types.* Behind and out of the fight: "follow", "keep behind",
+  "stay behind", "trail", "shadow". Beside, going at any enemy who comes to
+  blows with it: "stay with", "keep with", "stick with", "go with", "march
+  with", "ride with", "support", "escort", "accompany", "stay beside";
+  and "guard", "cover", "protect", "defend" when the words after it are one
+  of his own units (by name or by kind: "cavalry guard the archers").
+  "Everyone else follow the legionaries" counts the legionaries as named.
+  Several units named to keep by: each follower keeps by the nearest.
+  A condition may go with it ("velites follow the legionaries, if
+  attacked, fall back").
+- *Its station.* Beside: a tile (25 m) to one side, across the way to the
+  enemy, on whichever side of it the follower already is. Behind: two tiles
+  (50 m, the same 50 m "behind the legionaries" already meant) on the side
+  away from the enemy, judged from the enemy his side last saw nearest the
+  unit followed, else from the far side of the field. The nearest open,
+  passable tile to that. A unit within a tile of its station holds there,
+  so as not to shuffle. It keeps station on where the unit it follows is
+  making for this ten minutes (as far as it can go), not where it stood:
+  units of one pace march abreast. Followers are planned after the rest of
+  their side; with no follow order nothing is planned in a new order.
+- *Its own pace.* Foot following horse fall behind. When the one followed
+  is out of sight, the follower makes for where it was last seen going
+  (the end of its march); there, if still out of sight, it holds. Told to
+  follow as the order reaches it, it is told where the other unit stands.
+- *Fighting.* A follower that is fought stands and fights. One told to
+  guard (beside) goes at an enemy fighting the unit it keeps by, looking
+  for a fight that ten minutes, then takes up its station again. One
+  behind keeps out of the fight unless it is fought itself. Only blows
+  count; being shot at does not call a guard in (the other reading: it
+  would charge the archers shooting at them).
+- *When it ends.* The unit followed breaks, is destroyed or leaves the
+  field, or is lost from sight and not where it was going: the follower
+  holds where it is, and its side is told (`followLost`, private, in the
+  next report: "the legionaries broke, and the velites, who were keeping by
+  them, hold where they are"). Any new order ends it. It never finishes on
+  its own, so it does not end a turn early.
+- *An order like any other.* By rider; in the order log (a saved battle
+  plays back the same, `web/tests/follow.test.js`); on the Army tab
+  ("keeping beside Legionaries"); in the read-back ("keep beside
+  legionaries as they move, and go at any enemy who comes to blows with
+  them"). **Guessed:** that guarding is a clause an officer may lose, as a
+  condition is: a green officer told to guard keeps by the unit and, two
+  times in three, forgets to go in when it is fought (counsel warns of
+  it). Keeping behind is the plain order alone. The other reading counts
+  nothing extra, so every officer goes in.
+- *Not done.* The AI reader was not taught it: its schema is unchanged and
+  the benchmark was not run; the grammar reads every form above, so such
+  lines do not reach the AI. The computer's planner does not use it.
+
+**Measured.** The plain-orders fixture (`node
+src/interpreter/tests/fixtures/score.js`) now has 392 orders, 1,808
+readings; 40 new ones for kinds and keeping by a unit, and the five
+"follow" orders that wanted a question now want the order.
+
+| | Before (main 832d94e) | After |
+|---|---|---|
+| Read rightly | 1,526 (84%) | 1,705 (94%) |
+| A fair "which do you mean?" | 158 (9%) | 103 (6%) |
+| Read wrongly | 25 (1%) | 0 |
+| Not read | 99 (5%) | 0 |
+| The 40 new orders (199 readings) | 48 right, 32 asked, 25 wrong, 94 not read | 197 right, 2 asked |
+
+The 25 wrong before were kinds read by the old role ("skirmishers" took
+no one or the wrong units, "heavy infantry" took the velites, "spearmen"
+took the sarissa foot). The two asked after are "attack their
+crossbowmen" on Greywater, where the enemy has two units of crossbows: a
+fair question. The 352 older orders read as before (1,508 right), but for
+the five follow orders, now orders.
+
+Battles played by hand (the app's store, against the computer, seed 7):
+- Rome on Crownhill, "velites stay with the legionaries, legionaries
+  advance": the velites marched abreast of the legionaries, one or two
+  tiles off, through the woods and up to the enemy, and fought when the
+  crossbows came at them.
+- "Praetorian guard guard the hastati, hastati advance": the guard kept
+  beside the hastati, a tile off, all the way; when the hastati broke the
+  guard held where it was, and the report said so.
+- "Velites keep behind the hastati": the velites kept a tile or two on the
+  hastati's western side, away from the enemy, and never fought; they
+  broke when the hastati beside them broke.
+- Macedon on Thornwood, "peltasts keep behind sarissa foot 1": behind the
+  pikes, away from the enemy, until the pikes broke; then they held.
+- Parthia on Ashford, "levy spears 1 follow the savaran, savaran go east
+  600 m": the spears fell behind at once (the savaran out of sight inside
+  the first hour), marched on to where the savaran were going, found them
+  there and stood behind them.
