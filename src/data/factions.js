@@ -19,8 +19,9 @@
 //           (40 Spartans, 100 Immortals); without one it is raised at the
 //           elite's standard size (QUALITY_TIERS.elite). The Commander's
 //           veteran leads it, and he rides with it. Where the doc's kit is
-//           not in the builder (elephants, a second weapon), the nearest
-//           kit it has stands in, and the entry says so.
+//           not in the builder (elephants), the nearest kit it has stands
+//           in, and the entry says so. A `second` weapon is carried as a
+//           bought unit's is (docs/design/army-balance.md, part 8).
 //   army    the standard units, bought within the culture's budget. Each
 //           has a `name`: what the player calls it in an order. Two units
 //           with the same name are told apart by number ("sarissa foot 1",
@@ -39,15 +40,17 @@ const FACTIONS = {
     culture: 'Roman Republic',
     title: 'Rome',
     fights: 'Heavy foot behind big shields, with light javelin men ahead of them.',
-    // Doc: lorica segmentata, gladius, scutum.
+    // Doc: lorica segmentata, gladius, scutum; and the legion's pila.
     elite: {
       name: 'praetorian guard', size: 80,
-      weapon: 'roman_gladius', armor: 'heavy_armor', shield: 'heavy_shield'
+      weapon: 'roman_gladius', second: 'roman_pilum', armor: 'heavy_armor', shield: 'heavy_shield'
     },
     army: [
-      { name: 'legionaries', quality: 'professional', weapon: 'roman_gladius', armor: 'medium_armor', shield: 'heavy_shield' },
-      { name: 'hastati', quality: 'militia', weapon: 'roman_gladius', armor: 'medium_armor', shield: 'heavy_shield' },
-      { name: 'velites', quality: 'levy', weapon: 'sword_standard', armor: 'light_armor', shield: 'light_shield' }
+      // The legion's pila, and the velites' javelins (Polybius 6.22-23);
+      // the hastati in the bronze breastplate of the poorer citizen.
+      { name: 'legionaries', quality: 'professional', weapon: 'roman_gladius', second: 'roman_pilum', armor: 'medium_armor', shield: 'heavy_shield' },
+      { name: 'hastati', quality: 'militia', weapon: 'roman_gladius', armor: 'light_armor', shield: 'heavy_shield' },
+      { name: 'velites', quality: 'levy', weapon: 'sword_standard', second: 'light_javelin', armor: 'light_armor', shield: 'light_shield' }
     ]
   },
 
@@ -65,7 +68,7 @@ const FACTIONS = {
     army: [
       { name: 'sarissa foot', quality: 'professional', weapon: 'macedonian_sarissa', armor: 'no_armor', shield: 'no_shield' },
       { name: 'sarissa foot', quality: 'professional', weapon: 'macedonian_sarissa', armor: 'no_armor', shield: 'no_shield' },
-      { name: 'peltasts', quality: 'professional', weapon: 'spear_basic', armor: 'light_armor', shield: 'light_shield' }
+      { name: 'peltasts', quality: 'professional', weapon: 'spear_basic', second: 'light_javelin', armor: 'light_armor', shield: 'light_shield' }
     ]
   },
 
@@ -97,7 +100,7 @@ const FACTIONS = {
       weapon: 'spear_professional', armor: 'heavy_armor', shield: 'heavy_shield'
     },
     army: [
-      { name: 'numidian horse', quality: 'militia', weapon: 'sword_standard', armor: 'light_armor', shield: 'light_shield', mounted: true },
+      { name: 'numidian horse', quality: 'militia', weapon: 'sword_standard', second: 'light_javelin', armor: 'light_armor', shield: 'light_shield', mounted: true },
       { name: 'gauls', quality: 'militia', weapon: 'sword_standard', armor: 'light_armor', shield: 'medium_shield' },
       { name: 'iberians', quality: 'militia', weapon: 'sword_standard', armor: 'light_armor', shield: 'light_shield' },
       { name: 'libyans', quality: 'militia', weapon: 'spear_basic', armor: 'light_armor', shield: 'medium_shield' }
@@ -111,12 +114,12 @@ const FACTIONS = {
     // Doc: six-foot Nubian bows, leather armour. A sword for the melee
     // (ruled 2026-11-24: "They can have a sword"): Kush has no sword of its
     // own in the builder, so the standard sword (the straight iron sword of
-    // Meroe's smiths) stands in. Every other missile unit fights hand to
-    // hand with MISSILES.SIDEARM, a knife.
+    // Meroe's smiths) stands in. A missile unit without a sword fights hand
+    // to hand with MISSILES.SIDEARM, a knife.
     elite: {
       name: 'golden bows', size: 80,
       weapon: 'self_bow_professional', armor: 'light_armor', shield: 'no_shield',
-      sidearm: 'sword_standard'
+      second: 'sword_standard'
     },
     army: [
       { name: 'spearmen', quality: 'professional', weapon: 'spear_professional', armor: 'medium_armor', shield: 'medium_shield' },
@@ -130,10 +133,11 @@ const FACTIONS = {
     title: 'Berbers',
     fights: 'Desert horsemen with javelins, and the tribes on foot behind them.',
     // Doc: desert horses, light spears, leather armour. A spear cannot be
-    // used from horseback here, so they carry the heavy javelin.
+    // used from horseback here, so they throw the heavy javelin, and close
+    // with the sword.
     elite: {
       name: 'blue men', size: 80,
-      weapon: 'javelin_heavy', armor: 'light_armor', shield: 'light_shield', mounted: true
+      weapon: 'sword_standard', second: 'javelin_heavy', armor: 'light_armor', shield: 'light_shield', mounted: true
     },
     army: [
       { name: 'riders', quality: 'tribal_warriors', weapon: 'sword_standard', armor: 'light_armor', shield: 'light_shield', mounted: true },
@@ -261,7 +265,7 @@ const FACTIONS = {
     },
     army: [
       { name: 'warriors', quality: 'tribal_warriors', weapon: 'spear_basic', armor: 'light_armor', shield: 'medium_shield' },
-      { name: 'axemen', quality: 'tribal_warriors', weapon: 'battle_axe', armor: 'light_armor', shield: 'light_shield' },
+      { name: 'axemen', quality: 'tribal_warriors', weapon: 'battle_axe', second: 'germanic_throwing_axe', armor: 'light_armor', shield: 'light_shield' },
       { name: 'spearmen', quality: 'tribal_warriors', weapon: 'germanic_framea', armor: 'light_armor', shield: 'no_shield' },
       { name: 'skirmishers', quality: 'levy', weapon: 'sling', armor: 'no_armor', shield: 'no_shield' }
     ]
@@ -272,16 +276,17 @@ const FACTIONS = {
     title: 'Thrace',
     fights: 'Light men from the mountains: javelins, and the dreaded long blade.',
     // Doc: pelte shields, javelins, curved swords. Sixty men. They throw the
-    // heavy javelin; the curved sword is not carried.
+    // heavy javelin and close with the sword (the standard sword stands in
+    // for the curved one).
     elite: {
       name: 'peltast guard', size: 60,
-      weapon: 'javelin_heavy', armor: 'light_armor', shield: 'light_shield'
+      weapon: 'sword_standard', second: 'javelin_heavy', armor: 'light_armor', shield: 'light_shield'
     },
     army: [
       { name: 'rhomphaia men', quality: 'tribal_warriors', weapon: 'thracian_rhomphaia', armor: 'light_armor', shield: 'no_shield' },
       { name: 'rhomphaia men', quality: 'tribal_warriors', weapon: 'thracian_rhomphaia', armor: 'light_armor', shield: 'no_shield' },
       { name: 'slingers', quality: 'tribal_warriors', weapon: 'sling', armor: 'light_armor', shield: 'light_shield' },
-      { name: 'spearmen', quality: 'tribal_warriors', weapon: 'spear_basic', armor: 'light_armor', shield: 'light_shield' }
+      { name: 'spearmen', quality: 'tribal_warriors', weapon: 'spear_basic', second: 'light_javelin', armor: 'light_armor', shield: 'light_shield' }
     ]
   },
 
@@ -289,10 +294,11 @@ const FACTIONS = {
     culture: 'Samnite Federation',
     title: 'Samnium',
     fights: 'Mountain swordsmen with big shields, who hate Rome.',
-    // Doc: gladii, javelins, scuta. The javelins are not carried.
+    // Doc: gladii, javelins, scuta. The heavy javelin: the Samnites' was
+    // the pilum's forebear.
     elite: {
       name: 'sacred spring warriors', size: 80,
-      weapon: 'roman_gladius', armor: 'medium_armor', shield: 'heavy_shield'
+      weapon: 'roman_gladius', second: 'javelin_heavy', armor: 'medium_armor', shield: 'heavy_shield'
     },
     army: [
       { name: 'veterans', quality: 'professional', weapon: 'roman_gladius', armor: 'light_armor', shield: 'heavy_shield' },

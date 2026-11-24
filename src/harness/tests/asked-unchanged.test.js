@@ -20,6 +20,12 @@
 // crossbowmen, in mail, now close to shooting distance and stand, and the
 // computer presses with them. On ashford the battles were 10fbde01 34, 976d3898 35 (everyone
 // asked) and 9b2d3801 31, 551c795d 37 (no Commander).
+//
+// Retaken for second weapons (docs/design/army-balance.md part 8): Rome's
+// legionaries and Praetorians throw pila, and its velites javelins. The
+// battles were fdb72ba5 22, 5c62ed49 30, ad618256 34, 56ca8eee 36
+// (everyone asked) and 1fb30748 22, abc6d6db 30, 76c134c8 29, 7d98462c 31
+// (no Commander).
 
 const { test } = require('node:test')
 const assert = require('node:assert/strict')
@@ -58,18 +64,18 @@ function play(extra, { commander }) {
 
 test('a battle saved before the riders rulings (marked everyoneAsked) plays back exactly as it was played, event for event', () => {
   assert.deepEqual(play({ everyoneAsked: true }, { commander: true }), {
-    'crownhill 1': 'fdb72ba5 22',
-    'crownhill 2': '5c62ed49 30',
-    'ashford 1': 'ad618256 34',
-    'ashford 2': '56ca8eee 36'
+    'crownhill 1': 'be183ca2 18',
+    'crownhill 2': '3b976fdc 25',
+    'ashford 1': 'd5b50bd6 25',
+    'ashford 2': 'e79ea81f 29'
   })
 })
 
 test('a battle with no Commander on the field runs exactly as before the riders rulings, event for event', () => {
   assert.deepEqual(play({}, { commander: false }), {
-    'crownhill 1': '1fb30748 22',
-    'crownhill 2': 'abc6d6db 30',
-    'ashford 1': '76c134c8 29',
-    'ashford 2': '7d98462c 31'
+    'crownhill 1': 'a0fe2488 18',
+    'crownhill 2': 'e70e50fe 25',
+    'ashford 1': '31e8e9f4 26',
+    'ashford 2': '6583ef4f 34'
   })
 })

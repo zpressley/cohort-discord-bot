@@ -180,6 +180,23 @@ test('shooting is told with the fighting: who shot whom, and what it cost', () =
   assert.ok(told.includes('red_spears: was shot at by an unseen enemy, losing 1 man'), told.join(' / '))
 })
 
+test('javelins and pila thrown as the fighting begins are told first, in the kit\'s own words, to both sides', () => {
+  const told = report({
+    map, ...knowledge,
+    events: [
+      { type: 'contact', turn: 5, aId: 'blue_swords', bId: 'red_spears' },
+      { type: 'thrown', turn: 5, unitId: 'blue_swords', by: 'red_spears', weapon: 'roman_pilum', killed: 9, remaining: 91 },
+      { type: 'exchange', turn: 5, a: { unitId: 'red_spears', killed: 6, morale: 90 }, b: { unitId: 'blue_swords', killed: 12, morale: 70 } }
+    ]
+  })
+  assert.match(told.join(' / '), /^red_spears: threw their pila at blue_swords, felling 9 men; fought blue_swords/)
+  const theirs = report({
+    map, ownIds: new Set(['blue_swords']), seenEnemyIds: new Set(['red_spears']),
+    events: [{ type: 'thrown', turn: 5, unitId: 'blue_swords', by: 'red_spears', weapon: 'light_javelin', killed: 3, remaining: 97 }]
+  })
+  assert.deepEqual(theirs, ['blue_swords: met light javelins from red_spears, losing 3 men'])
+})
+
 test('an officer reacting as ordered, or losing the thread, is told to his own side only; the roll is told to no one', () => {
   const reacted = { type: 'reacted', turn: 4, unitId: 'red_spears', when: 'sees', kind: 'cavalry', action: 'hold', target: null }
   const lost = { type: 'lostThread', turn: 4, unitId: 'red_archers', officer: 'Marcus', lost: 'steps', did: 'advance' }

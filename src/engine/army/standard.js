@@ -20,7 +20,7 @@
 //
 // Pure: the same army, side and map always give the same units.
 
-const { buildArmy, buildUnit, toBattleUnits, roleFor, unitSize, mountCost } = require('./builder')
+const { buildArmy, buildUnit, toBattleUnits, roleFor, unitSize, mountCost, secondFields, secondPrice } = require('./builder')
 const D = require('./data')
 const T = require('../combat/tables')
 const { formUp, factionUnits } = require('./factions')
@@ -29,11 +29,14 @@ const { deployArmies } = require('../map/deploy')
 const { createRng } = require('../rng')
 const { FACTIONS } = require('../../data/factions')
 
-// A unit's kit, and nothing else from what was sent.
+// A unit's kit, and nothing else from what was sent. A second weapon
+// (docs/design/army-balance.md, part 8) only where it has one: an army
+// saved before there were second weapons reads as it was.
 function kitOf(unit = {}) {
   return {
     quality: String(unit.quality ?? ''),
     weapon: String(unit.weapon ?? ''),
+    ...(unit.second ? { second: String(unit.second) } : {}),
     armor: String(unit.armor ?? 'no_armor'),
     shield: String(unit.shield ?? 'no_shield'),
     mounted: unit.mounted === true
@@ -105,7 +108,7 @@ function kitPrice(kit, culture) {
   const tier = T.QUALITY_TIERS[k.quality === 'elite' ? 'veteran_mercenary' : k.quality]
   const weapon = D.WEAPONS[k.weapon]
   if (!tier || !weapon || !(k.armor in D.ARMOR_SP) || !(k.shield in D.SHIELD_SP)) return null
-  return tier.cost + weapon.sp + D.ARMOR_SP[k.armor] + D.SHIELD_SP[k.shield] + (k.mounted ? mountCost(culture) : 0)
+  return tier.cost + weapon.sp + (D.WEAPONS[k.second] ? secondPrice(k.second) : 0) + D.ARMOR_SP[k.armor] + D.SHIELD_SP[k.shield] + (k.mounted ? mountCost(culture) : 0)
 }
 
 // A unit taken from the enemy, as the builder gives its units: its kit as
@@ -116,7 +119,9 @@ function takenUnit(unit) {
   const tier = T.QUALITY_TIERS[k.quality]
   if (!tier || !D.WEAPONS[k.weapon] || !(k.armor in D.ARMOR_SP) || !(k.shield in D.SHIELD_SP)) return null
   const men = Number.isInteger(unit.men) && unit.men > 0 ? unit.men : unitSize(tier, k.weapon, k.mounted)
-  return { ...k, size: men, cost: 0 }
+  // A second weapon the game does not know is left behind.
+  const { second, ...rest } = k
+  return { ...rest, ...(secondFields(second).sidearm || secondFields(second).thrown ? { second } : {}), size: men, cost: 0 }
 }
 
 /**
@@ -155,7 +160,7 @@ function standardUnits(key, units, side, homeEdge = side === 'red' ? 'west' : 'e
     shield: e.shield ?? 'no_shield',
     mounted: Boolean(e.mounted),
     movementRange: e.mounted ? 5 : 3,
-    ...(e.sidearm ? { sidearm: e.sidearm } : {}),
+    ...secondFields(e.second),
     role: e.mounted ? 'cavalry' : roleFor(e.weapon)
   })
   // The name alone orders every unit of it, where all of them are numbered.

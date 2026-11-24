@@ -65,6 +65,9 @@
 //              'advance', 'hold' or 'carry on')
 //   volley     unitId, by, killed, remaining, distance
 //              missile fire: `by` shot at `unitId` from `distance` tiles
+//   thrown     unitId, by, weapon, killed, remaining
+//              `by` threw its second weapon (javelins, pila: weapon, a key
+//              of WEAPONS) at `unitId` as they came to blows
 //   heartened  unitId, by, morale
 //              a unit took heart: enemy unit `by` broke or was destroyed
 //              near it. morale is what it has now

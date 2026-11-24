@@ -113,7 +113,7 @@ const KIT = {
     germanic_framea: 'framea', persian_kontos: 'kontos', sling: 'sling', self_bow_basic: 'bow',
     throwing_spear: 'throwing spears', roman_plumbatae: 'plumbatae', germanic_throwing_axe: 'throwing axes',
     self_bow_professional: 'war bow', javelin_heavy: 'heavy javelins', sling_professional: 'war sling',
-    roman_pilum: 'pilum', greek_composite_bow: 'composite bow', persian_recurve_bow: 'recurve bow',
+    roman_pilum: 'pila', greek_composite_bow: 'composite bow', persian_recurve_bow: 'recurve bow',
     han_chinese_crossbow: 'crossbow', parthian_horse_bow: 'horse bow'
   },
   armor: { no_armor: 'no armour', light_armor: 'light armour', medium_armor: 'medium armour', heavy_armor: 'heavy armour' },
@@ -323,6 +323,18 @@ const SKIRMISH_WORDS = {
   gaveGround: (unit, before) => `${unit} ${ORDER.withdraw.did} before ${before}, keeping out of their reach`
 }
 
+// Second weapons (docs/design/army-balance.md, part 8): a unit's javelins
+// or pila, thrown as it comes to blows (battle/battle.js, the throw at
+// contact), told in the dispatch: "legionaries threw their pila at enemy
+// spears". The weapon is named as the kit names it (KIT.weapon, plural).
+const THROWN_WORDS = {
+  threw: (weapon, at) => `threw their ${KIT.weapon[weapon] ?? weapon} at ${at}`,
+  met: (weapon, from) => `met ${KIT.weapon[weapon] ?? weapon} from ${from}`,
+  // The army screen: a unit's second weapon, and none.
+  second: 'second weapon',
+  none: 'none'
+}
+
 // Making a Commander (data/commanders.js): the two questions, asked once,
 // and what each answer means for him. The ten kinds are the design's
 // (docs/design/commanders-lore-and-tutorial.md), each with its old line
@@ -402,4 +414,4 @@ const ON_HIS_OWN = {
   line: (who, did, why) => `${who}, with no word from you, ${did}${why}`
 }
 
-module.exports = { orderWords, moraleWords, ORDER, OWN_EDGE, HOLD_THERE, KIT, RIDE_WITH, LOYALTY_WORDS, VALUES_WORDS, VETERANCY_WORDS, RIDER, NIGHT, REPORT, GROUND, windWords, SKIRMISH_WORDS, MAKING, COMMANDER_KINDS, NATURE_SAID, HOLDS_DEAR, COMMANDER_TITLES, ENEMY_COMMANDER, ON_HIS_OWN }
+module.exports = { orderWords, moraleWords, ORDER, OWN_EDGE, HOLD_THERE, KIT, RIDE_WITH, LOYALTY_WORDS, VALUES_WORDS, VETERANCY_WORDS, RIDER, NIGHT, REPORT, GROUND, windWords, SKIRMISH_WORDS, THROWN_WORDS, MAKING, COMMANDER_KINDS, NATURE_SAID, HOLDS_DEAR, COMMANDER_TITLES, ENEMY_COMMANDER, ON_HIS_OWN }

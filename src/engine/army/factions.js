@@ -9,13 +9,12 @@
 //
 // Pure: the same faction, side and map always give the same units.
 
-const { buildArmy, buildUnit, toBattleUnits, roleFor } = require('./builder')
+const { buildArmy, buildUnit, toBattleUnits, roleFor, secondFields } = require('./builder')
 const { resolveMap } = require('../map/map')
 const { deployArmies } = require('../map/deploy')
 const { missileRange } = require('../combat/ranged')
 const { createRng } = require('../rng')
 const { FACTIONS } = require('../../data/factions')
-const D = require('./data')
 
 const FORWARD = { west: { x: 1, y: 0 }, east: { x: -1, y: 0 }, north: { x: 0, y: 1 }, south: { x: 0, y: -1 } }
 
@@ -35,12 +34,6 @@ function buildFaction(key) {
   const { name, ...kit } = faction.elite
   const check = buildUnit({ ...kit, quality: 'veteran_mercenary' }, faction.culture, { elite: true })
   errors.push(...check.errors.map(e => `the ${name}: ${e}`))
-  // A sidearm (an elite's own: the builder sells no second weapon) is a
-  // hand weapon its culture may field.
-  const side = kit.sidearm ? D.WEAPONS[kit.sidearm] : null
-  if (kit.sidearm && (!side || side.stacking.includes('ranged') || (side.cultures !== 'all' && !side.cultures.includes(faction.culture)))) {
-    errors.push(`the ${name}: ${kit.sidearm} is no sidearm ${faction.culture} may carry`)
-  }
   for (const unit of faction.army) if (!unit.name) errors.push('every unit needs a name')
   if (errors.length) return { ok: false, errors, army: null, elite: null }
   return { ok: true, errors: [], army: built.army, elite: { name, ...kit } }
@@ -75,7 +68,8 @@ function factionUnits(key, side, homeEdge = side === 'red' ? 'west' : 'east') {
     shield: e.shield ?? 'no_shield',
     mounted: Boolean(e.mounted),
     movementRange: e.mounted ? 5 : 3,
-    ...(e.sidearm ? { sidearm: e.sidearm } : {}),
+    // Its second weapon (a sword, or javelins), as a bought unit's.
+    ...secondFields(e.second),
     // The role of a horseman, or of his weapon: the app calls them "elite
     // cavalry" or "elite heavy infantry", not "elite elite guard".
     role: e.mounted ? 'cavalry' : roleFor(e.weapon)

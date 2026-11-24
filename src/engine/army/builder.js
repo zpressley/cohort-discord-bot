@@ -36,21 +36,53 @@ function mountCost(culture) {
   return D.HORSE_CULTURES.includes(culture) ? D.MOUNT_SP_DISCOUNTED : D.MOUNT_SP
 }
 
+// Second weapons (docs/design/army-balance.md, part 8). What kind of second
+// weapon a weapon is: 'thrown' (javelins, pila, plumbatae, throwing axes:
+// the data's stackable_ranged with a reach too short to shoot), 'sidearm'
+// (a sword: data.js, `sidearm`), or null (it is no second weapon).
+const reach = (weapon) => T.WEAPONS[weapon]?.range ?? 0
+function secondKind(weapon) {
+  const data = D.WEAPONS[weapon]
+  if (!data) return null
+  if (data.stacking === 'stackable_ranged' && reach(weapon) < T.MISSILES.MIN_RANGE_M) return 'thrown'
+  if (data.sidearm) return 'sidearm'
+  return null
+}
+
+// What a second weapon costs: its own price, or `secondSp` where the data
+// gives one for it as a second weapon (data.js).
+function secondPrice(second) {
+  const data = D.WEAPONS[second]
+  return data.secondSp ?? data.sp
+}
+
+// What a second weapon is in a battle unit's spec: a sword is the unit's
+// `sidearm` (combat/ratings.js, handWeapon), a thrown weapon its `thrown`
+// (battle/battle.js, the throw at contact). None: nothing.
+function secondFields(second) {
+  const kind = second ? secondKind(second) : null
+  if (kind === 'sidearm') return { sidearm: second }
+  if (kind === 'thrown') return { thrown: second }
+  return {}
+}
+
 /**
  * Validate and price one unit.
  *
- * @param {Object} pick { quality, weapon, armor, shield, mounted }
+ * @param {Object} pick { quality, weapon, armor, shield, mounted, second }
+ *   `second`: a second weapon, or none
  * @param {string} culture
  * @param {Object} [o]  { elite: true } checks a faction's own elite unit,
  *   which is never sold: only what its culture may field and carry, not the
- *   rules on what is sold (missile troops' armour, a weapon not sold alone)
+ *   rule on missile troops' armour
  * @returns {{ ok, errors, cost, unit }}
  */
 function buildUnit(pick, culture, { elite = false } = {}) {
   const errors = []
   const {
     quality, weapon,
-    armor = 'no_armor', shield = 'no_shield', mounted = false
+    armor = 'no_armor', shield = 'no_shield', mounted = false,
+    second = null
   } = pick
 
   const tier = T.QUALITY_TIERS[quality]
@@ -97,14 +129,43 @@ function buildUnit(pick, culture, { elite = false } = {}) {
         Object.keys(D.ARMOR_SP).indexOf(armor) > Object.keys(D.ARMOR_SP).indexOf(weaponData.armorMax)) {
       errors.push(`${weapon} is carried by men in ${weaponData.armorMax.replace('_armor', '')} armor at most`)
     }
-    // A sidearm or a thrown weapon is carried beside another weapon, and
-    // this builder has one weapon to a unit; until there are second weapons
-    // it is not sold alone (Recommendation A). A faction's elite carries
-    // the doc's second weapon in its men's hands (the Peltast Guard's
-    // curved swords, the Blue Men's spears), so its javelins stand.
-    if (!elite && (weaponData.stacking === 'secondary' ||
-        (weaponData.stacking === 'stackable_ranged' && (T.WEAPONS[weapon]?.range ?? 0) < T.MISSILES.MIN_RANGE_M))) {
+    // A sidearm or a thrown weapon is carried beside another weapon, not
+    // alone (Recommendation A): it is bought as a unit's second weapon
+    // (below). The faction elites that carried javelins alone carry them
+    // now beside a sword (src/data/factions.js).
+    if (weaponData.stacking === 'secondary' ||
+        (weaponData.stacking === 'stackable_ranged' && reach(weapon) < T.MISSILES.MIN_RANGE_M)) {
       errors.push(`${weapon} is carried beside another weapon, not alone`)
+    }
+  }
+
+  // A second weapon (docs/design/army-balance.md, part 8): one, beside the
+  // main one, by the weapon data's own stacking. A thrown weapon beside a
+  // one-handed hand weapon (the shield arm throws, then takes the shield);
+  // a sword beside a missile weapon, to fight hand to hand with in place of
+  // the knife. Its culture, training and horse rules are any weapon's.
+  const secondData = second ? D.WEAPONS[second] : null
+  if (second && !secondData) {
+    errors.push(`unknown weapon "${second}"`)
+  } else if (secondData) {
+    const kind = secondKind(second)
+    const shoots = reach(weapon) >= T.MISSILES.MIN_RANGE_M
+    if (!kind) {
+      errors.push(`${second} cannot be carried as a second weapon`)
+    } else if (kind === 'thrown' && !(weaponData?.stacking === 'primary' && !shoots)) {
+      errors.push(`${second} can only be thrown beside a one-handed weapon`)
+    } else if (kind === 'sidearm' && weaponData && !shoots) {
+      errors.push(`${second} is a sidearm for men who shoot`)
+    }
+    if (secondData.cultures !== 'all' && !secondData.cultures.includes(culture)) {
+      errors.push(`${second} is not forged by ${culture}`)
+    }
+    if (secondData.minQuality && tier &&
+        qualityRank(quality) < qualityRank(secondData.minQuality)) {
+      errors.push(`${second} demands ${secondData.minQuality} training or better`)
+    }
+    if (mounted && secondData.cavalryCompatible === false) {
+      errors.push(`${second} cannot be used from horseback`)
     }
   }
 
@@ -130,7 +191,7 @@ function buildUnit(pick, culture, { elite = false } = {}) {
 
   if (errors.length > 0) return { ok: false, errors, cost: 0, unit: null }
 
-  const cost = tier.cost + weaponData.sp +
+  const cost = tier.cost + weaponData.sp + (secondData ? secondPrice(second) : 0) +
     D.ARMOR_SP[armor] + D.SHIELD_SP[shield] +
     (mounted ? mountCost(culture) : 0)
 
@@ -138,7 +199,7 @@ function buildUnit(pick, culture, { elite = false } = {}) {
     ok: true,
     errors: [],
     cost,
-    unit: { quality, weapon, armor, shield, mounted, size: unitSize(tier, weapon, mounted), cost }
+    unit: { quality, weapon, ...(second ? { second } : {}), armor, shield, mounted, size: unitSize(tier, weapon, mounted), cost }
   }
 }
 
@@ -205,6 +266,7 @@ function toBattleUnits(army, deployment) {
       armor: unit.armor,
       shield: unit.shield,
       mounted: unit.mounted,
+      ...secondFields(unit.second),
       role: unit.mounted ? 'cavalry' : roleFor(unit.weapon),
       ...(army.culture ? { culture: army.culture } : {})
     })
@@ -240,4 +302,4 @@ function roleFor(weapon) {
   return 'heavy_infantry'
 }
 
-module.exports = { buildUnit, buildArmy, toBattleUnits, roleFor, unitSize, mountCost, PURCHASABLE }
+module.exports = { buildUnit, buildArmy, toBattleUnits, roleFor, unitSize, mountCost, secondKind, secondFields, secondPrice, PURCHASABLE }
