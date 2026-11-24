@@ -66,6 +66,8 @@ const SCALE = 1.35
 
 // One counter: a square in the side's colour with the role's mark, a
 // strength bar for your own, and (on the top counter of a stack) the name.
+// An enemy whose kind no report has told (unknownKind) is marked "?", not
+// with a kind's mark it might not be.
 function counter(unit, { side, own, selected, ghost, aged = false, commander = false, label, nameAbove = null, shift = 0 }) {
   const kind = kindOf(unit)
   const fill = ghost ? 'none' : `var(--side-${side})`
@@ -90,7 +92,7 @@ function counter(unit, { side, own, selected, ghost, aged = false, commander = f
       <g transform="scale(${SCALE})">
         ${selected ? '<rect x="-14" y="-11" width="28" height="25" fill="none" style="stroke: var(--ink)" stroke-width="1.6"/>' : ''}
         <rect x="-10" y="-7" width="20" height="14" style="fill: ${fill}; stroke: ${ghost ? 'var(--ghost)' : 'var(--ink)'}" stroke-width="1.1"${dash}/>
-        <g style="stroke: ${ink}; fill: ${ink}" stroke-width="1.3" stroke-linecap="square">${ghost ? '<text y="4" text-anchor="middle" font-size="11" style="stroke: none">?</text>' : symbol(kind)}</g>
+        <g style="stroke: ${ink}; fill: ${ink}" stroke-width="1.3" stroke-linecap="square">${ghost || unit.unknownKind ? '<text y="4" text-anchor="middle" font-size="11" style="stroke: none">?</text>' : symbol(kind)}</g>
         ${strength}
         ${pennant}${cut}
       </g>

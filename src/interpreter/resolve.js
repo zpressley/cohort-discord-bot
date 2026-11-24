@@ -35,14 +35,20 @@ const EXTRAS = ['careful', 'against', 'letPass', 'regardless', 'holdFire']
 // field is never looked at. "archers at E5" picks the one seen nearest E5.
 
 const AT_SQUARE = /\s+(?:at|in|near|by)\s+(\S+)$/i
+// "the enemy at the bridge", "troops by the Old Mill": a place by name or
+// by the ground, for an enemy whose kind he has not been told.
+const AT_PLACE = /(?:^|\s+)(?:at|in|near|by)\s+(.+)$/i
 const sansSide = (id) => String(id).replace(/^(?:red|blue)_/, '').replace(/_/g, ' ')
+// What he may call a seen enemy: its kind's name, or what the reports of it
+// let him call it (`name`: "troops", when no report told its kind).
+const calledBy = (enemy) => enemy.name ?? sansSide(enemy.id)
 
 // Is this seen enemy of that kind? By what was seen of it when the intel
 // says (role, mounted, weapon); else by its name.
 function looksLike(enemy, kind) {
   if ('role' in enemy || 'mounted' in enemy) return matchesKind({ id: enemy.id, role: enemy.role, mounted: enemy.mounted, primaryWeapon: enemy.primaryWeapon }, kind)
   const words = KINDS.find(([k]) => k === kind)?.[1]
-  return Boolean(words && words.test(sansSide(enemy.id)))
+  return Boolean(words && words.test(calledBy(enemy)))
 }
 
 function seenWhere(enemy) {
@@ -64,17 +70,29 @@ function resolveEnemy(words, enemies, map) {
     const square = gridTarget(map, at[1])
     if (!square.none) near = square.position
     ref = ref.slice(0, at.index).trim()
+  } else if (map) {
+    const there = ref.match(AT_PLACE)
+    // (The ground nearest the enemy he has seen: "the woods" they are in.)
+    const mid = seen.length ? { x: Math.round(seen.reduce((n, e) => n + e.position.x, 0) / seen.length), y: Math.round(seen.reduce((n, e) => n + e.position.y, 0) / seen.length) } : { x: Math.floor(map.width / 2), y: Math.floor(map.height / 2) }
+    const place = there ? findPlace(map, mid, there[1]) : null
+    if (place?.position) {
+      near = place.position
+      ref = ref.slice(0, there.index).trim()
+    }
   }
+  // "attack the enemy at the bridge": whichever enemy he has seen is nearest.
+  const bare = ref === '' || /^(?:troops|men|enemy|enemies|foe|foes|them)$/i.test(ref)
   const kind = KINDS.find(([, pattern]) => pattern.test(ref))?.[0] ?? null
   const anyone = /^(?:everyone|everybody|all|army|the army)$/i.test(ref)
   // "swordsmen" for the enemy swords, "spearmen" for their spears.
   const stem = (w) => w.toLowerCase().replace(/s$/, '')
-  const byStem = () => seen.filter(e => sansSide(e.id).split(' ').some(w => w.length > 3 && stem(ref).startsWith(stem(w))))
+  const byStem = () => seen.filter(e => calledBy(e).split(' ').some(w => w.length > 3 && stem(ref).startsWith(stem(w))))
   const named = () => {
-    const found = resolveUnitReference(ref, seen.map(e => ({ ...e, aliases: [sansSide(e.id)] }))).units
+    const found = resolveUnitReference(ref, seen.map(e => ({ ...e, aliases: [calledBy(e)] }))).units
     return found.length > 0 ? found : byStem()
   }
-  const matches = kind ? seen.filter(e => looksLike(e, kind)) : anyone ? [] : named()
+  const matches = kind ? seen.filter(e => looksLike(e, kind)) : bare && near ? seen : anyone ? [] : named()
+  if (bare && near && ref === '') ref = 'enemy'
   if (matches.length === 0) {
     if (seen.length === 0) return { question: `You have seen no enemy to attack. To go and find them, say "advance".` }
     return {

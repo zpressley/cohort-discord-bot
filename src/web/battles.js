@@ -36,13 +36,14 @@ const { matchedVeterancy } = require('../engine/veterans/veterancy')
 const { bargainChips, canRide, heldSight, sightFrom } = require('../engine/command/commander')
 const { orderDelays, byCommandPost } = require('../engine/command/messengers')
 const { knownEnemies, newsBetween } = require('../engine/orchestrator/word')
+const { aboutHowMany } = require('../engine/orchestrator/reports')
 const { captorAnswer } = require('../opponent/captor')
 const { createCommanderStore } = require('./commanders')
-const { digest, summarise } = require('../narrator/turnNarrator')
+const { digest, summarise, placeName } = require('../narrator/turnNarrator')
 const { gradeOf, DEATH_ODDS, loyaltyBand } = require('../engine/command/officers')
 const T = require('../engine/combat/tables')
 const { narrateTurn, report } = require('../narrator/turnNarrator')
-const { orderWords, RIDER, NIGHT } = require('../narrator/words')
+const { orderWords, RIDER, NIGHT, REPORT } = require('../narrator/words')
 const { loadScenario, SCENARIOS, mapChoices } = require('../adapters/hotseat/scenarios')
 const { MAPS } = require('../data/maps')
 const { FACTIONS, factionChoices } = require('../engine/army/factions')
@@ -91,11 +92,104 @@ function describeOrder(order, standing = null, name = (id) => id) {
 // Text for one side with unit ids swapped for names: its own units by name
 // ("Spears"), enemies as "enemy spears". Ids the side does not know stay as
 // they are (the narrator has already masked those).
+//
+// An enemy is named as his reports have told it (engine/orchestrator/
+// reports.js): by its kind once a report has told it ("enemy archers"),
+// else "enemy troops" (ruled 2026-11-23: "additional details as
+// progression happens but never incorrect details"). The unit holding him,
+// when he is held, he sees for himself.
 function namer(game, side) {
   const all = [...game.battle.world.units, ...game.battle.fledUnits]
-  const names = all.map(u => [u.id, u.side === side ? unitName(u) : `enemy ${unitName(u).toLowerCase()}`])
+  const known = enemyKnowledge(game, side)
+  const c = game.battle.commanders?.[side]
+  const holder = c?.status === 'held' ? c.heldBy : null
+  const names = all.map(u => [u.id, u.side === side ? unitName(u)
+    : known[u.id]?.told && !known[u.id].told.kind && u.id !== holder ? `enemy ${REPORT.troops}` : `enemy ${unitName(u).toLowerCase()}`])
     .sort((a, b) => b[0].length - a[0].length)
   return (text) => names.reduce((out, [id, name]) => out.replace(new RegExp(`\\b${id}\\b`, 'g'), name), String(text))
+}
+
+// What a side knows of the enemy now: as reported to its Commander, when he
+// is with his army and the battle is on; else its side's own sight.
+function enemyKnowledge(game, side) {
+  const word = game.battle.commanders?.[side]?.status === 'free' && !game.outcome?.decided ? game.word?.[side] ?? null : null
+  return word ? word.enemies : game.intel?.[side]?.known ?? {}
+}
+
+// What the reports of an enemy unit hold (engine/orchestrator/reports.js).
+// An entry with none (the enemy as a held Commander sees it from where he
+// sits, built in view) is told whole, as before.
+function toldOf(e, unit = null) {
+  if (e.told) return e.told
+  const on = e.seenOnTurn ?? 0
+  const kind = { role: e.role ?? unit?.role ?? null, mounted: Boolean(e.mounted ?? unit?.mounted), primaryWeapon: e.primaryWeapon ?? unit?.primaryWeapon ?? null, on }
+  return { grade: T.REPORTS.NO_OFFICERS, on, kind, ...(e.strength !== undefined ? { count: { exact: true, strength: e.strength, on } } : {}) }
+}
+
+// The id the browser knows an enemy unit by. Its own id says what kind it
+// is ("blue_slingers"), so an enemy whose kind he has not been told goes by
+// a stand-in made from the battle's seed, which tells nothing.
+function enemyHandle(game, e) {
+  if (toldOf(e).kind) return e.id
+  return 'enemy-' + crypto.createHash('sha256').update(`${game.seed}:${e.id}`).digest('hex').slice(0, 10)
+}
+
+// One enemy unit as a seat is shown it: where and when, and only what the
+// reports of it hold (the fog test proves it, src/web/tests/reports.test.js).
+function enemyView(game, e, unit, turn) {
+  const told = toldOf(e, unit)
+  const kind = told.kind ?? null
+  const age = (fact) => Math.max(0, (turn - fact.on) * 10)
+  const minutesAgo = Math.max(0, (turn - e.seenOnTurn) * 10)
+  const count = told.count ? (told.count.exact ? { exact: true, strength: told.count.strength } : { exact: false, band: told.count.band }) : null
+  return {
+    id: enemyHandle(game, e),
+    name: kind ? (unit ? unitName(unit) : e.id) : capitalise(`enemy ${REPORT.troops}`),
+    role: kind ? kind.role : null,
+    mounted: kind ? kind.mounted : false,
+    ...(kind ? {} : { unknownKind: true }),
+    status: e.status,
+    position: e.position,
+    at: where(e.position),
+    ...(count?.exact ? { strength: count.strength } : {}),
+    ...(count && !count.exact ? { about: REPORT.men(count) } : {}),
+    ...(count ? { countMinutesAgo: age(told.count) } : {}),
+    ...(told.state ? { holding: REPORT.holding(told.state), holdingMinutesAgo: age(told.state) } : {}),
+    // The best officer whose report of them has reached him.
+    reportedBy: told.grade,
+    seenOnTurn: e.seenOnTurn,
+    minutesAgo,
+    said: REPORT.line({
+      status: e.status, minutesAgo, kindKnown: Boolean(kind), grade: told.grade,
+      count, countAgo: told.count ? age(told.count) : 0,
+      state: told.state ?? null, stateAgo: told.state ? age(told.state) : 0
+    })
+  }
+}
+
+// How many men a unit is, for the plain account: his own (and, held, his
+// captors' own, as their reports tell it) counted; an enemy as his reports
+// of it tell, roughly or not at all.
+function menAsTold(game, side, ownIds) {
+  const known = enemyKnowledge(game, side)
+  return (id, n) => {
+    const men = n === 1 ? '1 man' : `${n} men`
+    if (ownIds.has(id)) return men
+    const count = known[id] ? toldOf(known[id]).count : null
+    if (!count) return null
+    return count.exact ? men : REPORT.men({ exact: false, band: aboutHowMany(n).band })
+  }
+}
+
+// An enemy unit as the order reader may know it: where it was reported, and
+// its kind only if a report told it ("troops" else, so that he can still
+// name it: "attack the enemy troops at F6", "attack the enemy at the bridge").
+function enemyForOrders(e) {
+  const told = toldOf(e)
+  const base = { id: e.id, status: e.status, position: e.position, seenOnTurn: e.seenOnTurn, ...(e.strength !== undefined ? { strength: e.strength } : {}) }
+  return told.kind
+    ? { ...base, role: told.kind.role, mounted: told.kind.mounted, primaryWeapon: told.kind.primaryWeapon }
+    : { ...base, name: REPORT.troops }
 }
 
 // Men standing, fled and fallen for each side: shown once the battle is
@@ -805,7 +899,7 @@ function createBattleStore({ dir = null, ai = null, now = () => Date.now() } = {
       units: [...game.battle.world.units, ...game.battle.fledUnits].filter(u => u.side === side && there(u) && !broken(u))
         .filter(u => word || u.strength > 0)
         .map(u => ({ ...known(u), aliases: [unitName(u).toLowerCase(), ...(u.aliases ?? [])] })),
-      enemies: word ? knownEnemies(word) : sideView(game, side).intel,
+      enemies: (word ? knownEnemies(word) : sideView(game, side).intel).map(enemyForOrders),
       // Where "fall back" takes a unit, for the read-back.
       homeEdge: game.spec.sides?.[side]?.homeEdge,
       lyingInWait: lyingInWait(game.battle, side),
@@ -954,20 +1048,10 @@ function createBattleStore({ dir = null, ai = null, now = () => Date.now() } = {
       ? battle.world.units.filter(u => u.side !== side && u.strength > 0 && held.seen.has(u.id))
         .map(u => ({ id: u.id, status: 'visible', position: { ...u.position }, strength: u.strength, seenOnTurn: battle.turn }))
       : word ? knownEnemies(word) : sv.intel
+    // Each as the reports of it have told it (enemyView).
     const enemies = intel.map(e => {
       const unit = battle.world.units.find(u => u.id === e.id) ?? battle.fledUnits.find(u => u.id === e.id)
-      return {
-        id: e.id,
-        name: unit ? unitName(unit) : e.id,
-        role: unit?.role ?? null,
-        mounted: Boolean(unit?.mounted),
-        status: e.status,
-        position: e.position,
-        at: where(e.position),
-        strength: e.strength,
-        seenOnTurn: e.seenOnTurn,
-        minutesAgo: Math.max(0, (battle.turn - e.seenOnTurn) * 10)
-      }
+      return enemyView(game, e, unit, battle.turn)
     })
 
     const objectives = (game.objectives ?? []).map(o => ({
@@ -1091,11 +1175,12 @@ function createBattleStore({ dir = null, ai = null, now = () => Date.now() } = {
     // (What he has heard of, when his own Commander is with his army.)
     const word = game.battle.commanders?.[side]?.status === 'free' ? game.word?.[side] : null
     const seen = word ? knownEnemies(word) : sideView(game, side).intel
+    const handleOf = (id) => { const e = seen.find(x => x.id === id); return e ? enemyHandle(game, e) : id }
     return {
       heldBy: name(game.battle.commanders[captive].heldBy),
       offer: t?.offer ? { id: t.offer.id, units: t.offer.units.map(id => ({ id, name: name(id) })) } : null,
-      asked: t?.counter && game.playerTurn <= t.counter.turn + PARLEY.COUNTER_LASTS ? { units: t.counter.units.map(id => ({ id, name: name(id) })) } : null,
-      seen: seen.map(e => ({ id: e.id, name: name(e.id) }))
+      asked: t?.counter && game.playerTurn <= t.counter.turn + PARLEY.COUNTER_LASTS ? { units: t.counter.units.map(id => ({ id: handleOf(id), name: name(id) })) } : null,
+      seen: seen.map(e => ({ id: enemyHandle(game, e), name: name(e.id) }))
     }
   }
   // What became of him, for the verdict.
@@ -1268,11 +1353,19 @@ function createBattleStore({ dir = null, ai = null, now = () => Date.now() } = {
     const reply = { offer: Number(given.offer) }
     if (given.accept === true) reply.accept = true
     else if (given.refuse === true) reply.refuse = true
-    else if (Array.isArray(given.more)) reply.more = { units: given.more.map(String) }
+    // (An enemy whose kind he has not been told goes by its stand-in.)
+    else if (Array.isArray(given.more)) reply.more = { units: given.more.map(String).map(id => byHandle(game, side, id)) }
     const refused = checkAnswer(game, side, reply)
     if (refused) throw Object.assign(new Error(capitalise(refused) + '.'), { status: 409 })
     submitOrders(game, side, { answer: reply })
     return await afterTable(entry)
+  }
+
+  // The enemy unit a stand-in names (enemyHandle), as this side knows it.
+  function byHandle(game, side, id) {
+    if (!id.startsWith('enemy-')) return id
+    const known = enemyKnowledge(game, side)
+    return Object.keys(known).find(k => enemyHandle(game, { id: k, ...known[k] }) === id) ?? id
   }
 
   // A deal ends the battle as a turn does; anything else is only saved.
@@ -1558,6 +1651,8 @@ function createBattleStore({ dir = null, ai = null, now = () => Date.now() } = {
         seenEnemyIds: captivity ? new Set(theySaw) : new Set(seen),
         events,
         nameOf: name,
+        // How many an enemy unit is, as far as his reports of it tell.
+        howMany: menAsTold(game, side, captivity ? theirIds : ownIds),
         // Where each unit of the side told of stands now, to say where it fought.
         whereIs: (id) => (captivity ? theirs : own).find(u => u.id === id)?.position ?? null
       }
@@ -1590,8 +1685,29 @@ function createBattleStore({ dir = null, ai = null, now = () => Date.now() } = {
         // Word come again from a unit he had had none of for too long.
         const again = [...new Set((word.back ?? []).filter(b => b.turn > from && b.turn <= to).map(b => b.unitId))]
           .map(id => capitalise(name(RIDER.wordAgain(id))))
+        // Enemies first reported to him in this stretch, by whom and where,
+        // with as much as the report held (REPORT.sighted).
+        const known = enemyKnowledge(game, side)
+        const sighted = Object.entries(word.enemies)
+          .filter(([, e]) => e.first && e.first.turn > from && e.first.turn <= to)
+          .sort((a, b) => b[1].first.sent - a[1].first.sent || a[0].localeCompare(b[0]))
+          .map(([id, e]) => {
+            const age = Math.max(0, (to - e.first.sent) * 10)
+            const men = REPORT.men(toldOf(known[id] ?? e).count)
+            const said = (n) => capitalise(name(REPORT.sighted(e.first.by, n > 1 ? `${id} (${n} units)` : id, men, `${placeName(game.battle.map, e.position)} (${where(e.position)})`)))
+            return { age, said }
+          })
+          // Several he cannot tell apart, reported together, are one line.
+          .reduce((out, x) => {
+            const same = out.find(y => y.age === x.age && y.said(1) === x.said(1))
+            if (same) same.n += 1
+            else out.push({ ...x, n: 1 })
+            return out
+          }, [])
+          .map(x => (x.age > 0 ? `${RIDER.from(x.age)}: ${x.said(x.n)}` : x.said(x.n)))
         lines = [
           ...again,
+          ...sighted,
           ...[...late.keys()].sort((a, b) => a - b).flatMap(age => told(late.get(age)).map(l => `${RIDER.from(age)}: ${l}`)),
           ...told(news.filter(n => n.arrived === n.event.turn).map(n => n.event))
         ]

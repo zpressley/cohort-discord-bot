@@ -216,7 +216,12 @@ function maskNames(event, known) {
   return out
 }
 
-function plainFact(map, event) {
+// How many men an enemy unit is, in a report: as many as he has been told
+// (the caller's `howMany`, by what his reports of it hold; ruled 2026-11-23:
+// "never incorrect details"). By default, the count.
+const countAll = (id, n) => men(n)
+
+function plainFact(map, event, howMany = countAll) {
   switch (event.type) {
     case 'move': return `${event.unitId} marched ${distance(event.from, event.to) * TILE_METRES} m ${compassWord(event.from, event.to)}, now ${whereAt(map, event.to)}` +
       (event.blockedBy ? `, halted by ${event.blockedBy}` : '')
@@ -254,8 +259,8 @@ function plainFact(map, event) {
     case 'cutOff': return RIDER.lostTouch(event.unitId)
     case 'inTouch': return RIDER.backInTouch(event.unitId)
     case 'deserted': return `${men(event.men)} of ${event.unitId} slipped away${event.officer ? `, ${event.officer} unable or unwilling to hold them` : ''}; ${event.strength} left`
-    case 'fled': return `${event.unitId} left the field with ${men(event.strength)}`
-    case 'rallied': return `${event.unitId} rallied ${whereAt(map, event.at)} with ${event.strength} men` +
+    case 'fled': return `${event.unitId} left the field` + (howMany(event.unitId, event.strength) ? ` with ${howMany(event.unitId, event.strength)}` : '')
+    case 'rallied': return `${event.unitId} rallied ${whereAt(map, event.at)}` + (howMany(event.unitId, event.strength) ? ` with ${howMany(event.unitId, event.strength)}` : '') +
       (moraleWords(event.morale) === 'at breaking point' ? ', at breaking point: it will not stand long without a success near it' : '')
     case 'heartened': return `${listOf(event.units ?? [event.unitId])} took heart at the breaking of ${event.by}`
     case 'destroyed': return `${event.unitId} was destroyed`
@@ -446,7 +451,7 @@ function report(turn) {
   const busy = fights.length > 0 || rest.some(e => weight(e) <= 4)
   const others = rest
     .filter(e => !busy || weight(e) < 6)
-    .map(e => ({ weight: weight(e), text: toTheCommander(e, ownIds) ?? plainFact(map, e) }))
+    .map(e => ({ weight: weight(e), text: toTheCommander(e, ownIds) ?? plainFact(map, e, turn.howMany ?? countAll) }))
     .filter(f => f.text)
 
   return [...fights, ...others]
@@ -481,7 +486,7 @@ You are given the facts as notes, the most important first. Turn them into a dis
 - Write prose, not notes: full sentences in the past tense, no colons after names, no semicolons, no lists, no headings, no greeting or sign-off. Vary the wording; do not copy the notes word for word.
 - One short paragraph: 2 to 4 sentences for a quiet stretch, at most 6 for a hard one.
 - Use only what the notes say. Never add a unit, place, number, cause or outcome, and never guess what the enemy intends. Every number you write must be in the notes.
-- Write unit names exactly as given ("Spears", "enemy horse"). "An unseen enemy" stays exactly that.
+- Write unit names exactly as given ("Spears", "enemy horse"). "An unseen enemy" and "enemy troops" stay exactly that: never say what kind they are or how many.
 - The commander gives orders by grid square, so keep the place and the grid square from the notes whenever a note has one, for example "at the ford (D4-SW)". Never work out or invent a square.
 - No advice, no questions, no mention of turns, rules or dice.
 

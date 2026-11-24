@@ -16,10 +16,14 @@
 // of them stands on high ground.
 
 const { VISION, visionRange, canSee } = require('../map/sight')
+const { reportGrade, reportOf, join, fuller } = require('./reports')
 
 // One side's intel ledger. Serializable — it is part of what the DB persists.
+// Each entry's `told` is what his side's reports of it hold, by the
+// officer of each unit that saw it (reports.js): what may be shown to a
+// player. The rest is the side's own knowledge, as the computer plans by.
 function createIntel() {
-  return { known: {} } // enemyId -> { status, position, strength, seenOnTurn, role, mounted, primaryWeapon }
+  return { known: {} } // enemyId -> { status, position, strength, seenOnTurn, role, mounted, primaryWeapon, told }
 }
 
 /**
@@ -37,7 +41,9 @@ function learnFromCaptivity(intel, world, side, turn) {
       seenOnTurn: turn,
       role: enemy.role ?? null,
       mounted: Boolean(enemy.mounted),
-      primaryWeapon: enemy.primaryWeapon ?? null
+      primaryWeapon: enemy.primaryWeapon ?? null,
+      // Heard in their camp: where each stood, no more (a guess).
+      told: join(intel.known[enemy.id]?.told, { grade: 'none', on: turn })
     }
   }
 }
@@ -47,7 +53,7 @@ function learnFromCaptivity(intel, world, side, turn) {
  * returns the ids of enemies sighted THIS update that were not visible in the
  * last one — the orchestrator's elastic time interrupts on exactly that.
  */
-function updateIntel(intel, world, side, turn, map, hidden = new Map()) {
+function updateIntel(intel, world, side, turn, map, hidden = new Map(), stateOf = () => null) {
   const friendlies = world.units.filter(u => u.side === side && u.strength > 0)
   const enemies = world.units.filter(u => u.side !== side && u.strength > 0)
   const sightings = []
@@ -57,8 +63,8 @@ function updateIntel(intel, world, side, turn, map, hidden = new Map()) {
     // A hidden enemy (battle/hiding.js) is seen only as closely as its
     // cover allows.
     const options = hidden.has(enemy.id) ? { seenWithin: hidden.get(enemy.id).seenWithin } : {}
-    const seen = friendlies.some(f => canSee(map, f, enemy, options))
-    if (!seen) continue
+    const seers = friendlies.filter(f => canSee(map, f, enemy, options))
+    if (seers.length === 0) continue
 
     visibleNow.add(enemy.id)
     const previous = intel.known[enemy.id]
@@ -74,7 +80,9 @@ function updateIntel(intel, world, side, turn, map, hidden = new Map()) {
       // so a Commander can name them ("their archers", "the enemy horse").
       role: enemy.role ?? null,
       mounted: Boolean(enemy.mounted),
-      primaryWeapon: enemy.primaryWeapon ?? null
+      primaryWeapon: enemy.primaryWeapon ?? null,
+      // What the reports of it tell, by the best officer who saw it.
+      told: join(previous?.told, reportOf(enemy, seers.reduce((g, f) => fuller(g, reportGrade(f)), null), turn, () => stateOf(enemy)))
     }
   }
 
