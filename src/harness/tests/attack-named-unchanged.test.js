@@ -12,10 +12,11 @@
 // rules. Before it they were f0ebadb3, 2cec0402, e92384f2, 4aaa5698,
 // e424a274, a2f07cdf, d567a781.
 //
-// Retaken again for the skirmish rule (a proposal, docs/design/army-
-// balance.md part 6: light missile troops give ground before slower men):
-// these battles have skirmishers in them. Before it they were 7dd10867,
-// 987939aa, aeded69a, b2a4ce2b, df860211, ade1ebaa, 29c7796a.
+// Retaken for fire and retreat (docs/design/army-balance.md part 7): these
+// battles have missile troops in them. On main before it they were
+// 7dd10867, 987939aa, aeded69a, b2a4ce2b, df860211, ade1ebaa, 29c7796a (the
+// skirmish proposal, part 6, not taken, had made them e2b2495b, 9d3ccd07,
+// 8b775320, ec175c50, 4edc2f02, 6e08eb2f, 29c7796a).
 
 const { test } = require('node:test')
 const assert = require('node:assert/strict')
@@ -34,12 +35,12 @@ function fingerprint(text) {
 }
 
 const BEFORE = {
-  'crownhill 1': 'e2b2495b',
+  'crownhill 1': 'd99dbaa6',
   'crownhill 2': '9d3ccd07',
-  'thornwood 1': '8b775320',
-  'thornwood 2': 'ec175c50',
-  'meeting 1': '4edc2f02',
-  'meeting 2': '6e08eb2f',
+  'thornwood 1': '7ceeb2cc',
+  'thornwood 2': 'a9616de5',
+  'meeting 1': 'df860211',
+  'meeting 2': 'ade1ebaa',
   'meeting 3': '29c7796a'
 }
 

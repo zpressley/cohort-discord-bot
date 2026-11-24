@@ -191,8 +191,8 @@ test('an officer reacting as ordered, or losing the thread, is told to his own s
   assert.deepEqual(visibleEvents([reacted, lost, roll], theirs), [], 'the enemy learns nothing of your orders')
 })
 
-test('skirmishers falling back are told once a turn, in the order\'s own words, and the enemy hears of it only if he sees them', () => {
-  // (Skirmishing: a proposal, docs/design/army-balance.md part 6.)
+test('missile troops falling back are told once a turn, in the order\'s own words, and the enemy hears of it only if he sees them', () => {
+  // (Fire and retreat, docs/design/army-balance.md part 7.)
   const fell = (turn, from, to) => ({ type: 'gaveGround', turn, unitId: 'red_archers', from, to: at(to) })
   const told = summarise([fell(5, ['blue_swords'], 'E7'), fell(6, ['blue_swords', 'blue_horse'], 'D7')])
   assert.equal(told.length, 1)

@@ -196,8 +196,8 @@ const RIDER = {
   clock
 }
 
-// Light missile troops giving ground before slower men (engine/battle/
-// skirmish.js; a proposal, not yet ruled). "Fell back" is the order's own
+// Fire and retreat: missile troops falling back before men they can
+// outmarch (engine/battle/skirmish.js; ruled 2026-11-24). "Fell back" is the order's own
 // word (ORDER.withdraw): it is the same thing, done unasked.
 const SKIRMISH_WORDS = {
   gaveGround: (unit, before) => `${unit} ${ORDER.withdraw.did} before ${before}, keeping out of their reach`

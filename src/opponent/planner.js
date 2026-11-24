@@ -181,11 +181,15 @@ function planTurn(game, side) {
   for (const unit of mine) {
     if (pulledOut.has(unit.id)) continue
     if (spent(unit) || battle.isShaken(unit)) { give(unit, { action: 'hold' }); continue }
-    // Skirmishers on foot with the enemy near press him, whatever the line
-    // does: pressing, they shoot, and give ground before men they can
-    // outrun (engine/battle/skirmish.js). Sent to a place, they walk into
-    // him. (Horse archers keep to the horse's way below: played this way
-    // too, slingers outshot them, 96 to 4 in 72 battles.)
+    // Missile troops on foot with the enemy near press him, whatever the
+    // line does: pressing, they close to shooting distance and stand there
+    // shooting (fire and retreat, engine/battle/skirmish.js). Sent to a
+    // place, they walk into him. Measured (docs/design/army-balance.md,
+    // part 7): without it heavy infantry won 65% against the other classic
+    // armies, with it 64%, and slingers beat it 42% rather than 33%. Horse
+    // archers keep to the horse's way below (pressing too, they won 41%
+    // rather than 37%, but twice the battles they were in ran to the day's
+    // end).
     if (canSkirmish(unit) && !unit.mounted && !fighting.has(unit.id)) {
       const foe = nearestSeen(unit.position)
       if (foe && foe.d <= TUNING.ENGAGE) { give(unit, { action: 'advance' }); continue }

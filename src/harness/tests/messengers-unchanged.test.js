@@ -13,6 +13,10 @@
 // were ec82c3c2 17, 1765942a 18, 1690181b 18, 5c67514a 20; after A and
 // before heavy armour's wind (part 5), f8deabe5 20, 745feb5f 30,
 // f7d6da75 32, 6c59381b 38.
+//
+// Retaken for fire and retreat (docs/design/army-balance.md part 7): Han's
+// crossbowmen, in mail, now close to shooting distance and stand, and the
+// computer presses with them. On ashford the battles were 9b2d3801 31 and 551c795d 37.
 
 const { test } = require('node:test')
 const assert = require('node:assert/strict')
@@ -32,8 +36,8 @@ function fingerprint(text) {
 const BEFORE = {
   'crownhill 1': '1fb30748 22',
   'crownhill 2': 'abc6d6db 30',
-  'ashford 1': '9b2d3801 31',
-  'ashford 2': '551c795d 37'
+  'ashford 1': '76c134c8 29',
+  'ashford 2': '7d98462c 31'
 }
 
 test('a battle with no Commander on the field runs exactly as before riders, event for event', () => {

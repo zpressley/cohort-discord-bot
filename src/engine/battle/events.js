@@ -92,9 +92,9 @@
 //              chaos roll (0-10) and lighter for drilled troops and an
 //              orderly (careful) withdrawal
 //   gaveGround unitId, from, to
-//              light missile troops pressing the enemy fell back to `to`
+//              missile troops pressing the enemy fell back to `to`
 //              before the slower enemies in from, who were coming within
-//              reach (skirmish.js; a proposal, not yet ruled)
+//              reach (fire and retreat: skirmish.js)
 //   checked    unitId, at, found
 //              a unit spent the turn searching the ground; found lists the
 //              hidden enemies it turned up (may be empty)

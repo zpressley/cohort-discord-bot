@@ -185,9 +185,14 @@ function battle(red, blue, { map = 'crownhill', seed = 1, turnLimit = DAY_TURNS,
     const now = game.battle.world.units.filter(u => u.side === side).reduce((s, u) => s + Math.max(0, u.strength), 0)
     return 1 - now / start
   }
+  // A battle the day ended has no winner (ruled 2026-11-24: "No the day
+  // just ends the battle, you can choose to fight again the next day"),
+  // whatever the engine of the day calls it.
+  const dayEnded = game.outcome.decided && /^time ran out/.test(game.outcome.reason ?? '')
   return {
     decided: game.outcome.decided,
-    winner: game.outcome.winner ?? null,
+    winner: dayEnded ? null : (game.outcome.winner ?? null),
+    dayEnded,
     reason: game.outcome.reason,
     turns,
     lost: { red: lost('red'), blue: lost('blue') },

@@ -1,22 +1,22 @@
 // src/engine/battle/skirmish.js
 //
-// Skirmishing (a proposal, docs/design/army-balance.md part 6; not yet
-// ruled). Light missile troops told to press the enemy close until they can
-// shoot, and stand there shooting (battle.js). With this, when slower men
-// come at them, they give ground and shoot as they go: the velites before
-// the phalanx, the Parthians at Carrhae.
+// Fire and retreat (ruled 2026-11-24: "Fire and retreat is ok"; "No firing
+// on the move"; docs/design/army-balance.md part 7). A missile unit told to
+// press the enemy closes until it can shoot, and stands there shooting
+// (battle.js). When an enemy it can outmarch comes within reach, it falls
+// back out of reach, still in shot if it can, and shoots again when it
+// stands. Falling back is a march like any other: the unit's own pace, over
+// the ground as it is, no dearer than any march; foot do not shoot on a
+// tick they moved, horse archers shoot as they ride, as they always have.
 //
-// It comes from the unit's kit alone, and it has limits:
-//   - only men in light armour or none, with a missile weapon;
-//   - only from men they can outrun: horse outrun foot; light foot outrun
-//     foot in medium or heavy armour; nothing outruns horse or light foot,
-//     and with one of those coming on they stand (they cannot get away);
-//   - running tires them, and spent men stand and are caught;
-//   - the field has edges, and ground that cannot be crossed;
-//   - foot shoot worse for having run (horse archers shoot as they ride
-//     anyway, at the rate they always have).
-// A unit ordered to hold, to stand, to hide, or one already fighting, does
-// not skirmish: only one pressing the enemy.
+// No man is slower for his kit (Marathon: hoplites ran). So foot cannot get
+// away from foot: only horse outmarch foot, and nothing outmarches horse.
+// With an enemy among those coming on that it cannot outmarch, it stands
+// and shoots until it is caught. The field's edges and ground that cannot
+// be crossed pin it.
+//
+// A unit ordered to hold, to stand, to hide or to march somewhere, or one
+// already fighting, does not fall back: only one pressing the enemy.
 //
 // Pure: positions, kit and numbers in, a tile out.
 
@@ -25,16 +25,15 @@ const { missileRange } = require('../combat/ranged')
 const { tileDistance } = require('../world')
 const { visionRange } = require('../map/sight')
 
-/** Is this unit's kit a skirmisher's: a missile weapon, and light enough to run? */
+/** Does this unit fire and retreat: has it a missile weapon? */
 function canSkirmish(unit) {
-  return missileRange(unit) > 0 && T.SKIRMISH.ARMOUR.includes(unit.armor ?? 'no_armor')
+  return missileRange(unit) > 0
 }
 
-/** Can this skirmisher get away from that enemy? */
+/** Can this unit get away from that enemy: does its march beat his? */
 function outruns(unit, enemy) {
-  if (unit.movementRange > enemy.movementRange) return true
-  if (unit.movementRange < enemy.movementRange || enemy.mounted) return false
-  return T.SKIRMISH.OUTRUN_ARMOUR.includes(enemy.armor ?? 'no_armor')
+  if (T.SKIRMISH.FROM === 'any') return true
+  return unit.movementRange > enemy.movementRange
 }
 
 // The order of preference among the places a skirmisher could fall back to.
@@ -77,7 +76,7 @@ function reachable(unit, map, enemyAt) {
 const reachOf = (enemy, engagementRange) => enemy.movementRange + engagementRange
 
 /**
- * Where a skirmisher falls back to this tick, or null if it does not.
+ * Where a missile unit falls back to this tick, or null if it does not.
  *
  * @param {Object} unit
  * @param {Array}  enemies   enemies its side can see, not broken and not
@@ -85,17 +84,16 @@ const reachOf = (enemy, engagementRange) => enemy.movementRange + engagementRang
  * @param {Object} o
  * @param {Object} o.map
  * @param {number} o.engagementRange
- * @param {number} o.stamina   the unit's stamina, as a share of its pool
  * @param {Function} o.enemyAt (tile) => true if an enemy stands there
  * @returns {{ to: {x,y}, from: string[] } | null}  `from`: who it gives ground before
  */
-function fallBack(unit, enemies, { map, engagementRange = 1, stamina = 1, enemyAt = () => false }) {
+function fallBack(unit, enemies, { map, engagementRange = 1, enemyAt = () => false }) {
   const S = T.SKIRMISH
-  if (!canSkirmish(unit) || stamina < S.SPENT) return null
+  if (!canSkirmish(unit)) return null
   const threats = enemies.filter(e =>
     tileDistance(unit.position, e.position) <= reachOf(e, engagementRange) + S.WARY)
   if (threats.length === 0) return null
-  // One it cannot outrun among them: running is no use.
+  // One it cannot outmarch among them: falling back is no use.
   if (threats.some(e => !outruns(unit, e))) return null
 
   const margin = (tile) => Math.min(...threats.map(e => tileDistance(tile, e.position) - reachOf(e, engagementRange)))

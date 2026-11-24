@@ -148,8 +148,8 @@ test('it plays every map to a verdict against a commander who only holds, and ag
   }
 })
 
-test('a holding side\'s skirmishers on foot press a near enemy, so as to shoot and give ground; its line and its horse stand', () => {
-  // (Skirmishing: a proposal, docs/design/army-balance.md part 6.)
+test('a holding side\'s missile troops on foot press a near enemy, so as to shoot; its line and its horse stand', () => {
+  // (Fire and retreat, docs/design/army-balance.md part 7.)
   const game = createGame({
     name: 'plain', map: PLAIN, seed: 1, turns: [],
     objectives: [{ id: 'hold', coord: { x: 15, y: 12 } }],
@@ -157,7 +157,7 @@ test('a holding side\'s skirmishers on foot press a near enemy, so as to shoot a
       unit({ id: 'blue_a', side: 'blue', position: { x: 15, y: 12 } }),
       archers({ id: 'blue_c', side: 'blue', position: { x: 17, y: 12 } }),
       archers({ id: 'blue_h', side: 'blue', position: { x: 17, y: 15 }, mounted: true, movementRange: 5 }),
-      archers({ id: 'blue_m', side: 'blue', position: { x: 17, y: 10 }, armor: 'medium_armor' }),
+      archers({ id: 'blue_m', side: 'blue', position: { x: 16, y: 10 }, armor: 'medium_armor' }),
       unit({ id: 'red_a', position: { x: 11, y: 12 } })
     ],
     sides: { red: { homeEdge: 'west' }, blue: { homeEdge: 'east' } }
@@ -168,5 +168,5 @@ test('a holding side\'s skirmishers on foot press a near enemy, so as to shoot a
   assert.equal(order(orders, 'blue_c').action, 'advance', 'light foot with bows')
   assert.notEqual(order(orders, 'blue_a')?.action, 'advance', 'the line holds')
   assert.notEqual(order(orders, 'blue_h')?.action, 'advance', 'horse archers keep to the horse')
-  assert.notEqual(order(orders, 'blue_m')?.action, 'advance', 'crossbowmen in mail are no skirmishers')
+  assert.equal(order(orders, 'blue_m').action, 'advance', 'crossbowmen in mail too: no kit makes a man slower')
 })

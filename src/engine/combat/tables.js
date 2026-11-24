@@ -526,42 +526,22 @@ const MISSILES = {
   SIDEARM: 'daggers'
 }
 
-// ── Skirmishing ────────────────────────────────────────
+// ── Fire and retreat ───────────────────────────────────
 //
-// A proposal (docs/design/army-balance.md, part 6), not yet ruled. Light
-// missile troops pressing the enemy give ground before slower men who come
-// at them, and shoot as they go (battle/skirmish.js). Part 5 of the study
-// found nothing let missile troops keep their distance, so the historical
-// answer to heavy foot (velites before the phalanx; Carrhae) was missing.
-// Starting values, measured in part 6.
+// Ruled 2026-11-24 ("I don't like the skirmish rule. Fire and retreat is
+// ok"; "No firing on the move"). A missile unit pressing the enemy closes
+// to where it can shoot and stands there shooting; when an enemy it can
+// outmarch comes on, it falls back a march, and shoots again once it
+// stands (battle/skirmish.js). No kit makes a man slower (Marathon:
+// hoplites ran), falling back costs what any march costs, and foot do not
+// shoot on a tick they moved. Horse archers shoot as they ride, at
+// MISSILES.ON_THE_MOVE, as before the rule. Measured in
+// docs/design/army-balance.md, part 7.
 const SKIRMISH = {
-  // Only men this lightly armoured run (a skirmisher's kit).
-  ARMOUR: ['no_armor', 'light_armor'],
-  // Men on foot at the same pace are outrun if they wear this (a hoplite's
-  // or a legionary's kit against a slinger's). Horse outrun all foot, and
-  // nothing outruns horse.
-  OUTRUN_ARMOUR: ['medium_armor', 'heavy_armor'],
   // How many tiles beyond the enemy's reach (its march and one tile to come
-  // to blows) a skirmisher gives ground at.
-  WARY: 1,
-  // Stamina a tick of giving ground costs (fighting a round costs 8 and
-  // more: STAMINA.BASE_DRAIN). Stamina does not come back in a battle.
-  WIND: 5,
-  // Below this share of its stamina a unit is spent and runs no more: it
-  // stands, and is caught.
-  SPENT: 0.4,
-  // Men who come on after skirmishers they cannot catch lose this share of
-  // their kit's wind a round (ARMOR, SHIELD, MOUNT staminaDrain) each tick
-  // of the chase: heavy armour and a light shield 12.5, mail and a medium
-  // shield 4, light armour and a light shield 1.5. Sphacteria and Carrhae:
-  // armoured men worn out chasing light ones. Measured (part 6): at 0.5
-  // heavy infantry won 64% against the other classic armies, at 1 60%.
-  CHASE: 1,
-  // Foot that gave ground this tick shoot at this share (ruled 2026-11-21:
-  // missile troops on foot shoot only standing; this is the exception the
-  // proposal asks for, and 0 would keep that ruling whole). Horse archers
-  // shoot as they ride at MISSILES.ON_THE_MOVE, as before.
-  ON_FOOT: 0.5
+  // to blows) a missile unit falls back at: from the skirmish proposal
+  // (part 6), kept.
+  WARY: 1
 }
 
 // ── Pace ───────────────────────────────────────────────
