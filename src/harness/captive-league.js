@@ -39,12 +39,16 @@ try { ({ captorAnswer } = need('opponent/captor')) } catch { /* an older build h
 // battle's seed, as at the app's muster. None: steady, the planner as it was.
 const CHARACTER = arg('--character', null)
 const { withCommander } = require('../opponent/commander')
+let withSecondLine = null
+try { ({ withSecondLine } = need('engine/army/secondLine')) } catch { /* a build before the big map */ }
 const MAX_PLAYER_TURNS = 150
 
 function play(red, blue, { map, seed, policy }) {
   // Officers as a new Commander has them: a veteran with the elite, no one
   // on the rest; the enemy's drawn from the seed, as at the muster.
   let spec = fieldFactions(loadScenario('meeting-battle', { map, deploy: true }), { red, blue })
+  // A field of more than one line (the big map): each army's second line.
+  if (withSecondLine) spec = withSecondLine(spec, { red, blue })
   spec = { ...spec, units: assignOfficers(spec.units, seed) }
   const mine = spec.units.filter(u => u.side === 'red')
   const elite = mine[leadUnit(mine)].id
@@ -96,7 +100,9 @@ function play(red, blue, { map, seed, policy }) {
 }
 
 function league({ battles = 480, policy = 'offer' } = {}) {
-  const maps = mapChoices().map(m => m.id)
+  // --maps a,b: these fields (the big one among them, if named); else the
+  // four 1 km fields.
+  const maps = arg('--maps', null)?.split(',') ?? mapChoices({ big: false }).map(m => m.id)
   const factions = Object.keys(FACTIONS)
   const pairs = []
   for (const a of factions) for (const b of factions) if (a !== b) for (const map of maps) pairs.push([a, b, map])

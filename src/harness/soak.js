@@ -19,7 +19,8 @@
 //                                a different enemy, and again fighting for
 //                                the map's own ground in a day of twelve hours,
 //                                and again with the computer led by a bold and
-//                                by a cautious Commander
+//                                by a cautious Commander; and a short
+//                                section on the big fields (2 km)
 //   npm run soak -- --seeds 50
 
 const { createSession } = require('../adapters/hotseat/session')
@@ -42,7 +43,8 @@ const OPENINGS = [
 ]
 
 const result = { games: 0, finished: 0, playerTurns: 0, stuck: [], unread: 0 }
-const fields = mapChoices().map(m => m.id)
+// The 1 km fields; the big ones have a short section of their own below.
+const fields = mapChoices({ big: false }).map(m => m.id)
 for (const field of fields) for (const name of Object.keys(SCENARIOS)) {
   OPENINGS.forEach((opening, o) => {
     const perMap = field === 'crownhill' ? seeds : Math.max(1, Math.round(seeds / 5))
@@ -205,6 +207,56 @@ fields.forEach((field, m) => factionKeys.forEach((red, i) => {
   }
 }))
 
+// The big fields (2 km, src/data/maps; mapChoices with big): half the
+// factions' armies, each with its second line (engine/army/secondLine.js),
+// fighting for the map's ground in a day of twelve hours, red a Commander
+// on the field played by the three kinds of commander, blue the computer;
+// and the hotseat's two scenarios with every opening once. Every one must
+// end.
+const { withSecondLine } = require('../engine/army/secondLine')
+const bigFields = mapChoices().filter(m => !fields.includes(m.id)).map(m => m.id)
+const big = { games: 0, finished: 0, minutes: 0, byGround: 0, night: 0, stuck: [] }
+bigFields.forEach((field, m) => factionKeys.forEach((red, i) => {
+  if (i % 2) return
+  for (const [foe, orders] of Object.entries(FOES)) {
+    const blue = factionKeys[(i + 5 + m * 3) % factionKeys.length]
+    const seed = 7 + i + factionKeys.length * m
+    const spec = withSecondLine(fieldFactions(loadScenario('meeting-battle', { map: field, deploy: true }), { red, blue }), { red, blue })
+    const mine = spec.units.filter(u => u.side === 'red')
+    const game = createGame({ ...spec, standingOrders: {}, dayMinutes: T.DAY.MINUTES, objectives: groundOf(field), commanders: { red: { unitId: mine[leadUnit(mine)].id } } }, { seed })
+    let turns = 0
+    while (!game.outcome.decided && turns < 4 * MAX_PLAYER_TURNS) {
+      if (waitingOn(game).includes('red')) submitOrders(game, 'red', orders(game))
+      if (!game.outcome.decided && waitingOn(game).includes('blue')) submitOrders(game, 'blue', byCommandPost(planTurn(game, 'blue')))
+      turns++
+    }
+    big.games++
+    if (!game.outcome.decided) { big.stuck.push(`${field} ${red} v ${blue}, red a commander who ${foe}, seed ${seed}`); continue }
+    big.finished++
+    big.minutes += game.minutesElapsed
+    if (game.outcome.reason === 'objectives held') big.byGround++
+    if (game.outcome.reason === 'night fell') big.night++
+  }
+}))
+const bigHotseat = { games: 0, finished: 0, stuck: [] }
+for (const field of bigFields) for (const name of Object.keys(SCENARIOS)) {
+  OPENINGS.forEach((opening, o) => {
+    const session = createSession(loadScenario(name, { map: field }), { seed: 1 + o })
+    const [red, blue] = session.sides
+    let turns = 0
+    while (!session.finished() && turns < MAX_PLAYER_TURNS) {
+      for (const [side, lines] of [[red, opening[0]], [blue, opening[1]]]) {
+        const read = session.submitLines(side, turns === 0 ? lines : [])
+        if (read.status === 'clarify') session.submitLines(side, [])
+      }
+      turns++
+    }
+    bigHotseat.games++
+    if (session.finished()) bigHotseat.finished++
+    else bigHotseat.stuck.push(`${field} ${name} opening ${o}`)
+  })
+}
+
 let decided = 0
 let meetingTurns = 0
 for (let seed = 1; seed <= 50; seed++) {
@@ -229,7 +281,10 @@ for (const stuck of bought.stuck.slice(0, 10)) console.log(`  stuck: ${stuck}`)
 console.log(`the map's ground: ${ground.finished} of ${ground.games} finished, ${ground.byGround} decided by the ground, ` +
   `${ground.night} ended by night, ${Math.round(ground.minutes / Math.max(1, ground.finished))} battle minutes on average`)
 for (const stuck of ground.stuck.slice(0, 10)) console.log(`  stuck: ${stuck}`)
+console.log(`the big fields (${bigFields.join(', ')}): ${big.finished} of ${big.games} finished, ${big.byGround} decided by the ground, ` +
+  `${big.night} ended by night, ${Math.round(big.minutes / Math.max(1, big.finished))} battle minutes on average; hotseat ${bigHotseat.finished} of ${bigHotseat.games}`)
+for (const stuck of [...big.stuck, ...bigHotseat.stuck].slice(0, 10)) console.log(`  stuck: ${stuck}`)
 console.log(`meeting battle: a verdict in ${decided} of 50, ` +
   `${(meetingTurns / Math.max(1, decided)).toFixed(1)} battle turns on average`)
 
-if (result.stuck.length > 0 || thinking.stuck.length > 0 || armies.stuck.length > 0 || characters.stuck.length > 0 || bought.stuck.length > 0 || ground.stuck.length > 0 || decided < 50 || result.unread > 0) process.exitCode = 1
+if (result.stuck.length > 0 || thinking.stuck.length > 0 || armies.stuck.length > 0 || characters.stuck.length > 0 || bought.stuck.length > 0 || ground.stuck.length > 0 || big.stuck.length > 0 || bigHotseat.stuck.length > 0 || decided < 50 || result.unread > 0) process.exitCode = 1

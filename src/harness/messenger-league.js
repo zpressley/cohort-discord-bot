@@ -60,6 +60,8 @@ const GROUND = process.argv.includes('--ground')
 const VETERANS = process.argv.includes('--veterans')
 const { groundOf } = require('../data/maps')
 const { withCommander } = require('../opponent/commander')
+let withSecondLine = null
+try { ({ withSecondLine } = need('engine/army/secondLine')) } catch { /* a build before the big map */ }
 const MAX_PLAYER_TURNS = 150
 // --no-catch: no rider is caught (tables.RIDER_TAKEN at nothing), to
 // measure the enemy catching riders against the same seeds without it.
@@ -70,6 +72,8 @@ if (process.argv.includes('--no-catch')) {
 
 function play(red, blue, { map, seed, policy }) {
   let spec = fieldFactions(loadScenario('meeting-battle', { map, deploy: true }), { red, blue })
+  // A field of more than one line (the big map): each army's second line.
+  if (withSecondLine) spec = withSecondLine(spec, { red, blue })
   spec = { ...spec, units: assignOfficers(spec.units, seed) }
   const mine = spec.units.filter(u => u.side === 'red')
   const elite = mine[leadUnit(mine)].id
@@ -178,7 +182,9 @@ function waitsOf(game) {
 }
 
 function league({ battles = 336, policy = 'planner' } = {}) {
-  const maps = mapChoices().map(m => m.id)
+  // --maps a,b: these fields (the big one among them, if named); else the
+  // four 1 km fields, as it was measured before the big map.
+  const maps = arg('--maps', null)?.split(',') ?? mapChoices({ big: false }).map(m => m.id)
   const factions = Object.keys(FACTIONS)
   const pairs = []
   for (const a of factions) for (const b of factions) if (a !== b) for (const map of maps) pairs.push([a, b, map])

@@ -57,7 +57,7 @@ function playFactions(red, blue, { map = 'crownhill', seed = 1, scenario = 'meet
   }
 }
 
-function league({ seeds = 20, maps = mapChoices().map(m => m.id), factions = Object.keys(FACTIONS) } = {}) {
+function league({ seeds = 20, maps = mapChoices({ big: false }).map(m => m.id), factions = Object.keys(FACTIONS) } = {}) {
   const pairs = {}
   // Each faction's own record, over all its battles.
   const record = Object.fromEntries(factions.map(f => [f, { battles: 0, wins: 0, losses: 0, draws: 0 }]))
@@ -98,7 +98,7 @@ function league({ seeds = 20, maps = mapChoices().map(m => m.id), factions = Obj
 if (require.main === module) {
   const arg = (name) => { const i = process.argv.indexOf(name); return i > -1 ? process.argv[i + 1] : null }
   const seeds = Number(arg('--seeds') ?? 20)
-  const maps = arg('--maps') ? arg('--maps').split(',') : mapChoices().map(m => m.id)
+  const maps = arg('--maps') ? arg('--maps').split(',') : mapChoices({ big: false }).map(m => m.id)
   const factions = arg('--factions') ? arg('--factions').split(',') : Object.keys(FACTIONS)
   const { pairs, record, all } = league({ seeds, maps, factions })
   const pct = (n, d) => `${Math.round(100 * n / Math.max(1, d))}%`

@@ -12,6 +12,7 @@ const { MAPS } = require('../../../data/maps')
 const { resolveMap } = require('../map')
 const { detectFeatures } = require('../features')
 const { findPlace } = require('../places')
+const { gridSize } = require('../grid')
 const { deployArmies } = require('../deploy')
 const { positionKey, toPosition } = require('../labels')
 const { loadScenario } = require('../../../adapters/hotseat/scenarios')
@@ -19,14 +20,30 @@ const { runBattle } = require('../../battle/battle')
 
 const names = Object.keys(MAPS)
 
-test('there are several maps, each 1 km square', () => {
-  assert.ok(names.length >= 4)
-  for (const name of names) {
-    const map = resolveMap(name)
-    assert.equal(map.width, 40, name)
-    assert.equal(map.height, 40, name)
-    assert.ok(MAPS[name].title, `${name} has a title`)
+test('there are four maps of 1 km square, and Greywater of 2 km (80 by 80 tiles, 20 by 20 squares)', () => {
+  const size = (name) => { const map = resolveMap(name); return [map.width, map.height] }
+  for (const name of ['crownhill', 'ashford', 'thornwood', 'ravenridge']) assert.deepEqual(size(name), [40, 40], name)
+  assert.deepEqual(size('greywater'), [80, 80])
+  assert.deepEqual(gridSize(resolveMap('greywater')), { columns: 20, rows: 20 })
+  for (const name of names) assert.ok(MAPS[name].title, `${name} has a title`)
+})
+
+test('Greywater is the same ground for both armies: the south half is the north half turned about the middle', () => {
+  const map = resolveMap('greywater')
+  for (let y = 0; y < 80; y++) for (let x = 0; x < 80; x++) {
+    assert.equal(map.terrainAt({ x, y }), map.terrainAt({ x: 79 - x, y: 79 - y }), `${x},${y}`)
   }
+  const { west, east } = map.deploy
+  assert.deepEqual(east, { x: 79 - west.x, y: 79 - west.y })
+})
+
+test('on Greywater the armies form up out of sight of each other, a long march from Elderby, the ground to fight for', () => {
+  const map = resolveMap('greywater')
+  const { west, east } = map.deploy
+  const ground = MAPS.greywater.ground[0].tiles
+  const nearest = (p) => Math.min(...ground.map(t => Math.abs(t.x - p.x) + Math.abs(t.y - p.y)))
+  assert.ok(Math.abs(west.x - east.x) + Math.abs(west.y - east.y) > 40, 'more than a kilometre apart')
+  for (const p of [west, east]) assert.ok(nearest(p) >= 20 && nearest(p) <= 30, `${nearest(p)} tiles from Elderby`)
 })
 
 for (const name of names) {

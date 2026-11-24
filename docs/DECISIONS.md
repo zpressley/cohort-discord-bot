@@ -3877,3 +3877,174 @@ rides to when the enemy is fighting it (he rides into that fight, as the
 path rule lets him); that a unit in a fight can still catch him; that the
 stretch looked over is the whole ten minutes' ride, with the enemy where
 it stands at the end of it, not tick by tick.
+
+### How the big map was built (Claude's choices, open to change)
+
+From the ruling of October 14 ("keep 25m tiles and make the map much
+bigger ... map size is a per-scenario setting"), the grid ruling of
+October 21 ("a 2 km map is 20×20 squares"), and the standing work list
+(`docs/REVIEW-2026-11.md`, section 5, item 6: "The 2 km map and scenarios
+bigger than four units a side, once battles are slower"). Zach asked for
+it to be built and has not ruled on the details.
+
+**What a player meets.** At the muster the field list has "Greywater
+(2 km)" after the four 1 km fields. Under it: its ground to fight for
+(Elderby), and "A big field: each army comes in two lines. Behind your own
+marches your faction's usual army again, raised for the day; its units are
+called "second" ("second spears"), all of them answer to "second line",
+and they go home when the battle is over." (`words.js`, `FIELD`). In the
+tent the map opens on his army at the size a 1 km field always had on a
+phone (15 px a tile), so the 2 km field is three screens wide; he drags or
+pinches it, or uses + and −, and ⤢ shows the whole field in the window
+and, pressed again, takes him back. On a desktop the wheel zooms about the
+pointer and a mouse drag pans.
+
+**1. Any map size.** The engine already took the map's own size
+everywhere (`map.width`, `map.height`; the grid, deployment, sight, the
+rider's road, the planner, the place finder, the hotseat renderer, the
+server's views and the browser's map). Nothing in them assumed 40 by 40;
+the one place that did was a test ("each 1 km square"), now "four maps of
+1 km and Greywater of 2 km". A map may now say how many lines its armies
+come in (`lines`, `createMap`); none says 1, and nothing changes.
+
+**2. Greywater** (`src/data/maps/greywater.js`), 80 by 80 tiles, 20 by 20
+squares (A to T, 1 to 20). The river Grey, two tiles wide, runs north to
+south down the middle; the Old Road crosses it at Elderby, a village
+about its bridge; Shepherd's Ford (north) and Ladyford (south) are the
+long ways round. Greyhowe and Tor Down (hills), the Long Down and Windle
+Ridge (ridges), Hanger Wood and Brackenwood (the drove lanes run through
+them), copses, Mere Marsh and the Sallows. Places to name in orders:
+Elderby, the Old Road, the two fords, the four heights, the two woods, the
+two marshes, and the ground by kind ("the woods to the east", "the
+ridge").
+- *Fair by construction.* The south half is the north half turned about
+  the middle, tile for tile (tested), and the two forming-up spots are
+  each other's twins. Measured with both sides played by the computer
+  (`ground-league.js --mode mirror --map greywater --rounds 4`, 80
+  battles): west 40, east 34. The first drawing, nearly but not exactly
+  twinned, gave 28 to 46 and 45 to 30 on two runs, so it was made exact.
+- *Elderby is the ground to fight for*: the open ground of the village and
+  the bridge, on both banks (52 tiles). The bridge carries the name
+  "Elderby" ("Elderby bridge" is an alias), because a place is found by
+  the name of the ground it stands on and an open field has none.
+- *Where the armies form up*: on the Old Road, 21 tiles (525 m) short of
+  Elderby, 1.35 km apart. The first spots were 11 rows apart across the
+  road; two armies told only to press the enemy then marched past each
+  other out of sight (sight is 150 m), so they were moved onto the road's
+  line. With every faction pressing on (60 battles, `runBattle`, no day)
+  every battle ended, 3.3 hours on average, the longest 25.
+
+**3. Battles big enough for it.** Today a side fields 4 to 6 units: three
+to five bought within its faction's budget and the free elite (4.5 on
+average for the twenty usual armies; a player's roster is held to the same
+budget). Measured on Greywater, the app's way (`--mode app`: a Commander
+on the field, orders by rider, the computer's by rider, a day of twelve
+hours, the ground; 80 battles a row; on the first drawing of the field, before it
+was made exactly twinned and the forming-up spots moved):
+
+| Armies | Units a side | Hours | Asked of the player | Ground decided | Night |
+|---|---|---|---|---|---|
+| as on 1 km | 4.5 | 2.5 | 11.4 | 7 | 0 |
+| two lines | 8.1 | 3.5 | 16.7 | 10 | 0 |
+| three lines | 11.7 | 3.8 | 18.1 | 10 of 40 | 0 |
+
+The usual army alone on a 2 km field is thin (a line of four in a field
+twenty squares across, the battle over in two and a half hours), so the
+big field has two lines. **The second line** (`src/engine/army/secondLine.js`)
+is each side's faction's usual army again, without a second elite:
+"second legionaries", all answering to "second line", formed up with the
+first (foot abreast, missile foot behind, horse on the wings). Against the
+computer both sides have it; against a friend each side has its own;
+Rome brings 7 units, the Celts 11. It is not the Commander's to keep: it is
+not on his roster, his company takes no note of it (its officers are drawn
+for the day, as the computer's are), and the computer's veterancy, matched
+to his, is matched to his own men only. Saved in the battle's spec, so a
+saved battle replays with it; the next day it comes back as it stood at
+nightfall, like the rest.
+- *Guessed*: Zach's "bigger budget on the big map". I read it as the
+  field calling out more men, not as the player owning more: his roster is
+  held to one budget at every field ("you cannot field an army over the
+  supply threshold"), and a second budget he could not spend would leave
+  him with half the computer's army. The other reading is a budget doubled
+  on the big field for what he buys and marches; that changes the roster,
+  the army screen and the buying rules (another agent's ground) and
+  leaves him outnumbered until he has bought twice. Say if it should be so.
+- *Orders to many units on a phone*: "second line hold" reads as an order
+  to the whole second line (it is offered on the first turn's card among
+  the examples); "everyone", a kind ("archers", "horse") and a name work
+  as before. "legionaries" is the first line's legionaries only; the
+  second are "second legionaries". Not built: "first line".
+
+**4. The map on a phone and a desktop** (`public/app.js`, `map.js`,
+`app.css`). Pinch, the + and − buttons and a finger's drag were there; new
+are ⤢ (the whole field in the window, and back to your army at the zoom
+you had: one thumb), the wheel (zooms about the pointer, on a desktop), a
+mouse drag on open ground (pans, and gives no order; a drag from one of
+your units is still an order), and the least zoom is now the whole field
+in the window. A 1 km field opens exactly as before on a phone (tested:
+15 px a tile). On a desktop the tent now fills the window and the map
+scrolls inside its own box; before, the page itself scrolled 155 px past
+the window on a 1 km field, and a 2 km field could not be panned up and
+down. Counters at the opening zoom are 17 px across; a tap picks the
+nearest of your units within 26 px of the finger (a 52 px target), as
+before; the buttons are 44 px. Screenshots, phone and desktop, both sizes
+of field: `/tmp/claude-0/-home-user-cohort-discord-bot/139f145f-6ee5-5bbb-83bf-96e084a41cbf/scratchpad/big-map/`
+(made by `SHOT=.../map.png npm run test:browser`).
+
+**5. Measured.** `messenger-league.js --battles 380 --policy planner
+--day 720 --ground --character mix` (the player's stand-in plans as the
+computer does, his Commander on the field, orders by rider), the four 1 km
+fields against Greywater (`--maps greywater`):
+
+| | 1 km fields | Greywater |
+|---|---|---|
+| Battle length | 154 min (2.6 h) | 197 min (3.3 h) |
+| Turns the player is asked for | 12.0 | 15.1 |
+| Ended by night, no winner | 1 of 380 | 5 of 380 |
+| The stand-in's wins against the computer | 49% | 51% |
+| Orders by rider | 14% | 14% |
+| A rider's ride, median / longest | 10 / 60 min | 10 / 70 min |
+| Rides of 50 to 70 minutes | 6 of 2,160 | 539 of 5,156 (10%) |
+| Battles with a unit cut off at some point | 31% | 59% |
+
+So the far wing is often an hour away by rider, as the design means, and
+the battle is still played out in about fifteen asks, with nights rare.
+The ground decided 11% of battles on Greywater (`ground-league.js --mode
+app`, 80 battles; 18% in a run before the forming-up spots moved), against
+31% on the 1 km fields: both armies reach Elderby, each holds its own bank
+of it, and neither holds it alone until one breaks. The ground still pulls
+both armies to the middle, which is its use.
+
+*The Commander's odds* (`captive-league.js --battles 2000 --policy wait`):
+on Greywater he is taken in 1 battle in 12.9; with one line a side on the
+same field, 1 in 19.0, as on the 1 km fields. It is the bigger enemy army,
+not the field. Not changed: see the question below.
+
+*The server*: a turn played on Greywater (muster, an order, the computer's
+plan, the view) takes 19 ms on average and 105 ms at most; a view 3 ms
+(Crownhill: 19 ms, 64 ms, 2 ms). Sight and path finding on 6,400 tiles
+needed nothing.
+
+**6. The harnesses and the soak.** `mapChoices({ big: false })` gives the
+1 km fields; every league and study keeps to them by default (their tables
+read as they did), and `--map`/`--maps greywater` measures the big one
+(`ground-league`, `messenger-league`, `captive-league`, which also add the
+second line). The soak has a short section of its own: half the factions on
+Greywater, two lines a side, a day, the ground, red played three ways (30
+battles), and the hotseat's two scenarios with every opening (12): every
+one ends. The rest of the soak is line for line as before; it runs 2 min 20
+to 2 min 30 s (was 2 min 18 s). `npm run balance` is unchanged, every line.
+
+**Left undone.** A map bigger than 2 km (the October proposal's 5 km).
+The hotseat terminal's scenarios have no second line (their armies are
+drawn, not factions'). "first line" as a name. The AI dispatch is told
+nothing new.
+
+**For Zach:**
+1. On the big field each army comes in two lines: your own, and your
+   faction's usual army again, raised for the day and gone after. Or should
+   the big field instead let you buy and march twice the supply, as your
+   own men?
+2. On the big field your Commander is taken 1 battle in 13 (1 in 19 on the
+   1 km fields), because the enemy's army is twice the size. Keep it (a
+   bigger battle is a more dangerous one), or bring it back to 1 in 19?

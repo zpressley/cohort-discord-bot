@@ -30,7 +30,7 @@ async function start(store = createBattleStore({})) {
   return { store, api, close: () => new Promise(resolve => server.close(resolve)) }
 }
 
-const GROUND = { crownhill: 'the Crownhill', ashford: 'the Old Mill Bridge', thornwood: 'Thorn Knoll', ravenridge: 'Raven Gap' }
+const GROUND = { crownhill: 'the Crownhill', ashford: 'the Old Mill Bridge', thornwood: 'Thorn Knoll', ravenridge: 'Raven Gap', greywater: 'Elderby' }
 
 test('every field offered at the muster names its own ground to fight for, in the muster\'s words', async () => {
   const app = await start()

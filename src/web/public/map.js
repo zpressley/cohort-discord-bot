@@ -309,6 +309,9 @@ const REACH = 26
  *   onPlace(x, y)                a place was tapped with no unit picked
  *   onPinch(factor, x, y)        two fingers moved: scale by factor about the
  *                                client point x, y
+ *   onPan(dx, dy)                a mouse dragged the map (not from a unit) by
+ *                                dx, dy screen pixels (a finger scrolls it
+ *                                natively)
  */
 export function attachGestures(svg, view, getPicked, handlers) {
   const toMap = (event) => {
@@ -340,6 +343,7 @@ export function attachGestures(svg, view, getPicked, handlers) {
   const touches = new Map()
   let pinch = null
   let down = null
+  let pan = null
   const gap = () => { const [a, b] = [...touches.values()]; return Math.hypot(a.x - b.x, a.y - b.y) }
   svg.addEventListener('pointerdown', (event) => {
     if (event.pointerType === 'touch') {
@@ -350,8 +354,15 @@ export function attachGestures(svg, view, getPicked, handlers) {
     if (!t) return
     const near = ownNear(event)
     down = { t, unit: near.length === 1 ? near[0] : null, x: event.clientX, y: event.clientY }
+    if (event.pointerType === 'mouse' && !down.unit) pan = { x: event.clientX, y: event.clientY }
   })
   svg.addEventListener('pointermove', (event) => {
+    if (pan && event.pointerType === 'mouse') {
+      if (!(event.buttons & 1)) { pan = null; return }
+      handlers.onPan?.(event.clientX - pan.x, event.clientY - pan.y)
+      pan = { x: event.clientX, y: event.clientY }
+      return
+    }
     if (!touches.has(event.pointerId)) return
     touches.set(event.pointerId, { x: event.clientX, y: event.clientY })
     if (!pinch || touches.size < 2) return
@@ -365,6 +376,7 @@ export function attachGestures(svg, view, getPicked, handlers) {
     if (touches.size === 0) setTimeout(() => { pinch = null }, 0)
   }
   svg.addEventListener('pointerup', (event) => {
+    pan = null
     const wasPinch = pinch !== null
     lift(event)
     if (wasPinch || !down) return

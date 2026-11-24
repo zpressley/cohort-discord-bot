@@ -414,7 +414,15 @@ const ON_HIS_OWN = {
   line: (who, did, why) => `${who}, with no word from you, ${did}${why}`
 }
 
-module.exports = { orderWords, moraleWords, ORDER, OWN_EDGE, HOLD_THERE, KIT, RIDE_WITH, LOYALTY_WORDS, VALUES_WORDS, VETERANCY_WORDS, RIDER, NIGHT, REPORT, GROUND, windWords, SKIRMISH_WORDS, THROWN_WORDS, MAKING, COMMANDER_KINDS, NATURE_SAID, HOLDS_DEAR, COMMANDER_TITLES, ENEMY_COMMANDER, ON_HIS_OWN }
+// A field bigger than 1 km (src/data/maps, `lines`; docs/DECISIONS.md,
+// "How the big map was built"): its size at the muster, and the second line
+// each army is joined by there (engine/army/secondLine.js).
+const FIELD = {
+  size: (km) => `${km} km`,
+  lines: 'A big field: each army comes in two lines. Behind your own marches your faction\'s usual army again, raised for the day; its units are called "second" ("second spears"), all of them answer to "second line", and they go home when the battle is over.'
+}
+
+module.exports = { orderWords, moraleWords, ORDER, OWN_EDGE, HOLD_THERE, KIT, RIDE_WITH, LOYALTY_WORDS, VALUES_WORDS, VETERANCY_WORDS, RIDER, NIGHT, REPORT, GROUND, windWords, SKIRMISH_WORDS, THROWN_WORDS, MAKING, COMMANDER_KINDS, NATURE_SAID, HOLDS_DEAR, COMMANDER_TITLES, ENEMY_COMMANDER, ON_HIS_OWN, FIELD }
 
 // The enemy catching a rider and reading the order he carried (engine/
 // command/messengers.js, ridersTaken). Told only to the side that caught

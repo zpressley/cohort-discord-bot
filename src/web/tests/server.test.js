@@ -189,7 +189,7 @@ test('a battle can be mustered on any map', async () => {
   const app = await start()
   try {
     const maps = (await app.api('GET', '/api/maps')).body
-    assert.deepEqual(maps.map(m => m.id).sort(), ['ashford', 'crownhill', 'ravenridge', 'thornwood'])
+    assert.deepEqual(maps.map(m => m.id).sort(), ['ashford', 'crownhill', 'greywater', 'ravenridge', 'thornwood'])
     const token = (await app.api('POST', '/api/battles', { map: 'thornwood', scenario: 'legions-vs-celts', opponent: 'standing', side: 'red' })).body.seats.red
     const tent = (await app.api('GET', `/api/seat/${token}`)).body
     assert.equal(tent.map.name, 'thornwood')

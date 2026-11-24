@@ -832,3 +832,140 @@ test('on a phone: a new Commander is made on one screen, two questions and a nam
     await shot('record-fallen')
   })
 })
+
+// ── The big map (docs/DECISIONS.md, "How the big map was built") ──────
+const bigShot = (p, name) => process.env.SHOT ? p.screenshot({ path: process.env.SHOT.replace('.png', `-${name}.png`) }) : null
+
+test('the big map on a phone: it opens on your army at a size to read, zooms and pans by finger and button, shows the whole field, and a tap picks a unit', { skip }, async () => {
+  await withApp(async ({ base, browser, errors, store }) => {
+    const seat = store.muster({ opponent: 'standing', side: 'red', seed: 5, map: 'greywater', faction: 'rome', enemyFaction: 'celts' }).seats.red
+    const context = await browser.newContext({ viewport: { width: 390, height: 844 }, hasTouch: true })
+    const p = await context.newPage()
+    p.on('pageerror', e => errors.push(e.message))
+    p.on('console', m => { if (m.type() === 'error') errors.push(m.text()) })
+    await p.goto(`${base}/b/${seat}`)
+    await p.waitForSelector('#map-scroll svg')
+    const svgBox = () => p.locator('#map-scroll svg').boundingBox()
+    const scrollOf = () => p.evaluate(() => { const s = document.getElementById('map-scroll'); return { left: s.scrollLeft, top: s.scrollTop, width: s.clientWidth, height: s.clientHeight } })
+    assert.ok(await p.evaluate(() => document.documentElement.scrollWidth <= 390), 'no sideways scroll of the page')
+
+    // At rest: the field is far wider than the screen, the counters are a
+    // size to read and to tap, and the army is in the window.
+    const start = (await svgBox()).width
+    assert.ok(start > 1000, `the 2 km field opens zoomed in (${start} px wide)`)
+    const box = await p.locator('.counter[opacity="1"]').first().boundingBox()
+    const view = await p.locator('#map-scroll').boundingBox()
+    assert.ok(box.width >= 16, `a counter is ${box.width} px across`)
+    assert.ok(box.x > view.x && box.x < view.x + view.width && box.y > view.y && box.y < view.y + view.height, 'the army is in the window')
+    for (const id of ['zoom-in', 'zoom-out', 'whole', 'tall']) assert.ok((await p.locator(`#${id}`).boundingBox()).height >= 44, `${id} is a 44 px target`)
+    await bigShot(p, 'big-phone')
+
+    // A tap a little off the counter still picks the unit: a fingertip's
+    // reach, not the counter's size.
+    await p.touchscreen.tap(box.x + box.width / 2 + 12, box.y + box.height / 2 + 8)
+    await p.waitForFunction(() => /picked|Which one/.test(document.getElementById('map-hint').textContent))
+    if (await p.locator('[data-stack]').count()) await p.click('[data-stack] >> nth=0')
+    assert.match(await p.textContent('#map-hint'), /picked/)
+    await p.click('#unpick')
+
+    // The whole field in the window, and back again, with one thumb.
+    await p.click('#whole')
+    const whole = await svgBox()
+    const { width, height } = await scrollOf()
+    assert.ok(whole.width <= width + 1 && whole.height <= height + 1, `the whole field fits the window (${Math.round(whole.width)} by ${Math.round(whole.height)})`)
+    await bigShot(p, 'big-phone-whole')
+    await p.click('#whole')
+    assert.ok(Math.abs((await svgBox()).width - start) < 2, 'and back to the zoom it had')
+
+    // The buttons zoom.
+    await p.click('#zoom-in')
+    assert.ok((await svgBox()).width > start * 1.3, 'zoom in')
+    await p.click('#zoom-out')
+    await p.click('#zoom-out')
+    assert.ok((await svgBox()).width < start, 'zoom out')
+
+    // A finger drags the map across (the browser scrolls it).
+    const before = await scrollOf()
+    const cdp = await context.newCDPSession(p)
+    const mid = { x: view.x + view.width / 2, y: view.y + view.height / 2 }
+    await cdp.send('Input.dispatchTouchEvent', { type: 'touchStart', touchPoints: [{ x: mid.x, y: mid.y, id: 1 }] })
+    for (const d of [20, 40, 60, 80, 100]) await cdp.send('Input.dispatchTouchEvent', { type: 'touchMove', touchPoints: [{ x: mid.x - d, y: mid.y - d / 2, id: 1 }] })
+    await cdp.send('Input.dispatchTouchEvent', { type: 'touchEnd', touchPoints: [] })
+    await p.waitForTimeout(300)
+    const after = await scrollOf()
+    assert.ok(after.left > before.left + 30, `a finger pans the map (${before.left} to ${after.left})`)
+
+    // Two fingers pinch it bigger.
+    const pinchFrom = (await svgBox()).width
+    const pt = (dx, id) => ({ x: mid.x + dx, y: mid.y, id })
+    await cdp.send('Input.dispatchTouchEvent', { type: 'touchStart', touchPoints: [pt(-20, 1), pt(20, 2)] })
+    for (const d of [30, 45, 60, 80]) await cdp.send('Input.dispatchTouchEvent', { type: 'touchMove', touchPoints: [pt(-d, 1), pt(d, 2)] })
+    await cdp.send('Input.dispatchTouchEvent', { type: 'touchEnd', touchPoints: [] })
+    assert.ok((await svgBox()).width > pinchFrom * 1.5, 'a pinch zooms in')
+    await context.close()
+  })
+})
+
+test('the big map on a desktop: the wheel zooms about the pointer, a mouse drag pans and writes no order, and a click picks a unit', { skip }, async () => {
+  await withApp(async ({ base, browser, errors, store }) => {
+    const seat = store.muster({ opponent: 'standing', side: 'red', seed: 5, map: 'greywater', faction: 'rome', enemyFaction: 'celts' }).seats.red
+    const p = await page(browser, errors, { width: 1280, height: 860 })
+    await p.goto(`${base}/b/${seat}`)
+    await p.waitForSelector('#map-scroll svg')
+    await bigShot(p, 'big-desktop')
+    const svgWidth = async () => (await p.locator('#map-scroll svg').boundingBox()).width
+    const scrollLeft = () => p.evaluate(() => document.getElementById('map-scroll').scrollLeft)
+    const view = await p.locator('#map-scroll').boundingBox()
+    const mid = { x: view.x + view.width / 2, y: view.y + view.height / 2 }
+
+    // A click on one of yours picks it.
+    const counter = await p.locator('.counter[opacity="1"]').first().boundingBox()
+    await p.mouse.click(counter.x + counter.width / 2, counter.y + counter.height / 2)
+    await p.waitForFunction(() => /picked|Which one/.test(document.getElementById('map-hint').textContent))
+    if (await p.locator('[data-stack]').count()) await p.click('[data-stack] >> nth=0')
+    await p.click('#unpick')
+
+    const start = await svgWidth()
+    await p.mouse.move(mid.x, mid.y)
+    await p.mouse.wheel(0, -400)
+    await p.waitForTimeout(100)
+    assert.ok(await svgWidth() > start * 1.3, 'the wheel up zooms in')
+    await p.mouse.wheel(0, 800)
+    await p.waitForTimeout(100)
+    assert.ok(await svgWidth() < start, 'the wheel down zooms out')
+    assert.ok(await p.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth), 'the page does not scroll sideways')
+
+    // A drag from open ground pans, and gives no order.
+    await p.click('#zoom-in')
+    await p.click('#zoom-in')
+    await p.click('#zoom-in')
+    const from = await scrollLeft()
+    const y = view.y + 60
+    await p.mouse.move(view.x + 300, y)
+    await p.mouse.down()
+    for (const d of [20, 60, 120, 160]) await p.mouse.move(view.x + 300 - d, y)
+    await p.mouse.up()
+    assert.ok(await scrollLeft() > from + 100, `a mouse drag pans the map (${from} to ${await scrollLeft()})`)
+    assert.doesNotMatch(await p.textContent('#map-hint'), /picked/)
+
+  })
+})
+
+test('a 1 km map opens on a phone as it always did, 15 px a tile, and shows the whole field with the same button', { skip }, async () => {
+  await withApp(async ({ base, browser, errors, store }) => {
+    const seat = store.muster({ opponent: 'standing', side: 'red', seed: 5, map: 'ashford', faction: 'rome', enemyFaction: 'celts' }).seats.red
+    const p = await page(browser, errors, { width: 390, height: 844 })
+    await p.goto(`${base}/b/${seat}`)
+    await p.waitForSelector('#map-scroll svg')
+    const width = (await p.locator('#map-scroll svg').boundingBox()).width
+    assert.ok(Math.abs(width - Math.round((40 * 24 + 52) * 15 / 24)) <= 1, `${width} px wide`)
+    await bigShot(p, 'small-phone')
+    await p.click('#whole')
+    assert.ok((await p.locator('#map-scroll svg').boundingBox()).width <= 390)
+    await bigShot(p, 'small-phone-whole')
+    const d = await page(browser, errors, { width: 1280, height: 860 })
+    await d.goto(`${base}/b/${seat}`)
+    await d.waitForSelector('#map-scroll svg')
+    await bigShot(d, 'small-desktop')
+  })
+})

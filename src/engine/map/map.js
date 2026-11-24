@@ -89,7 +89,10 @@ function createMap(definition) {
     label: toLabel,
     // Where armies form up when a scenario is fought here (deploy.js), if
     // the map says.
-    deploy: definition.deploy ? JSON.parse(JSON.stringify(definition.deploy)) : null
+    deploy: definition.deploy ? JSON.parse(JSON.stringify(definition.deploy)) : null,
+    // How many lines each army is called out in here (army/secondLine.js):
+    // 1 on a 1 km field, more on a bigger one, if the map says.
+    lines: Number.isInteger(definition.lines) && definition.lines > 1 ? definition.lines : 1
   }
 }
 
