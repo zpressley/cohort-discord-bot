@@ -3829,7 +3829,8 @@ to five bought within its faction's budget and the free elite (4.5 on
 average for the twenty usual armies; a player's roster is held to the same
 budget). Measured on Greywater, the app's way (`--mode app`: a Commander
 on the field, orders by rider, the computer's by rider, a day of twelve
-hours, the ground; 80 battles a row):
+hours, the ground; 80 battles a row; on the first drawing of the field, before it
+was made exactly twinned and the forming-up spots moved):
 
 | Armies | Units a side | Hours | Asked of the player | Ground decided | Night |
 |---|---|---|---|---|---|
@@ -3921,8 +3922,8 @@ read as they did), and `--map`/`--maps greywater` measures the big one
 second line). The soak has a short section of its own: half the factions on
 Greywater, two lines a side, a day, the ground, red played three ways (30
 battles), and the hotseat's two scenarios with every opening (12): every
-one ends. The rest of the soak is line for line as before; it runs 2 min 29
-s (was 2 min 18 s). `npm run balance` is unchanged, every line.
+one ends. The rest of the soak is line for line as before; it runs 2 min 20
+to 2 min 30 s (was 2 min 18 s). `npm run balance` is unchanged, every line.
 
 **Left undone.** A map bigger than 2 km (the October proposal's 5 km).
 The hotseat terminal's scenarios have no second line (their armies are
