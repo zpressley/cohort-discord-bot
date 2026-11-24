@@ -84,18 +84,21 @@ async function field() {
   const score = {}
   jobs.forEach((j, i) => {
     const key = j.a.kind
-    const sc = score[key] ?? (score[key] = { won: 0, battles: 0, by: {} })
+    const sc = score[key] ?? (score[key] = { won: 0, battles: 0, by: {}, atDusk: 0, unended: 0 })
     const w = results[i].winner === (j.flip ? 'blue' : 'red')
     sc.battles++; if (w) sc.won++
+    // Won when the day ran out (fewer losses), not by breaking the enemy.
+    if (w && /^time ran out/.test(results[i].reason ?? '')) sc.atDusk++
+    if (!results[i].decided) sc.unended++
     const b = sc.by[j.a.f] ?? (sc.by[j.a.f] = { won: 0, battles: 0 })
     b.battles++; if (w) b.won++
   })
   console.log(`\n### The classic armies against the usual armies (${jobs.length / list.length} battles each)\n`)
-  console.log(`| Army | Won | ${FACTIONS_USED.map(f => FACTIONS[f].title).join(' | ')} | Units (${FACTIONS_USED[0]}) |`)
-  console.log(`|---|---|${FACTIONS_USED.map(() => '---').join('|')}|---|`)
+  console.log(`| Army | Won | ${FACTIONS_USED.map(f => FACTIONS[f].title).join(' | ')} | Units (${FACTIONS_USED[0]}) | Won at the day's end | Not ended |`)
+  console.log(`|---|---|${FACTIONS_USED.map(() => '---').join('|')}|---|---|---|`)
   for (const [kind, sc] of Object.entries(score)) {
     const first = list.find(a => a.kind === kind && a.f === FACTIONS_USED[0]).army.units.length
-    console.log(`| ${kind} | ${L.pct(sc.won / sc.battles)} | ${FACTIONS_USED.map(f => L.pct(sc.by[f].won / sc.by[f].battles)).join(' | ')} | ${first} |`)
+    console.log(`| ${kind} | ${L.pct(sc.won / sc.battles)} | ${FACTIONS_USED.map(f => L.pct(sc.by[f].won / sc.by[f].battles)).join(' | ')} | ${first} | ${sc.atDusk} | ${sc.unended} |`)
   }
   return score
 }

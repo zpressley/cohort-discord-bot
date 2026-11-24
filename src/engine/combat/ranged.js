@@ -34,7 +34,8 @@ function missileRangeMetres(unit) {
  * @param {number} about.distance        tiles between them
  * @param {string} [about.targetTerrain] the ground the target stands on
  * @param {boolean} [about.moved]        the shooters moved this tick (only
- *                                       mounted archers can)
+ *                                       mounted archers can, and foot that
+ *                                       gave ground: battle/skirmish.js)
  * @param {boolean} [about.inMelee]      the target is locked in a melee
  */
 function volley(shooter, target, { distance, targetTerrain = 'plains', moved = false, inMelee = false } = {}) {
@@ -48,7 +49,7 @@ function volley(shooter, target, { distance, targetTerrain = 'plains', moved = f
     (M.SHIELD[target.shield] ?? 1)
   if (distance > reach / 2) felled *= M.LONG_SHOT
   if (targetTerrain === 'forest') felled *= M.IN_WOODS
-  if (moved) felled *= M.ON_THE_MOVE
+  if (moved) felled *= shooter.mounted ? M.ON_THE_MOVE : T.SKIRMISH.ON_FOOT
   if (inMelee) felled *= M.INTO_MELEE
   return felled
 }

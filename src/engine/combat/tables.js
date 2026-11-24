@@ -526,6 +526,44 @@ const MISSILES = {
   SIDEARM: 'daggers'
 }
 
+// ── Skirmishing ────────────────────────────────────────
+//
+// A proposal (docs/design/army-balance.md, part 6), not yet ruled. Light
+// missile troops pressing the enemy give ground before slower men who come
+// at them, and shoot as they go (battle/skirmish.js). Part 5 of the study
+// found nothing let missile troops keep their distance, so the historical
+// answer to heavy foot (velites before the phalanx; Carrhae) was missing.
+// Starting values, measured in part 6.
+const SKIRMISH = {
+  // Only men this lightly armoured run (a skirmisher's kit).
+  ARMOUR: ['no_armor', 'light_armor'],
+  // Men on foot at the same pace are outrun if they wear this (a hoplite's
+  // or a legionary's kit against a slinger's). Horse outrun all foot, and
+  // nothing outruns horse.
+  OUTRUN_ARMOUR: ['medium_armor', 'heavy_armor'],
+  // How many tiles beyond the enemy's reach (its march and one tile to come
+  // to blows) a skirmisher gives ground at.
+  WARY: 1,
+  // Stamina a tick of giving ground costs (fighting a round costs 8 and
+  // more: STAMINA.BASE_DRAIN). Stamina does not come back in a battle.
+  WIND: 5,
+  // Below this share of its stamina a unit is spent and runs no more: it
+  // stands, and is caught.
+  SPENT: 0.4,
+  // Men who come on after skirmishers they cannot catch lose this share of
+  // their kit's wind a round (ARMOR, SHIELD, MOUNT staminaDrain) each tick
+  // of the chase: heavy armour and a light shield 12.5, mail and a medium
+  // shield 4, light armour and a light shield 1.5. Sphacteria and Carrhae:
+  // armoured men worn out chasing light ones. Measured (part 6): at 0.5
+  // heavy infantry won 64% against the other classic armies, at 1 60%.
+  CHASE: 1,
+  // Foot that gave ground this tick shoot at this share (ruled 2026-11-21:
+  // missile troops on foot shoot only standing; this is the exception the
+  // proposal asks for, and 0 would keep that ruling whole). Horse archers
+  // shoot as they ride at MISSILES.ON_THE_MOVE, as before.
+  ON_FOOT: 0.5
+}
+
 // ── Pace ───────────────────────────────────────────────
 //
 // How much of a combat round is fought in one ten-minute tick of a battle.
@@ -879,6 +917,7 @@ module.exports = {
   SURPRISE,
   PURSUIT,
   MISSILES,
+  SKIRMISH,
   PACE,
   RALLY,
   HEART,

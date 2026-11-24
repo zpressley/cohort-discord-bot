@@ -2497,6 +2497,102 @@ day: a change to combat replays it differently (as `before-roster` already
 does on this base). `roster.test.js` compares a Commander's units without
 the new `level`.
 
+### How the skirmish rule was built (Claude's choices, open to change; a proposal, not yet taken)
+
+Asked for as the next lever after the army balance (Part 5 of
+`docs/design/army-balance.md`, question 2: "a skirmish rule, so horse
+archers and slingers can wear heavy infantry down as at Carrhae"), built
+from Zach's direction of November 23 that the balance "come from the units
+themselves and the combination of weapons and armor", grounded in history.
+**Not ruled.** Part 6 of the study has every table. The code:
+`engine/battle/skirmish.js` (`canSkirmish`, `outruns`, `fallBack`), its step
+in `battle/battle.js`, `tables.SKIRMISH`, `ranged.volley` (foot that fell
+back), `opponent/planner.js` (six lines), the `gaveGround` event
+(`battle/events.js`), its words (`SKIRMISH_WORDS` in `narrator/words.js`,
+`turnNarrator.js`, `adapters/hotseat/render.js`).
+
+**What was built.**
+- **A skirmisher is its kit**: a missile weapon, and light armour or none
+  (`SKIRMISH.ARMOUR`). No new purchase, no new order.
+- **Only while pressing the enemy** (advance, or attack with no target).
+  Hold, defend, a march to a place, hiding, or a fight already joined: it
+  does not. Pressing, it closes to the first place it can shoot from (the
+  nearer of its weapon's reach and its own sight, 6 tiles), and only on an
+  enemy in sight: closing on a place an enemy was last seen, a unit stood
+  for ever (found by the planner's own "plays every map to a verdict"
+  test).
+- **It falls back** when seen enemies, formed and not fighting, are within
+  their reach (their march plus one tile) and one more tile (`WARY` 1),
+  and it outruns them all: horse outrun foot, light foot outrun foot in
+  medium or heavy armour (`OUTRUN_ARMOUR`), nothing outruns horse or light
+  foot. With any enemy it cannot outrun among them it stands. It goes to
+  the tile it can reach this tick (over the ground: the movement costs, a
+  first step always allowed, never through an enemy) that is out of reach,
+  then still in shot, then farthest, then straight back, then the shortest
+  run. Nowhere better (an edge, a river behind): it stands.
+- **Its limits**: 5 stamina a tick of running (`WIND`); spent under 40%
+  (`SPENT`). Foot shoot after falling back at half rate (`ON_FOOT` 0.5);
+  horse archers at `MISSILES.ON_THE_MOVE` as before.
+- **The chase**: each enemy it fell back before, if it moved that tick,
+  loses its kit's stamina drain a round (armour, shield, horse; not the
+  base 8) once a tick (`CHASE` 1).
+- **The computer**: its foot skirmishers press any enemy in sight within
+  `TUNING.ENGAGE` (7) tiles, whatever its posture. Horse archers are left as
+  the planner had them.
+- **Told**: one line a turn for each unit ("fell back before X, keeping out
+  of their reach", the order's own word for falling back), shown to the
+  enemy only if he can see the unit.
+- **A battle with no skirmisher in it** is not changed by any of this: the
+  rule's code runs only for a unit that `canSkirmish`, and the balance
+  matrix is the same line for line.
+
+**Measured** (Part 6 has the tables): heavy infantry 77 -> 70% against the
+usual armies and 70 -> 61% against the other classic armies; slingers
+against it 29 -> 53%, archers 23 -> 38%, horse archers 33 -> 48%. Kinds
+"All" 38 to 68% (was 36 to 70). The usual armies' league 39-60% (was
+40-59), 27 pairings past 75/25 (26). The random search's best army
+unchanged (93%, Carthage's three professional spears in mail); the best
+army of skirmishers only 83%, as before. Soak: every battle ended, a few
+player turns longer. `npm run balance`: unchanged. The Commander taken 1 in
+16.7 by a player who sends everyone in (23.5 before), 1 in 30 with the
+computer on both sides (34). Eight rounds, one change at a time; the one
+dropped was the computer playing horse archers as foot skirmishers.
+
+**Guessed.**
+- "Keep their distance from slower men" was read as **speed and kit**: equal
+  speed but heavier armour counts as slower (a hoplite cannot catch a
+  slinger), since every foot unit marches 3 tiles. The other reading would
+  give heavy armour a slower march; Part 5 tried 2 tiles a tick and dropped
+  it, and with this rule it would double up on the chase's wind.
+- **The chase's wind** comes from the unit's own kit, not from a new number
+  per kind: "men who run tire" read for both sides of the run.
+- **Foot shoot as they fall back**, against the ruling of November 21 that
+  missile troops on foot shoot only standing. Without it (measured) the rule
+  helps less (slingers against heavy 39%, not 53%). This is question 2 in
+  Part 6, for Zach.
+- **No ammunition**: arrows do not run out (ruled November 21), and the
+  measurement did not need it: the best skirmisher army is no better than
+  before.
+- **The day's end left alone**: a side that fell back all day can still win
+  on fewer losses; archers do so in 26 of 320 battles (16 before). Measured,
+  not changed.
+- The computer's horse archers keep riding for enemy archers first; the
+  other reading (skirmish with them too) was measured and was worse.
+
+**Tests.** `src/engine/battle/tests/skirmish.test.js` (13), a planner test
+("a holding side's skirmishers on foot press a near enemy ..."), a narrator
+test, `gaveGround` in the event schema test. `attack-named-unchanged` retaken
+(its battles have skirmishers in them), the old values in its header;
+`asked-unchanged` and `messengers-unchanged` did not change. The battle saved
+before veterans (`web/tests/veterans.test.js`, "a battle saved before
+veterans went into battle ... replays exactly as it was played") now replays
+differently, as the two older saved battles do; its fixture is left as it
+was, for Zach's question on old battles.
+
+**Open, for Zach** (Part 6's questions): take the rule; let foot shoot as
+they fall back; the Commander's odds (1 in 17 for a player who sends
+everyone in); a win at the day's end for a side that never closed.
+
 ## Rulings, November 24, 2026 (riders again, the day, old battles, fire and retreat)
 
 Zach's words, answering the questions left open on November 23.

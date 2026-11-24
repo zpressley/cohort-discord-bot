@@ -31,6 +31,7 @@ const { sideView } = require('../engine/orchestrator')
 const { tileDistance } = require('../engine/world')
 const { detectFeatures } = require('../engine/map/features')
 const { missileRange } = require('../engine/combat/ranged')
+const { canSkirmish } = require('../engine/battle/skirmish')
 const { createRng } = require('../engine/rng')
 const { positionKey } = require('../engine/map/labels')
 
@@ -180,6 +181,15 @@ function planTurn(game, side) {
   for (const unit of mine) {
     if (pulledOut.has(unit.id)) continue
     if (spent(unit) || battle.isShaken(unit)) { give(unit, { action: 'hold' }); continue }
+    // Skirmishers on foot with the enemy near press him, whatever the line
+    // does: pressing, they shoot, and give ground before men they can
+    // outrun (engine/battle/skirmish.js). Sent to a place, they walk into
+    // him. (Horse archers keep to the horse's way below: played this way
+    // too, slingers outshot them, 96 to 4 in 72 battles.)
+    if (canSkirmish(unit) && !unit.mounted && !fighting.has(unit.id)) {
+      const foe = nearestSeen(unit.position)
+      if (foe && foe.d <= TUNING.ENGAGE) { give(unit, { action: 'advance' }); continue }
+    }
 
     if (horse.includes(unit)) {
       // Horse go for archers they have seen, wherever the line stands; else

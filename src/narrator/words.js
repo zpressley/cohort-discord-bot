@@ -196,4 +196,11 @@ const RIDER = {
   clock
 }
 
-module.exports = { orderWords, moraleWords, ORDER, OWN_EDGE, HOLD_THERE, KIT, RIDE_WITH, LOYALTY_WORDS, VALUES_WORDS, VETERANCY_WORDS, RIDER }
+// Light missile troops giving ground before slower men (engine/battle/
+// skirmish.js; a proposal, not yet ruled). "Fell back" is the order's own
+// word (ORDER.withdraw): it is the same thing, done unasked.
+const SKIRMISH_WORDS = {
+  gaveGround: (unit, before) => `${unit} ${ORDER.withdraw.did} before ${before}, keeping out of their reach`
+}
+
+module.exports = { orderWords, moraleWords, ORDER, OWN_EDGE, HOLD_THERE, KIT, RIDE_WITH, LOYALTY_WORDS, VALUES_WORDS, VETERANCY_WORDS, RIDER, SKIRMISH_WORDS }
