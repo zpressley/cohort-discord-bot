@@ -49,6 +49,13 @@ function secondKind(weapon) {
   return null
 }
 
+// What a second weapon costs: its own price, or `secondSp` where the data
+// gives one for it as a second weapon (data.js).
+function secondPrice(second) {
+  const data = D.WEAPONS[second]
+  return data.secondSp ?? data.sp
+}
+
 // What a second weapon is in a battle unit's spec: a sword is the unit's
 // `sidearm` (combat/ratings.js, handWeapon), a thrown weapon its `thrown`
 // (battle/battle.js, the throw at contact). None: nothing.
@@ -184,7 +191,7 @@ function buildUnit(pick, culture, { elite = false } = {}) {
 
   if (errors.length > 0) return { ok: false, errors, cost: 0, unit: null }
 
-  const cost = tier.cost + weaponData.sp + (secondData ? secondData.sp : 0) +
+  const cost = tier.cost + weaponData.sp + (secondData ? secondPrice(second) : 0) +
     D.ARMOR_SP[armor] + D.SHIELD_SP[shield] +
     (mounted ? mountCost(culture) : 0)
 
@@ -295,4 +302,4 @@ function roleFor(weapon) {
   return 'heavy_infantry'
 }
 
-module.exports = { buildUnit, buildArmy, toBattleUnits, roleFor, unitSize, mountCost, secondKind, secondFields, PURCHASABLE }
+module.exports = { buildUnit, buildArmy, toBattleUnits, roleFor, unitSize, mountCost, secondKind, secondFields, secondPrice, PURCHASABLE }

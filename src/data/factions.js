@@ -46,9 +46,11 @@ const FACTIONS = {
       weapon: 'roman_gladius', second: 'roman_pilum', armor: 'heavy_armor', shield: 'heavy_shield'
     },
     army: [
-      { name: 'legionaries', quality: 'professional', weapon: 'roman_gladius', armor: 'medium_armor', shield: 'heavy_shield' },
-      { name: 'hastati', quality: 'militia', weapon: 'roman_gladius', armor: 'medium_armor', shield: 'heavy_shield' },
-      { name: 'velites', quality: 'levy', weapon: 'sword_standard', armor: 'light_armor', shield: 'light_shield' }
+      // The legion's pila, and the velites' javelins (Polybius 6.22-23);
+      // the hastati in the bronze breastplate of the poorer citizen.
+      { name: 'legionaries', quality: 'professional', weapon: 'roman_gladius', second: 'roman_pilum', armor: 'medium_armor', shield: 'heavy_shield' },
+      { name: 'hastati', quality: 'militia', weapon: 'roman_gladius', armor: 'light_armor', shield: 'heavy_shield' },
+      { name: 'velites', quality: 'levy', weapon: 'sword_standard', second: 'light_javelin', armor: 'light_armor', shield: 'light_shield' }
     ]
   },
 
@@ -66,7 +68,7 @@ const FACTIONS = {
     army: [
       { name: 'sarissa foot', quality: 'professional', weapon: 'macedonian_sarissa', armor: 'no_armor', shield: 'no_shield' },
       { name: 'sarissa foot', quality: 'professional', weapon: 'macedonian_sarissa', armor: 'no_armor', shield: 'no_shield' },
-      { name: 'peltasts', quality: 'professional', weapon: 'spear_basic', armor: 'light_armor', shield: 'light_shield' }
+      { name: 'peltasts', quality: 'professional', weapon: 'spear_basic', second: 'light_javelin', armor: 'light_armor', shield: 'light_shield' }
     ]
   },
 
@@ -98,7 +100,7 @@ const FACTIONS = {
       weapon: 'spear_professional', armor: 'heavy_armor', shield: 'heavy_shield'
     },
     army: [
-      { name: 'numidian horse', quality: 'militia', weapon: 'sword_standard', armor: 'light_armor', shield: 'light_shield', mounted: true },
+      { name: 'numidian horse', quality: 'militia', weapon: 'sword_standard', second: 'light_javelin', armor: 'light_armor', shield: 'light_shield', mounted: true },
       { name: 'gauls', quality: 'militia', weapon: 'sword_standard', armor: 'light_armor', shield: 'medium_shield' },
       { name: 'iberians', quality: 'militia', weapon: 'sword_standard', armor: 'light_armor', shield: 'light_shield' },
       { name: 'libyans', quality: 'militia', weapon: 'spear_basic', armor: 'light_armor', shield: 'medium_shield' }
@@ -263,7 +265,7 @@ const FACTIONS = {
     },
     army: [
       { name: 'warriors', quality: 'tribal_warriors', weapon: 'spear_basic', armor: 'light_armor', shield: 'medium_shield' },
-      { name: 'axemen', quality: 'tribal_warriors', weapon: 'battle_axe', armor: 'light_armor', shield: 'light_shield' },
+      { name: 'axemen', quality: 'tribal_warriors', weapon: 'battle_axe', second: 'germanic_throwing_axe', armor: 'light_armor', shield: 'light_shield' },
       { name: 'spearmen', quality: 'tribal_warriors', weapon: 'germanic_framea', armor: 'light_armor', shield: 'no_shield' },
       { name: 'skirmishers', quality: 'levy', weapon: 'sling', armor: 'no_armor', shield: 'no_shield' }
     ]
@@ -284,7 +286,7 @@ const FACTIONS = {
       { name: 'rhomphaia men', quality: 'tribal_warriors', weapon: 'thracian_rhomphaia', armor: 'light_armor', shield: 'no_shield' },
       { name: 'rhomphaia men', quality: 'tribal_warriors', weapon: 'thracian_rhomphaia', armor: 'light_armor', shield: 'no_shield' },
       { name: 'slingers', quality: 'tribal_warriors', weapon: 'sling', armor: 'light_armor', shield: 'light_shield' },
-      { name: 'spearmen', quality: 'tribal_warriors', weapon: 'spear_basic', armor: 'light_armor', shield: 'light_shield' }
+      { name: 'spearmen', quality: 'tribal_warriors', weapon: 'spear_basic', second: 'light_javelin', armor: 'light_armor', shield: 'light_shield' }
     ]
   },
 

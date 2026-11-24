@@ -20,7 +20,7 @@
 //
 // Pure: the same army, side and map always give the same units.
 
-const { buildArmy, buildUnit, toBattleUnits, roleFor, unitSize, mountCost, secondFields } = require('./builder')
+const { buildArmy, buildUnit, toBattleUnits, roleFor, unitSize, mountCost, secondFields, secondPrice } = require('./builder')
 const D = require('./data')
 const T = require('../combat/tables')
 const { formUp, factionUnits } = require('./factions')
@@ -108,7 +108,7 @@ function kitPrice(kit, culture) {
   const tier = T.QUALITY_TIERS[k.quality === 'elite' ? 'veteran_mercenary' : k.quality]
   const weapon = D.WEAPONS[k.weapon]
   if (!tier || !weapon || !(k.armor in D.ARMOR_SP) || !(k.shield in D.SHIELD_SP)) return null
-  return tier.cost + weapon.sp + (D.WEAPONS[k.second]?.sp ?? 0) + D.ARMOR_SP[k.armor] + D.SHIELD_SP[k.shield] + (k.mounted ? mountCost(culture) : 0)
+  return tier.cost + weapon.sp + (D.WEAPONS[k.second] ? secondPrice(k.second) : 0) + D.ARMOR_SP[k.armor] + D.SHIELD_SP[k.shield] + (k.mounted ? mountCost(culture) : 0)
 }
 
 // A unit taken from the enemy, as the builder gives its units: its kit as

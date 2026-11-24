@@ -17,6 +17,11 @@
 // Retaken for fire and retreat (docs/design/army-balance.md part 7): Han's
 // crossbowmen, in mail, now close to shooting distance and stand, and the
 // computer presses with them. On ashford the battles were 9b2d3801 31 and 551c795d 37.
+//
+// Retaken for second weapons (docs/design/army-balance.md part 8): Rome's
+// legionaries and Praetorians throw pila, and its velites javelins, as they
+// come to blows. The battles were 1fb30748 22, abc6d6db 30, 76c134c8 29,
+// 7d98462c 31.
 
 const { test } = require('node:test')
 const assert = require('node:assert/strict')
@@ -34,10 +39,10 @@ function fingerprint(text) {
 }
 
 const BEFORE = {
-  'crownhill 1': '1fb30748 22',
-  'crownhill 2': 'abc6d6db 30',
-  'ashford 1': '76c134c8 29',
-  'ashford 2': '7d98462c 31'
+  'crownhill 1': 'a0fe2488 18',
+  'crownhill 2': 'e70e50fe 25',
+  'ashford 1': '31e8e9f4 26',
+  'ashford 2': '6583ef4f 34'
 }
 
 test('a battle with no Commander on the field runs exactly as before riders, event for event', () => {

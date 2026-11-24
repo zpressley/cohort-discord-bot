@@ -78,11 +78,11 @@ test('a unit may take a thrown weapon beside a one-handed hand weapon, at the th
   assert.ok(buildUnit({ quality: 'militia', weapon: 'sword_standard', second: 'light_javelin', armor: 'light_armor', shield: 'light_shield', mounted: true }, 'Carthaginian Empire').ok, 'Numidian horse: javelins from horseback')
 })
 
-test('a missile unit may take a sword beside its bow or sling, at the sword\'s price', () => {
+test('a missile unit may take a sword beside its bow or sling, at a sidearm\'s price of 1', () => {
   const slingers = { quality: 'levy', weapon: 'sling', armor: 'light_armor' }
   const r = buildUnit({ ...slingers, second: 'sword_standard' }, 'Roman Republic')
   assert.ok(r.ok, r.errors.join('; '))
-  assert.equal(r.cost, buildUnit(slingers, 'Roman Republic').cost + 2)
+  assert.equal(r.cost, buildUnit(slingers, 'Roman Republic').cost + 1, 'a sword at a bowman\'s belt costs 1, where a swordsman\'s costs 2')
   assert.ok(buildUnit({ quality: 'professional', weapon: 'persian_recurve_bow', second: 'persian_akinakes', armor: 'light_armor' }, 'Achaemenid Persian').ok)
   assert.ok(buildUnit({ quality: 'professional', weapon: 'self_bow_professional', second: 'sword_standard', armor: 'light_armor', mounted: true }, 'Parthian Empire').ok, 'horse archers too')
 })

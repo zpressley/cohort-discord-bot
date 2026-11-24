@@ -544,7 +544,11 @@ const THROWN = {
   // (Polybius 6.23), a peltast a few javelins. One a contact.
   THROWS: 2,
   // A thrown volley against a missile volley of the same weapon and men.
-  CLOSE: 2
+  // Measured (docs/design/army-balance.md, part 8): at 2, Rome's usual army
+  // (pila) won 70% of the league and two professional units with pila beat
+  // the same SP spent on a third unit, 88 to 84%; at 1, 58% and 78 to 84%;
+  // at 1.5, 64% and 85 to 85%: pila worth what they cost.
+  CLOSE: 1.5
 }
 
 // ── Fire and retreat ───────────────────────────────────

@@ -18,7 +18,7 @@
 //
 // Nothing here is trusted from the browser: every list is checked again.
 
-const { buildUnit, buildArmy, secondKind, PURCHASABLE } = require('../engine/army/builder')
+const { buildUnit, buildArmy, secondKind, secondPrice, PURCHASABLE } = require('../engine/army/builder')
 const D = require('../engine/army/data')
 const { tables: T } = require('../engine/combat')
 const { FACTIONS } = require('../data/factions')
@@ -181,7 +181,14 @@ function appraise(key, { units = [], draft = null, at = null, reserved = [] } = 
     const over = overBy(candidate)
     return over && !wasOver && buildUnit(candidate, culture).ok ? plain(over) : null
   }
-  const option = (field, value, cost, words) => ({ value, cost, words, refused: refusal({ ...kit, [field]: value }) })
+  // A second weapon the choice would not take is put down with it (the
+  // screen does so), so it does not stand in the choice's way.
+  const putDown = (candidate) => {
+    if (!candidate.second || !buildUnit(candidate, culture).errors.some(e => e.startsWith(`${candidate.second} `))) return candidate
+    const { second, ...rest } = candidate
+    return rest
+  }
+  const option = (field, value, cost, words) => ({ value, cost, words, refused: refusal(field === 'second' ? { ...kit, [field]: value } : putDown({ ...kit, [field]: value })) })
   const legal = Object.entries(D.WEAPONS).filter(([, w]) => w.cultures === 'all' || w.cultures.includes(culture))
   // A weapon only ever carried beside another (a sidearm, javelins) is
   // offered as the second weapon, not the first (docs/design/army-balance.md,
@@ -206,7 +213,7 @@ function appraise(key, { units = [], draft = null, at = null, reserved = [] } = 
       // One more weapon, or none: javelins and the like to throw as they
       // close (kind 'thrown'), or a sword for men who shoot ('sidearm').
       second: [{ ...option('second', '', 0, THROWN_WORDS.none), kind: null },
-        ...legal.filter(([w]) => secondKind(w)).map(([w, data]) => ({ ...option('second', w, data.sp, KIT.weapon[w] ?? w), kind: secondKind(w) }))],
+        ...legal.filter(([w]) => secondKind(w)).map(([w]) => ({ ...option('second', w, secondPrice(w), KIT.weapon[w] ?? w), kind: secondKind(w) }))],
       armor: Object.keys(D.ARMOR_SP).map(a => option('armor', a, D.ARMOR_SP[a], KIT.armor[a])),
       shield: Object.keys(D.SHIELD_SP).map(s => option('shield', s, D.SHIELD_SP[s], KIT.shield[s]))
     }
