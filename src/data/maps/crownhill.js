@@ -189,7 +189,7 @@ module.exports = {
   // Crownhill: the west must cross the one bridge and the woods, the east
   // has the road north to the ford. Each side's first unit on the hill
   // after 104 and 107 minutes, half its army after 140 and 146 (every
-  // faction; it was 104 and 86, 140 and 130, and the east held the hill
+  // faction; it was 106 and 86, 191 and 163, and the east held the hill
   // first in 185 battles of 200). docs/DECISIONS.md, "How the first
   // battle, being asked, and forming up were built".
   deploy: { west: { x: 11, y: 23 }, east: { x: 30, y: 29 } },

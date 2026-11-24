@@ -4212,3 +4212,206 @@ line).
 - **The AI's instructions** gained two lines: the Commander is "you", and
   ground not yet held an hour has not won the field. Not measured live
   again: the task allowed one AI battle, and it was spent finding this.
+
+### How the first battle, being asked, and forming up were built (Claude's choices, open to change)
+
+From the playthrough of November 24 (`docs/REVIEW-2026-11.md`, D1, D2 and
+D11), inside Zach's rulings: holding the ground alone for an hour wins; no
+word comes back from a lost rider; orders go by rider; the day is twelve
+hours; "each Commander asked only when he has something to do"; "Holding
+for several turns would still get interrupts from passing enemy troops".
+None of those changed.
+
+**How it was measured.** A new harness, `src/harness/first-battle.js`,
+plays a new player's battles through the server's own battle store, as
+the app does: a new Commander of each faction in turn, on the field with
+his best unit, his words read by the grammar (no AI), his orders by
+rider; the computer's Commander's character from the seed, its orders by
+rider; a day of twelve hours; the field's ground. He plays one of four
+ways: `--play advance` ("everyone advance", then nothing), `take`
+("everyone take the Crownhill" and the like, then nothing), `planner` (he
+plans as the computer does, each time he is asked), `hold` ("everyone
+hold"). 80 battles a field each, the same seeds before and after.
+
+**What was wrong, in numbers (before).** On Crownhill "everyone advance"
+won 3 of 80 (4%), with no blow struck in 55: his men marched east to look
+for the enemy while the computer walked onto the hill. "take" won 24%,
+the planner 29%. Marching alone to the Crownhill, every faction on
+average, the west's first unit set foot on it after 106 minutes and the
+east's after 86 (half of each army: 191 and 163); between equal armies
+played by the computer the east held the hill first in 185 battles of 200
+and won 60% (`ground-league.js --mode mirror --rounds 10`).
+
+**1. Both armies as far from the Crownhill by marching time.** The west
+must file over the one bridge (Harrow Bridge) and through the woods; the
+east has the road north to the ford. The east army now forms up on that
+road further south, at (30, 29) (it was (27, 23)): 746 m from the hill as
+the crow flies against the west's 587 m, but as long to march. First unit
+on the hill after 104 and 107 minutes, half the army after 140 and 146.
+I tried a dozen places for one army or both; this one keeps the west
+where it was, and was the fairest across three measures (the mirror
+league, the app's league, and the first battle). Tested: "on Crownhill the
+two armies are as long marching to the Crownhill".
+- The other fields were already within ten minutes by the same measure
+  (first unit on the ground: Ashford 28 and 29, Thornwood 27 and 27, Raven
+  Ridge 19 and 24), so they were left.
+- Guessed: that the place to move is where an army forms up, not the
+  ground (moving the ground was tried before, "How each map's ground to
+  fight for was built"). This changes every battle on Crownhill.
+
+**2. "Advance" with no enemy known goes for the ground.** Before, a unit
+told to advance with no enemy seen or last seen went to look for him:
+straight across to his side of the field. On Crownhill that is away from
+the hill. Now, where the battle has ground to fight for, it makes for the
+ground instead, each unit to a tile of it no other of its side has taken;
+once an enemy is seen or known, it presses him as before (`battle.js`,
+`toPress` with `toGround`, `groundFor`). Only an order to advance (or to
+attack an enemy lost from sight, which presses as advance does): a side's
+standing order to advance still goes looking, so the computer's idle
+units behave as they did. With no ground, advance is as before. Tests:
+"told to advance with no enemy known, an army makes for the ground to
+fight for, each man to a tile of his own"; "told to advance with no ground
+to fight for and no enemy known, an army goes looking toward the enemy's
+side, as before"; "an army that knows where the enemy is advances on him,
+not on the ground".
+- Guessed: that a Commander who says "advance" means "go and fight for
+  the field", and the field is fought for on its ground. The other
+  reading: advance means find the enemy wherever he is; then the ground
+  is reached only by naming it, and a new player must be taught that.
+  The read-back still says "advance on the enemy" (`words.js` untouched).
+
+**3. When he is asked: nothing new was needed.** Each piece of news the
+task proposed already calls him:
+- the enemy first seen: `sighting`, when the word reaches him;
+- the enemy first holding the ground alone: `objective`, every side at
+  once;
+- the enemy close to winning by it: at 30 minutes left
+  (`GROUND.CLOSE_MINUTES`).
+Across all 1,280 battles of the four plays, before and after, no player
+lost by the ground without having been asked while the enemy held it.
+But the half-hour notice, and even the call when the enemy first holds
+the ground (an hour left), come too late to act on from where the armies
+start: 104 to 146 minutes' march on Crownhill, 20 to 46 on the other
+fields. So on Crownhill the call that matters is the first one: he must
+be moving from the start, which "advance" and "take" now both do. A
+Commander who holds from the start is still asked when the enemy takes
+the hill, and loses (80 of 80, before and after); that is his choice, and
+the muster tells him the ground is what the field is fought for.
+- Guessed: that no earlier call should be invented (say, when the enemy
+  first marches for the ground, which no one of his can see). The other
+  reading is a scout's report of the enemy's march; that would be a new
+  kind of news, and was not built.
+
+**4. Light shooting does not call him back again for an hour.** A free
+Commander was called back every ten minutes while any shot reached his
+men. Now (`orchestrator.js`, `smallFire`; `tables.FIRE_NEWS`): once he has
+been called with news of shooting, more shooting calls him again only
+after `QUIET` (an hour), or at once if it grows: a unit of his losing
+`HEAVY` (5%) of its mustered men to it in ten minutes, a unit of his down
+to `SHAKEN` (50 of 100) in heart as its report has it, or a shooter he
+did not know of before. A fight hand to hand, a rout, a new sighting,
+ground changing hands and orders carried out call him as before, on
+their own account. The shooting is still told, in full, in the next
+dispatch. Passing enemy troops still interrupt a hold (a sighting).
+Tests: "light shooting by an enemy he knows of calls a free Commander
+back once, then not again for 60 minutes unless it grows" (the Raven
+Ridge case, slingers taking a man a volley from men who hold: asked 18
+times in three hours before, 3 now); "shooting that costs a unit of his a
+heavy share of its men calls him back at once".
+- Guessed: an hour, 5% and half his heart. The other reading of "unless
+  it grows" is that losses add up over the hour; I took them per ten
+  minutes, so slow bleeding is told at the hour.
+
+**5. Units sent to one place form up beside one another.** Two or more
+units of a side given the same move, stand or fall back to one tile in
+one turn (and nothing after it) are given a tile each about it, in a line
+across the way the enemy lies (seen or last seen; else his edge of the
+field), the middle of the line on the spot; off water, on ground joined
+to the spot within three tiles (not across a river from it), keeping to
+the spot's kind of ground (the hill) while it can, a second rank behind
+when the first runs out; each unit to the place on its own side, so none
+cross (`battle/formUp.js`; `tables.FORM_UP`). Done as orders reach the
+battle, so the computer's orders get it too, and the planner needed no
+change. Attacks (on a place or an enemy), hiding, searching, ambushes and
+advances are left as they were: units sent into the same fight go
+together. Tests: "units sent to one place by one order form up beside one
+another there, one to a tile, the first on the spot"; "units sent into
+the same fight are not pushed apart"; "one unit sent to a place, or units
+sent to different places, go where they were told"; "forming up keeps off
+water, and to the place's own side of it".
+- Guessed: one order or two naming the same tile in the same turn are
+  treated alike (the engine sees only units and places). The other
+  reading is that only "everyone X" forms up; then two lines naming the
+  same tile would still pack.
+- Measured (`take`, 80 battles a field): times his units were packed on or
+  beside the ground, Crownhill 189 -> 123, Ashford 485 -> 294, Thornwood
+  501 -> 401, Raven Ridge 516 -> 159. What is left is packing in a fight
+  (pushes, men stepping in beside a friend) and on the road: the
+  playthrough's "280 men packed onto one spot" on Crownhill was the west
+  army filing over the one bridge, which forming up at the end does not
+  touch. Left as it is.
+
+**A new player's first battle, after** (80 battles a field, won, before
+-> after):
+
+| Field | "everyone advance" | "everyone take ..." | the planner | "everyone hold" |
+|---|---|---|---|---|
+| Crownhill | 4% -> 43% | 24% -> 45% | 29% -> 50% | 0% -> 0% |
+| Ashford Vale | 58% -> 53% | 50% -> 33% | 63% -> 63% | 0% -> 0% |
+| Thornwood | 46% -> 48% | 28% -> 23% | 43% -> 40% | 0% -> 0% |
+| Raven Ridge | 73% -> 44% | 49% -> 60% | 58% -> 58% | 0% -> 0% |
+
+On Crownhill "everyone advance" now has blows struck in every battle (55
+of 80 had none), his men losing 129 on average and the computer's 162 (18
+and 31 before). He won 34 (33 by breaking the enemy's army), lost 44 (37
+by the ground, 7 by his own army breaking), 2 ended by night. He is first
+asked again after 60 to 140 minutes (median 90), when his men on the
+march to the hill first see the enemy. On Raven Ridge "advance" fell from
+73%: it used to march straight at the enemy and now goes for Raven Gap;
+44% is in line with the other fields. "take" on Ashford and Thornwood
+moves both ways with the seeds (40 battles a field gave 35% and 20%); the
+planner, which forms its own lines, barely moved. Tested: "a new player
+who orders 'everyone advance' on Crownhill and nothing more gets a real
+battle: blows struck, and some won"; "a new player is never lost by the
+ground on Crownhill without being asked while the enemy held it".
+
+**Turns he is asked a battle** (`take`, before -> after): Crownhill 13.4
+-> 13.1, Ashford 11.6 -> 11.9, Thornwood 14.3 -> 13.2, Raven Ridge 12.3
+-> 13.8 (its battles ran 132 -> 174 minutes; per hour of battle 5.6 ->
+4.8). Calls for shooting: 196 -> 112, 245 -> 167, 254 -> 161, 184 -> 211
+(Raven Ridge's longer battles). The commonest call is now ground changing
+hands (every side, each time), which this did not touch.
+
+**The other leagues, before -> after** (main at 07b6201 against this):
+- `npm run balance`: unchanged, every line.
+- The ground league, mirror (`--rounds 10`, 200 a field), west's share of
+  battles won: Crownhill 40% -> 52% (the east held it first in 185 of 200
+  -> 94); Ashford 51%, Thornwood 43%, Raven Ridge 54%, unchanged. As the
+  app plays (`--mode app`): Crownhill 39% -> 49%; Ashford 61% -> 60%,
+  Thornwood 52% -> 51%, Raven Ridge 61% -> 61%.
+- The character league: steady 51%, bold 49%, cautious 50% -> 50, 50, 50.
+- The messenger league (`--battles 400 --policy planner --day 720 --ground
+  --character mix`): red won 50% -> 55%; 11.9 -> 11.1 turns a battle;
+  asked for shooting 12% -> 7% of his turns.
+- The Commander taken (`captive-league.js --policy wait`): on the 1 km
+  fields 1 in 21.5 -> 1 in 20.4 (2,000 battles; the 1 in 21.7 written
+  before was measured before later work); on Greywater 1 in 10.8 -> 1 in
+  10.8 (400 battles; 12.9 was written before later work).
+- The soak: every battle ends; the computer's side 19.8 -> 20.6 player
+  turns, faction armies 19.6 -> 20.1; the map's ground decided 146 -> 139,
+  139 -> 154 battle minutes on average.
+- Fingerprint tests retaken, the old values in their headers:
+  `asked-unchanged`, `messengers-unchanged`, `attack-named-unchanged`,
+  their Crownhill battles only (the east army's new place; with the old
+  place they were as before). Four web tests that needed a battle where
+  "everyone advance" and "everyone hold" stop for one side alone now
+  muster with no ground (`objectives: []`), as other web tests chosen for
+  other things do; one held-Commander test now allows his dispatch a line
+  more than his captors' Commander's (he hears their unit at once, their
+  Commander hears it by rider).
+
+**Left undone.** Ground changing hands calls every side each time it
+changes, and in a fight on the hill that can be several times an hour;
+that is the ruling ("all sides know at once") and was not touched.
+Packing on the road to a single crossing. The planner (another agent's)
+was not changed.
