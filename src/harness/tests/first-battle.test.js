@@ -59,3 +59,21 @@ test('a new player is never lost by the ground on Crownhill without being asked 
     }
   }
 })
+
+// (Found by the soak once the two changes of November 24 were put together.)
+test('a broken enemy left in sight does not begin a search afresh every ten minutes: the searchers find the army still standing', () => {
+  const { createGame, submitOrders } = require('../../engine/orchestrator')
+  const { planTurn } = require('../../opponent/planner')
+  const { leadUnit } = require('../../engine/command/company')
+  const { byCommandPost } = require('../../engine/command/messengers')
+  const spec = fieldFactions(loadScenario('meeting-battle', { map: 'ashford', deploy: true }), { red: 'sarmatia', blue: 'germania' })
+  const mine = spec.units.filter(u => u.side === 'red')
+  const game = createGame({ ...spec, standingOrders: {}, commanders: { red: { unitId: mine[leadUnit(mine)].id } } }, { seed: 27 })
+  for (let turns = 0; turns < 150 && !game.outcome.decided; turns++) {
+    const red = game.playerTurn === 0 ? [{ unitRef: 'everyone', action: 'advance' }] : []
+    const blue = byCommandPost(planTurn(game, 'blue'))
+    submitOrders(game, 'red', red)
+    submitOrders(game, 'blue', blue)
+  }
+  assert.ok(game.outcome.decided, 'the battle ends')
+})

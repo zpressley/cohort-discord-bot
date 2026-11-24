@@ -223,7 +223,11 @@ function stepTurn(state, sideOrders = {}, { sameTurn = false } = {}) {
     const memory = state.lastSeen.get(side)
     const seen = seenAtStart.get(side) ?? new Set()
     // An enemy in sight ends any search for one; the next begins afresh.
-    if (seen.size > 0) {
+    // (Not one broken: a broken unit that could not get away, in sight for
+    // hours, began every search afresh each ten minutes, and the searchers
+    // walked up and down for ever: ashford, Sarmatia against Germania,
+    // seed 27 of the soak.)
+    if ([...seen].some(id => !broken.has(id))) {
       state.searched.delete(side)
       for (const u of unitsOnSide(world, side)) { state.searchFor.delete(u.id); state.searchedAhead.delete(u.id) }
     }
