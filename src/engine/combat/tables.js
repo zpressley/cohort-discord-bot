@@ -1232,3 +1232,19 @@ module.exports.FOLLOW = {
   BESIDE: 1,       // tiles (25 m) to one side of it, across the way to the enemy
   SLACK: 1         // tiles off its station a unit may stand and not shuffle over (it holds there)
 }
+
+// A unit sent to the ground to fight for fights for it (battle.js,
+// groundFoe): it goes at an enemy on that ground (as near as holds it:
+// the ground's own reach) or BESIDE tiles more, rather than stand and
+// watch him hold it. Which orders send a unit to the ground: a move or a
+// stand there ("take", "defend"), and a hold given to a unit on it.
+// BESIDE 1 (going at men a tile off the ground too) was tried first: a new
+// player's "take" won 56, 50, 57, 47% on the four 1 km fields and his
+// stand-in planner 54 to 63%; at 0, 58, 47, 54, 50% and the planner as
+// before (200 battles a field, first-battle.js). Claude's values, open to
+// change (docs/DECISIONS.md, "How taking ground, news of the ground, and
+// rallying were mended").
+module.exports.GROUND_FIGHT = {
+  BESIDE: 0,
+  ORDERS: ['move', 'defend']
+}

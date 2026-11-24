@@ -646,3 +646,12 @@ function kindParts(unit) {
   return { quality, kind: words.join(' ') }
 }
 module.exports.kindParts = kindParts
+
+// A unit rallied with no heart left that will not go at the enemy
+// (engine/battle/battle.js, 'heldBack'; "How taking ground, news of the
+// ground, and rallying were mended"): the Commander's order is kept, and
+// why it is not carried out is told him in plain words.
+const HELD_BACK = {
+  line: (unit) => `${unit} rallied with no heart left, and will not go at the enemy: they hold where they stand, keeping your order, until a success near them puts heart back in them`
+}
+module.exports.HELD_BACK = HELD_BACK
