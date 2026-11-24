@@ -736,7 +736,7 @@ function ordersCarriedOut(battle, { side = null, events = null } = {}) {
     // Going for a named enemy never finishes, as pressing the enemy does not.
     if (order.enemy) return false
     switch (order.action) {
-      case 'hold': case 'advance': return false
+      case 'hold': case 'advance': case 'follow': return false
       case 'check': return true
       case 'hide': case 'ambush': return !battle.hidden.has(unit.id)
       default: return order.target ? !samePosition(order.target, unit.position) : true

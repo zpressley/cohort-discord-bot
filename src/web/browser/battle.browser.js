@@ -93,7 +93,7 @@ test('alone, on a phone: muster, an order written on the map, turns to a verdict
 
     // The first turn's card: its examples are put in the box, and the game reads them.
     const examples = await p.locator('[data-example]').count()
-    assert.equal(examples, 6)
+    assert.equal(examples, 7)
     // The first is the field's ground to fight for: "everyone advance" alone
     // lets the computer take it.
     assert.equal(await p.textContent('[data-example] >> nth=0'), 'everyone take the Crownhill')

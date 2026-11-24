@@ -139,13 +139,11 @@ test('"skirmish" for men with bows is fire and retreat: they advance, read back 
   assert.equal(foot.orders.length, 0, 'velites have no bows: a question')
 })
 
-test('"stay with the legionaries" is a question: no order keeps one unit with another, and the two nearest orders are offered', async () => {
+test('"stay with the legionaries" is an order to keep beside them as they move, read back by name', async () => {
   const r = await read('velites stay with the legionaries')
-  assert.equal(r.orders.length, 0)
-  assert.match(r.questions[0], /no order to keep one unit with another/)
-  const [there, both] = r.choices[0].options
-  assert.match(there.text, /^velites to [A-J]\d+-[NS][EW]$/)
-  assert.equal(both.text, 'velites and legionaries advance')
+  assert.deepEqual(r.questions, [])
+  assert.deepEqual(r.orders, [{ unitRef: 'red_velites', action: 'follow', friend: 'red_legionaries', keep: 'beside', guard: true }])
+  assert.match(r.understood[0], /^red_velites: keep beside red_legionaries as they move, and go at any enemy who comes to blows with them/)
 })
 
 test('"go around their left" is a question offering the ends of the enemy he has seen, by the compass', async () => {

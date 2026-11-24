@@ -84,9 +84,10 @@ function chanceToKeep(officer, nth) {
   return loyaltyOf(officer) <= LOYALTY.DISLOYAL ? chance * LOYALTY.DISLOYAL_GRASP : chance
 }
 
-/** How many clauses an order holds beyond the plain order. */
+/** How many clauses an order holds beyond the plain order. Guarding the unit
+ * kept by (follow, guard: going at an enemy that fights it) is one. */
 function clauses(order) {
-  return (order?.when ? 1 : 0) + (order?.steps?.length ?? 0)
+  return (order?.guard ? 1 : 0) + (order?.when ? 1 : 0) + (order?.steps?.length ?? 0)
 }
 
 /**
@@ -111,6 +112,12 @@ function grasp(order, officer, random) {
   const out = { ...order }
   let nth = 0
   let kept = 0
+  // Guarding is the first clause: lost, he keeps by the unit and no more.
+  if (order.guard) {
+    nth += 1
+    if (random() < chanceToKeep(officer, nth)) kept += 1
+    else delete out.guard
+  }
   if (order.when) {
     nth += 1
     if (random() < chanceToKeep(officer, nth)) kept += 1

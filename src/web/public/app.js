@@ -1457,6 +1457,8 @@ async function tent(token) {
       `${b.name} defend ${east(b, 2)}`,
       // By the compass, and every unit the other orders leave out.
       `${a.name} go north 200 m`,
+      // One unit keeping by another as it moves.
+      ...(own.length > 2 ? [`${own[2].name} stay with ${a.name}`] : []),
       'everyone else hold',
       // On a big field, the second line as one: a short order for many units.
       ...(own.some(u => u.secondLine) ? ['second line hold'] : [])

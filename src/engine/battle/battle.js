@@ -300,6 +300,78 @@ function stepTurn(state, sideOrders = {}, { sameTurn = false } = {}) {
     const remembered = state.lastSeen.get(unit.side)?.get(enemyId)
     return remembered ? { id: enemyId, position: remembered } : null
   }
+  // Where a unit told to keep by another of its own side goes (orders.js,
+  // follow): { to } its station by that unit as it stands now (null: hold
+  // where it is, on station already), { join } at an enemy fighting that
+  // unit, for one told to guard it, or { lost } why it can keep by it no
+  // longer. It keeps by what it can see of the unit; out of sight, it goes
+  // to where it last saw it (seenAt) before it gives up.
+  const followed = (unit, order) => {
+    const friend = getUnit(world, order.friend)
+    if (!friend || friend.side !== unit.side || friend.strength <= 0) return { lost: 'gone' }
+    if (broken.has(friend.id)) return { lost: 'broken' }
+    if (!canSee(map, unit, friend)) {
+      if (order.seenAt && !samePosition(order.seenAt, unit.position)) return { to: order.seenAt }
+      return { lost: 'out of sight' }
+    }
+    // Where it is making for this turn, as far as it can go: its own side
+    // knows, and keeps station on that. Where it is making for is
+    // remembered (seenAt), so that one lost from sight (horse outmarching
+    // foot) is looked for there.
+    const going = orders.find(o => o.unitId === friend.id && o.target && o.target !== 'hold' && !o.fleeing)
+    const path = going ? findPath(map, friend.position, toPosition(going.target)) : null
+    const ahead = path ? path[Math.min(friend.movementRange ?? 1, path.length - 1)] : friend.position
+    const seenAt = path ? { ...path[path.length - 1] } : { ...friend.position }
+    // Fighting itself: it stands and fights.
+    if (engagedAtStart.has(unit.id)) return { to: null, seenAt }
+    if (order.guard) {
+      const foes = [...(engagedAtStart.get(friend.id) ?? [])].map(id => getUnit(world, id))
+        .filter(e => e && e.strength > 0 && !broken.has(e.id) && seenAtStart.get(unit.side)?.has(e.id))
+        .sort((a, b) => tileDistance(unit.position, a.position) - tileDistance(unit.position, b.position) || a.id.localeCompare(b.id))
+      if (foes.length > 0) return { join: { ...foes[0].position }, seenAt }
+    }
+    return { to: stationBy(unit, { ...friend, position: ahead }, order.keep), seenAt }
+  }
+  // Its station: beside the unit it keeps by, across the way to the enemy
+  // as its side knows him (the enemy last seen nearest that unit, else the
+  // far side of the field), on its own side of it; or behind it, away from
+  // the enemy. The nearest open passable tile to that; null when it stands
+  // near enough already (FOLLOW.SLACK) or there is none.
+  const stationBy = (unit, friend, keep) => {
+    const known = [...(state.lastSeen.get(unit.side)?.values() ?? [])]
+      .sort((a, b) => tileDistance(friend.position, a) - tileDistance(friend.position, b) || a.y - b.y || a.x - b.x)
+    const home = { west: [-1, 0], east: [1, 0], north: [0, -1], south: [0, 1] }[spec.sides?.[unit.side]?.homeEdge ?? 'west'] ?? [-1, 0]
+    let ax = known.length ? friend.position.x - known[0].x : home[0]
+    let ay = known.length ? friend.position.y - known[0].y : home[1]
+    if (ax === 0 && ay === 0) [ax, ay] = home
+    const length = Math.hypot(ax, ay)
+    ax /= length; ay /= length
+    let ideal
+    if (keep === 'behind') {
+      ideal = { x: Math.round(friend.position.x + ax * T.FOLLOW.BEHIND), y: Math.round(friend.position.y + ay * T.FOLLOW.BEHIND) }
+    } else {
+      // Across the way to the enemy, on whichever side of it the unit is.
+      const sign = (unit.position.x - friend.position.x) * -ay + (unit.position.y - friend.position.y) * ax >= 0 ? 1 : -1
+      ideal = { x: Math.round(friend.position.x - ay * sign * T.FOLLOW.BESIDE), y: Math.round(friend.position.y + ax * sign * T.FOLLOW.BESIDE) }
+    }
+    const onStation = (p) => !samePosition(p, friend.position) && tileDistance(p, ideal) <= T.FOLLOW.SLACK &&
+      (keep !== 'behind' || (p.x - friend.position.x) * ax + (p.y - friend.position.y) * ay > 0)
+    if (onStation(unit.position)) return null
+    const taken = (p) => livingUnits(world).some(u => u.id !== unit.id && samePosition(u.position, p))
+    for (let r = 0; r <= 2; r++) {
+      for (let dy = -r; dy <= r; dy++) {
+        for (let dx = -r; dx <= r; dx++) {
+          if (Math.max(Math.abs(dx), Math.abs(dy)) !== r) continue
+          const p = { x: ideal.x + dx, y: ideal.y + dy }
+          if (map.inBounds(p) && map.passable(p) && !taken(p)) return p
+        }
+      }
+    }
+    return null
+  }
+  // Units going at an enemy fighting the one they guard: looking for a
+  // fight this turn, as an advance is.
+  const joining = new Set()
   const lookedOver = new Set()
   const whereToLook = (unit) => {
     if (!state.searched.has(unit.side)) state.searched.set(unit.side, new Set())
@@ -588,6 +660,12 @@ function stepTurn(state, sideOrders = {}, { sameTurn = false } = {}) {
         if (kept.clauses > 0) log.emit('grasp', turn, { unitId: order.unitId, officer: officer.name ?? null, clauses: kept.clauses, kept: kept.kept })
         given = kept.order
       }
+      // Told to keep by a unit, it is told where that unit is as the order
+      // reaches it: it makes for it there if it cannot see it.
+      if (given.action === 'follow') {
+        const friend = getUnit(world, given.friend)
+        if (friend && friend.strength > 0) given = { ...given, seenAt: { ...friend.position } }
+      }
       state.orderBook.set(order.unitId, given)
       freshThisTurn.add(order.unitId)
       // What his Commander last told him, and when it reached him: his
@@ -644,11 +722,16 @@ function stepTurn(state, sideOrders = {}, { sameTurn = false } = {}) {
       fresh: fresh.has(unit.id),
       nearestEnemy: (u) => toPress(u, { toGround: true }),
       namedEnemy: (u, id) => toFollow(u, id),
+      followed: (u, order) => followed(u, order),
       homeTarget: (u) => edgeTarget(map, u.position, edge)
     })
 
     const onHisOwn = ownJudgement(side, effective)
-    for (const unit of effective) {
+    // Units keeping by another are planned last, so that each knows where
+    // the one it keeps by is making for this turn (followed, below). With
+    // no follow order the order is as it always was.
+    const keeping = (u) => state.orderBook.get(u.id)?.action === 'follow'
+    for (const unit of [...effective.filter(u => !keeping(u)), ...effective.filter(keeping)]) {
       // The order's condition, if it has one and its moment has come: the
       // unit does the other thing, from now on. (Or its officer, having
       // lost that part, does as his nature tells him.)
@@ -673,8 +756,10 @@ function stepTurn(state, sideOrders = {}, { sameTurn = false } = {}) {
         freshThisTurn.add(unit.id)
       }
 
-      let { move, order, lostThread, quarryGone } = planUnit(unit, current, context(unit))
+      let { move, order, lostThread, quarryGone, joins, followLost } = planUnit(unit, current, context(unit))
       if (quarryGone) log.emit('quarryGone', turn, { unitId: unit.id, on: quarryGone })
+      if (followLost) log.emit('followLost', turn, { unitId: unit.id, on: followLost.on, why: followLost.why })
+      if (joins) joining.add(unit.id)
       if (lostThread) {
         // He has done what he remembered, and not what came after.
         const instead = loseThread(unit, 'steps', current);
@@ -706,7 +791,7 @@ function stepTurn(state, sideOrders = {}, { sameTurn = false } = {}) {
         const held = state.orderBook.get(unit.id)
         orders.push({
           ...move,
-          seeking: isSeeking(held, standingFor(unit)),
+          seeking: joining.has(unit.id) || isSeeking(held, standingFor(unit)),
           careful: Boolean(held?.careful)
         })
         continue
@@ -832,7 +917,7 @@ function stepTurn(state, sideOrders = {}, { sameTurn = false } = {}) {
     // it does now: 'hold' (digs in) or 'standing' (back to its side's
     // standing orders).
     const order = state.orderBook.get(move.unitId)
-    if (move.reachedTarget && order && order.action !== 'hold' && order.action !== 'advance' && !order.enemy) {
+    if (move.reachedTarget && order && order.action !== 'hold' && order.action !== 'advance' && order.action !== 'follow' && !order.enemy) {
       log.emit('arrived', turn, {
         unitId: move.unitId, action: order.action, at: { ...move.to },
         then: order.then === 'hold' ? 'hold' : 'standing',
@@ -891,7 +976,7 @@ function stepTurn(state, sideOrders = {}, { sameTurn = false } = {}) {
   // hidden force lets a column march by unless it chooses to strike.
   const seeking = (id) => {
     const unit = getUnit(world, id)
-    return sprung.has(id) || isSeeking(state.orderBook.get(id), standingFor(unit))
+    return sprung.has(id) || joining.has(id) || isSeeking(state.orderBook.get(id), standingFor(unit))
   }
   const seenNow = sightBySide(map, world, state.hidden)
   const picksFight = (id, otherId) =>

@@ -75,6 +75,7 @@ function orderWords(form, order, place = null, { relative = false } = {}) {
   // engine was told it. With nowhere to go, it is simply holding.
   const holdsIt = action === 'defend' || (action === 'move' && order.then === 'hold')
   if (holdsIt) action = place ? 'move' : 'hold'
+  if (action === 'follow' && order.keep === 'behind') action = 'followBehind'
   const words = ORDER[action] ?? { say: action, doing: action, did: action }
 
   let out = words[form]
@@ -611,3 +612,37 @@ module.exports.kindWords = kindWords
 const COUNT_WORDS = { 2: 'two', 3: 'three', 4: 'four', 5: 'five', 6: 'six', 7: 'seven', 8: 'eight', 9: 'nine', 10: 'ten' }
 NIGHT.overDays = (days) => `fought over ${COUNT_WORDS[days] ?? days} days`
 NIGHT.listed = 'Night fell, and neither side had won'
+
+// ── Keeping by another unit (engine/battle/orders.js, follow) ──
+// The order in words: "keep beside the legionaries", "keeping behind the
+// pikemen". Beside and guarding, they go at an enemy who fights the unit
+// they keep by; behind, they keep out of its fight.
+ORDER.follow = { say: 'keep beside', doing: 'keeping beside', did: 'kept beside', to: '' }
+ORDER.followBehind = { say: 'keep behind', doing: 'keeping behind', did: 'kept behind', to: '' }
+const FOLLOW_WORDS = {
+  // The read-back, after the order: what they will do as the other moves.
+  guard: 'as they move, and go at any enemy who comes to blows with them',
+  beside: 'as they move, at their own pace',
+  behind: 'as they move, on the side away from the enemy, at their own pace, and keep out of their fight unless attacked themselves',
+  // Several to keep by: each keeps by the one nearest it.
+  nearest: (pairs) => pairs.join('; '),
+  // Why a unit could keep by the other no longer, and what it does.
+  lost: {
+    broken: (unit, friend) => `${friend} broke, and ${unit}, who were keeping by them, hold where they are`,
+    gone: (unit, friend) => `${friend} are gone from the field, and ${unit}, who were keeping by them, hold where they are`,
+    'out of sight': (unit, friend) => `${unit} lost sight of ${friend}, whom they were keeping by, and hold where they are`
+  },
+  // A unit told to keep by itself, or by no one he has.
+  self: (who) => `${who} cannot keep by themselves. Name another of your units: "velites stay with the legionaries".`
+}
+module.exports.FOLLOW_WORDS = FOLLOW_WORDS
+
+// A unit's kind, as the Army tab shows it (kindWords), in its two parts:
+// how good the men are ("levy") and what they are ("skirmishers"). Orders
+// find units by these words (interpreter/resolve.js, unitsByKind).
+function kindParts(unit) {
+  const words = kindWords(unit).split(' ')
+  const quality = Object.values(KIND.quality).includes(words[0]) ? words.shift() : null
+  return { quality, kind: words.join(' ') }
+}
+module.exports.kindParts = kindParts

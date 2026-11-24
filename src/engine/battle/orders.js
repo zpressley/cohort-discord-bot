@@ -38,6 +38,15 @@
 //             since one on guard is not worth it). An enemy that stops
 //             beside the ambush is not struck: the player springs the
 //             trap, with any order to attack (ruled 2026-10-29).
+//   follow    keep station by another unit of its own side (friend: its id)
+//             as it moves: keep 'beside' it (a tile to one side, across the
+//             way to the enemy) or 'behind' it (two tiles off, on the side
+//             away from the enemy as its side knows him), at its own pace.
+//             guard: go at an enemy fighting the unit it keeps by. A unit
+//             fighting itself stands and fights. The unit followed broken,
+//             gone, or out of sight and not where it was last seen: the
+//             order becomes hold, and its side is told (followLost). It
+//             never finishes, as hold does not.
 //
 // Depth (November 2026, docs/design/officers-memory-delegation.md). An order
 // may hold more than one thing to do:
@@ -82,7 +91,7 @@
 const { toPosition, samePosition } = require('../map/labels')
 const { MAX_STEPS } = require('../command/officers')
 
-const ACTIONS = ['move', 'hold', 'defend', 'advance', 'attack', 'withdraw', 'hide', 'check', 'ambush']
+const ACTIONS = ['move', 'hold', 'defend', 'advance', 'attack', 'withdraw', 'hide', 'check', 'ambush', 'follow']
 const SEEKING = ['advance', 'attack']
 
 /**
@@ -139,6 +148,14 @@ function normalizeOne(order) {
     // An attack on a named enemy goes where that enemy is, not to a place.
     if (order.action === 'attack' && order.enemy) return withCareful({ action: 'attack', target: null, then: null }, order)
     if (order.action === 'attack' && !target) return withCareful({ action: 'advance', target: null, then: null }, order)
+    // Keeping by another unit goes where that unit is, not to a place.
+    if (order.action === 'follow') {
+      if (!order.friend) throw new Error('a follow order needs the unit to follow')
+      return withCareful({
+        action: 'follow', target: null, then: null, friend: order.friend,
+        keep: order.keep === 'behind' ? 'behind' : 'beside', ...(order.guard ? { guard: true } : {})
+      }, order)
+    }
     return withCareful({ action: order.action, target, then }, order)
   }
   if (!order.target || order.target === 'hold') return { action: 'hold', target: null, then: null }
@@ -150,11 +167,14 @@ function normalizeOne(order) {
  *
  * @param {Object} unit
  * @param {Object|undefined} order  normalized, from the battle's order book
- * @param {Object} context          { fresh, nearestEnemy(unit), homeTarget(unit), namedEnemy(unit, id) }
+ * @param {Object} context          { fresh, nearestEnemy(unit), homeTarget(unit), namedEnemy(unit, id), followed(unit, order) }
  *   fresh: the order was submitted this player turn
  *   namedEnemy: where the unit's side knows that enemy to be ({ position }),
  *   null when it has lost it, { gone: true } when it is beaten or gone
- * @returns {{ move: {unitId, target}|null, order: Object|undefined, quarryGone?: string }}
+ *   followed: for a follow order, { to } where to stand (null: where it
+ *   is), { join } an enemy to go at, or { lost } why it can keep by it no
+ *   longer; seenAt where it last saw the unit it keeps by
+ * @returns {{ move: {unitId, target}|null, order: Object|undefined, quarryGone?: string, joins?: boolean, followLost?: { on, why } }}
  *   move null means "use the side's standing orders"; order is what the
  *   unit's standing order becomes (undefined when it is done)
  */
@@ -217,6 +237,17 @@ function planUnit(unit, order, context) {
         return { move: { unitId: unit.id, target: 'hold' }, order: holding }
       }
       return { move: null, order: undefined }
+    }
+
+    case 'follow': {
+      const way = context.followed?.(unit, order) ?? { lost: 'gone' }
+      if (way.lost) {
+        return { move: { unitId: unit.id, target: 'hold' }, order: { action: 'hold', target: null, then: null }, followLost: { on: order.friend, why: way.lost } }
+      }
+      const kept = way.seenAt && !samePosition(way.seenAt, order.seenAt ?? { x: -1, y: -1 }) ? { ...order, seenAt: { ...way.seenAt } } : order
+      if (way.join) return { move: { unitId: unit.id, target: way.join }, order: kept, joins: true }
+      if (!way.to || samePosition(way.to, unit.position)) return { move: { unitId: unit.id, target: 'hold' }, order: kept }
+      return { move: { unitId: unit.id, target: way.to }, order: kept }
     }
 
     default:
