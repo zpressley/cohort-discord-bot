@@ -42,6 +42,16 @@ function saveSeat(seat) {
 function loadDraft(token) {
   try { return localStorage.getItem(`cohort.draft.${token}`) ?? '' } catch { return '' }
 }
+// The army screen's changes not yet kept ("Keep this army" makes them his
+// army): kept in this browser as they are made, so leaving the screen, a
+// link or a reload loses none of them. `base` is the army they were made
+// to; if it has been changed since (kept from elsewhere), they are dropped.
+function loadArmyDraft(token) {
+  try { return JSON.parse(localStorage.getItem(`cohort.army.${token}`)) } catch { return null }
+}
+function saveArmyDraft(token, draft) {
+  try { draft ? localStorage.setItem(`cohort.army.${token}`, JSON.stringify(draft)) : localStorage.removeItem(`cohort.army.${token}`) } catch { /* fine */ }
+}
 function howToHidden() {
   try { return localStorage.getItem('cohort.hideHowTo') === '1' } catch { return false }
 }
@@ -220,16 +230,21 @@ async function home() {
 
 // ── Your battles ───────────────────────────────────────
 async function battles() {
-  const lines = await seatLines(loadSeats())
+  // A battle fought on the next day is one battle: the day before is not
+  // listed once there is a next day in the list.
+  const all = await seatLines(loadSeats())
+  const listed = new Set(all.map(l => l.token))
+  const lines = all.filter(l => !(l.nextDay?.token && listed.has(l.nextDay.token)))
   const group = (status) => lines.filter(l => l.status === status)
   const card = (l) => {
     const verdict = verdictWords(l)
     const opponent = l.opponent === 'standing' ? 'against the computer' : 'against a friend'
     const when = l.status === 'waiting' && l.sentAt ? `your orders went ${ago(l.sentAt)}` : `turn ${l.turn} · ${clock(l.minutes)}`
+    const over = l.status === 'finished' && l.overDays
     return `<a class="battle-link${l.status === 'your-orders' ? ' mine' : ''}" href="/b/${esc(l.token)}" data-link>
-      <strong>${esc(l.title)}</strong>
-      <span>${esc(sideName(l.side))}, ${opponent}</span>
-      <span>${esc(verdict ? `${verdict.title}: ${verdict.reason}` : when)}</span>
+      <strong>${esc(over ? l.firstTitle : l.title)}</strong>
+      <span>${esc(sideName(l.side))}, ${opponent}${over ? `, ${esc(l.overDays)}` : ''}</span>
+      <span>${esc(verdict ? (l.outcome?.listed ?? `${verdict.title}: ${verdict.reason}`) : when)}</span>
       ${l.calledOut ? `<span class="called-out">${esc(l.calledOut)}</span>` : ''}
     </a>`
   }
@@ -257,11 +272,11 @@ const veteranOf = (v) => {
   const n = Math.floor(Number(v) || 0)
   return n === 0 ? 'new to battle' : `${n} battle${n === 1 ? '' : 's'} a man on average`
 }
-const FATE_WORDS = { killed: 'killed', captured: 'taken by the enemy', 'given up': 'given to the enemy for the Commander\'s freedom', left: 'left you when the battle left you a commander of none' }
+const FATE_WORDS = { killed: 'killed', captured: 'taken by the enemy', 'given up': 'given to the enemy for your freedom', left: 'left you when the battle left you a commander of none' }
 async function officers(note = null) {
   const commanders = await loadCommanders()
   const battleLine = (r) => `<li><strong>${esc(r.title)}</strong>, ${esc(RESULT_WORDS[r.result] ?? r.result)}${
-    r.fate === 'wounded' ? `; wounded${r.how ? ` (${esc(r.how)})` : ''}` : ''}${r.fate === 'given up' ? '; given up, with his men, in a deal for his Commander\'s freedom' : ''}.${r.deeds ? ` His men ${esc(r.deeds)}.` : ''}${r.named ? ' Here he came forward to lead them.' : ''}${r.loyalty > 0 ? ' He thought the better of you for it.' : r.loyalty < 0 ? ' He thought the worse of you for it.' : ''}</li>`
+    r.fate === 'wounded' ? `; wounded${r.how ? ` (${esc(r.how)})` : ''}` : ''}${r.fate === 'given up' ? '; given up, with his men, in a deal for your freedom' : ''}.${r.deeds ? ` His men ${esc(r.deeds)}.` : ''}${r.named ? ' Here he came forward to lead them.' : ''}${r.loyalty > 0 ? ' He thought the better of you for it.' : r.loyalty < 0 ? ' He thought the worse of you for it.' : ''}</li>`
   // Moving an officer to other men (between battles only): to a unit with
   // none, or in place of the officer there, who takes his.
   const moves = (o, c) => {
@@ -294,14 +309,14 @@ async function officers(note = null) {
   const company = (c) => `
       <h2 class="commander">Commander ${esc(c.name)}${c.title ? ` ${esc(c.title)}` : ''}${c.factionTitle ? ` of ${esc(c.factionTitle)}` : ''}</h2>
       ${c.kind ? `<p class="note">${esc(c.kind.title.charAt(0).toUpperCase() + c.kind.title.slice(1))}${c.holds ? `, for ${esc(c.holds.title.toLowerCase())}` : ''}.</p>` : ''}
-      <a class="btn btn-quiet btn-wide" href="/commander/${esc(c.token)}" data-link>His record</a>
+      <a class="btn btn-quiet btn-wide" href="/commander/${esc(c.token)}" data-link>Your record</a>
       <p class="note">${c.battles} battle${c.battles === 1 ? '' : 's'} fought. ${c.ended
-        ? `${c.ended.how === 'killed' ? 'Killed' : 'Lost in the enemy\'s hands'} at ${esc(c.ended.at)}. His name stays in the record; his company is no more.`
+        ? `${c.ended.how === 'killed' ? 'You were killed' : 'You were lost in the enemy\'s hands'} at ${esc(c.ended.at)}. Your name stays in the record; your company is no more.`
         : c.battle
-        ? `His army is in the field${c.battle.seat ? `: <a href="/b/${esc(c.battle.seat)}" data-link>${esc(c.battle.title)}</a>` : ` (${esc(c.battle.title)})`}.`
-        : 'His army is ready to muster.'}</p>
+        ? `Your army is in the field${c.battle.seat ? `: <a href="/b/${esc(c.battle.seat)}" data-link>${esc(c.battle.title)}</a>` : ` (${esc(c.battle.title)})`}.`
+        : 'Your army is ready to muster.'}</p>
       ${c.battle?.calledOut && c.battle.seat ? `<a class="notice" href="/b/${esc(c.battle.seat)}" data-link role="status"><strong>${esc(c.battle.calledOut)}</strong><span>${esc(c.battle.title)}</span></a>` : ''}
-      ${!c.ended && c.faction ? `<a class="btn btn-wide" href="/army/${esc(c.token)}" data-link>${c.battle ? 'His army' : c.army?.own ? 'Change his army' : 'Buy his own army'}</a>` : ''}
+      ${!c.ended && c.faction ? `<a class="btn btn-wide" href="/army/${esc(c.token)}" data-link>${c.battle ? 'Your army' : c.army?.own ? 'Change your army' : 'Buy your own army'}</a>` : ''}
       ${c.officers.map(o => card(o, c)).join('')}
       ${(c.units ?? []).filter(u => u.trained > 0).map(u => `<p class="note">The ${esc(u.kind)} have been trained up ${u.trained} level${u.trained === 1 ? '' : 's'} by an officer of thirty battles.</p>`).join('')}
       ${(c.unled ?? []).map(u => `<p class="note">The ${esc(u.kind)} have no officer${u.battles >= c.earnedAt ? ': one of their own will step up after their next battle' : ` yet: ${u.battles} battle${u.battles === 1 ? '' : 's'} come through. One comes forward after ${c.earnedAt}`}. ${menLine(c, u.kind, 'Their men')}</p>`).join('')}
@@ -310,7 +325,7 @@ async function officers(note = null) {
     <header class="bar"><a href="/battles" data-link>Your battles</a><strong style="font-family: var(--font-display); font-size: 18px">Your officers</strong><span></span></header>
     <main class="page">
       ${commanders.length === 0
-        ? '<p class="note">No officers yet. A Commander starts with one, a veteran with his best unit. The rest are earned: a unit that comes through enough battles finds an officer in its own ranks.</p>'
+        ? '<p class="note">No officers yet. You start with one, a veteran, with your best unit. The rest are earned: a unit that comes through enough battles finds an officer in its own ranks.</p>'
         : '<p class="note">A unit with no officer keeps only a plain order. One that comes through enough battles finds an officer in its own ranks; a veteran follows a longer order. An army fights one battle at a time.</p>'}
       ${note ? `<p class="note" role="status" id="officers-note">${esc(note)}</p>` : ''}
       ${commanders.map(company).join('')}
@@ -413,6 +428,9 @@ async function makeCommander() {
     try {
       const token = await newCommander(factionBox.value, { kind: state.kind, holds: state.holds, name: nameBox.value.trim() || asked.name })
       rememberCommander(token)
+      // Made to lead a friend's battle: he leads it, with no second tap on
+      // "Who leads?" (whoLeads takes him straight on).
+      if (then.startsWith('/b/')) { try { localStorage.setItem(`cohort.leads.${then.slice(3)}`, token) } catch { /* he chooses again */ } }
       go(params.get('buy') === '1' ? `/army/${token}?then=${then}` : then)
     } catch (error) {
       button.disabled = false
@@ -563,10 +581,11 @@ async function muster() {
     document.getElementById('army-line').innerHTML = chosen?.faction
       ? `<strong>${army.own ? 'Your own army' : `The usual army of ${esc(f.title)}`}</strong>
          ${chosen.roster ? whoMarches(chosen) : ''}
-         <a class="btn btn-wide" href="/army/${esc(chosen.token)}?then=/muster" data-link id="to-army">${army.own ? 'Change your army' : 'Buy your own army'}</a>`
+         ${loadArmyDraft(chosen.token) ? '<p class="question" id="army-not-kept">You changed your army and have not kept the changes: this army marches as it was. To march with them, open your army and keep it.</p>' : ''}
+         <a class="btn btn-wide" href="/army/${esc(chosen.token)}?then=/muster" data-link id="to-army">${loadArmyDraft(chosen.token) ? 'Your army, with your changes' : army.own ? 'Change your army' : 'Buy your own army'}</a>`
       : `<strong>The usual army of ${esc(f?.title ?? '')}</strong>
-         <span class="note">Or buy your own: make your Commander first, and choose his units within his budget.</span>
-         <button class="btn btn-wide" type="button" id="make-and-buy">Make your Commander, and buy his army</button>`
+         <span class="note">Or buy your own: make your Commander first, and choose your units within your budget.</span>
+         <button class="btn btn-wide" type="button" id="make-and-buy">Make your Commander, and buy your army</button>`
     document.getElementById('to-army')?.addEventListener('click', () => rememberCommander(chosen.token))
     for (const b of document.querySelectorAll('[data-march]')) {
       b.addEventListener('click', () => {
@@ -689,6 +708,16 @@ async function armyScreen(token) {
   }
   const cap = (s) => String(s).charAt(0).toUpperCase() + String(s).slice(1)
   const inField = Boolean(commander.battle)
+  // His changes from last time, not yet kept, as he left them.
+  let base = JSON.stringify({ units: state.units, captured: state.captured })
+  const rebase = () => { base = JSON.stringify({ units: state.units, captured: state.captured }) }
+  const kept = inField ? null : loadArmyDraft(token)
+  if (kept && kept.base === base) {
+    Object.assign(state, { units: kept.units, captured: kept.captured, draft: kept.draft ?? null, at: kept.at ?? null, changed: true, note: 'Your changes from last time are here, not yet kept. Keep this army to make it yours.' })
+  } else if (kept) saveArmyDraft(token, null)
+  const remember = () => saveArmyDraft(token, !inField && (state.changed || state.draft)
+    ? { base, units: state.units, captured: state.captured, draft: state.draft, at: state.at }
+    : null)
   const back = then ? `<a href="${esc(then)}" data-link>${then === '/muster' ? 'Muster' : 'The battle'}</a>` : '<a href="/officers" data-link>Your officers</a>'
   const rosterUnit = (name) => (commander.roster?.units ?? []).find(u => u.name === name)
   const eliteName = () => (commander.roster?.units ?? []).find(u => u.how === 'elite')?.name
@@ -730,6 +759,7 @@ async function armyScreen(token) {
         Object.assign(commander, view)
         state.units = (view.army?.units ?? []).map(u => ({ ...u }))
         state.captured = (view.roster?.units ?? []).filter(u => u.came).map(u => u.name)
+        rebase()
         const was = state.naming
         const now = view.roster.units.find(u => (u.formerly ?? []).includes(was) || u.name === was)
         state.note = `The ${was} are the ${now?.name ?? typed} now.`
@@ -768,6 +798,7 @@ async function armyScreen(token) {
 
   function render() {
     const s = state.seen
+    remember()
     if (state.draft) return renderDraft(s)
     const room = s.left >= s.cheapest
     app.innerHTML = `
@@ -776,7 +807,7 @@ async function armyScreen(token) {
         <h1>${esc(commander.name)}'s army</h1>
         ${budget(s.spent, s.budget)}
         ${perkList(s.perks)}
-        ${inField ? `<p class="question">His army is in the field (${esc(commander.battle.title)}). It can be changed when the battle is over.</p>` : ''}
+        ${inField ? `<p class="question">Your army is in the field (${esc(commander.battle.title)}). It can be changed when the battle is over.</p>` : ''}
         <div class="buy-unit elite">
           <header><h3>${esc(cap(eliteName() ?? s.elite.name))}</h3><span class="cost">Free</span></header>
           <span class="note">${esc(s.elite.words)}</span>
@@ -815,6 +846,8 @@ async function armyScreen(token) {
         ${s.errors.map(e => `<p class="refused">${esc(e)}</p>`).join('')}
         ${state.note ? `<p class="note" role="status">${esc(state.note)}</p>` : ''}
         ${state.error ? `<p class="error">${esc(state.error)}</p>` : ''}
+        ${state.changed && !inField ? `<div class="buy-unit" id="not-kept"><span class="note">Not yet your army: your changes wait in this browser, as you left them, until you keep this army or undo them.</span>
+          <button class="btn btn-quiet" type="button" id="undo">Undo your changes</button></div>` : ''}
         <p class="note">A unit you keep keeps its officer, or its battles toward one, whatever you change. A unit you dismiss takes its battles with it; its officer stays with you, and leads a unit that has none. A new unit has no officer: it earns one in battle. At the muster you choose who marches; a unit left at home is still yours, and what you buy still counts it.</p>
         ${inField ? '' : `<div class="buy-foot">
           <button class="btn btn-main btn-wide" type="button" id="keep"${s.errors.length || state.saving ? ' disabled' : ''}>${state.changed || !state.own ? 'Keep this army' : 'Kept'}</button>
@@ -871,6 +904,8 @@ async function armyScreen(token) {
       state.captured = (view.roster?.units ?? []).filter(u => u.came).map(u => u.name)
       state.changed = false
       state.saving = false
+      rebase()
+      saveArmyDraft(token, null)
       if (then) return go(then)
       state.note = 'Your army is kept. It goes with you to your next battle.'
       appraise().then(render)
@@ -885,6 +920,12 @@ async function armyScreen(token) {
       }
     }
     document.getElementById('keep')?.addEventListener('click', () => keep({ units: state.units, captured: state.captured }))
+    document.getElementById('undo')?.addEventListener('click', async () => {
+      const was = JSON.parse(base)
+      Object.assign(state, { units: was.units, captured: was.captured, changed: false, note: 'Your army is as it was kept.' })
+      await appraise()
+      render()
+    })
     document.getElementById('usual')?.addEventListener('click', () => keep({ usual: true, captured: state.captured }))
   }
 
@@ -967,7 +1008,7 @@ async function armyScreen(token) {
   }
 
   if (!commander.faction) {
-    app.innerHTML = `<main class="page"><h1>${esc(commander.name)}</h1><p class="note">He has no faction yet: he takes one at his next muster, and then buys his army from its kit.</p><a class="btn btn-wide" href="/muster" data-link>Muster</a></main>`
+    app.innerHTML = `<main class="page"><h1>${esc(commander.name)}</h1><p class="note">You have no faction yet: you take one at your next muster, and then buy your army from its kit.</p><a class="btn btn-wide" href="/muster" data-link>Muster</a></main>`
     return
   }
   await appraise()
@@ -984,16 +1025,25 @@ async function whoLeads(token, view) {
   const [all, factions] = await Promise.all([loadCommanders(), view.faction ? api('GET', '/api/factions') : []])
   // The Commander last chosen in this browser first (one just made, and his army bought).
   const ready = all.filter(c => !c.ended && !c.battle).sort((x, y) => (y.token === lastCommander()) - (x.token === lastCommander()))
+  // A Commander just made for this battle (makeCommander) leads it at once.
+  let made = null
+  try { made = localStorage.getItem(`cohort.leads.${token}`); localStorage.removeItem(`cohort.leads.${token}`) } catch { /* he chooses */ }
+  if (made && ready.some(c => c.token === made)) {
+    try {
+      await api('POST', `/api/seat/${token}/join`, { commander: made, faction: null })
+      return route()
+    } catch { /* the choice below, with the reason if he taps again */ }
+  }
   const titleOf = (id) => factions.find(f => f.id === id)?.title ?? ''
   const choice = (c, i) => `<button class="btn btn-wide${i === 0 ? ' btn-main' : ''}" type="button" data-lead="${esc(c.token)}">${esc(c.name)}${c.title ? ` ${esc(c.title)}` : ''}, ${c.battles} battle${c.battles === 1 ? '' : 's'} fought${c.faction && view.faction ? ` (${esc(titleOf(c.faction))})` : ''}</button>`
   app.innerHTML = `
     <header class="bar"><a href="/battles" data-link>Battles</a><div class="bar-title"><strong>${esc(b.title)}</strong><span>${esc(sideName(b.side))} · against a friend</span></div><span></span></header>
     <main class="page" id="who-leads">
       <h1>Who leads?</h1>
-      <p class="note">You command ${esc(sideName(b.side))}${view.faction ? ', with your Commander\'s own army: the one he bought, or his faction\'s usual one' : ''}. Your Commander rides with your best unit, and his officers lead your units. What befalls them here goes with them to the next battle.</p>
+      <p class="note">You command ${esc(sideName(b.side))}${view.faction ? ', with your own army: the one you bought, or your faction\'s usual one' : ''}. You ride with your best unit, and your officers lead your units. What befalls you and them here goes with you to the next battle.</p>
       ${ready.map(choice).join('')}
       <button class="btn btn-wide${ready.length ? '' : ' btn-main'}" type="button" data-lead="new">A new Commander${view.faction ? ', with the usual army' : ''}</button>
-      ${view.faction ? '<button class="btn btn-wide" type="button" data-lead="new-buy">A new Commander, and buy his army first</button>' : ''}
+      ${view.faction ? '<button class="btn btn-wide" type="button" data-lead="new-buy">A new Commander, and buy your army first</button>' : ''}
       <div id="who-leads-error"></div>
     </main>`
   for (const button of app.querySelectorAll('[data-lead]')) {
@@ -1069,6 +1119,10 @@ async function tent(token) {
           <button class="btn" type="button" id="whole" aria-label="The whole field" aria-pressed="false">⤢</button>
           <button class="btn btn-tall" type="button" id="tall" aria-label="Taller map" aria-pressed="false">⇕</button>
         </div>
+        <div class="map-find">
+          <button class="btn" type="button" id="find-army">Your army</button>
+          <button class="btn" type="button" id="find-you">You</button>
+        </div>
         <div class="map-hint" id="map-hint"></div>
       </section>
       <aside class="panel" aria-label="Army, orders and dispatches">
@@ -1098,6 +1152,8 @@ async function tent(token) {
     if (state.zoom === null) state.zoom = Math.max(scroll.clientWidth / W, 15 / TILE)
     svg.style.width = `${Math.round(W * state.zoom)}px`
     svg.style.height = 'auto'
+    // (Put back as it was: not a move of his own.)
+    if (keepScroll) placed = { left, top }
     if (state.shown) { if (keepScroll) { scroll.scrollLeft = left; scroll.scrollTop = top } return }
     attachGestures(svg, onMap(state.view), () => state.picked, {
       onPick: (id) => { state.picked = id; state.stack = null; state.place = null; state.flash = null; renderMap(); renderHint(); if (state.tab === 'army') renderPanel() },
@@ -1115,14 +1171,57 @@ async function tent(token) {
   function centreOnArmy() {
     // Held, the map opens where he is held.
     const own = state.view.commander?.heldPosition ? [{ position: state.view.commander.heldPosition }] : onMap(state.view).own
-    if (!own.length) return
+    centreOn(own)
+  }
+  function centreOn(units) {
+    if (!units.length) return
     const svg = scroll.querySelector('svg')
     const scale = svg.clientWidth / Number(svg.getAttribute('width'))
-    const mx = own.reduce((s, u) => s + u.position.x, 0) / own.length
-    const my = own.reduce((s, u) => s + u.position.y, 0) / own.length
+    const mx = units.reduce((s, u) => s + u.position.x, 0) / units.length
+    const my = units.reduce((s, u) => s + u.position.y, 0) / units.length
     scroll.scrollLeft = (26 + mx * TILE) * scale - scroll.clientWidth / 2
     scroll.scrollTop = (26 + my * TILE) * scale - scroll.clientHeight / 2
+    placed = { left: scroll.scrollLeft, top: scroll.scrollTop }
   }
+  // Whether he has moved the map himself since this turn began (since the
+  // map opened, or the last turn's dispatch came in): if not, the map comes
+  // back to his army when the turn has run (afterTurn). A scroll the page
+  // made itself (placed) is not his.
+  let moved = false
+  let placed = null
+  scroll.addEventListener('scroll', () => {
+    if (placed && Math.abs(scroll.scrollLeft - placed.left) < 2 && Math.abs(scroll.scrollTop - placed.top) < 2) return
+    placed = null
+    moved = true
+  }, { passive: true })
+  function afterTurn() {
+    if (!moved && !state.shown) centreOnArmy()
+    moved = false
+  }
+  // One tap to find his army (the whole of it in the window if the zoom
+  // allows, zoomed out if it must be), and one to find himself.
+  document.getElementById('find-army').addEventListener('click', () => {
+    const own = onMap(state.view).own
+    if (!own.length) return centreOnArmy()
+    const svg = scroll.querySelector('svg')
+    const W = Number(svg.getAttribute('width'))
+    const xs = own.map(u => u.position.x)
+    const ys = own.map(u => u.position.y)
+    const spanX = (Math.max(...xs) - Math.min(...xs) + 4) * TILE
+    const spanY = (Math.max(...ys) - Math.min(...ys) + 4) * TILE
+    const fit = Math.min(scroll.clientWidth / spanX, scroll.clientHeight / spanY)
+    if (fit < state.zoom) {
+      state.zoom = Math.max(wholeZoom(), fit)
+      svg.style.width = `${Math.round(W * state.zoom)}px`
+    }
+    centreOn(own)
+  })
+  document.getElementById('find-you').addEventListener('click', () => {
+    const c = state.view.commander
+    const at = c?.heldPosition ?? onMap(state.view).own.find(u => u.id === c?.unitId)?.position
+    if (at) centreOn([{ position: at }])
+    else centreOnArmy()
+  })
 
   // Zoom about a point of the screen (the pinch's middle), or the middle of
   // the map's window.
@@ -1272,7 +1371,7 @@ async function tent(token) {
     const sightCard = (u) => `
       <div class="unit-card">
         <header><h3>${esc(u.name)}</h3><span class="where">${u.outOfSight ? 'out of your sight' : esc(u.at)}</span></header>
-        <span class="note">${esc([u.quality, u.role].filter(Boolean).join(' ').replace(/_/g, ' '))}${u.outOfSight ? '' : `, about ${u.strength} men, in sight from where you are held`}</span>
+        <span class="note">${esc(u.kind ?? [u.quality, u.role].filter(Boolean).join(' ').replace(/_/g, ' '))}${u.outOfSight ? '' : `, about ${u.strength} men, in sight from where you are held`}</span>
         ${officerLine(u)}
         <p class="unit-order">${esc(u.order.charAt(0).toUpperCase() + u.order.slice(1))}.</p>
         ${u.broken ? '<div class="flags"><span class="flag flag-warn">broken</span></div>' : ''}
@@ -1280,7 +1379,7 @@ async function tent(token) {
     const units = v.own.map(u => u.outOfSight || u.inSightOfCaptivity ? sightCard(u) : `
       <div class="unit-card" aria-pressed="${u.id === state.picked}">
         <header><h3>${esc(u.name)}</h3><span class="where">${esc(u.at)} · ${esc(terrainWords(v, u.position.x, u.position.y))}</span></header>
-        <span class="note">${esc([u.quality, u.role].filter(Boolean).join(' ').replace(/_/g, ' '))}, ${u.strength} of ${u.maxStrength} men</span>
+        <span class="note">${esc(u.kind ?? [u.quality, u.role].filter(Boolean).join(' ').replace(/_/g, ' '))}, ${u.strength} of ${u.maxStrength} men</span>
         ${u.word && !u.word.live ? `<p class="unit-order word${u.word.cutOff || u.word.noWord ? ' cut-off' : ''}"><strong>${u.word.cutOff ? 'Cut off.' : 'By rider:'}</strong> ${esc(u.word.cutOff ? u.word.said.replace(/^cut off: n/, 'N') : u.word.noWord ? `${u.word.said}. This is where they last were` : `as they were ${u.word.said}`)}</p>` : ''}
         ${u.rider ? `<p class="unit-order"><strong>On the road:</strong> ${esc(u.rider.said)}</p>` : ''}
         ${v.commander?.unitId === u.id ? '<p class="unit-order"><strong>You ride with them.</strong> If they are cut to half and still in the fight, you can be taken or killed.</p>' : ''}
@@ -1298,7 +1397,7 @@ async function tent(token) {
     // The computer's Commander: his name, and what is said of him.
     const them = v.enemyCommander ? `<p class="note"><strong>The enemy's Commander:</strong> ${esc(v.enemyCommander.said)}</p>` : ''
     const seen = v.enemies.length
-      ? `<p class="label-caps">${v.commander?.status === 'held' ? 'The enemy, as you can see it from where you are held' : 'The enemy, as you know it'}</p>${them}${v.enemies.map(e => `<p class="note">${esc(e.name)} at ${esc(e.at)}: ${esc(e.said)}</p>`).join('')}`
+      ? `<p class="label-caps">${v.commander?.status === 'held' ? 'The enemy, as you can see it from where you are held' : 'The enemy, as you know it'}</p>${them}${v.enemies.map(e => `<p class="note">${esc(/^enemy\b/i.test(e.name) ? e.name : `Enemy ${String(e.name).toLowerCase()}`)} at ${esc(e.at)}: ${esc(e.said)}</p>`).join('')}`
       : `${them}<p class="note">No enemy in sight.</p>`
     body.innerHTML = `${units || '<p class="note">No units standing.</p>'}${fallen}${seen}`
     body.querySelectorAll('[data-pick]').forEach(b => b.addEventListener('click', () => {
@@ -1476,6 +1575,7 @@ async function tent(token) {
         } catch (error) { state.readback = { understood: [], questions: [], error: error.message } }
         state.sending = false
         renderAll()
+        afterTurn()
         watch()
       }
       body.querySelectorAll('[data-chip]').forEach(box => box.addEventListener('change', () => {
@@ -1562,6 +1662,7 @@ async function tent(token) {
         await load()
         if (result.status === 'turn-ran') state.tab = 'dispatches'
         renderAll()
+        afterTurn()
         watch()
       } catch (error) {
         state.sending = false
@@ -1668,6 +1769,8 @@ async function tent(token) {
   }
 
   function renderAll() {
+    // "You" finds the Commander on the map: there is none to find without one.
+    document.getElementById('find-you').hidden = !state.view.commander
     renderBar()
     renderGround()
     renderMap()
@@ -1702,6 +1805,7 @@ async function tent(token) {
           await load()
           if (s.status === 'your-orders' && turned) state.tab = 'dispatches'
           renderAll()
+          if (turned) afterTurn()
           watch()
         }
       } catch { /* try again later */ }
