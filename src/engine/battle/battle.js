@@ -42,6 +42,7 @@ const { normalizeOrder, planUnit, nextStep, isSeeking, NEAR_TILES } = require('.
 const { grasp, losingTheThread, ownCommand, wouldYield, loyaltyOf } = require('../command/officers')
 const { createCommanders, stepCommanders, canRide } = require('../command/commander')
 const { byRider, riders } = require('../command/messengers')
+const { actsAlone, initiative } = require('../command/initiative')
 const { canSee, visionRange } = require('../map/sight')
 const { coverFor } = require('./hiding')
 const { canSkirmish, fallBack } = require('./skirmish')
@@ -404,6 +405,97 @@ function stepTurn(state, sideOrders = {}, { sameTurn = false } = {}) {
     }
   }
 
+  // Officers who act on their Commander's intent when no word can reach
+  // them (command/initiative.js; docs/design/point-of-view-and-messengers.md,
+  // "What comes after"). Only a side whose Commander is on the field and
+  // free, sending his orders by rider, and only for an officer who can
+  // (veterans and above). Returns, for the side, (unit, its order) -> the
+  // order he gives himself, or null; null for a side with none.
+  // state.touch: unitId -> { turn, post }, the last tick a rider could get
+  // through to the unit, and where its Commander was then.
+  // state.ownMind: unitId -> what its officer last chose of his own
+  // judgement, since he last had word; he does not choose it twice.
+  const ownJudgement = (side, effective) => {
+    const c = state.commanders?.[side]
+    if (!c || c.status !== 'free' || !byRider(state, side)) return null
+    if (!effective.some(u => actsAlone(u.officer))) return null
+    const road = riders(state, side)
+    state.touch ??= new Map()
+    state.ownMind ??= new Map()
+    const friends = effective
+    const since = (from) => {
+      const out = []
+      for (let t = from + 1; t <= turn; t++) out.push(...log.forTurn(t))
+      return out
+    }
+    return (unit, current) => {
+      if (!actsAlone(unit.officer)) return null
+      const ticks = road ? road.ticks(unit) : Infinity
+      const was = state.touch.get(unit.id) ?? { turn: 0, post: road ? { ...road.post.position } : null }
+      // An order that reached him is word from his Commander.
+      const ordered = state.lastOrder?.get(unit.id)
+      if (ticks !== Infinity || ordered?.turn === turn) {
+        state.touch.set(unit.id, { turn, post: road ? { ...road.post.position } : was.post })
+        state.ownMind.delete(unit.id)
+        return null
+      }
+      if (turn - was.turn < T.INITIATIVE.WAIT) return null
+      // What has changed since he last had word, as his own unit sees it.
+      const from = Math.max(was.turn, ordered?.turn ?? 0)
+      const news = since(from)
+      const sees = (e) => seenAtStart.get(side)?.has(e.id) && canSee(map, unit, e)
+      const enemies = livingUnits(world).filter(e => e.side !== side && !broken.has(e.id) && sees(e))
+      const changed = []
+      let ground = null
+      for (const area of state.ground ?? []) {
+        const reach = area.reach ?? (area.single === false ? 0 : 1)
+        const on = (u) => area.tiles.some(t => tileDistance(u.position, t) <= reach)
+        if (!enemies.some(on) || friends.some(on)) continue
+        if (!news.some(e => e.type === 'objective' && e.objectiveId === area.id && e.side && e.side !== side && !e.close)) continue
+        ground = area
+        changed.push('groundLost')
+        break
+      }
+      const near = unitsOnSide(world, side).filter(f => f.id !== unit.id && f.strength > 0 && canSee(map, unit, f))
+      const fallen = near.filter(f => broken.has(f.id))
+      if (fallen.length > 0 && fallen.length * 2 >= near.length &&
+        news.some(e => e.type === 'rout' && fallen.some(f => f.id === e.unitId))) changed.push('friendsBroke')
+      const quarryGone = Boolean(current?.enemy && toFollow(unit, current.enemy)?.gone)
+      if (quarryGone) changed.push('quarryGone')
+      if (engagedAtStart.has(unit.id) || state.shotLastTurn.has(unit.id)) changed.push('attacked')
+      const idle = (!current || (current.action === 'hold' && !current.target)) && standingFor(unit) !== 'advance'
+      if (idle && enemies.length > 0) changed.push('done')
+      if (changed.length === 0) return null
+      const mustered = state.mustered.get(unit.id) ?? unit.strength
+      const choice = initiative(unit.officer, {
+        changed,
+        enemyInSight: enemies.length > 0,
+        goodGround: T.INITIATIVE.GOOD_GROUND.includes(map.terrainAt(unit.position)),
+        bled: unit.strength <= mustered * (1 - T.INITIATIVE.BLED),
+        intent: ordered?.action ?? null,
+        running: Boolean(current) && !idle && !quarryGone
+      })
+      if (!choice || state.ownMind.get(unit.id) === choice.did) return null
+      state.ownMind.set(unit.id, choice.did)
+      // What he is doing already, he need not choose.
+      if (choice.did === 'hold' && (idle || current?.action === 'hold')) return null
+      if (choice.did === 'advance' && current?.action === 'advance') return null
+      let order
+      if (choice.did === 'advance') order = { action: 'advance', target: null, then: null }
+      else if (choice.did === 'hold') order = { action: 'hold', target: null, then: null }
+      else if (choice.did === 'ground') {
+        const tile = [...ground.tiles].sort((a, b) => tileDistance(unit.position, a) - tileDistance(unit.position, b) || a.y - b.y || a.x - b.x)[0]
+        order = normalizeOrder({ action: 'attack', target: tile })
+      } else order = normalizeOrder({ action: 'withdraw', ...(was.post ? { target: was.post } : {}) })
+      log.emit('initiative', turn, {
+        unitId: unit.id, officer: unit.officer.name ?? null, nature: unit.officer.personality, why: choice.why, did: choice.did,
+        ...(ground ? { ground: ground.name } : {}),
+        ...(choice.did === 'fall back' && was.post ? { to: { ...was.post } } : {})
+      })
+      return order
+    }
+  }
+
   for (const side of sides(world)) {
     const effective = unitsOnSide(world, side).filter(u => !broken.has(u.id))
     // A Commander in the enemy's hands gives no orders.
@@ -447,6 +539,9 @@ function stepTurn(state, sideOrders = {}, { sameTurn = false } = {}) {
       }
       state.orderBook.set(order.unitId, given)
       freshThisTurn.add(order.unitId)
+      // What his Commander last told him, and when it reached him: his
+      // intent, for an officer who must act on it alone (initiative.js).
+      ;(state.lastOrder ??= new Map()).set(order.unitId, { turn, action: given.action })
     }
     // Orders marked as from a command post (the computer's, in the app)
     // go by rider from then on.
@@ -487,11 +582,20 @@ function stepTurn(state, sideOrders = {}, { sameTurn = false } = {}) {
       homeTarget: (u) => edgeTarget(map, u.position, edge)
     })
 
+    const onHisOwn = ownJudgement(side, effective)
     for (const unit of effective) {
       // The order's condition, if it has one and its moment has come: the
       // unit does the other thing, from now on. (Or its officer, having
       // lost that part, does as his nature tells him.)
       let current = state.orderBook.get(unit.id)
+      // A veteran no word can reach, who sees things have changed, acts on
+      // his Commander's intent (command/initiative.js).
+      const own = onHisOwn?.(unit, current)
+      if (own) {
+        current = own
+        state.orderBook.set(unit.id, current)
+        freshThisTurn.add(unit.id)
+      }
       if (current?.when && whenTrue(unit, current.when)) {
         if (current.when.lost) {
           current = loseThread(unit, 'condition', current)
