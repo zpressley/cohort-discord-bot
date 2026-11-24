@@ -81,17 +81,30 @@ all of them answer to "second line", the first turn's examples offer
 "second line hold", and they go home after the battle (not on the roster,
 not in the company).
 
-The map in the tent opens at about 15 px a tile on a phone (a 1 km field
-as it always did; a 2 km field is then three screens wide), centred on
-your army. It moves by finger (drag to pan, pinch to zoom) or by mouse
+The map in the tent opens with your army and the ground to fight for both
+in view when they fit at 12 px a tile or more (on a desktop, the 1 km
+fields); else at about 15 px a tile on a phone (a 2 km field is then three
+screens wide), centred on your army, with a mark at the map's edge ("↑ the
+Crownhill") pointing to the ground while it is out of the window: a tap
+brings it into view. It moves by finger (drag to pan, pinch to zoom) or by mouse
 (drag to pan, the wheel to zoom about the pointer), and by its buttons:
 + and − zoom, ⤢ shows the whole field in the window and, pressed again,
 goes back to your army at the zoom you had; ⇕ (phone) makes the map
 taller. "Your army" and "You" (top left) bring your army, or the unit you
 ride with, into the window; after a turn the map comes back to your army by
 itself unless you moved it since the turn began. Labels are placed so they
-do not lie on each other; the enemy's read "enemy spears", and his counters
-carry a cut corner as well as his colour. On a desktop the tent fills the
+do not lie on each other, and are never under 11 px on the screen at any
+zoom (the map is drawn again for its zoom once a pinch or a button has
+done); where there is no room for each its own, as at a fight on a phone,
+units share one ("7 of yours, 6 enemy"), and a tap there names them in the
+hint under the map. The enemy's read "enemy spears", and his counters
+carry a cut corner as well as his colour.
+
+The verdict's table: for each side, men standing of those it went in with
+("364 of 400"), men fallen, and how many units broke; under it, each of
+your units that broke and what became of it ("Horse: broke twice, and
+rallied"; "left the field with 40 men"; "were destroyed"), and the enemy's
+units your men saw break, by the names you know them by, and no more. On a desktop the tent fills the
 window and the map scrolls inside its own box.
 
 A battle fought on the next day is one battle in Your battles, on the
