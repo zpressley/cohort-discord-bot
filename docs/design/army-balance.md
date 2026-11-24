@@ -1444,3 +1444,187 @@ then cost more"; "grounding in history".
 Branch `worktree-agent-a9bc961a7e9bb7e73`, on the skirmish proposal and
 main `d7622ab`: `62384fe` and `a84fef2` (fire and retreat), `16c0c0f`
 (the sword), `00a1338` (`WARY` 0, the soak), and this report.
+
+## Part 8. Second weapons (built 2026-11-24)
+
+Since Recommendation A a sidearm or a thrown weapon "is carried beside
+another weapon, not alone", and none was sold: every missile unit fought
+hand to hand with a knife, and javelin men had no javelins. Built inside
+Zach's rulings of November 23 ("The balance needs to come from the units
+themselves and the combination of weapons and armor ... Some units should
+be best but can then cost more. It should have a grounding in history")
+and November 24 ("No firing on the move"; the Golden Bows' sword).
+
+### The rule, in plain words
+
+- **One more weapon.** A unit may take one second weapon beside its main
+  one, never a third, at the second weapon's price: light javelins,
+  plumbatae and throwing axes 1 supply point; heavy javelins, pila and
+  throwing spears 2; a sword at a bowman's belt 1. Culture, training and
+  horse rules apply as to any weapon (pila are Rome's, for professionals,
+  on foot).
+- **Which**, by the weapon data's own stacking:
+  - **javelins and the like** (light and heavy javelins, throwing spears,
+    pila, plumbatae, throwing axes) beside a **one-handed hand weapon**: a
+    sword, spear, axe, mace or club. Not beside a bow or sling, nor a
+    two-handed weapon;
+  - **a sword** (the sword, gladius, xiphos, dao, longsword, akinakes)
+    beside a **bow, sling or crossbow**, on foot or on horse.
+  Daggers, the pugio and the sickle are not sold: every missile unit has
+  its knife already. Javelins are never the main weapon.
+- **Javelins in battle.** A unit with javelins throws them once as it comes
+  to blows with an enemy, whether it closed or was closed on, and then
+  fights hand to hand. The throw is a volley as any other is reckoned (the
+  weapon, its bite on the enemy's armour, his shield; the men felled shake
+  him as a volley does), half as heavy again: every man throws, at a few
+  paces (`THROWN.CLOSE` 1.5). A unit has two throws in a battle
+  (`THROWN.THROWS`: a legionary's two pila); with none left it closes
+  without throwing. Javelins do not shoot from a distance.
+- **No firing on the move.** The throw is part of the charge, so men on
+  foot who marched to contact throw (my reading; the other, that they must
+  stand a tick, would leave javelins to the side that is charged).
+- **A sword for men who shoot.** A missile unit with a sword fights hand
+  to hand with it, not the knife: the Golden Bows' rule of November 24,
+  for anyone who pays.
+- **Told.** On the army screen a second weapon is one more choice after
+  the weapon, showing only the kind the weapon takes ("A second weapon: to
+  throw as they close", or "a sword, to fight hand to hand"), each priced,
+  "none" first; a second weapon the new weapon will not take is put down.
+  Kit reads "professionals, gladius and pila, medium armour, heavy shield,
+  on foot". The dispatch: "Legionaries: threw their pila at enemy spears,
+  felling 9 men; fought enemy spears ..."; the other side hears "Spears:
+  met pila from enemy legionaries, losing 9 men". No new orders.
+- **Saved things.** Armies, rosters, captured units and battles saved
+  before have no second weapon, and load and play as they did.
+- **The elites.** The Peltast Guard and the Blue Men (javelins alone
+  until now) carry the sword with heavy javelins; the Sacred Spring
+  Warriors heavy javelins beside the gladius; the Praetorians pila; the
+  Golden Bows' sword is now their second weapon.
+- **The usual armies** where the history is a second weapon: Rome's
+  legionaries pila and its velites light javelins (the hastati in light
+  armour to pay for them); Macedon's peltasts, Thrace's spearmen and
+  Carthage's Numidian horse light javelins; Germania's axemen throwing
+  axes.
+
+The code: `army/builder.js` (`secondKind`, `secondFields`, `secondPrice`,
+the rules in `buildUnit`), `army/data.js` (`sidearm`, `secondSp`),
+`battle/battle.js` ("The throw at contact"), `combat/ranged.js`
+(`thrownVolley`), `tables.THROWN`, `world.js` (`thrown`, `throws`), the
+`thrown` event, `web/armies.js` and `public/app.js` (the screen).
+
+### Measured
+
+As in Parts 5 to 7: the computer's planner on both sides, all four maps,
+both ways round, every battle its own seed; a battle the day ends is no
+win. "Before" is `integration-14` (main with the computer's Commanders).
+
+**Are they worth what they cost?** Armies of about the same supply, with
+second weapons and with the points spent otherwise, against the twenty
+usual armies (`try.js --seeds 1`, 160 battles each, so a row moves 4 to 8
+points by chance; at `--seeds 3`, 480):
+
+| Army (Rome unless named) | SP | Win | The same points spent otherwise | SP | Win |
+|---|---|---|---|---|---|
+| 2 professional swordsmen with pila, mail, heavy shields | 30 | 85% | the same without pila, and a unit of levy spears | 30 | 85% |
+| | | | the same without pila, in heavy armour | 30 | 78% |
+| 6 levy spears with light javelins | 30 | 49% | 7 levy spears | 28 | 49% |
+| 3 Germanic axemen with throwing axes, and a unit of levy spears | 28 | 59% | 4 axemen | 28 | 74% |
+| 5 levy slingers with swords | 30 | 73% | 6 levy slingers | 30 | 69% |
+| 6 levy archers with swords | 30 | 68% | 7 levy archers | 28 | 51% |
+| 3 Parthian horse archers with swords (480 battles) | 30 | 85% | 3 without | 27 | 75% |
+| 2 professional spears with throwing spears (at 1 SP), militia archers with swords (480) | 29 | 93% | with light javelins | 29 | 88% |
+| | | | with no javelins | 27 | 86% |
+
+**Rounds** (one change at a time):
+
+| Round | Change | League: Rome, Samnium (before 53, 45) | Pila / spent otherwise | Levy javelins / spears | Kept |
+|---|---|---|---|---|---|
+| 0 | The throw at twice a volley (`CLOSE` 2); swords 2 SP | 70%, 57%: Rome out of the band | 88 / 84% | 54 / 48% | no |
+| 1 | `CLOSE` 1 | 58%, 50% | 78 / 84% | 39 / 45% | no |
+| 2 | `CLOSE` 1.5 | 64%, 52% | 85 / 85% | 49 / 49% | yes |
+| 3 | A sword beside a bow or sling 1 SP, not 2 | (no usual army buys one) | slingers with swords 51 -> 73% (six without 69%); archers 44 -> 68% (seven without 51%) | | yes |
+| 4 | Throwing spears 1 -> 2 SP | | the search's armies over 70%: 59 -> 47 of 600; its best 93% -> 92-93% (other armies) | | yes |
+
+At round 0 the swords lost to more missile troops (four levy slingers with
+swords 54% to six without 69%; five archers with swords 46% to seven
+without 57%): a sword was not a real choice.
+
+**The usual armies' league** (`usual.js league --seeds 4`, 6,080 battles,
+32 a pairing):
+
+| Faction | Before | After | | Faction | Before | After |
+|---|---|---|---|---|---|---|
+| Germania | 61% | 64% | | Silla | 49% | 48% |
+| Rome | 53% | **64%** | | Sarmatia | 48% | 48% |
+| Macedon | 55% | 56% | | Tibet | 48% | 47% |
+| Mongolia | 55% | 55% | | Carthage | 48% | 48% |
+| Thrace | 54% | 55% | | Yayoi | 47% | 46% |
+| Samnium | 45% | **52%** | | Berbers | 46% | 49% |
+| Celts | 52% | 51% | | Kush | 46% | 44% |
+| Bactria | 52% | 50% | | Parthia | 46% | 42% |
+| Persia | 52% | 50% | | Maurya | 45% | 43% |
+| | | | | Han | 44% | 40% |
+| | | | | Sparta | 41% | 39% |
+
+Every faction between 35 and 65%, before and after, so no usual army was
+re-picked. Pairings past 75/25: 25 of 190 before, 30 after. Ended by the
+day: 64 before, 62 after; 14.0 player turns on average, both. Commanders
+taken 1 in 32 before, 1 in 31 after; killed 1 in 392 and 1 in 338.
+
+**The random search** (`search.js --per 30`: 600 legal armies, each against
+all twenty usual armies; now drawn with second weapons too, 487 of the 600
+carrying one; the ten best and ten worst again at 96 battles). The search
+of "before" was not rerun on this base (forty minutes a run); its column
+is Part 7's:
+
+| | Before (Part 7) | After round 3 | After round 4 (final) |
+|---|---|---|---|
+| Best army (96 battles) | 3 professional clubmen, medium armour (Carthage): 88% | 2 professional spear units with throwing spears, militia archers with swords (Rome): 93% | 2 professional axe units in heavy armour with heavy javelins (Macedon): 93%; the same with throwing spears (Carthage, 32 SP): 92%; 3 professional spear units in medium armour, no second weapon (Maurya): 92% |
+| Over 70% / under 20% | 47 / 154 | 59 / 146 | 47 / 166 |
+| Mean win: armies with a second weapon / without | - | 38% (470) / 35% (130) | 36% (487) / 37% (113) |
+| Mean win: with a missile unit carrying a sword / with javelins | - | 37% / 38% | 37% / 36% |
+
+The 88% of Part 7 was the best of that draw, not the ceiling: Maurya's three
+professional spear units in medium armour, no second weapon, win 90% on
+this base before second weapons and 89% after (`try.js --seeds 3`, 480
+battles); Macedon's two professional axe units in heavy armour 87% before
+and 86% after, and **92%** with heavy javelins (30 SP, the 4 points their
+budget had left over). So second weapons lift the very top by two or three
+points, by filling the last points of a two-unit heavy army.
+
+**The Commander's odds** (`captive-league.js --battles 2000 --policy
+wait`): taken in 1 battle in 19.0 (main 18.9). Not retuned.
+
+**Checked.** `npm run balance`: the same, line for line (no duel
+archetype carries a second weapon). `npm run soak`: every battle ended.
+
+### What is still out of line
+
+- **The best armies** are 92-93% against the usual armies (target: not
+  above Part 7's 88%; the ceiling before was really about 90%). Two
+  professional units in heavy armour with 2-SP javelins (heavy javelins,
+  throwing spears) beside the axe or spear. Round 4 (throwing spears
+  dearer) thinned the strong armies but did not lower the top; a fifth
+  round (heavy javelins dearer) would only price that army out of its own
+  budget, and was not tried. Rounds 0 and 1 did not help; I stopped at
+  four, as the top is mostly what Part 5 left (professionals in armour).
+- **Throwing axes** are a poor buy (three axe units with them and a levy
+  unit 59%, four axe units 74%): at 1 SP they bite less than light
+  javelins on armour. Left as the data has them: Germania's usual army
+  carries them and wins 64%.
+- **A sword is worth more to archers than to slingers** (archers 51 ->
+  68%, slingers 69 -> 73%), and horse archers with a sword (Parthia's three
+  professional units) win 85% where without it 75%: horse archers are no
+  longer the weak kind, at least as bought by a horse people. Not the best
+  buy; watch it.
+- **Rome and Germania** are at 64% in the league, the top of the band.
+- **Whole-battle fingerprints** with Rome's usual army changed, as they
+  must (retaken, old values in their headers). A battle saved before
+  replays its own spec, which carries no second weapon, so it plays as it
+  was played.
+
+### Where it is
+
+This worktree's branch, on `integration-14`: the rule, the builder, the
+screen and the words; the usual armies, the throw at 1.5 and the sidearm's
+price; throwing spears at 2 and this report.

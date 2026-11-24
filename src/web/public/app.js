@@ -888,7 +888,7 @@ async function armyScreen(token) {
       const close = options.filter(o => !o.shoots)
       const far = options.filter(o => o.shoots)
       return `<section class="step"><h3>${title}: to fight hand to hand</h3><div class="options">${close.map(o => option(field, o)).join('')}</div>
-        <h3>Or to shoot and throw</h3><div class="options">${far.map(o => option(field, o)).join('')}</div></section>`
+        <h3>Or to shoot</h3><div class="options">${far.map(o => option(field, o)).join('')}</div></section>`
     }
     app.innerHTML = `
       <header class="bar"><button class="btn btn-quiet" type="button" id="draft-back">Back</button><strong style="font-family: var(--font-display); font-size: 18px">${state.at === null ? 'Buy a unit' : 'Change a unit'}</strong><span></span></header>

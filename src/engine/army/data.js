@@ -137,7 +137,12 @@ const WEAPONS = {
 
   sling: { sp: 2, armorMax: 'light_armor', stacking: 'stackable_ranged', cultures: 'all' },
   self_bow_basic: { sp: 1, armorMax: 'light_armor', stacking: 'primary_ranged', shieldRestriction: 'secondary_melee_only', cultures: 'all' },
-  throwing_spear: { sp: 1, stacking: 'stackable_ranged', cultures: 'all' },
+  // Part 8 (second weapons, measured): 1 -> 2. At 1 it was the cheapest
+  // edge of all: two professional spear units with throwing spears beside
+  // them won 93% against the usual armies (the best army drawn), 86%
+  // without, 88% with light javelins. It hits nearly as hard as a heavy
+  // javelin, and any troops may carry it.
+  throwing_spear: { sp: 2, stacking: 'stackable_ranged', cultures: 'all' },
   roman_plumbatae: { sp: 1, stacking: 'stackable_ranged', cultures: ['Roman Republic'] },
   germanic_throwing_axe: { sp: 1, stacking: 'stackable_ranged', cavalryCompatible: false, cultures: ['Germanic Tribes'] },
   self_bow_professional: { sp: 2, armorMax: 'light_armor', stacking: 'primary_ranged', minQuality: 'professional', shieldRestriction: 'secondary_melee_only', cultures: 'all' },

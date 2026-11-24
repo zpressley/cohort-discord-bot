@@ -3530,3 +3530,111 @@ making of a Commander asks his kind); a fourth character; anything the
 enemy Commander does on the field himself (he is not on the field: the
 computer's side has no Commander there, as before); telling, after the
 battle, how he fought.
+
+### How second weapons were built (Claude's choices, open to change)
+
+Asked for as a roadmap piece, with the small details mine to decide (the
+rulings it is built inside: November 23, "The balance needs to come from
+the units themselves and the combination of weapons and armor ... Some
+units should be best but can then cost more. It should have a grounding in
+history"; November 24, "No firing on the move", and the Golden Bows' sword).
+The rule and the measures are Part 8 of `docs/design/army-balance.md`.
+
+**What is sold.** One second weapon beside the main one, by the weapon
+data's own `stacking`: a thrown weapon (`stackable_ranged` with a reach
+under `MISSILES.MIN_RANGE_M`: light and heavy javelins, throwing spears,
+pila, plumbatae, throwing axes) beside a one-handed hand weapon
+(`stacking: 'primary'`, not a bow or sling); a sword (`sidearm: true` in
+`data.js`: the sword, gladius, xiphos, dao, longsword, akinakes) beside a
+missile weapon. It costs its `sp`, or its `secondSp` where it has one;
+culture, training and horse rules are any weapon's
+(`builder.js`, `buildUnit`). The pick carries `second`; a battle unit
+carries `sidearm` (a sword: `ratings.handWeapon`, as for the Golden Bows)
+or `thrown` and `throws` (`world.js`). Choices, each mine:
+- **Not beside a two-handed weapon.** The task allowed "a hand sidearm ...
+  beside ... a two-handed one where history allows" (phalangites carried a
+  sword). In this engine a pike unit never fights with anything but its
+  pike, so a sword there would cost points and do nothing. Not sold. The
+  other reading: sell it, and have men drop the pike for the sword when
+  flanked or in rough ground: a new rule.
+- **No javelins beside a two-handed weapon either** (the shield arm throws,
+  and a two-handed weapon has none), nor beside a bow or sling.
+- **Daggers, the pugio and the sickle are not sold as second weapons**:
+  every missile unit fights with a knife already (`MISSILES.SIDEARM`),
+  and they would buy nothing. Axes and maces as a bowman's sidearm (the
+  Scythian sagaris) are not offered: swords only, kept simple.
+- **A thrown weapon is never the main weapon**, even with a second: it is
+  bought as the second ("javelins and a sword", not "a sword and
+  javelins").
+- **Elites.** The builder's exemption for an elite's thrown weapon (its
+  javelins "in its men's hands") is gone: the Peltast Guard and the Blue
+  Men carry the standard sword with the heavy javelin, the Sacred Spring
+  Warriors heavy javelins beside the gladius (the doc: "gladii, javelins"),
+  the Praetorians pila; Kush's Golden Bows' sword is now their `second`
+  (it was `sidearm`). Silla's hwarang (sword and bow), Yayoi's spearmen
+  (spear and bow) and Sarmatia's lancers (lance and bow) would need a bow
+  beside a hand weapon, which the stacking rules do not give: left as they
+  were.
+
+**The throw** (`battle/battle.js`, "The throw at contact";
+`ranged.thrownVolley`; `tables.THROWN`). One volley as a unit comes to
+blows with an enemy, closing or closed on; one a tick, at the first enemy
+it met (by name); both sides throw, then fight. Reckoned as a missile
+volley (`MISSILES.RATE`, the weapon's damage and effectiveness against the
+target's armour, the target's shield, woods), times `THROWN.CLOSE`, and its
+losses shake morale as a volley's do (`SHOCK`). Two throws a battle
+(`THROWN.THROWS`, a legionary's two pila). A new event, `thrown`, told in
+the dispatch first among a unit's fighting ("threw their pila at ...";
+the other side "met pila from ..."). `KIT.weapon.roman_pilum` is now
+"pila" (it was "pilum", a word no player saw: the pilum was never sold).
+- **"No firing on the move."** My reading, as the task suggested: the
+  ruling was about archers shooting as they fall back; a throw at contact
+  is part of the charge, so men on foot who marched to contact throw.
+  **The other reading**: men must stand a tick to throw; then a unit that
+  charges never throws, and javelins defend only.
+- **At contact, not at range.** The salvaged ranges of thrown weapons (15
+  to 35 m) are a tile or less; a volley at a tile before contact would
+  need the throwers to stand a tick in reach of the enemy, which the
+  planner does not do. At contact is the simple reading of "thrown as its
+  men close or are closed on".
+
+**Numbers, measured** (Part 8 has the tables): `THROWN.CLOSE` 2 put Rome's
+re-armed usual army at 70% of the league; 1 at 58%, with pila worth less
+than their price; 1.5 at 64%, with two professional units with pila level
+with the same SP spent on a third unit (85% and 85% against the usual
+armies). A sword at a bowman's belt at 2 SP lost to buying more missile
+troops (slingers 51% against 69%); at 1 (`secondSp`), 73% against 69%, and
+archers 68% against 51%. Throwing spears 1 -> 2 SP: at 1 they were the
+cheapest edge (the best army the random search drew, 93%, carried them;
+86% without, 88% with light javelins), with nearly a heavy javelin's bite
+and open to any troops; at 2 the search's armies over 70% fell from 59 to
+47 of 600, but its best stayed at 92-93% (two professional units in heavy
+armour with heavy javelins). The ceiling before second weapons was about
+90% on this base (three professional spear units in medium armour), not
+Part 7's 88% (the best of that draw). I stopped after four rounds; what is
+still out of line is in Part 8.
+
+**Usual armies** re-armed where the history is a second weapon, each kept
+inside its budget: Rome's legionaries pila, its velites light javelins, the
+hastati in light armour to pay for them (the bronze breastplate of the
+poorer citizen, Polybius 6.23); Macedon's peltasts and Thrace's spearmen
+light javelins; Carthage's Numidian horse light javelins; Germania's axemen
+throwing axes. Not re-armed for want of budget: Samnium (26 SP, spent) and
+the Berbers (30, spent): their elites carry the javelins. No faction left
+35 to 65%, so none was re-picked.
+
+**Saved things.** `kitOf` carries `second` only when there is one, so an
+army, roster or captured unit saved before reads as it was; a battle saved
+before has no `thrown` in its spec and plays as before (its spec is what it
+replays). A unit captured in battle keeps its second weapon (from the
+spec's `sidearm` or `thrown`); an unknown second weapon is left behind.
+
+**Tests retaken**: the whole-battle fingerprints (Rome against Han:
+`asked-unchanged`, `messengers-unchanged`, old values in their headers);
+`night.test.js`'s "men who ran" battle (Rome no longer ran in the day:
+Mongolia against Han now, found by search); `held-commander.test.js`'s
+battle in which Macedon's Commander is taken (seed 646 to 708); Rome's
+roster prices in `roster.test.js` (the hastati 11 to 9 SP). `npm run
+balance` is unchanged (no duel archetype carries a second weapon). The
+Commander's odds (`captive-league.js --battles 2000 --policy wait`): taken
+in 1 battle in 19.0, as on main (18.9).

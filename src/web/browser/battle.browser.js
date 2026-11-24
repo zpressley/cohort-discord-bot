@@ -312,7 +312,7 @@ test('on a phone: a new Commander buys his army, is told why a pick is refused, 
     await shot('army-second')
     await p.click('#take')
     await p.waitForSelector('#add')
-    assert.match(await p.textContent('#budget'), /14 of 30 supply points/)
+    assert.match(await p.textContent('#budget'), /13 of 30 supply points/, 'the dao at his belt costs 1')
     assert.match(await p.textContent('[data-unit="0"]'), /crossbow and dao/)
     await shot('army-part')
 
