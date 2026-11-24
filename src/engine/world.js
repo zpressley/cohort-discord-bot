@@ -43,6 +43,9 @@ function createUnit(spec) {
     // set. (It used to be dropped here, so a veteran unit fought and broke
     // exactly like a new one.)
     ...(spec.veteranResistance ? { veteranResistance: spec.veteranResistance } : {}),
+    // docs/design/army-balance.md, part 4 (taken 2026-11-23): the unit's men's
+    // average experience, 0 to 30 (command/company.js). Carried only when set.
+    ...(spec.veterancy ? { veterancy: spec.veterancy } : {}),
     // The officer who carries the Commander's orders to this unit
     // (command/officers.js): { name, experience, personality }. A unit
     // without one carries any order whole.

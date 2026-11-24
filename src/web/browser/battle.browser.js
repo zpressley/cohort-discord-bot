@@ -253,7 +253,7 @@ test('on a phone: a new Commander buys his army, is told why a pick is refused, 
     await p.click('#make-and-buy')
     await p.waitForSelector('#army-screen')
     // He starts from the usual army; the elite is free and not for sale.
-    assert.match(await p.textContent('#budget'), /16 of 30 supply points/)
+    assert.match(await p.textContent('#budget'), /26 of 30 supply points/)
     assert.match(await p.textContent('.buy-unit.elite'), /Yulin guard[\s\S]*Free[\s\S]*Not for sale/)
     assert.equal(await p.locator('.buy-unit.elite [data-dismiss]').count(), 0)
     while (await p.locator('[data-dismiss]').count()) {
@@ -286,7 +286,7 @@ test('on a phone: a new Commander buys his army, is told why a pick is refused, 
     await pick('armor', 'medium_armor')
     await p.click('#take')
     await p.waitForSelector('#add')
-    assert.match(await p.textContent('#budget'), /10 of 30 supply points/)
+    assert.match(await p.textContent('#budget'), /12 of 30 supply points/)
     await shot('army-part')
 
     // Slingers until the supply points run out; the last two are numbered.
@@ -300,7 +300,7 @@ test('on a phone: a new Commander buys his army, is told why a pick is refused, 
     assert.equal(await p.locator('#add').isDisabled(), true)
     assert.match(await p.textContent('#army-screen'), /the cheapest unit costs 4/)
     const names = await p.locator('.buy-unit h3').allTextContents()
-    assert.deepEqual(names, ['Yulin guard', 'Crossbows', 'Slingers', 'Slingers 2', 'Slingers 3', 'Slingers 4', 'Slingers 5'])
+    assert.deepEqual(names, ['Yulin guard', 'Crossbows', 'Slingers', 'Slingers 2', 'Slingers 3'])
     await shot('army-full')
 
     // Kept: back to the muster, with his own army.
@@ -311,7 +311,7 @@ test('on a phone: a new Commander buys his army, is told why a pick is refused, 
     await p.click('button[type="submit"]')
     await p.waitForSelector('#map-scroll svg')
     await p.click('[data-tab="army"]')
-    assert.deepEqual(await p.locator('.unit-card h3').allTextContents(), ['Crossbows', 'Slingers', 'Slingers 2', 'Slingers 3', 'Slingers 4', 'Slingers 5', 'Yulin guard'])
+    assert.deepEqual(await p.locator('.unit-card h3').allTextContents(), ['Crossbows', 'Slingers', 'Slingers 2', 'Slingers 3', 'Yulin guard'])
 
     // In the field, his army cannot be changed.
     await p.goto(base + '/officers')
@@ -542,7 +542,8 @@ test('on a phone: a Commander the battle is not waiting on sees his orders with 
     const { waitingOn } = require('../../engine/orchestrator')
     const post = async (url, body) => (await fetch(base + url, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body ?? {}) })).json()
     let found = null
-    for (const seed of [5, 6, 7, 8, 9, 10]) {
+    // (Seeds 5 to 10 found one until combat changed with the army balance.)
+    for (let seed = 5; seed <= 40; seed++) {
       const redC = (await post('/api/commanders', { faction: 'rome' })).token
       const blueC = (await post('/api/commanders', { faction: 'han' })).token
       const seats = (await post('/api/battles', { opponent: 'friend', side: 'red', seed, commander: redC })).seats

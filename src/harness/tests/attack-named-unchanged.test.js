@@ -6,6 +6,11 @@
 // was added (the `campaign` branch at 0c577eb): the computer's side against
 // itself on two maps, and the closed-loop meeting battle. If one changes,
 // something other than the new order changed how battles fall out.
+//
+// Retaken when combat changed on purpose (the army balance, Recommendation
+// A: docs/design/army-balance.md): the same battles, the same code but the
+// rules. Before it they were f0ebadb3, 2cec0402, e92384f2, 4aaa5698,
+// e424a274, a2f07cdf, d567a781.
 
 const { test } = require('node:test')
 const assert = require('node:assert/strict')
@@ -24,13 +29,13 @@ function fingerprint(text) {
 }
 
 const BEFORE = {
-  'crownhill 1': 'f0ebadb3',
-  'crownhill 2': '2cec0402',
-  'thornwood 1': 'e92384f2',
-  'thornwood 2': '4aaa5698',
-  'meeting 1': 'e424a274',
-  'meeting 2': 'a2f07cdf',
-  'meeting 3': 'd567a781'
+  'crownhill 1': '7dd10867',
+  'crownhill 2': '987939aa',
+  'thornwood 1': 'aeded69a',
+  'thornwood 2': 'b2a4ce2b',
+  'meeting 1': 'df860211',
+  'meeting 2': 'ade1ebaa',
+  'meeting 3': '29c7796a'
 }
 
 test('a battle in which no unit is told to attack a named enemy runs exactly as before', () => {

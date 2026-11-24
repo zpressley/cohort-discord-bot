@@ -33,7 +33,7 @@ async function start(store = createBattleStore({})) {
   return { server, api, close: () => new Promise(resolve => server.close(resolve)) }
 }
 
-// Rome's usual army: legionaries 12, hastati 10, velites 4 (26 of 30); the
+// Rome's usual army: legionaries 13, hastati 11, velites 5 (29 of 30); the
 // praetorian guard free.
 const roman = async (app) => (await app.api('POST', '/api/commanders', { faction: 'rome' })).body
 
@@ -82,7 +82,7 @@ test('an army in the field may not cost more than the budget: what marches over 
     store.commanders.setRoster(c, addToRoster(c, { name: 'pikes', quality: 'veteran_mercenary', weapon: 'two_handed_spear', culture: 'Macedonian Kingdoms' }, 'captured'))
     const refused = await app.api('POST', '/api/battles', { opponent: 'standing', commander: red.token, marching: ['legionaries', 'hastati', 'velites', 'pikes'] })
     assert.equal(refused.status, 400)
-    assert.equal(refused.body.error, 'They would cost 38 supply points against a budget of 30: leave one at home.')
+    assert.equal(refused.body.error, 'They would cost 41 supply points against a budget of 30: leave one at home.')
     assert.equal(store.commanders.get(red.token).battle, null, 'no battle was made')
     // Leave the hastati at home, and they may go.
     const made = await app.api('POST', '/api/battles', { opponent: 'standing', commander: red.token, marching: ['legionaries', 'velites', 'pikes'] })
@@ -135,7 +135,7 @@ test('what he buys must fit the budget together, at home or not: he cannot buy t
     const army = [
       { name: 'legionaries', quality: 'professional', weapon: 'roman_gladius', armor: 'medium_armor', shield: 'heavy_shield' },
       { name: 'hastati', quality: 'militia', weapon: 'roman_gladius', armor: 'medium_armor', shield: 'heavy_shield' },
-      { name: 'velites', quality: 'levy', weapon: 'light_javelin', shield: 'light_shield' }
+      { name: 'velites', quality: 'levy', weapon: 'sword_standard', armor: 'light_armor', shield: 'light_shield' }
     ]
     assert.equal((await app.api('POST', `/api/commander/${red.token}/army`, { units: army })).status, 200)
     // He leaves the legionaries at home...
@@ -181,7 +181,7 @@ test('a unit given in a deal between two players goes to the captor\'s roster wi
     assert.equal(hastati.words, 'militia, gladius, medium armour, heavy shield, on foot', 'their kit as it was raised, though Macedon forges no gladius')
     assert.equal(hastati.from.commander, red.name)
     assert.equal(hastati.marches, false, 'a unit taken waits at home until he chooses it')
-    assert.deepEqual(theirs.units.find(u => u.kind === 'hastati'), { kind: 'hastati', battles: 7, veterancy: theirs.units.find(u => u.kind === 'hastati').veterancy, trained: 1 })
+    assert.deepEqual(theirs.units.find(u => u.kind === 'hastati'), { kind: 'hastati', battles: 7, veterancy: theirs.units.find(u => u.kind === 'hastati').veterancy, level: 'green', trained: 1 })
     assert.ok(theirs.units.find(u => u.kind === 'hastati').veterancy > 5, 'their veterancy came with them')
     const tullus = theirs.officers.find(o => o.name === 'Tullus')
     assert.equal(tullus.leads, 'hastati')
@@ -209,7 +209,7 @@ test('a unit taken can march: it costs its kit\'s price in supply, and takes the
     const { blue } = await hastatiGiven(app, store)
     const theirs = (await app.api('GET', `/api/commander/${blue.token}`)).body
     const cost = (name) => theirs.roster.units.find(u => u.name === name).cost
-    assert.equal(cost('hastati'), 10, 'militia 5, gladius 3, medium armour 1, heavy shield 1')
+    assert.equal(cost('hastati'), 11, 'militia 5, gladius 2, medium armour 2, heavy shield 2')
     const all = theirs.roster.units.filter(u => u.how !== 'elite').map(u => u.name)
     const over = await app.api('POST', '/api/battles', { opponent: 'standing', commander: blue.token, marching: all })
     assert.equal(over.status, 400, 'everything at once is over the budget')
@@ -407,7 +407,11 @@ test('a unit taken whose name is borne already is given the next free one, and a
   assert.throws(() => addToRoster(commander, unit, 'found'), /no avenue/)
 })
 
-test('battles and Commanders saved before the roster still load, and replay to the same battle', async () => {
+// Ruled 2026-11-24: "There are not any old battles I care about". A battle
+// saved under older combat rules plays back under today's, so it is not the
+// same battle; what is kept is that it loads, and goes on. (The fixture's
+// expected.json.txt still holds the battle as it was on its day.)
+test('battles and Commanders saved before the roster still load, and go on', async () => {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'cohort-before-'))
   const from = path.join(__dirname, 'fixtures', 'before-roster')
   fs.cpSync(from, dir, { recursive: true })
@@ -423,15 +427,17 @@ test('battles and Commanders saved before the roster still load, and replay to t
         units: [...game.battle.world.units, ...game.battle.fledUnits].map(u => [u.id, u.strength, u.position.x, u.position.y])
       }
     }
-    assert.deepEqual(facts(expected.seats.done), expected.games.done)
-    assert.deepEqual(facts(expected.seats.openBlue), expected.games.open)
+    for (const token of [expected.seats.done, expected.seats.openBlue]) {
+      const now = facts(token)
+      assert.deepEqual(now.units.map(u => u[0]).sort(), expected.games[token === expected.seats.done ? 'done' : 'open'].units.map(u => u[0]).sort(), 'the same units')
+    }
     // The Commanders: their officers and units as they were; every unit they
     // had marches, as every unit always did.
     for (const key of ['a', 'b']) {
       const now = (await app.api('GET', `/api/commander/${expected.commanders[key]}`)).body
       const was = expected.companies[key]
       assert.deepEqual(now.officers.map(({ id, ...o }) => o), was.officers)
-      assert.deepEqual(now.units, was.units)
+      assert.deepEqual(now.units.map(({ level, ...u }) => u), was.units)
       assert.deepEqual(now.roster.marching, was.army.units.map(u => u.name))
     }
     // The open battle goes on.

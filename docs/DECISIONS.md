@@ -2274,3 +2274,269 @@ wins. The soak still ends every battle; the balance table is unchanged.
 3. The computer is asked on its own news and every hour. Fewer would make
    it weaker; it does not stop the player either way.
 4. The day: ten hours of battle time. Right?
+
+### How the army balance was built (Claude's choices, open to change)
+
+Builds Zach's answers of November 23 to the army balance study
+(`docs/design/army-balance.md`, whose Part 5 has every table): Recommendation A
+taken; veterans who fight a little better and die less taken (the engine part
+was on the branch already; the app wiring is other work); no muster roll, the
+balance to come "from the units themselves and the combination of weapons and
+armor", with "more levers".
+
+**A on twenty factions.**
+- A faction's elite is checked only for kit its culture may field, not for
+  A's rules on what is sold (`buildUnit(pick, culture, { elite: true })`): the
+  Peltast Guard's and Blue Men's javelins and the Eternal Sky Riders' medium
+  armour stand, as the doc gives them.
+- Every javelin or throwing-axe unit in a usual army re-armed: Rome's velites
+  (levy, sword, light kit), Macedon's peltasts (professional, basic spear),
+  Sparta's skirmishers (levy bows), Germania's skirmishers (levy slingers) and
+  axemen (battle axe), Thrace's javelin men (tribal slingers), the Numidian,
+  Berber, Celtic and Sarmatian light horse (swords). Then Han, Kush, Mongolia,
+  Sarmatia, Bactria and Sparta re-picked by the twenty-factions method
+  (`army-study/usual.js repick`).
+- The suite's slowness on that branch was a hang, not a loop:
+  `web/tests/factions.test.js` mustered illegal usual armies, one test threw
+  before closing its server, and the file never exited.
+
+**The levers kept** (each in `tables.js` or `army/data.js`, with its
+measurements in the comment):
+- **Armour by its weight**: medium 2 SP, heavy 4 (were 1 and 2). Three
+  professionals with a 1-SP spear won 74% in light armour, 94% in medium, 98%
+  in heavy. After: heavy infantry 99% -> 88% against the usual armies.
+- **Heavy armour's wind**: stamina drain 12 a round (was 6; 9 tried). Heavy
+  infantry 88% -> 78% against the usual armies, 79% -> 69% against the other
+  classic armies; pikes now beat it (54%).
+- **The usual armies re-picked** under those two (Germania, Parthia, Yayoi,
+  Kush, Samnium, Bactria, Carthage, Maurya). League, 6,080 battles: every
+  faction 40% to 59%; 26 of 190 pairings past 75/25 (41 before A, same
+  harness and seeds).
+
+**Tried and dropped** (Part 5 has the numbers): heavy foot marching 2 tiles;
+pikes keeping the enemy off on open ground and disordered in rough; the
+computer playing horse archers as archers (a planner change, reverted);
+the basic spear at 2 SP; professional archers with a sword; the pike at 4 SP.
+Stopped after three rounds in a row that did not help.
+
+**Measured, not retuned**: the Commander's odds (taken 1 in 24.4 -> 23.5 for
+a player who sends everyone in, `captive-league.js`, 2,000 battles; with the
+computer's plan on both sides 1 in 40 -> 34 taken, 1 in 450 -> 368 killed,
+12,160 Commanders). `VETERANCY.STEPS` unchanged. `npm run balance`: the
+mirror ladder as A left it; the duel matrix's heavy infantry row moved with
+its wind (against spearmen 29/71, cavalry 2/98).
+
+**Tests.** A's rules had no tests; each now has one whose title reads as the
+rule, as do armour's price and wind. Tests that pinned old numbers pin the new
+ones. Fingerprints of whole battles (`attack-named-unchanged`,
+`messengers-unchanged`, `asked-unchanged`) were retaken, the old values kept in
+each header: combat changed on purpose, so the same battles fall out
+differently. The riders tests that search seeds 5 to 10 for a battle that stops
+for one Commander alone now search to 40.
+
+**Still failing, for Zach**: `roster.test.js` "battles and Commanders saved
+before the roster still load, and replay to the same battle" and `asked.test.js`
+"battles saved before the riders rulings load, replay to the same battle...".
+A battle saved under the old combat replays differently under the new (the
+finished one is no longer decided at its last turn). The fixtures are left as
+they were.
+
+**Guessed.**
+- "The balance needs to come from the units themselves" was read as prices
+  and what kit does, not new kinds of unit or new orders. The other reading
+  would allow a skirmish rule (missile troops step back from slower foot),
+  which is the lever this work most lacks and is a question below.
+- "Some units should be best but can then cost more" was read as armour
+  (the best protection, now priced), not the professional tier: at the old
+  armour prices the tier price barely mattered (pro 8 SP: 92% for heavy
+  infantry, as at 7).
+- Elites exempt from A's sale rules: read as "the elite is not bought". The
+  other reading re-arms the doc's elites to fit A.
+- The usual armies keep to the doc's restrictions as before (Parthia's 10 SP
+  of levy, Kush's no heavy foot, Yayoi's no horse, all horse for the steppe).
+
+**Open, for Zach.**
+1. Professionals in medium armour are now the best buy (three with a basic
+   spear: 92-93%). Medium armour at 3 SP (measured 86%), or wait for players?
+2. A skirmish rule, so horse archers and slingers can wear heavy infantry
+   down as at Carrhae? (Recommended next.)
+3. Battles saved under older rules: replay under the rules they were played
+   with (a rules version on each saved battle), or under today's?
+4. Kush's Golden Bows fight with a knife hand to hand: give the elite a sword?
+
+### How veterans in battle were built (Claude's choices, open to change)
+
+Builds Part 4 of `docs/design/army-balance.md` ("Veterans who fight
+better", and "The fairness problem"), taken 2026-11-23 with the computer
+matching the player. The engine's part (`tables.VETERANCY.STEPS`: from
+green 4, seasoned 8, veteran 13 and legendary 20 battles a man, +0.25,
++0.5, +0.75 and +1 to attack and defence and 5, 10, 15 and 20 in a hundred
+fewer of the men a blow would fell) was on the branch already; nothing
+passed a unit's veterancy into a battle. The code: `web/battles.js`
+(`leadSide`, `matchComputer`), `veterans/veterancy.js` (`veterancyLevel`,
+`matchedVeterancy`), `tables.VETERANCY.MATCH_UP_TO`, `narrator/words.js`
+(`VETERANCY_WORDS`), `web/commanders.js` (the view's `units[].level`), the
+Officers page and the army screen.
+
+**What was built.**
+- **Each unit goes in with its own veterancy.** At the muster, and when a
+  friend joins with his Commander, each of his units takes its men's
+  average experience (`unitsOf`, to the hundredth) as it stands before the
+  battle, onto the unit in the battle's spec. So it is saved with the
+  battle and replays. A unit at 0 (raised new, or bled to nothing) gets no
+  `veterancy` at all, so it is the same spec, and the same battle, as
+  before.
+- **The computer matches, up to seasoned.** Against the computer, every
+  unit of its army takes one number: the average of the veterancy of the
+  units he fields in this battle, **each unit counting once whatever its
+  numbers, the elite among them, a unit with none counting as nothing**,
+  and no more than 8 (`MATCH_UP_TO`, seasoned). Units left at home do not
+  count. It is fixed at the muster, in the spec, for the whole battle.
+- **Between two Commanders** each army carries its own; nothing is matched.
+  The friend's side carries nothing until he joins with a Commander. No
+  "fresh armies" switch (not asked for).
+- **He can see it.** On Your officers each officer's card says "His men:
+  seasoned, 9 battles a man on average", and a unit with no officer the
+  same ("Their men: raw, ..."); on the army screen each unit's line ends
+  "· men: seasoned". The words are `VETERANCY_WORDS` in `words.js`: the
+  officers' grade words (green, seasoned, veteran, legendary) at the same
+  steps, and **"raw"** below green (a new word: nothing in `words.js` named a
+  unit below green; "nameless" is an officer's, "fresh" and "recruit" were
+  the old ladder's). The server sends the word; the page puts it through
+  `esc()`.
+- **Fog of war.** No seat's view, his own or the enemy's, says any unit's
+  veterancy or what the computer matched (tested). The enemy's veterancy is
+  shown nowhere.
+- **Training and veterancy stack**, as the study describes: a unit trained
+  up a level by an officer of thirty battles goes in at its new quality and
+  with its veterancy (tested). No cap.
+
+**Measured** (`node src/harness/army-study/veterans-match.js --seeds 4`,
+new: a Commander's usual army, every unit of it carrying the veterancy,
+against the computer's usual army of another faction, the planner on both
+sides; the 9 factions whose usual army passes the builder on this base
+(kush, han, maurya, silla, persia, parthia, samnium, tibet, yayoi), four
+maps, both ways round; 288 battles a row, each its own seed, the same seeds
+in every row). `veterans.js --vs usual` could not run here: it fields all
+twenty factions' usual armies, and eleven fail the builder on this base.
+
+| His units carry | Without the match: won, his men lost, the computer's | With it: the computer carries | won, his men lost, the computer's |
+|---|---|---|---|
+| none | 51%, 39.1%, 39.5% | none | 51%, 39.1%, 39.5% |
+| green (4) | 52%, 37.0%, 39.9% | 4 | 51%, 38.1%, 38.6% |
+| seasoned (8) | 55%, 35.4%, 40.9% | 8 | 51%, 36.7%, 37.5% |
+| veteran (13) | 59%, 33.8%, 41.3% | 8 | 52%, 35.2%, 38.3% |
+| legendary (20) | 59%, 32.6%, 42.0% | 8 | 54%, 33.1%, 38.5% |
+| thirty battles (30) | 59%, 32.6%, 42.0% | 8 | 54%, 33.1%, 38.5% |
+
+What the numbers say:
+- **Without the match** a long-lived Commander wins clearly more (none 51%,
+  veteran and legendary 59%) and loses fewer men.
+- **With the match** the computer is never a pushover: the veteran wins
+  about what a new Commander wins (51% new, 51% seasoned, 52%
+  veteran, 54% legendary), within the noise (about 4
+  points at 288 battles). **His reward is almost all in men kept alive**,
+  not in battles won: his losses fall from 39 to 33 men in a hundred,
+  about as much as without the match, while the computer's matched men
+  also die a little less (39.5 to 38.5).
+- Thirty battles is the same as legendary: the steps stop at 20.
+- So the match does what was asked ("never a pushover"), and the reward
+  that is left is the one the game is about (keeping his people alive). If
+  Zach wants a veteran to win more often against the computer too, the cap
+  could be lower (green), or the match a share of his average.
+
+**Measured again on the rebalanced armies** (the same script after the
+army balance above was merged in: all twenty factions' usual armies now
+pass the builder; `--seeds 2`, 320 battles a row):
+
+| His units carry | Without the match: won, his men lost, the computer's | With it: the computer carries | won, his men lost, the computer's |
+|---|---|---|---|
+| none | 55%, 38.0%, 41.5% | none | 55%, 38.0%, 41.5% |
+| green (4) | 59%, 36.1%, 42.5% | 4 | 54%, 36.7%, 40.4% |
+| seasoned (8) | 61%, 35.1%, 43.0% | 8 | 56%, 35.3%, 39.1% |
+| veteran (13) | 65%, 33.7%, 43.5% | 8 | 59%, 34.0%, 40.1% |
+| legendary (20) | 68%, 32.0%, 43.8% | 8 | 62%, 32.5%, 40.9% |
+| thirty battles (30) | 68%, 32.0%, 43.8% | 8 | 62%, 32.5%, 40.9% |
+
+The same shape, a little wider: without the match legendary veterans win
+13 points more than a new army; with it, 7 points more past the cap and
+nothing below it. (With no veterancy on either side he wins 55% in this script, not 50%,
+though the armies are met both ways round; why was not looked into.)
+
+**Guessed at.**
+- **The average weighs units equally and counts the elite** (as
+  recommended). The other reading: weigh by men (a big unit of recruits
+  pulls it down more), or leave the elite out (it is usually his best).
+- **"Up to seasoned" read as a veterancy of 8**, seasoned's step; the
+  average itself is passed under it (so 6 is 6, which fights as green).
+  The other reading: round the match down to its step.
+- **The match is of the units he fields this battle**, not his whole
+  roster.
+- **A friend's side** carries nothing until he joins with a Commander; a
+  friend who joins with none fields no veterancy, and no match is made
+  (he is not the computer).
+- **"raw"** as the word for a unit below green.
+- Veterancy goes in to the hundredth, as the company keeps it; only the
+  steps matter in the battle.
+
+**Left open.**
+- **A cap on training and veterancy together** (the study's question 8:
+  "professional +1"?). Not ruled; none built.
+- The muster does not show the enemy's or the computer's veterancy before
+  the battle (the study's idea for friends); not asked for.
+- `veterans.js` should be run again with the twenty factions once their
+  usual armies pass the builder.
+
+**Tests.** `src/engine/veterans/tests/veterancy-in-battle.test.js` (5) and
+`src/web/tests/veterans.test.js` (11), and a line in the fog-of-war test
+in `server.test.js`. A battle saved before this change is
+`tests/fixtures/before-veterans` (made with the code before, by
+`fixtures/make-before-veterans.js`): it has no veterancy in its spec and
+replays exactly. Like every saved battle, it pins the combat rules of the
+day: a change to combat replays it differently (as `before-roster` already
+does on this base). `roster.test.js` compares a Commander's units without
+the new `level`.
+
+## Rulings, November 24, 2026 (riders again, the day, old battles, fire and retreat)
+
+Zach's words, answering the questions left open on November 23.
+
+**Riders.**
+- On whether a Commander who is not being asked may send new orders:
+  "You can interrupt units mid March. But orders don't come over till the
+  end of the turn."
+- On a Commander whose men only hold: "Holding for several turns would
+  still get interrupts from passing enemy troops".
+- On the length of the day: "10 hours is fine... might as well make it 12
+  armies did not fight in the dark."
+- On an order no rider could carry: "Like if the unit is surrounded, the
+  rider should return with that news. After turns of travel pass".
+
+**Old saved battles.** "There are not any old battles I care about".
+
+**Armies.**
+- Medium armour at 3 SP: "Maybe". (Not taken; left as it is.)
+- Kush's Golden Bows: "They don't hit hard from range? They can have a
+  sword".
+- The skirmish rule (docs/design/army-balance.md, Part 6): "Skirmish rule
+  makes sense but evidence like marathon shows heavy infantry can run a
+  long way. I don't like the skirmish rule. Fire and retreat is ok".
+- On men on foot shooting as they fall back: "No firing on the move."
+- On the Commander being taken more often: "Retun commander taken odds".
+- On a side winning at the day's end on fewer losses: "No the day just
+  ends the battle, you can choose to fight again the next day."
+
+### How the ruling on old battles was built (Claude's choices, open to change)
+
+- A battle saved under older combat rules still loads and plays back under
+  today's rules, so it may not be the battle it was (a finished one can
+  come back unfinished). Nothing was built to stamp saves with their rules.
+- The three tests that held old saves to the battle they were
+  (`roster.test.js`, `asked.test.js`, `veterans.test.js`, fixtures
+  `before-roster`, `before-asked`, `before-veterans`) now show only that
+  such a save loads with the same units, keeps what marked it as old, and
+  goes on. The fixtures are untouched.
+- Guessed: that "not any old battles I care about" covers battles saved from
+  now on as well, until there are players. The other reading is that only
+  today's saves are let go; then each save needs a rules stamp before the
+  next change to combat.

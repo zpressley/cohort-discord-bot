@@ -84,7 +84,18 @@ function fatigueMultiplier(staminaPct) {
 // see it.
 function moraleResistance(unit) {
   return 1 + resolveQuality(unit).morale * T.MORALE.RESISTANCE_PER_POINT +
-    (unit.veteranResistance ?? 0)
+    (unit.veteranResistance ?? 0) + (veteranEdge(unit).stand ?? 0)
+}
+
+// docs/design/army-balance.md, part 4 (taken 2026-11-23): what a unit's earned
+// veterancy (its men's average experience) gives it: the highest step of
+// tables.VETERANCY.STEPS it has reached, or nothing.
+const NO_EDGE = { fight: 0, stand: 0, survive: 0 }
+function veteranEdge(unit) {
+  const v = unit.veterancy ?? 0
+  let edge = NO_EDGE
+  for (const step of T.VETERANCY.STEPS ?? []) if (v >= step.from) edge = step
+  return edge
 }
 
 // ── Rock-paper-scissors ────────────────────────────────
@@ -100,16 +111,32 @@ function armorClass(unit) {
 // [Q4] `effectiveness` is a damage multiplier, divided by 100. The tables were
 // authored as percentages, so using them raw would inflate damage 100x.
 function effectivenessAgainst(striker, target) {
-  const weapon = resolveWeapon(striker)
+  const weapon = handWeapon(striker)
   const cls = armorClass(target)
   return (weapon.effectiveness[cls] ?? 50) / 100
+}
+
+// Recommendation A (docs/design/army-balance.md; taken 2026-11-23): what a missile unit fights with
+// hand to hand. With MISSILES.SIDEARM set, a unit whose weapon shoots
+// fights a melee with that weapon instead (it does not swing its sling);
+// unset, it fights with its missile weapon's numbers, as before.
+function handWeapon(unit) {
+  const weapon = resolveWeapon(unit)
+  const sidearm = T.MISSILES.SIDEARM
+  if (sidearm && (weapon.range ?? 0) >= T.MISSILES.MIN_RANGE_M) return T.WEAPONS[sidearm] ?? weapon
+  return weapon
+}
+
+// The same, for the missile weapon itself (combat/ranged.js).
+function missileEffectiveness(shooter, target) {
+  return (resolveWeapon(shooter).effectiveness[armorClass(target)] ?? 50) / 100
 }
 
 // [notebook] "Spears good vs horses. Cavalry charge bonus suppressed against
 // braced spears." A weapon braces when its anti-cavalry effectiveness is at or
 // above the threshold, which picks out the spear/sarissa/framea family exactly.
 function isAntiCavalry(unit) {
-  return resolveWeapon(unit).effectiveness.cavalry >= T.ANTI_CAVALRY_THRESHOLD
+  return handWeapon(unit).effectiveness.cavalry >= T.ANTI_CAVALRY_THRESHOLD
 }
 
 // Ranged weapons carry a range in metres. [notebook] Archers cannot use ranged
@@ -212,7 +239,7 @@ function chaosMultiplier(chaos) {
 //   prepared         this unit set and braced for the attack
 
 function baseAttackRating(unit) {
-  return resolveQuality(unit).attack + resolveWeapon(unit).damage
+  return resolveQuality(unit).attack + handWeapon(unit).damage
 }
 
 function baseDefenseRating(unit) {
@@ -247,7 +274,7 @@ function attackRating(unit, ctx = {}) {
   } = ctx
 
   const terrainMod = terrainModifier(terrain, enemyTerrain, prepared).attack
-  const base = Math.max(0, baseAttackRating(unit) + terrainMod + bonusAttack - crowding)
+  const base = Math.max(0, baseAttackRating(unit) + (veteranEdge(unit).fight ?? 0) + terrainMod + bonusAttack - crowding)
 
   return base
     * fatigueMultiplier(stamina / staminaPool(unit))
@@ -267,7 +294,7 @@ function defenseRating(unit, ctx = {}) {
   } = ctx
 
   const terrainMod = terrainModifier(terrain, enemyTerrain, prepared).defense
-  const base = Math.max(0, baseDefenseRating(unit) + terrainMod - crowding)
+  const base = Math.max(0, baseDefenseRating(unit) + (veteranEdge(unit).fight ?? 0) + terrainMod - crowding)
 
   // Defense does not scale with the strength snowball. A thinner line is
   // easier to kill because there are fewer men in it, which the casualty
@@ -305,8 +332,11 @@ module.exports = {
   staminaDrainPerRound,
   fatigueMultiplier,
   moraleResistance,
+  veteranEdge,
   armorClass,
   effectivenessAgainst,
+  handWeapon,
+  missileEffectiveness,
   isAntiCavalry,
   isRanged,
   chargeMultiplier,

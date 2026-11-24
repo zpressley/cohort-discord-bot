@@ -224,12 +224,17 @@ test('Tribal Warriors bleed like Militia but hold like Professionals', () => {
   assert.ok(tribal.total < militia.total)
 })
 
-test('Veteran Mercenaries lose morale as fast as Militia despite the price', () => {
+// The notebook gave them "morale of mere Militia"; Recommendation A
+// (docs/design/army-balance.md) raised levy and militia a step and left
+// the veterans' morale where it was, which is now the levy's.
+test('Veteran Mercenaries lose morale as fast as Levy despite the price', () => {
   const sources = { killed: 15, pushDifferential: 2, chaos: 3 }
   assert.equal(
     D.moraleDamage(unit({ quality: 'veteran_mercenary' }), sources).total,
-    D.moraleDamage(unit({ quality: 'militia' }), sources).total
+    D.moraleDamage(unit({ quality: 'levy' }), sources).total
   )
+  assert.ok(D.moraleDamage(unit({ quality: 'veteran_mercenary' }), sources).total >
+    D.moraleDamage(unit({ quality: 'militia' }), sources).total)
 })
 
 // ── Stamina ────────────────────────────────────────────
@@ -322,4 +327,22 @@ test('everything is deterministic — same inputs, same numbers', () => {
   const ctx = { chaos: 3, roundsInContact: 1, terrain: 'hill' }
 
   assert.deepEqual(D.resolveExchange(a, b, ctx, ctx), D.resolveExchange(a, b, ctx, ctx))
+})
+
+test('men in heavy armour are spent soonest: their wind is the price of the best protection', () => {
+  // docs/design/army-balance.md, part 5: heavy armour drains twice what
+  // medium does and more, so a heavy unit must win before it gasses out.
+  const drain = (armor) => R.staminaDrainPerRound(unit({ armor, shield: 'no_shield' }))
+  assert.ok(drain('heavy_armor') - drain('medium_armor') > drain('medium_armor') - drain('no_armor'))
+  // Professionals in heavy armour fall below full effectiveness inside three
+  // rounds of fighting; in light armour they last past five.
+  const rounds = (armor) => {
+    const u = unit({ armor, shield: 'light_shield' })
+    let stamina = R.staminaPool(u)
+    let n = 0
+    while (R.fatigueMultiplier(stamina / R.staminaPool(u)) >= 1 && n < 20) { stamina -= R.staminaDrainPerRound(u); n++ }
+    return n
+  }
+  assert.ok(rounds('heavy_armor') <= 3, `${rounds('heavy_armor')} rounds`)
+  assert.ok(rounds('light_armor') >= 5, `${rounds('light_armor')} rounds`)
 })

@@ -39,7 +39,7 @@ const QUALITY_TIERS = {
     size: 100,               // [Q6] was 400
     attack: 1,               // [salvage]
     defense: 1,              // [salvage]
-    morale: 0,               // [salvage]
+    morale: 1,               // Recommendation A (docs/design/army-balance.md; taken 2026-11-23): was 0 [salvage]; at 0 levy broke at a look
     push: 1,                 // [derived] push has no legacy table
     staminaPool: 60,         // [notebook] better training = more stamina
     restrictions: ['heavy_weapons', 'heavy_armor', 'heavy_shield']
@@ -50,7 +50,7 @@ const QUALITY_TIERS = {
     size: 100,
     attack: 2,
     defense: 2,
-    morale: 1,
+    morale: 2,               // Recommendation A: was 1
     push: 2,
     staminaPool: 75,
     restrictions: []
@@ -118,12 +118,19 @@ const QUALITY_ORDER = [
 //   staminaDrain  [notebook] kit weight, per locked decision 2. Heavy kit
 //                 protects and hits harder but runs the tank down faster.
 //   push          [derived] mass helps you shove.
+//
+// Heavy armour's drain was 6 and is 12 (army balance, docs/design/
+// army-balance.md part 5): heavy infantry is the best in a stand-up fight,
+// and the price of it is wind. At 6, two professional units in heavy armour
+// won 88% of their battles against the usual armies and 79% against the
+// other classic armies; at 12, 78% and 69%, and pikes on the flat beat them
+// (54%). The notebook: "heavies must win before they gas out".
 
 const ARMOR = {
   no_armor:     { defense: 0, damageClass: 'light',  staminaDrain: 0,   push: 0 },
   light_armor:  { defense: 3, damageClass: 'light',  staminaDrain: 1,   push: 0 },
   medium_armor: { defense: 6, damageClass: 'medium', staminaDrain: 3,   push: 1 },
-  heavy_armor:  { defense: 9, damageClass: 'heavy',  staminaDrain: 6,   push: 2 }
+  heavy_armor:  { defense: 9, damageClass: 'heavy',  staminaDrain: 12,  push: 2 }
 }
 
 // ── Shields ────────────────────────────────────────────
@@ -201,14 +208,16 @@ const WEAPONS = {
 
   // Ranged — ranges in metres. Archers cannot use these while engaged in melee
   // (notebook), so in phase 2 they contribute melee damage only.
-  sling:                   { damage: 8,  effectiveness: { light: 85, medium: 45, heavy: 25, cavalry: 90 }, range: 300 },
+  // Recommendation A (docs/design/army-balance.md; taken 2026-11-23): sling range 300 -> 200, war
+  // sling 350 -> 250: a sling outranged every bow, at a third of the price.
+  sling:                   { damage: 8,  effectiveness: { light: 85, medium: 45, heavy: 25, cavalry: 90 }, range: 200 },
   self_bow_basic:          { damage: 6,  effectiveness: { light: 70, medium: 35, heavy: 15, cavalry: 65 }, range: 125 },
   throwing_spear:          { damage: 6,  effectiveness: { light: 75, medium: 45, heavy: 25, cavalry: 70 }, range: 25 },
   roman_plumbatae:         { damage: 5,  effectiveness: { light: 65, medium: 40, heavy: 20, cavalry: 45 }, range: 15 },
   germanic_throwing_axe:   { damage: 6,  effectiveness: { light: 70, medium: 50, heavy: 30, cavalry: 40 }, range: 20 },
   self_bow_professional:   { damage: 8,  effectiveness: { light: 75, medium: 45, heavy: 20, cavalry: 60 }, range: 225 },
   javelin_heavy:           { damage: 9,  effectiveness: { light: 85, medium: 65, heavy: 40, cavalry: 75 }, range: 35 },
-  sling_professional:      { damage: 10, effectiveness: { light: 85, medium: 45, heavy: 25, cavalry: 90 }, range: 350 },
+  sling_professional:      { damage: 10, effectiveness: { light: 85, medium: 45, heavy: 25, cavalry: 90 }, range: 250 },
   roman_pilum:             { damage: 9,  effectiveness: { light: 80, medium: 70, heavy: 50, cavalry: 60 }, range: 25 },
   greek_composite_bow:     { damage: 9,  effectiveness: { light: 80, medium: 50, heavy: 25, cavalry: 65 }, range: 200 },
   persian_recurve_bow:     { damage: 9,  effectiveness: { light: 80, medium: 50, heavy: 25, cavalry: 70 }, range: 200 },
@@ -504,7 +513,17 @@ const MISSILES = {
   // in fights". They shoot without having to stand, which is the limit on
   // everyone else, so a mounted missile unit is raised at this share of
   // its quality tier's men (army/builder.js). A starting value.
-  HORSE_ARCHER_NUMBERS: 0.6
+  HORSE_ARCHER_NUMBERS: 0.6,
+  // Recommendation A (docs/design/army-balance.md; taken 2026-11-23): how hard men felled by a volley shake a unit, as a share of
+  // the same men felled hand to hand (was 1). Missile fire wears a unit;
+  // the melee breaks it.
+  SHOCK: 0.67,
+  // Recommendation A: the weapon a missile unit fights with hand to hand (a key of
+  // WEAPONS): its knife, not its sling or bow (the notebook: "engaged
+  // archers fight (poorly) in melee"). null: its missile weapon's numbers,
+  // as before, when a sling was swung as hard as a sword and braced
+  // against horse like a spear.
+  SIDEARM: 'daggers'
 }
 
 // ── Pace ───────────────────────────────────────────────
@@ -575,7 +594,37 @@ const DAY = { TURNS: 40, MINUTES: 600 }
 // men fall first). The experience the fallen take with them, as a share of
 // the unit's average: at 1 they die evenly; at 0.5 the men who fall have on
 // average half the unit's experience. Starting value.
-const VETERANCY = { FALLEN_SHARE: 0.5 }
+//
+// docs/design/army-balance.md, part 4 (taken 2026-11-23): what a unit's veterancy
+// does in a battle. A unit carries its average experience, 0 to 30
+// (command/company.js, unitsOf), as `veterancy`. At each step it adds
+// `fight` to its attack and defence ratings (a professional has 4 of each
+// over a levy's 1) and `stand` to its morale resistance (a quality tier's
+// morale point is 0.38); and of the men a blow would fell it loses only
+// 1 - `survive` (they know how to keep alive), though it is shaken as if
+// it had lost them all. The steps fall where an officer's levels do:
+// green 4, seasoned 8, veteran 13, legendary 20. A unit with none fights
+// as before.
+// Measured (src/harness/army-study/veterans.js, a usual army against
+// itself, 128 battles a row): legendary veterans win 60% (none: 48%) and
+// lose 35% of their men a battle (none: 39%). Harder to break alone gave
+// 78% and 35%; a lift to the fight alone, 72% and 35%.
+const VETERANCY = {
+  FALLEN_SHARE: 0.5,
+  STEPS: [
+    { from: 4, fight: 0.25, survive: 0.05 },   // green
+    { from: 8, fight: 0.5, survive: 0.10 },    // seasoned
+    { from: 13, fight: 0.75, survive: 0.15 },  // veteran
+    { from: 20, fight: 1, survive: 0.20 }      // legendary
+  ],
+  // Against the computer, every unit of its army takes the average
+  // veterancy of the units the Commander fields in that battle, but never
+  // more than this: seasoned, the second step above. Ruled 2026-11-23,
+  // "Yes" to "take it, with the computer's army matching your average
+  // veterancy up to seasoned so it is never a pushover"
+  // (docs/design/army-balance.md, part 4, "The fairness problem").
+  MATCH_UP_TO: 8
+}
 
 // Training (command/company.js; ruled 2026-11-23: "Good perk for 30 is
 // training, each battle fought increase the level of the unit. A 30

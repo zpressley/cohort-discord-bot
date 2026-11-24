@@ -31,6 +31,8 @@ const { lyingInWait } = require('../interpreter/resolve')
 const { assignOfficers } = require('../engine/command/roster')
 const { planTurn } = require('../opponent/planner')
 const { musterOfficers, settleBattle, ridesWith, createCompany } = require('../engine/command/company')
+const { unitsOf } = require('../engine/command/company')
+const { matchedVeterancy } = require('../engine/veterans/veterancy')
 const { bargainChips, canRide, heldSight, sightFrom } = require('../engine/command/commander')
 const { orderDelays, byCommandPost } = require('../engine/command/messengers')
 const { knownEnemies, newsBetween } = require('../engine/orchestrator/word')
@@ -324,6 +326,8 @@ function createBattleStore({ dir = null, ai = null, now = () => Date.now() } = {
       // He is on the field himself, riding with his best unit (his
       // veteran's): there he can be taken, or killed.
       spec = led.spec
+      // Against the computer, its army matches his (ruled 2026-11-23).
+      if (solo) spec = matchComputer(spec, side, other)
     }
     let game
     try {
@@ -387,14 +391,29 @@ function createBattleStore({ dir = null, ai = null, now = () => Date.now() } = {
     // The quality each unit takes the field at: what it was raised as, and
     // what an officer of the greatest experience has since made of it.
     const qualityOf = new Map(led.units.map(u => [u.id, u.quality]))
+    // Each unit's own veterancy, its men's average experience, as it goes
+    // into this battle (army-balance.md, part 4). Saved in the spec, so the
+    // battle replays with it; a unit with none carries none.
+    const earned = new Map(unitsOf(led.company).map(u => [u.kind, u.veterancy]))
+    const veterancyOf = new Map(mine.filter(u => earned.get(u.kind) > 0).map(u => [u.id, earned.get(u.kind)]))
     return {
       company: led.company,
       spec: {
         ...spec,
-        units: spec.units.map(u => (officerOf.has(u.id) ? { ...u, officer: officerOf.get(u.id), quality: qualityOf.get(u.id) ?? u.quality } : u)),
+        units: spec.units.map(u => (officerOf.has(u.id) ? { ...u, officer: officerOf.get(u.id), quality: qualityOf.get(u.id) ?? u.quality, ...(veterancyOf.has(u.id) ? { veterancy: veterancyOf.get(u.id) } : {}) } : u)),
         commanders: { ...(spec.commanders ?? {}), [side]: { unitId: ridesWith(led.units) } }
       }
     }
+  }
+
+  // The computer's side, against a Commander: every unit of it takes the
+  // average veterancy of the units he fields, up to seasoned
+  // (veterancy.js, matchedVeterancy; ruled 2026-11-23). Fixed here, in the
+  // spec, for the whole battle.
+  function matchComputer(spec, side, other) {
+    const v = matchedVeterancy(spec.units.filter(u => u.side === side))
+    if (!(v > 0)) return spec
+    return { ...spec, units: spec.units.map(u => (u.side === other ? { ...u, veterancy: v } : u)) }
   }
 
   // The faction whose army a side brings: its Commander's for life; for one

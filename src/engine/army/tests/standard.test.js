@@ -22,7 +22,7 @@ test('an army over its budget is refused with the builder\'s reason', () => {
   const rich = Array.from({ length: 3 }, (_, i) => ({ name: `swords ${i + 1}`, quality: 'veteran_mercenary', weapon: 'sword_standard', armor: 'heavy_armor', shield: 'heavy_shield' }))
   const checked = checkStandard('rome', rich)
   assert.equal(checked.ok, false)
-  assert.deepEqual(checked.errors, ['army costs 45 SP against a budget of 30'])
+  assert.deepEqual(checked.errors, ['army costs 51 SP against a budget of 30'])
 })
 
 test('an army with kit its culture may not field is refused with the builder\'s reason', () => {
@@ -64,7 +64,9 @@ test('bought units have distinct names; one numbered is told apart, and a name a
 })
 
 test('a bought army forms up on every map, where the scenario puts its side, and a game can be made', () => {
-  const big = { rome: slingers(7), sarmatia: Array.from({ length: 3 }, (_, i) => ({ name: i ? `horse archers ${i + 1}` : 'horse archers', quality: 'tribal_warriors', weapon: 'self_bow_basic', armor: 'light_armor', mounted: true })) }
+  // Seven units, the most a Roman budget buys: levy archers at 4 SP each.
+  const archers = Array.from({ length: 7 }, (_, i) => ({ name: i ? `archers ${i + 1}` : 'archers', quality: 'levy', weapon: 'self_bow_basic', armor: 'light_armor' }))
+  const big = { rome: archers, sarmatia: Array.from({ length: 3 }, (_, i) => ({ name: i ? `horse archers ${i + 1}` : 'horse archers', quality: 'tribal_warriors', weapon: 'self_bow_basic', armor: 'light_armor', mounted: true })) }
   for (const map of mapChoices().map(m => m.id)) {
     for (const scenario of Object.keys(SCENARIOS)) {
       const spec = fieldArmies(loadScenario(scenario, { map, deploy: true }), { red: { faction: 'rome', units: big.rome }, blue: { faction: 'sarmatia', units: big.sarmatia } })

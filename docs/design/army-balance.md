@@ -774,3 +774,221 @@ To rerun: `node src/harness/army-study/experiments.js`, `value.js`,
 `search.js --per 150`, `tune.js now`, `veterans.js --seeds 4` (and
 `--vs usual`), `node src/harness/bought-league.js`,
 `node src/harness/faction-league.js`, `npm run balance`.
+
+---
+
+## Part 5. What was built after Zach's rulings
+
+Zach, November 23: A, **"Yes"**; veterans who fight a little better and die
+less, the computer matching your average veterancy up to seasoned, **"Yes"**
+(wired into the app by another piece of work). On B: **"In some ways it makes
+sense but is not as fun. The balance needs to come from the units themselves
+and the combination of weapons and armor ... Some units should be best but can
+then cost more. It should have a grounding in history ..."** And on the smaller
+questions: **"pull more levers and rebalance in a way to keeps the fun army
+building ideas alive."** So no muster roll: every army a player thinks of is
+allowed, and the work is in what things cost and what they do.
+
+Measured as before: the computer's planner on both sides, every battle its own
+seed, all four maps, both ways round. New scripts in `src/harness/army-study/`:
+`pool.js` (battles in worker processes), `usual.js` (the twenty usual armies'
+league, and the re-pick), `classics.js` (the classic armies, against the usual
+armies and kind against kind), `try.js` (any army against the usual armies).
+
+### 1. Recommendation A on twenty factions
+
+A forbade what ten of the new factions' usual armies carried: javelins and
+throwing axes alone (velites, peltasts, Numidian and Berber horse, Thracian and
+Germanic skirmishers, the Sarmatian and Celtic light horse), and the Mongols'
+elite wore medium armour with bows. What was done:
+
+- **A faction's elite is checked for its culture's kit only**, not for A's
+  rules on what is sold: the elite is never bought, and the doc gives the
+  Peltast Guard and the Blue Men a second weapon the builder cannot carry.
+- **Each javelin or throwing-axe unit re-armed in its people's kit**: Rome's
+  velites and Macedon's peltasts with a sword or spear, the skirmishers with
+  slings or bows, the light horse with swords. Then the six factions A had made
+  weak or strong were **re-picked by the method that picked them** (each
+  candidate against the other nineteen; the one nearest half kept): Han
+  (crossbows in medium armour, swords, spears), Kush, Mongolia (two horse
+  archers, two riders), Sarmatia (three horse archers), Bactria, Sparta.
+- **Why the suite ran for ten minutes on that branch**: it hung.
+  `web/tests/factions.test.js` mustered illegal usual armies, the server
+  answered 500, a test threw before closing its server, and the file never
+  exited. With legal armies it ends; the whole suite runs in about 15 seconds here.
+- **Tests** that pinned A's old numbers pin the new ones; A's rules (what is
+  sold, the knife, the volley's shock, veterancy) had no tests and now do.
+
+The usual armies against each other (`usual.js league`, 32 battles a pairing):
+
+| | Before A (main) | A, armies only made legal | A, re-picked | After part 5 |
+|---|---|---|---|---|
+| Range of factions | 41% (Berbers) to 58% (Persia) | 21% (Han) to 67% | 31% (Kush) to 65% | **40% (Kush) to 59% (Germania)** |
+| Factions outside 35-65% | 0 | 6 | 2 | **0** |
+| Pairings past 75/25 | 41 of 190 | 61 (16 a pairing) | 41 (16 a pairing) | **26 of 190** |
+
+### 2. More levers, from the units themselves
+
+The classic armies (`classics.js`): each bought by Rome (full-price horse),
+Sarmatia (cheap horse, tribal warriors) and Han, as many of its kit as the
+budget buys: levy spears in light kit; levy slingers; levy archers; riders
+(militia or tribal, sword); horse archers; heavy infantry (professionals with
+the spear in heavy armour); pikes (professionals); a balanced army (a
+professional line unit, spears, archers, riders).
+
+**What A left** (against the usual armies, 160 battles each; kind against kind,
+72 a cell): heavy infantry 99% against the usual armies and 94% against every
+other kind, beating every one of them 83 to 100%. Nothing beat it. Measured
+(`try.js`): three professionals with the basic spear won 74% in light armour,
+94% in medium, 98% in heavy, for 3 and 6 SP more. **Armour was the cheapest
+edge in the game.**
+
+Rounds (one change at a time, then measured):
+
+| Round | Lever | Result | Kept |
+|---|---|---|---|
+| 1 | **Armour by its weight**: medium 1 -> 2 SP, heavy 2 -> 4 | heavy infantry 99 -> 88% v usual, 94 -> 79% v kinds (three units -> two) | yes |
+| 2 | Heavy armour marches 2 tiles a tick, not 3 | no change (98% v usual): the computer does not skirmish, so nothing keeps its distance | no |
+| 3 | Pikes keep an enemy without them off (blows at 0.6) on open ground unless flanked; disordered (+2 chaos) in woods, marsh and crossings | pikes v heavy 38 -> 44%, the rest within noise | no |
+| 4 | The computer plays horse archers as archers (stand off and shoot) | horse archers 34 -> 33% v kinds: they cannot hurt armour | no (and it is the planner's file) |
+| 5 | **Heavy armour costs wind**: stamina drain 6 -> 12 (9 tried) | heavy 88 -> 78% v usual (84 at 9), 79 -> 69% v kinds; pikes now beat it 54% | yes |
+| 6 | The basic spear 1 -> 2 SP | levy 43 -> 33%, nothing else moved | no |
+| 7 | Professional, veteran and elite archers fight with a sword (the knife for the rest) | Kush 15 -> 17%: no help; Mongolia and Han +10 | no |
+| 8 | The pike 3 -> 4 SP | pikes 72 -> 39% (three units -> two): overshoots | no |
+| - | The usual armies re-picked under rounds 1 and 5 (eight factions) | see the league above | yes |
+
+Rounds 6, 7 and 8 in a row did not help, so I stopped there.
+
+**The classic armies, after** (against the usual armies, 320 battles each):
+
+| Army | After A | After part 5 | Rome / Sarmatia / Han, after |
+|---|---|---|---|
+| a mob of levy (7 units) | 46% | 41% | 38 / 53 / 31% |
+| slingers (6) | 57% | 53% | 61 / 50 / 46% |
+| archers (7) | 42% | 36% | 43 / 34 / 32% |
+| all horse (3) | 44% | 41% | 30 / 71 / 22% |
+| horse archers (3, Sarmatia 4) | 34% | 35% | 19 / 75 / 12% |
+| heavy infantry (3, now 2) | **99%** | **77%** | 79 / 79 / 74% |
+| pikes (3) | 77% | **76%** | 80 / 81 / 68% |
+| balanced (4, now 3) | 69% | 46% | 35 / 79 / 25% |
+
+**Kind against kind, after** (the row's wins against the column, 144 battles a
+cell; each kind's three factions against the other's three):
+
+| | levy | slingers | archers | horse | horse archers | heavy | pikes | balanced | All |
+|---|---|---|---|---|---|---|---|---|---|
+| levy | - | 52% | 53% | 72% | 71% | 22% | 20% | 51% | 49% |
+| slingers | 48% | - | 80% | 48% | 62% | 29% | 48% | 47% | 52% |
+| archers | 47% | 20% | - | 45% | 47% | 23% | 31% | 42% | 36% |
+| horse | 28% | 52% | 55% | - | 55% | 22% | 24% | 52% | 41% |
+| horse archers | 29% | 38% | 53% | 45% | - | 33% | 20% | 43% | 38% |
+| heavy | 78% | 71% | 77% | 78% | 67% | - | 46% | 71% | 70% |
+| pikes | 80% | 52% | 69% | 76% | 80% | 54% | - | 69% | 69% |
+| balanced | 49% | 53% | 58% | 48% | 57% | 29% | 31% | - | 46% |
+
+(After A the "All" column ran from 29% (horse archers) to 94% (heavy); now 36%
+(archers) to 70% (heavy). Every kind now wins at least a fifth of its battles
+against heavy infantry, and pikes beat it.)
+
+Who beats whom: **heavy infantry** beats everything but pikes and is the best
+army in a stand-up fight, and now costs it (two units, not three, and spent
+within three rounds); **pikes** beat heavy infantry on open ground, horse and
+levy, and are held by slingers; **slingers** beat archers (they outrange them
+and are cheaper per volley) and horse archers; **levy** in numbers beat horse
+and horse archers (spears brace) and hold slingers and archers even; **horse**
+beat archers and the balanced army; **horse archers** beat only archers.
+
+**The random search** (`search.js --per 30`: 600 legal armies, 30 a faction,
+each against all twenty usual armies; the extremes again at 96 battles):
+
+| | After A (four factions, report above) | After part 5 (twenty factions) |
+|---|---|---|
+| Best army | 3 professional spears, heavy armour: 99% | 3 professional spears, **medium** armour (Carthage): 93% |
+| The ten best | professionals in heavy armour, 88-99% | professionals in medium armour with a cheap weapon (spear, club), 82-93% |
+| Over 70% | 74 of 600 | 68 of 600 |
+| Under 20% | 196 of 600 | 149 of 600 |
+| Armies with no missile troops / over half missile | 40% / 26% | 40% / 32% |
+
+The ten best against each other: 66 to 88%. The worst ten are armies without
+armour (veterans in none, levy on horses) and seven of them are Kush's: random
+Kush armies win almost nothing (below).
+
+**The five kinds `bought-league.js` buys** (`--seeds 1`: each faction's five
+armies against all twenty usual armies, 160 battles each; the mean of the
+twenty factions, and the lowest and highest):
+
+| Army bought | Before A | After A, part 1 | After part 5 |
+|---|---|---|---|
+| the usual army (yardstick) | 50% (43-58) | 49% (30-65) | 49% (36-59) |
+| all levy spears, no kit | 9% (1-24) | 22% (2-41) | 20% (3-34) |
+| all levy slingers | **79%** (50-96) | 41% (14-74) | 41% (16-69) |
+| veteran mercenaries, best kit | 63% (21-88) | 57% (5-82) | 35% (2-70) |
+| all horse | 26% (1-74) | 30% (3-82) | 31% (3-78) |
+
+16,000 battles each. With no end of day in this harness (it plays up to 150
+player turns), 4 battles did not end after part 5 (2 after A, 0 before); in the
+app the day ends them, and `npm run soak` ends every one. In `experiments.js`
+(now against all twenty usual armies) seven levy spears in their free light
+kit win 48% against the planner and 47% against a charging player (33 and 43%
+after A); three professional spears in light armour 88 and 98%.
+
+**The Commander's odds** (`captive-league.js --battles 2000 --policy wait`, a
+player who sends everyone in): taken in 1 battle in 24.4 before A, 1 in 23.5
+now. With the computer's plan on both sides (`usual.js league`, 12,160
+Commanders): taken 1 in 40 and killed 1 in 450 before A; 1 in 34 and 1 in 368
+now. Within the ruled band; `tables.COMMANDER` not retuned.
+
+**`npm run balance`.** Its last table (the mirror ladder, medium infantry) is
+as A left it: levy 3.0 rounds, militia 4.0, tribal and professional 5.0,
+veteran mercenaries 3.0, elite 6.8 (before A: levy 2.0, militia 3.0). The duel
+matrix's heavy infantry row moved with its wind: against spearmen 100/0 -> 29/71,
+cavalry 100/0 -> 2/98, maceman 1/99 -> 0/100. The design assertions pass.
+
+### 3. What is still out of line
+
+- **Professionals in medium armour** are the new top: three of them with a
+  1-SP weapon win 92-93%. Medium armour at 3 SP was tried (two such units and
+  a militia one: 86%). Most of the edge is quality and armour per unit; the
+  engine settles each melee between two units almost surely, so a few good
+  units beat many middling ones.
+- **Heavy infantry 77% and pikes 76%** against the usual armies (the target was
+  70). Against the other classic armies both are at 69-70%.
+- **Horse archers** 35% overall, and 12-19% for a people who pay full price for
+  horses and field them as militia. They cannot hurt armour, and nothing in the
+  engine lets them keep their distance: the Carrhae counter to heavy infantry
+  is not there. That needs a skirmish rule (light and mounted missile troops
+  step back from slower foot), which is a new rule and was not built.
+- **Archers** 36%: below slingers everywhere, and beaten 4 to 1 by them.
+- **Kush**: its usual army is re-picked to 40%, but almost any army Kush buys
+  is among the worst drawn. Its elite are archers who fight hand to hand with a
+  knife, and the Commander rides with them; a sword for better archers did not
+  change it (round 7).
+- Woods and marsh do not yet break up formed heavy foot (the Teutoburg
+  counter). Pikes' disorder in rough ground was built in round 3 and dropped
+  with the rest of it.
+- Numbers still do not count in a melee: a cheap army buys bodies, not weight.
+
+### 4. Questions for Zach
+
+1. **Medium armour at 3 SP?** Professionals in medium armour are now the best
+   buy (92%); at 3 they fall to 86%. Recommendation: not yet; first see whether
+   players find them.
+2. **A skirmish rule** (missile troops, on foot or horse, step back from slower
+   foot that comes at them, and shoot): the one rule that would make horse
+   archers and slingers a real answer to heavy infantry, as at Carrhae.
+   Recommendation: yes, as the next piece of work.
+3. **Battles saved before this change replay differently** (the finished one in
+   the before-roster test is no longer decided at its last turn). Keep old
+   rules for old battles, or let them replay under the new ones?
+   Recommendation: keep a rules version on each saved battle.
+4. **Kush's elite**: the Golden Bows are archers who cannot fight hand to hand.
+   Give them a second weapon (a sword) as the doc's elites often have, or leave
+   Kush as an army that must be bought around its elite? Recommendation: a
+   sword for the elite only.
+
+### Where it is
+
+Branch `worktree-agent-abbec1f2756ff7178`: `0380d68` (part 1: A on twenty
+factions), `0cc1731` (armour by weight), `42af3bb` (study scripts), `2d39d8d`
+(wind), `f1a27c6` (main merged), `268e307`, `580ed20` (usual armies
+re-picked), `239864a`, and this report.

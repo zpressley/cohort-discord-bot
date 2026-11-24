@@ -457,3 +457,26 @@ test('roundsPerTurn resolves several ten-minute rounds in one player turn', () =
   assert.ok(killedIn(b) > killedIn(a), 'three rounds must cost more than one')
   assert.equal(b.events.length, 3, 'and produce one event per round')
 })
+
+// ── Volleys and veterans (docs/design/army-balance.md) ──
+
+test('men felled by a volley shake a unit less than the same men felled hand to hand', () => {
+  // Recommendation A: missile fire wears a unit; the melee breaks it.
+  const resolver = createCombatResolver()
+  const target = unitSpec({ id: 't' })
+  resolver.volley(target, 10)
+  const shot = T.MORALE.START - resolver.getState('t').morale
+  const D = require('../damage')
+  const handToHand = D.moraleDamage(target, { killed: 10 }).total
+  assert.ok(Math.abs(shot - handToHand * T.MISSILES.SHOCK) < 1e-9)
+  assert.ok(T.MISSILES.SHOCK < 1)
+})
+
+test('a veteran unit loses fewer of the men a volley would fell, and is shaken as much', () => {
+  const plain = createCombatResolver()
+  const old = createCombatResolver()
+  const a = plain.volley(unitSpec({ id: 'a' }), 40)
+  const b = old.volley(unitSpec({ id: 'b', veterancy: 20 }), 40)
+  assert.ok(b.killed < a.killed, `${b.killed} of 40 against ${a.killed}`)
+  assert.equal(plain.getState('a').morale, old.getState('b').morale)
+})

@@ -76,6 +76,13 @@ const TRIBAL_CULTURES = [
 //   shieldRestriction  no_shield | secondary_melee_only | medium_shield_max
 //   cavalryCompatible  false = cannot be taken mounted
 //   cultures           'all' or the list that may buy it
+//   armorMax           Recommendation A (docs/design/army-balance.md): the heaviest
+//                      armour its men may wear (missile troops are light
+//                      troops; crossbowmen may wear medium)
+//
+// Recommendation A's prices: sling 1 -> 2 (it outshot every bow at any price),
+// sling_professional 2 -> 3, han_chinese_crossbow 2 -> 3 (it pierces armour
+// as nothing else does).
 const WEAPONS = {
   clubs: { sp: 1, stacking: 'primary', cavalryCompatible: false, cultures: 'all' },
   daggers: { sp: 1, stacking: 'secondary', cultures: 'all' },
@@ -109,29 +116,34 @@ const WEAPONS = {
   // The twenty cultures doc gives the Sarmatians' elite "Kontos lances".
   persian_kontos: { sp: 3, stacking: 'two_handed', shieldRestriction: 'no_shield', cultures: ['Achaemenid Persian', 'Parthian Empire', 'Sarmatian Confederations', 'Bactrian Greeks'] },
 
-  sling: { sp: 1, stacking: 'stackable_ranged', cultures: 'all' },
-  self_bow_basic: { sp: 1, stacking: 'primary_ranged', shieldRestriction: 'secondary_melee_only', cultures: 'all' },
+  sling: { sp: 2, armorMax: 'light_armor', stacking: 'stackable_ranged', cultures: 'all' },
+  self_bow_basic: { sp: 1, armorMax: 'light_armor', stacking: 'primary_ranged', shieldRestriction: 'secondary_melee_only', cultures: 'all' },
   throwing_spear: { sp: 1, stacking: 'stackable_ranged', cultures: 'all' },
   roman_plumbatae: { sp: 1, stacking: 'stackable_ranged', cultures: ['Roman Republic'] },
   germanic_throwing_axe: { sp: 1, stacking: 'stackable_ranged', cavalryCompatible: false, cultures: ['Germanic Tribes'] },
-  self_bow_professional: { sp: 2, stacking: 'primary_ranged', minQuality: 'professional', shieldRestriction: 'secondary_melee_only', cultures: 'all' },
+  self_bow_professional: { sp: 2, armorMax: 'light_armor', stacking: 'primary_ranged', minQuality: 'professional', shieldRestriction: 'secondary_melee_only', cultures: 'all' },
   javelin_heavy: { sp: 2, stacking: 'stackable_ranged', minQuality: 'professional', cultures: 'all' },
-  sling_professional: { sp: 2, stacking: 'stackable_ranged', minQuality: 'professional', cultures: 'all' },
+  sling_professional: { sp: 3, armorMax: 'light_armor', stacking: 'stackable_ranged', minQuality: 'professional', cultures: 'all' },
   roman_pilum: { sp: 2, stacking: 'stackable_ranged', minQuality: 'professional', cavalryCompatible: false, cultures: ['Roman Republic'] },
-  greek_composite_bow: { sp: 2, stacking: 'primary_ranged', minQuality: 'professional', shieldRestriction: 'secondary_melee_only', cultures: ['Spartan City-State', 'Macedonian Kingdoms'] },
-  persian_recurve_bow: { sp: 2, stacking: 'primary_ranged', minQuality: 'professional', shieldRestriction: 'secondary_melee_only', cultures: ['Achaemenid Persian'] },
-  han_chinese_crossbow: { sp: 2, stacking: 'primary_ranged', minQuality: 'professional', shieldRestriction: 'medium_shield_max', cavalryCompatible: false, cultures: ['Han Dynasty'] },
-  parthian_horse_bow: { sp: 2, stacking: 'primary_ranged', minQuality: 'professional', shieldRestriction: 'secondary_melee_only', cultures: ['Parthian Empire'] }
+  greek_composite_bow: { sp: 2, armorMax: 'light_armor', stacking: 'primary_ranged', minQuality: 'professional', shieldRestriction: 'secondary_melee_only', cultures: ['Spartan City-State', 'Macedonian Kingdoms'] },
+  persian_recurve_bow: { sp: 2, armorMax: 'light_armor', stacking: 'primary_ranged', minQuality: 'professional', shieldRestriction: 'secondary_melee_only', cultures: ['Achaemenid Persian'] },
+  han_chinese_crossbow: { sp: 3, armorMax: 'medium_armor', stacking: 'primary_ranged', minQuality: 'professional', shieldRestriction: 'medium_shield_max', cavalryCompatible: false, cultures: ['Han Dynasty'] },
+  parthian_horse_bow: { sp: 2, armorMax: 'light_armor', stacking: 'primary_ranged', minQuality: 'professional', shieldRestriction: 'secondary_melee_only', cultures: ['Parthian Empire'] }
 }
 
 // [salvage] ARMOR_CATEGORIES / SHIELD_OPTIONS SP costs (the combat values for
 // the same keys live in phase 2's tables).
-const ARMOR_SP = { no_armor: 0, light_armor: 0, medium_armor: 1, heavy_armor: 2 }
+// Armour by its weight in iron (army balance, docs/design/army-balance.md
+// part 5): medium 1 -> 2, heavy 2 -> 4. At the old prices armour was the
+// cheapest edge in the game: three professionals in heavy armour won 98%
+// of their battles against the usual armies, in light armour 74%, for 6 SP
+// less. Heavy infantry is still the best in a stand-up fight; it costs it.
+const ARMOR_SP = { no_armor: 0, light_armor: 0, medium_armor: 2, heavy_armor: 4 }
 const SHIELD_SP = { no_shield: 0, light_shield: 0, medium_shield: 1, heavy_shield: 2 }
 
 // [salvage] MOUNT_OPTIONS: 3 SP standard, 2 for the horse cultures.
-const MOUNT_SP = 3
-const MOUNT_SP_DISCOUNTED = 2
+const MOUNT_SP = 2       // docs/design/army-balance.md, Recommendation A: was 3
+const MOUNT_SP_DISCOUNTED = 1   // was 2
 // The twenty cultures doc's steppe peoples: Sarmatians, Parthians, Mongols.
 const HORSE_CULTURES = ['Sarmatian Confederations', 'Parthian Empire', 'Pre-Genghis Mongolia']
 
