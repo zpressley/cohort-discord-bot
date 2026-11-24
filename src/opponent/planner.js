@@ -251,7 +251,10 @@ function planTurn(game, side) {
     // end).
     if (canSkirmish(unit) && !unit.mounted && !fighting.has(unit.id)) {
       const foe = nearestSeen(unit.position)
-      if (foe && foe.d <= ch.engage) { give(unit, { action: 'advance' }); continue }
+      // (Within 7 tiles, as part 7 has it, for a cautious Commander too:
+      // his engage of 5 is short of a crossbow's reach, and his crossbowmen
+      // marched to and fro short of the enemy for ever. Part 9.)
+      if (foe && foe.d <= Math.max(ch.engage, TUNING.ENGAGE)) { give(unit, { action: 'advance' }); continue }
     }
 
     if (horse.includes(unit)) {

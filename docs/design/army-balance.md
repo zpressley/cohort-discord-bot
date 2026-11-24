@@ -1849,13 +1849,37 @@ Commanders taken 1 in 31 before, 1 in 32 after; killed 1 in 338 and 1 in
 
 **The random search** (`search.js --per 30`, 600 legal armies, now kept to
 each people's restrictions, each against the twenty usual armies):
-SEARCH_RESULT
+
+| | Before (part 8) | After |
+|---|---|---|
+| Best army (96 battles) | 2 professional axe units in heavy armour with heavy javelins (Macedon): 93%; the same with throwing spears (Carthage): 92% | the same Macedonian army: 92%; Maurya's 3 professional spear units in medium armour 91%; the Carthaginian 91% |
+| Over 70% / under 20% | 47 / 166 of 600 | 45 / 170 |
+| Mean win, by faction, lowest | | Kush 10%, Thrace 17%, Silla 18% (Thrace and Kush may no longer buy heavy kit) |
+
+The best army did not rise; nor did the number of strong ones.
 
 **The Commander's odds** (`captive-league.js --battles 2000 --policy
-wait`): CAPTIVE_RESULT
+wait`): taken in 1 battle in 21.7 (92 of 2,000), where `integration-16`
+gives 1 in 19.0 (105). Within what chance moves it (a few battles either
+way), though steadier and seasoned elites (Macedon's, Sparta's line) may
+take a little of it. `tables.COMMANDER` is not retuned.
 
 **`npm run balance`**: the same, line for line, the mirror ladder
 included. Its duels have no faction, so no unit carries a perk.
+
+**`npm run soak`**: every battle ended, after one change outside the
+perks. With the perks one battle of 480 with a cautious computer never
+ended (Persia against Han on ravenridge, the player giving no orders): the
+cautious Commander's crossbowmen, his only men fit to fight, marched to and
+fro short of the enemy for ever. Part 7 has the computer's foot missile
+troops press any enemy within 7 tiles; since the computer was given
+character, they pressed within the Commander's own `engage`, 5 for a
+cautious one, short of a crossbow's reach (6). Now within 7 at the least
+(`opponent/planner.js`, one line): the battle ends, and in the character
+league (`character-league.js --rounds 4`, 2,880 battles) the cautious
+Commander wins 49% (48% before), steady 51% (52%), bold 50% (50%). The
+usual armies' league and the search are played by the steady Commander,
+whose `engage` is 7: untouched.
 
 ### What is still out of line
 

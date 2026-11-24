@@ -3831,8 +3831,11 @@ into true already, built, and left out with the reason, is Part 9 of
 (`usual.js league --seeds 4`, 6,080 battles): Sparta 39% to Rome and
 Germania 64% before; Han, Maurya, Sarmatia and Yayoi 44% to Rome 64% after.
 Pairings past 75/25: 30 of 190 before, 31 after. The Commander in the
-league taken 1 in 31 before, 1 in 32 after. The random search and the
-Commander's odds against a player who sends everyone in: Part 9.
+league taken 1 in 31 before, 1 in 32 after. The random search
+(`search.js --per 30`, now kept to the restrictions): its best army 92%
+(93% before), 45 of 600 over 70% (47 before). The Commander against a
+player who sends everyone in (`captive-league.js --battles 2000 --policy
+wait`): taken in 1 battle in 21.7 (1 in 19.0 before); not retuned.
 
 **Guessed, and the other reading.**
 - **"Fight to the last man, until 50% casualties"** (Sparta), "break at
@@ -3878,6 +3881,13 @@ Commander's odds against a player who sends everyone in: Part 9.
   The bought-league's kinds a people may not buy (all-levy Rome, foot for
   Sarmatia) are left out of it and of the soak (`bought-league.js`).
 
+**Outside the perks, one line** (`opponent/planner.js`): the computer's
+foot missile troops press an enemy within 7 tiles at the least, as part 7
+of the balance study built it, not within a cautious Commander's
+`engage` of 5. With 5 a cautious Commander's crossbowmen (reach 6) marched
+to and fro short of the enemy for ever, and a battle in the soak never
+ended. Cautious wins 49% in the character league (48% before).
+
 **Tests retaken**: the whole-battle fingerprints of Rome against Han
 (`asked-unchanged`, `messengers-unchanged`, old values in their headers):
 Rome steadier, Han larger. On ashford with no Commander the two battles now
@@ -3885,4 +3895,6 @@ run to the 150-turn guard, marching up and down either side of the ford;
 not the perks' doing (it happens without them, Mongolia against Tibet on
 ashford, seed 77), and the day ends such a battle in the app.
 `held-commander.test.js`'s battle in which Macedon's Commander is taken
-(seed 708 to HELD_SEED).
+(Macedon's to Persia's, seed 708: Macedon's Commander, his Silver Shields
+seasoned, is now taken only with his army all but gone, and none of some
+thousands of seeds searched left the battle on a turn later).
