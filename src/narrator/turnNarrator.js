@@ -14,6 +14,7 @@ const { compassWord, TILE_METRES } = require('../engine/map/places')
 const { orderWords, moraleWords, ORDER, RIDER, NIGHT, GROUND, SKIRMISH_WORDS, THROWN_WORDS, ON_HIS_OWN } = require('./words')
 const { gridLabel } = require('../engine/map/grid')
 const { RIDER_TAKEN } = require('./words')
+const { BATTLE_OVER } = require('./words')
 
 // Where a tile is, in words: the feature it is part of, or the nearest
 // feature with a name, or open ground near the nearest feature.
@@ -298,7 +299,7 @@ function plainFact(map, event, howMany = countAll) {
     case 'gaveGround': return SKIRMISH_WORDS.gaveGround(event.unitId, listOf(event.from))
     case 'disengage': return `${event.unitId} broke off the fight` +
       (event.orderly ? ' in good order' : '') +
-      (event.killed ? `, losing ${event.killed} men to the parting blows` : ' cleanly')
+      (event.killed ? `, losing ${men(event.killed)} to the parting blows` : ' cleanly')
     case 'ambush': return `${event.unitId} sprang an ambush on ${event.on} ${whereAt(map, event.at)}`
     case 'ambushHeld': return event.reason === 'on guard'
       ? `${event.unitId} let ${event.on} pass: it came on guard, not worth the strike`
@@ -475,6 +476,12 @@ function toTheCommander(event, ownIds) {
 // The ground to fight for, told to one side (turn.side) as its own or the
 // enemy's: every side knows at once when it changes hands.
 function toTheSide(event, side) {
+  // The battle's end, in the side's own words (not "Red won (enemy army
+  // broken)"); night is told by its own line.
+  if (event.type === 'victory' && side) {
+    if (event.reason === 'night fell') return ''
+    return BATTLE_OVER.line(event.reason, event.winner === 'draw' ? null : event.winner === side)
+  }
   if (event.type !== 'objective' || !side) return null
   if (event.close) return GROUND.close(event.name, event.side === side, event.close)
   if (event.side) return GROUND.took(event.name, event.side === side)
@@ -498,6 +505,9 @@ function report(turn) {
   return [...fights, ...others]
     .map((f, i) => ({ ...f, i }))
     .sort((x, y) => x.weight - y.weight || x.i - y.i)
+    // (The same line twice, "Enemy velites was pinned with nowhere to give
+    // way" for two ticks, is told once.)
+    .filter((f, i, all) => all.findIndex(g => g.text === f.text) === i)
     .slice(0, MAX_FACTS)
     .map(f => nameOf(f.text))
 }
@@ -530,6 +540,8 @@ You are given the facts as notes, the most important first. Turn them into a dis
 - Write unit names exactly as given ("Spears", "enemy horse"). "An unseen enemy" and "enemy troops" stay exactly that: never say what kind they are or how many.
 - The commander gives orders by grid square, so keep the place and the grid square from the notes whenever a note has one, for example "at the ford (D4-SW)". Never work out or invent a square.
 - No advice, no questions, no mention of turns, rules or dice.
+- Speak to the commander as "you". What happened to him is "you were taken", never "we were taken" or "the commander was taken".
+- A note on the ground to fight for says only how things stand now: "hold it 30 min more and the field is yours" means the field is not yet won. Never say the field is won, secured or yours unless a note says the battle is over.
 
 Example notes:
 - Guards: fought enemy axes at North Ford (D4-SW); lost 9 men and killed 21; broke enemy axes, cutting down 5 as they ran, and holds firm

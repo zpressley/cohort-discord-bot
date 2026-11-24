@@ -50,6 +50,8 @@ a { color: var(--accent); }
 .bar-title strong { font-family: var(--font-display); font-size: clamp(15px, 4.2vw, 18px); font-weight: 600; }
 .bar-title span { font-size: 12px; color: var(--ink-soft); }
 .bar a { font-size: 14px; white-space: nowrap; }
+/* The way back, a finger's size: 44 px tall, the bar's height unchanged. */
+.bar > a { display: inline-flex; align-items: center; min-height: 44px; min-width: 44px; margin: -12px 0; }
 .chip { font-size: 12px; font-weight: 600; padding: 3px 8px; border: 1px solid var(--ink); white-space: nowrap; }
 .chip-dark { background: var(--ink); color: var(--on-ink); }
 

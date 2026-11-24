@@ -88,7 +88,10 @@ function plain(reason, names = []) {
   s = s.replace(/army costs (\d+) SP against a budget of (\d+)/, (_, cost, budget) => `the army would cost ${cost} ${KIT.points} against a budget of ${budget}`)
   s = s.replace(/demands (\w+) training/, (_, q) => `demands ${(T.QUALITY_TIERS[q]?.name ?? q).toLowerCase()} training`)
   s = s.replace(/"(\w+)" is not a purchasable troop quality/, (_, q) => `${KIT.quality[q] ?? q} troops cannot be bought`)
-  for (const [key, word] of KEYS) s = s.replace(new RegExp(`\\b${key}\\b`, 'g'), `the ${word}`)
+  // In one pass, so a word put in ("great mace") is not itself replaced
+  // again ("the great the mace").
+  const words = new Map(KEYS)
+  s = s.replace(new RegExp(`\\b(${KEYS.map(([key]) => key).join('|')})\\b`, 'g'), (key) => `the ${words.get(key)}`)
   s = s.replace(/\barmor\b/g, 'armour')
   return cap(s)
 }

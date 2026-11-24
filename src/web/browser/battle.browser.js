@@ -93,7 +93,10 @@ test('alone, on a phone: muster, an order written on the map, turns to a verdict
 
     // The first turn's card: its examples are put in the box, and the game reads them.
     const examples = await p.locator('[data-example]').count()
-    assert.equal(examples, 5)
+    assert.equal(examples, 6)
+    // The first is the field's ground to fight for: "everyone advance" alone
+    // lets the computer take it.
+    assert.equal(await p.textContent('[data-example] >> nth=0'), 'everyone take the Crownhill')
     for (let i = 0; i < examples; i++) {
       await p.click(`[data-example] >> nth=${i}`)
     }
@@ -432,6 +435,7 @@ test('held, on a phone: an offer made with the tick boxes, the friend who holds 
     await red.waitForSelector('#make-offer')
     assert.match(await red.textContent('#panel-body'), /You are taken/)
     assert.equal(await red.locator('#yield-held').count(), 0, 'held, he cannot yield by his own word')
+    assert.equal(await red.textContent('#map-hint'), 'You are held by the enemy: you can send no orders.', 'the map does not ask him to order his units')
     assert.equal(await red.textContent('#make-offer'), 'Offer the field alone')
     await red.check('[data-chip="red_horse"]')
     assert.equal(await red.textContent('#make-offer'), 'Offer the field and the horse')
@@ -967,5 +971,28 @@ test('a 1 km map opens on a phone as it always did, 15 px a tile, and shows the 
     await d.goto(`${base}/b/${seat}`)
     await d.waitForSelector('#map-scroll svg')
     await bigShot(d, 'small-desktop')
+  })
+})
+
+// From the playthrough of November 24 (docs/REVIEW-2026-11.md).
+test('on a phone: the way back in the top bar is a finger\'s size, and a horse people\'s new unit starts on horse, its refusals keeping the people\'s capital', { skip }, async () => {
+  await withApp(async ({ base, browser, errors }) => {
+    const p = await page(browser, errors, { width: 390, height: 844 })
+    await toMuster(p, base, { faction: 'sarmatia' })
+    const back = await p.locator('.bar > a').first().boundingBox()
+    assert.ok(back.height >= 44 && back.width >= 44, `the way back is ${back.width} by ${back.height}`)
+    await p.click('#to-army')
+    await p.waitForSelector('#army-screen')
+    await p.click('#add')
+    await p.waitForSelector('#draft')
+    assert.match(await p.textContent('#draft'), /on horse/, 'Sarmatia fights on horseback: the new unit is on horse')
+    assert.equal(await p.locator('#draft-refused').count(), 0, 'and is not refused as it stands')
+    assert.equal(await p.locator('#take').isDisabled(), false)
+    // A refused choice says why, the people's name as it is written.
+    await p.locator('[data-field="mounted"][data-value="false"]').dispatchEvent('click')
+    await p.waitForSelector('#refused')
+    assert.match(await p.textContent('#refused'), /On foot: Sarmatia fights on horseback/)
+    const evenSo = await p.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)
+    assert.ok(evenSo, 'no sideways scroll')
   })
 })

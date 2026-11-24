@@ -4179,3 +4179,36 @@ ashford, seed 77), and the day ends such a battle in the app.
 (Macedon's to Persia's, seed 708: Macedon's Commander, his Silver Shields
 seasoned, is now taken only with his army all but gone, and none of some
 thousands of seeds searched left the battle on a turn later).
+
+### How the playthrough's fixes were built (Claude's choices, open to change)
+
+From a whole playthrough of the game (`docs/REVIEW-2026-11.md`,
+"Playthrough, November 24", P1 to P11). No rule changed; the engine, the
+planner and `npm run balance` are untouched (its output identical, every
+line).
+
+- **The ground first among the first turn's examples** ("everyone take the
+  Crownhill"). Measured through the API on Crownhill, five battles each:
+  "everyone advance" lost 5 of 5 to the ground with no man lost; "everyone
+  take the Crownhill" gave five real battles (12 to 27 turns). The other
+  reading was to leave the examples alone and change the first turn
+  (stop it when the enemy is first seen near the ground); that is the
+  engine's, and left as D1.
+- **Your turn, at the end, is the one the battle ended in**: the count of
+  times this side was asked (`game.calls`), which is what the dispatches
+  are numbered by. The replay keeps the battle's own stops (they are what
+  the saved order log replays) and is told by the clock instead of a turn.
+- **The battle's end in each side's words** (`words.js`, `BATTLE_OVER`),
+  the reasons as the verdict already gave them on screen; first in the
+  last dispatch, for every way a battle ends but night (which has its own
+  line). The AI is given the same facts as before.
+- **A friend's battle is "against a friend" until he chooses** who leads.
+  Guessed: that knowing his faction before he has chosen is no part of the
+  game; the other reading is that the lot's faction is a fair default to
+  show.
+- **A horse people's new unit** starts on horse with a sword (the first
+  weapon a rider may carry, the sword if allowed); only when the usual
+  starting unit is refused as it stands.
+- **The AI's instructions** gained two lines: the Commander is "you", and
+  ground not yet held an hour has not won the field. Not measured live
+  again: the task allowed one AI battle, and it was spent finding this.

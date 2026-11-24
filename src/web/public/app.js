@@ -850,6 +850,17 @@ async function armyScreen(token) {
       state.refused = null
       state.note = null
       await appraise()
+      // A people who fight only on horse (Sarmatia) may not buy the men on
+      // foot a new unit starts as, and a spear cannot be carried on horse:
+      // so start them on horse, with a weapon a rider carries.
+      if (state.seen.draft.refused) {
+        state.draft = { ...NEW_UNIT, mounted: true }
+        await appraise()
+        const fit = state.seen.draft.options.weapon.filter(o => !o.refused)
+        const weapon = fit.find(o => o.value === 'sword_standard') ?? fit.find(o => !o.shoots) ?? fit[0]
+        if (state.seen.draft.refused && weapon) { state.draft.weapon = weapon.value; await appraise() }
+        if (state.seen.draft.refused) { state.draft = { ...NEW_UNIT }; await appraise() }
+      }
       render()
       window.scrollTo(0, 0)
     })
@@ -921,7 +932,9 @@ async function armyScreen(token) {
       const field = b.dataset.field
       const o = d.options[field].find(x => String(x.value) === b.dataset.value)
       if (b.getAttribute('aria-disabled') === 'true') {
-        state.refused = `${cap(o.words)}: ${o.refused.charAt(0).toLowerCase()}${o.refused.slice(1)}`
+        // "The spear ..." reads on as "the spear ..."; a people's name
+        // ("Sarmatia fights on horseback") keeps its capital.
+        state.refused = `${cap(o.words)}: ${/^(The|A|An) /.test(o.refused) ? o.refused.charAt(0).toLowerCase() + o.refused.slice(1) : o.refused}`
         render()
         document.getElementById('refused')?.scrollIntoView({ block: 'center' })
         return
@@ -1173,8 +1186,11 @@ async function tent(token) {
 
   function renderHint() {
     const hint = document.getElementById('map-hint')
-    const finished = state.view.battle.status === 'finished'
-    if (state.stack && !state.picked && !state.flash) {
+    // Held by the enemy, he gives no orders: the map is only to look at.
+    const finished = state.view.battle.status === 'finished' || state.view.commander?.status === 'held'
+    if (state.view.commander?.status === 'held' && state.view.battle.status !== 'finished' && !state.place) {
+      hint.innerHTML = '<span>You are held by the enemy: you can send no orders.</span>'
+    } else if (state.stack && !state.picked && !state.flash) {
       const units = state.stack.map(id => state.view.own.find(u => u.id === id)).filter(Boolean)
       hint.innerHTML = `<span>Which one?</span>${units.map(u => `<button class="btn" type="button" data-stack="${esc(u.id)}">${esc(u.name)}</button>`).join('')}<button class="btn btn-quiet" type="button" id="stack-away">Never mind</button>`
       hint.querySelectorAll('[data-stack]').forEach(b => b.addEventListener('click', () => {
@@ -1334,6 +1350,9 @@ async function tent(token) {
     const a = own[0]
     const b = own[own.length > 1 ? 1 : 0]
     const examples = [
+      // The field's ground to fight for, first: a player who only advances
+      // on an enemy he cannot see watches the computer take it.
+      ...(v.objectives ?? []).slice(0, 1).map(o => `everyone take ${o.name}`),
       'everyone advance',
       `${a.name} to ${east(a, 4)}`,
       `${b.name} defend ${east(b, 2)}`,
@@ -1576,7 +1595,7 @@ async function tent(token) {
       ${v?.commander ? commanderLine(v.commander) : ''}
       ${v?.officers ? `<p class="label-caps">Your officers</p>${officerLines(v.officers)}` : ''}
       <label class="field" for="replay">Replay the battle, turn by turn
-        <input id="replay" type="range" min="0" max="${state.view.battle.turn - 1}" value="${state.shown ? state.shown.turn : state.view.battle.turn - 1}" style="min-height: 44px">
+        <input id="replay" type="range" min="0" max="${replayLast()}" value="${state.shown ? state.shown.turn : replayLast()}" style="min-height: 44px">
       </label>
       <p class="note" id="replay-note">${state.shown ? replayWords(state.shown) : 'The field as the battle ended.'}</p>
       ${v?.company ? '<a class="btn btn-wide" href="/officers" data-link>Your officers</a>' : ''}
@@ -1601,7 +1620,7 @@ async function tent(token) {
     const slider = document.getElementById('replay')
     slider.addEventListener('change', async () => {
       const turn = Number(slider.value)
-      const last = state.view.battle.turn - 1
+      const last = replayLast()
       state.shown = turn >= last ? null : await api('GET', `/api/seat/${token}/replay?turn=${turn}`)
       document.getElementById('replay-note').textContent = state.shown ? replayWords(state.shown) : 'The field as the battle ended.'
       renderMap()
@@ -1632,8 +1651,11 @@ async function tent(token) {
     return lines.join('')
   }
 
+  // The replay steps through every stop of the battle, the other side's
+  // too, so it is told by the clock, not by your turns.
+  function replayLast() { return state.view.verdict?.replayTo ?? state.view.battle.turn - 1 }
   function replayWords(shown) {
-    return shown.turn === 0 ? 'The field before the first orders.' : `The field after turn ${shown.turn}, ${clock(shown.battle.minutes)}.`
+    return shown.turn === 0 ? 'The field before the first orders.' : `The field at ${clock(shown.battle.minutes)}.`
   }
 
   // The ground to fight for, and who holds it (every side knows at once).
