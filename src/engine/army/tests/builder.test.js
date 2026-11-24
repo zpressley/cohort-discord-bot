@@ -50,17 +50,81 @@ test('archers and slingers are light troops; a crossbowman may wear medium armou
   assert.match(kit('han_chinese_crossbow', 'heavy_armor', 'Han Dynasty').errors.join(), /medium armor at most/)
 })
 
-test('a sidearm or a thrown weapon is not sold alone; a faction\'s elite keeps the doc\'s kit', () => {
+test('a sidearm or a thrown weapon is not sold alone, nor carried alone by an elite; an elite keeps the doc\'s armour', () => {
   for (const weapon of ['daggers', 'sickle', 'light_javelin', 'throwing_spear', 'roman_pilum']) {
     const r = buildUnit({ quality: 'professional', weapon }, 'Roman Republic')
     assert.match(r.errors.join(), /beside another weapon, not alone/, weapon)
   }
-  // The elite is never bought: the Peltast Guard's javelins and the Eternal
-  // Sky Riders' armour are the doc's, and stand.
-  assert.ok(buildUnit({ quality: 'veteran_mercenary', weapon: 'javelin_heavy', armor: 'light_armor', shield: 'light_shield' }, 'Thracian Odrysians', { elite: true }).ok)
+  // Now there are second weapons, the Peltast Guard carry their javelins
+  // beside a sword; the Eternal Sky Riders' armour is the doc's, and stands.
+  assert.ok(!buildUnit({ quality: 'veteran_mercenary', weapon: 'javelin_heavy', armor: 'light_armor', shield: 'light_shield' }, 'Thracian Odrysians', { elite: true }).ok)
+  assert.ok(buildUnit({ quality: 'veteran_mercenary', weapon: 'sword_standard', second: 'javelin_heavy', armor: 'light_armor', shield: 'light_shield' }, 'Thracian Odrysians', { elite: true }).ok)
   assert.ok(buildUnit({ quality: 'veteran_mercenary', weapon: 'self_bow_professional', armor: 'medium_armor', mounted: true }, 'Pre-Genghis Mongolia', { elite: true }).ok)
   // ...but what it may not field at all, it still may not.
   assert.ok(!buildUnit({ quality: 'veteran_mercenary', weapon: 'roman_gladius' }, 'Thracian Odrysians', { elite: true }).ok)
+})
+
+// ── Second weapons (docs/design/army-balance.md, part 8) ──────────────
+
+test('a unit may take a thrown weapon beside a one-handed hand weapon, at the thrown weapon\'s price', () => {
+  const legion = buildUnit({ ...legionary, second: 'roman_pilum' }, 'Roman Republic')
+  assert.ok(legion.ok, legion.errors.join('; '))
+  assert.equal(legion.cost, buildUnit(legionary, 'Roman Republic').cost + 2, 'the pilum costs its 2 SP')
+  assert.equal(legion.unit.second, 'roman_pilum')
+  for (const second of ['light_javelin', 'throwing_spear', 'roman_plumbatae', 'javelin_heavy']) {
+    assert.ok(buildUnit({ ...legionary, second }, 'Roman Republic').ok, second)
+  }
+  assert.ok(buildUnit({ quality: 'tribal_warriors', weapon: 'battle_axe', second: 'germanic_throwing_axe', armor: 'light_armor', shield: 'light_shield' }, 'Germanic Tribes').ok)
+  assert.ok(buildUnit({ quality: 'militia', weapon: 'sword_standard', second: 'light_javelin', armor: 'light_armor', shield: 'light_shield', mounted: true }, 'Carthaginian Empire').ok, 'Numidian horse: javelins from horseback')
+})
+
+test('a missile unit may take a sword beside its bow or sling, at a sidearm\'s price of 1', () => {
+  const slingers = { quality: 'levy', weapon: 'sling', armor: 'light_armor' }
+  const r = buildUnit({ ...slingers, second: 'sword_standard' }, 'Roman Republic')
+  assert.ok(r.ok, r.errors.join('; '))
+  assert.equal(r.cost, buildUnit(slingers, 'Roman Republic').cost + 1, 'a sword at a bowman\'s belt costs 1, where a swordsman\'s costs 2')
+  assert.ok(buildUnit({ quality: 'professional', weapon: 'persian_recurve_bow', second: 'persian_akinakes', armor: 'light_armor' }, 'Achaemenid Persian').ok)
+  assert.ok(buildUnit({ quality: 'professional', weapon: 'self_bow_professional', second: 'sword_standard', armor: 'light_armor', mounted: true }, 'Parthian Empire').ok, 'horse archers too')
+})
+
+test('a second weapon keeps to the stacking rules: no javelins beside a bow or a two-handed weapon, no sword beside a hand weapon, no knife', () => {
+  const why = (pick, culture = 'Roman Republic') => buildUnit(pick, culture).errors.join()
+  assert.match(why({ quality: 'levy', weapon: 'sling', second: 'light_javelin' }), /only be thrown beside a one-handed weapon/)
+  assert.match(why({ quality: 'professional', weapon: 'two_handed_spear', second: 'light_javelin' }), /only be thrown beside a one-handed weapon/)
+  assert.match(why({ quality: 'professional', weapon: 'roman_gladius', second: 'sword_standard' }), /sidearm for men who shoot/)
+  assert.match(why({ quality: 'levy', weapon: 'sling', second: 'daggers' }), /cannot be carried as a second weapon/, 'every missile unit has its knife already')
+  assert.match(why({ quality: 'levy', weapon: 'sling', second: 'self_bow_basic' }), /cannot be carried as a second weapon/, 'no second missile weapon')
+  assert.match(why({ quality: 'levy', weapon: 'light_javelin', second: 'sword_standard' }), /not alone/, 'the javelins are the second weapon, not the first')
+})
+
+test('a second weapon is held to its culture, its training and the horse, as any weapon', () => {
+  const why = (pick, culture) => buildUnit(pick, culture).errors.join()
+  assert.match(why({ quality: 'professional', weapon: 'sword_standard', second: 'roman_pilum' }, 'Celtic Tribes'), /not forged by Celtic Tribes/)
+  assert.match(why({ quality: 'militia', weapon: 'roman_gladius', second: 'roman_pilum' }, 'Roman Republic'), /demands professional training/)
+  assert.match(why({ quality: 'militia', weapon: 'sword_standard', second: 'roman_pilum', mounted: true }, 'Roman Republic'), /cannot be used from horseback/)
+})
+
+test('a unit with no second weapon is built and priced exactly as before', () => {
+  const r = buildUnit(legionary, 'Roman Republic')
+  assert.equal(r.cost, 13)
+  assert.ok(!('second' in r.unit))
+  const [spec] = toBattleUnits({ culture: 'Roman Republic', units: [r.unit] }, { side: 'red', positions: ['E7', 'E8'] })
+  assert.ok(!('sidearm' in spec) && !('thrown' in spec))
+})
+
+test('in battle, a bought sword is the unit\'s sidearm and bought javelins its thrown weapon', () => {
+  const army = buildArmy({
+    culture: 'Roman Republic',
+    units: [
+      { ...legionary, second: 'roman_pilum' },
+      { quality: 'levy', weapon: 'sling', second: 'sword_standard', armor: 'light_armor' }
+    ]
+  })
+  assert.ok(army.ok, army.errors.join('; '))
+  const [legion, slingers] = toBattleUnits(army.army, { side: 'red', positions: ['E7', 'E8', 'E9'] })
+  assert.equal(legion.thrown, 'roman_pilum')
+  assert.equal(slingers.sidearm, 'sword_standard')
+  assert.equal(slingers.primaryWeapon, 'sling')
 })
 
 test('Q8: there is no training purchase — the builder has no such field to pay into', () => {

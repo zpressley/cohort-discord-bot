@@ -160,7 +160,9 @@ test('the next day, men who ran come back to the standards in the night; the dea
   const store = createBattleStore({})
   const app = await start(store)
   try {
-    const made = (await app.api('POST', '/api/battles', { opponent: 'standing', side: 'red', seed: 8, map: 'ashford', faction: 'rome', enemyFaction: 'han', turnLimit: 10 })).body
+    // (Mongolia, not Rome: with their pila the legions no longer ran in the
+    // day; docs/design/army-balance.md, part 8. Found by search.)
+    const made = (await app.api('POST', '/api/battles', { opponent: 'standing', side: 'red', seed: 1, map: 'ashford', faction: 'mongolia', enemyFaction: 'han', turnLimit: 10 })).body
     const game = await untilNight(app, store, made.seats, 'everyone advance on the enemy')
     assert.equal(game.outcome.reason, 'night fell')
     const ran = game.battle.fledUnits.filter(u => u.side === 'red' && u.strength > 0)

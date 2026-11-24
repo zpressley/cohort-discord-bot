@@ -7,7 +7,9 @@
 //        'sarmatia: 3x tribal_warriors self_bow_basic light_armor no_shield horse' --seeds 1
 //
 // Each army: faction, then groups "Nx quality weapon armour shield [horse]",
-// joined by " + ". `--set` works as in the other study scripts.
+// joined by " + ". A second weapon after the first, with "&":
+// "3x professional roman_gladius&roman_pilum medium_armor heavy_shield".
+// `--set` works as in the other study scripts.
 
 const L = require('./lib')
 const { runBattles } = require('./pool')
@@ -21,7 +23,8 @@ function parse(text) {
   const kits = []
   for (const group of rest.split('+').map(s => s.trim())) {
     const [n, quality, weapon, armor = 'no_armor', shield = 'no_shield', horse] = group.replace(/^(\d+)x\s*/, '$1 ').split(/\s+/)
-    for (let i = 0; i < Number(n); i++) kits.push({ quality, weapon, armor, shield, mounted: horse === 'horse' })
+    const [main, second] = weapon.split('&')
+    for (let i = 0; i < Number(n); i++) kits.push({ quality, weapon: main, ...(second ? { second } : {}), armor, shield, mounted: horse === 'horse' })
   }
   return { label: text, army: { faction: f, units: L.named(f, kits) } }
 }

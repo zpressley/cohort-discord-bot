@@ -18,7 +18,7 @@ const where = (position) => gridLabel(position, { quarter: true })
 const { sideView } = require('../../engine/orchestrator')
 const { describeCombatEvent } = require('../../narrator/eventText')
 const { visibleEvents, publicEvents, maskNames } = require('../../narrator/turnNarrator')
-const { NIGHT } = require('../../narrator/words')
+const { NIGHT, KIT } = require('../../narrator/words')
 
 const TERRAIN_GLYPHS = {
   plains: '.', road: '=', hill: '^', forest: 'F',
@@ -220,6 +220,7 @@ function wordEvent(event) {
         (event.trapped ? ' — they are cornered' : '')
     case 'fled': return `${event.unitId} escapes the field with ${event.strength} men`
     case 'volley': return `${event.by} shoots at ${event.unitId}: ${event.killed} fall`
+    case 'thrown': return `${event.by} throw their ${KIT.weapon[event.weapon] ?? event.weapon} at ${event.unitId}: ${event.killed} fall`
     case 'reacted': return `${event.unitId}: the moment it was warned of has come (${event.when}); it turns to its other order (${event.action})`
     case 'lostThread': return `${event.headless ? 'With no officer,' : `${event.officer ?? 'The officer'} of`} ${event.unitId} ${event.headless ? 'have' : 'has'} LOST THE THREAD (${event.lost}) and will ${event.did}`
     case 'quarryGone': return `${event.unitId}: ${event.on} is beaten or gone; it advances on the enemy instead`

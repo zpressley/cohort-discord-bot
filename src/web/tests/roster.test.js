@@ -82,12 +82,12 @@ test('an army in the field may not cost more than the budget: what marches over 
     store.commanders.setRoster(c, addToRoster(c, { name: 'pikes', quality: 'veteran_mercenary', weapon: 'two_handed_spear', culture: 'Macedonian Kingdoms' }, 'captured'))
     const refused = await app.api('POST', '/api/battles', { opponent: 'standing', commander: red.token, marching: ['legionaries', 'hastati', 'velites', 'pikes'] })
     assert.equal(refused.status, 400)
-    assert.equal(refused.body.error, 'They would cost 41 supply points against a budget of 30: leave one at home.')
+    assert.equal(refused.body.error, 'They would cost 42 supply points against a budget of 30: leave one at home.')
     assert.equal(store.commanders.get(red.token).battle, null, 'no battle was made')
-    // Leave the hastati at home, and they may go.
-    const made = await app.api('POST', '/api/battles', { opponent: 'standing', commander: red.token, marching: ['legionaries', 'velites', 'pikes'] })
+    // Leave the legionaries at home, and they may go.
+    const made = await app.api('POST', '/api/battles', { opponent: 'standing', commander: red.token, marching: ['hastati', 'velites', 'pikes'] })
     assert.equal(made.status, 201)
-    assert.deepEqual(ownUnits(store, made.body.seats.red).map(u => u.id), ['red_legionaries', 'red_velites', 'red_pikes', 'red_praetorian_guard'])
+    assert.deepEqual(ownUnits(store, made.body.seats.red).map(u => u.id), ['red_hastati', 'red_velites', 'red_pikes', 'red_praetorian_guard'])
   } finally { await app.close() }
 })
 
@@ -178,7 +178,7 @@ test('a unit given in a deal between two players goes to the captor\'s roster wi
     const hastati = theirs.roster.units.find(u => u.name === 'hastati')
     assert.equal(hastati.how, 'captured')
     assert.equal(hastati.came, 'taken from the enemy')
-    assert.equal(hastati.words, 'militia, gladius, medium armour, heavy shield, on foot', 'their kit as it was raised, though Macedon forges no gladius')
+    assert.equal(hastati.words, 'militia, gladius, light armour, heavy shield, on foot', 'their kit as it was raised, though Macedon forges no gladius')
     assert.equal(hastati.from.commander, red.name)
     assert.equal(hastati.marches, false, 'a unit taken waits at home until he chooses it')
     assert.deepEqual(theirs.units.find(u => u.kind === 'hastati'), { kind: 'hastati', battles: 7, veterancy: theirs.units.find(u => u.kind === 'hastati').veterancy, level: 'green', trained: 1 })
@@ -209,7 +209,7 @@ test('a unit taken can march: it costs its kit\'s price in supply, and takes the
     const { blue } = await hastatiGiven(app, store)
     const theirs = (await app.api('GET', `/api/commander/${blue.token}`)).body
     const cost = (name) => theirs.roster.units.find(u => u.name === name).cost
-    assert.equal(cost('hastati'), 11, 'militia 5, gladius 2, medium armour 2, heavy shield 2')
+    assert.equal(cost('hastati'), 9, 'militia 5, gladius 2, light armour 0, heavy shield 2')
     const all = theirs.roster.units.filter(u => u.how !== 'elite').map(u => u.name)
     const over = await app.api('POST', '/api/battles', { opponent: 'standing', commander: blue.token, marching: all })
     assert.equal(over.status, 400, 'everything at once is over the budget')

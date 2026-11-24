@@ -112,6 +112,13 @@ test('fog of war is held on the server: a side never receives an enemy it has no
     for (const word of ['character', 'pullOut', 'engage', 'horseAt', 'horseInReserve', 'commanderName']) {
       assert.equal(JSON.stringify(told).includes(word), false, `no "${word}" in the answer`)
     }
+    // Second weapons (docs/design/army-balance.md, part 8): the javelins a
+    // unit has left to throw are the engine's count, told to no side; an
+    // enemy's javelins are known when they are thrown, from the dispatch.
+    const legion = (await app.api('POST', '/api/battles', { opponent: 'standing', side: 'red', seed: 5, faction: 'rome', enemyFaction: 'thrace' })).body.seats.red
+    await app.api('POST', `/api/seat/${legion}/orders`, { text: 'everyone advance' })
+    const tent = JSON.stringify((await app.api('GET', `/api/seat/${legion}`)).body)
+    assert.equal(/"throws"|"thrown"|"sidearm"/.test(tent), false, 'no count of throws, and no enemy\'s kit, in the answer')
   } finally { await app.close() }
 })
 

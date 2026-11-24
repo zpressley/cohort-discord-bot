@@ -527,6 +527,30 @@ const MISSILES = {
   SIDEARM: 'daggers'
 }
 
+// ── Thrown weapons ─────────────────────────────────────
+//
+// Second weapons (docs/design/army-balance.md, part 8): a unit that carries
+// javelins, pila, plumbatae or throwing axes beside its hand weapon looses
+// one volley of them as it comes to blows with an enemy, whether it closed
+// or was closed on, and then fights hand to hand (battle/battle.js, the
+// throw at contact; combat/ranged.js, thrownVolley). A volley as any
+// missile volley is reckoned (MISSILES.RATE, the weapon's damage and its
+// effectiveness against the target's armour, the target's shield), times
+// CLOSE: every man throws, at a few paces, into a packed front. Only a
+// unit with throws left throws: a man carried two or three, not a quiver.
+// Starting values, measured in part 8.
+const THROWN = {
+  // How many times a unit throws in a battle: a legionary carried two pila
+  // (Polybius 6.23), a peltast a few javelins. One a contact.
+  THROWS: 2,
+  // A thrown volley against a missile volley of the same weapon and men.
+  // Measured (docs/design/army-balance.md, part 8): at 2, Rome's usual army
+  // (pila) won 70% of the league and two professional units with pila beat
+  // the same SP spent on a third unit, 88 to 84%; at 1, 58% and 78 to 84%;
+  // at 1.5, 64% and 85 to 85%: pila worth what they cost.
+  CLOSE: 1.5
+}
+
 // ── Fire and retreat ───────────────────────────────────
 //
 // Ruled 2026-11-24 ("I don't like the skirmish rule. Fire and retreat is
@@ -983,6 +1007,7 @@ module.exports = {
   SURPRISE,
   PURSUIT,
   MISSILES,
+  THROWN,
   SKIRMISH,
   PACE,
   RALLY,

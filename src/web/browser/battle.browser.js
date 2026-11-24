@@ -295,6 +295,8 @@ test('on a phone: a new Commander buys his army, is told why a pick is refused, 
     await pick('weapon', 'han_chinese_crossbow')
     assert.match(await p.textContent('#draft h3'), /Crossbows/)
     // Refused: a heavy shield with the crossbow. Tapping it says why, in the builder's words.
+    // (Centred first: the page is long, and the foot of it stays in view.)
+    await p.$eval('[data-field="shield"][data-value="heavy_shield"]', el => el.scrollIntoView({ block: 'center' }))
     await p.click('[data-field="shield"][data-value="heavy_shield"]', { force: true })
     await p.waitForSelector('#refused')
     assert.match(await p.textContent('#refused'), /Not allowed: Heavy shield: the crossbow allows at most a medium shield/)
@@ -302,15 +304,27 @@ test('on a phone: a new Commander buys his army, is told why a pick is refused, 
     await noSideways()
     await shot('army-refused')
     await pick('armor', 'medium_armor')
+    // A second weapon: a sword for men who shoot, one more plain choice.
+    assert.match(await p.textContent('#army-screen'), /A second weapon: a sword, to fight hand to hand/)
+    await pick('second', 'chinese_dao')
+    assert.match(await p.textContent('#draft'), /professionals, crossbow and dao, medium armour, no shield, on foot/)
+    await noSideways()
+    await shot('army-second')
     await p.click('#take')
     await p.waitForSelector('#add')
-    assert.match(await p.textContent('#budget'), /12 of 30 supply points/)
+    assert.match(await p.textContent('#budget'), /13 of 30 supply points/, 'the dao at his belt costs 1')
+    assert.match(await p.textContent('[data-unit="0"]'), /crossbow and dao/)
     await shot('army-part')
 
     // Slingers until the supply points run out; the last two are numbered.
     for (let i = 0; i < 6 && !(await p.locator('#add').isDisabled()); i++) {
       await p.click('#add')
       await p.waitForSelector('#draft')
+      // Spears take javelins as their second weapon, not a sword.
+      if (i === 0) {
+        assert.match(await p.textContent('#army-screen'), /A second weapon: to throw as they close/)
+        await shot('army-javelins')
+      }
       await pick('weapon', 'sling')
       await p.click('#take')
       await p.waitForSelector('#add')
