@@ -546,7 +546,7 @@ const SKIRMISH = {
   // a battle in the soak never ended (Parthia's light horse against a
   // Persian sword unit, 150 turns). At 0 a unit falls back only from men
   // who could reach it this tick; measured against 1 on the classic armies
-  // (72 battles a cell) every kind moved 2 points or less.
+  // (72 battles a cell) every kind moved 3 points or less.
   WARY: 0
 }
 

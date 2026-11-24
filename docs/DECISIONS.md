@@ -2497,7 +2497,12 @@ day: a change to combat replays it differently (as `before-roster` already
 does on this base). `roster.test.js` compares a Commander's units without
 the new `level`.
 
-### How the skirmish rule was built (Claude's choices, open to change; a proposal, not yet taken)
+### How the skirmish rule was built (Claude's choices, open to change; a proposal, not taken)
+
+**Not taken** (November 24: "I don't like the skirmish rule. Fire and
+retreat is ok"; "No firing on the move"). Fire and retreat was built in
+its place: see "How fire and retreat, Kush's sword and the Commander's
+odds were built", at the end.
 
 Asked for as the next lever after the army balance (Part 5 of
 `docs/design/army-balance.md`, question 2: "a skirmish rule, so horse
@@ -2636,3 +2641,124 @@ Zach's words, answering the questions left open on November 23.
   now on as well, until there are players. The other reading is that only
   today's saves are let go; then each save needs a rules stamp before the
   next change to combat.
+
+### How fire and retreat, Kush's sword and the Commander's odds were built (Claude's choices, open to change)
+
+From the rulings of November 24 above: "I don't like the skirmish rule.
+Fire and retreat is ok"; "No firing on the move"; "Retun commander taken
+odds"; "They don't hit hard from range? They can have a sword". Every
+table is in Part 7 of `docs/design/army-balance.md`.
+
+**Fire and retreat** (`engine/battle/skirmish.js`, its step in
+`battle/battle.js`, `tables.SKIRMISH`, six lines in `opponent/planner.js`).
+- Every missile unit (bow, sling, crossbow), whatever its armour, pressing
+  the enemy closes to where it can shoot and stands shooting. When seen
+  enemies, formed and not fighting, could reach it this tick, and its march
+  beats every one of theirs, it falls back to ground it can reach this tick
+  out of their reach, still in shot if it can; it shoots again when it
+  stands.
+- Taken out of the proposal: kit making a man slower (light foot outrunning
+  mail and plate); the armour list for who may skirmish; the wind lost in
+  falling back (5 a tick) and the "spent" stop; the chase's wind; foot
+  shooting as they fall back (`SKIRMISH.ON_FOOT`, and its line in
+  `ranged.volley`). No knob was left at zero. Armour's ordinary wind in a
+  fight (`ARMOR` stamina drain) is as main had it.
+- **Who falls back, from whom**: measured both readings. (a) only from
+  enemies its own march beats: horse from foot; foot from no one. (b) from
+  any enemy about to reach it: foot ran before foot as fast as they, never
+  standing to shoot, and archers fell from 35 to 26% against the other kinds,
+  109 of their 320 battles against the usual armies ended by the day.
+  Took (a).
+- `SKIRMISH.WARY` 1 -> 0: a unit falls back only from men who could reach it
+  this tick. At 1, horse archers shooting at men who held their ground
+  walked in and out of the margin for ever and a soak battle never ended.
+  Measured the same within 3 points on the classic armies.
+- **The computer**: kept the proposal's line (its missile troops on foot
+  press a near enemy, within `TUNING.ENGAGE` 7 tiles, so that they shoot),
+  now for all foot missile troops, crossbowmen in mail too. Without it
+  slingers beat heavy infantry 33% rather than 42%. Pressing with horse
+  archers too was measured (37 -> 41% against the kinds) and not taken:
+  twice their battles ran to the day's end. Offered to Zach.
+- **Horse archers**: as on main before the proposal: they shoot as they
+  ride (`MISSILES.ON_THE_MOVE` 0.6), and now fall back before foot.
+- The telling is the proposal's (`SKIRMISH_WORDS.gaveGround`, "fell back
+  before X, keeping out of their reach"), shown to the enemy only if he
+  sees the unit.
+- **The study's harness** counts a battle the day ended as no win for
+  either side (`army-study/lib.js`: `dayEnded`, winner null), and
+  `classics.js` and `usual.js` show how many, before and after.
+
+**Measured** (before: main `d7622ab`): heavy infantry 76 -> 72% against the
+usual armies, 69 -> 65% against the other classic armies; slingers 51 ->
+57% and 51 -> 57%; archers 35 -> 40% and 35 -> 38%; horse archers 35 -> 33%
+and 38 -> 37%; pikes 76 -> 74% and 68 -> 67%. The league: 40-58% before and
+after (Sparta now the lowest; Kush 40 -> 47%), pairings past 75/25 26 -> 19,
+battles ended by the day 15 -> 70 of 6,080. Soak: every battle ends;
+hotseat games 13.4 -> 16.3 player turns. `npm run balance`: unchanged.
+Less than the proposal did (heavy 61% against the kinds there): with no
+kit speed and no chase, foot cannot keep away from foot. As ruled.
+
+**Guessed.**
+- "No firing on the move" was read as the answer to the question asked
+  (men on foot shooting as they fall back); horse archers keep shooting as
+  they ride, as ruled November 21. The other reading (nobody shoots on the
+  move) was measured once (`ON_THE_MOVE` 0): horse archers 37 -> 36% against
+  the kinds, 35 -> 34% against the usual armies; it would also take away
+  the reason they are raised at 0.6 of their men.
+- "Fire and retreat" was read as every missile unit, armour or none: with
+  no man slower for his kit, a crossbowman in mail falls back as readily
+  as a slinger (that is, from horse never, and from foot never). The other
+  reading keeps the proposal's light-armour list; it changes no classic
+  army.
+- "Running to the map's edge all day" is not a way out: foot never run from
+  foot, and the edge pins a horse unit. But battles that end with the day
+  rose: horse archers 17 -> 56 of their 320 against the usual armies. They
+  stand at the edge of shot and shoot, weakly, rather than run. Counted,
+  not changed.
+
+**Kush's sword** (`src/data/factions.js`, `engine/combat/ratings.js`
+`handWeapon`, `engine/world.js`, `engine/army/factions.js` and
+`standard.js`, `web/armies.js` `kitWords`).
+- An elite may carry `sidearm`, a key of `WEAPONS`: a hand weapon its
+  culture may field (checked in `buildFaction`). A missile unit with one
+  fights hand to hand with it instead of `MISSILES.SIDEARM`. Only the
+  Golden Bows have one; the builder sells no second weapon.
+- The sword: `sword_standard`, "the sword" on screen. Kush has no sword of
+  its own in the builder, and Meroe's iron makes a straight sword likely;
+  guessed. The other choice would be to add a Kushite weapon (none is in
+  the cultures doc).
+- The kit words: one line in `src/web/armies.js` (`kitWords`), which is the
+  other agent's ground: "elite, war bow and sword, light armour, no shield,
+  on foot". A captured elite's kit (`battles.js`, `capturesOf`) does not
+  carry the sword over: not changed.
+- "They don't hit hard from range?": no. A volley depends on the bow and
+  the men, not their training: 80 Golden Bows fell 4.3 / 2.6 / 1.1 men in
+  light / medium / heavy armour at close range, against 6.0 / 3.2 / 1.8 for
+  100 levy slingers and 9.3 / 8.3 / 6.8 for 100 Han crossbowmen. Their edge
+  is reach (9 tiles).
+- Measured: Kush in the league 39 -> 47%; its usual army against the field
+  39 -> 43%; its 30 random armies 9 -> 11% on average. A bought Kush army is
+  still among the worst: the elite, a third of it, is the weakest of the
+  twenty.
+
+**The Commander's odds** (`captive-league.js --battles 2000 --policy
+wait`): taken 1 in 19.0 for a player who sends everyone in (main 23.5, the
+proposal 16.7); 1 in 31 with the computer on both sides, killed 1 in 358.
+They were set at "about 1 battle in 19" on November 23: inside the band,
+so `tables.COMMANDER` is not changed. The ruling "Retun commander taken
+odds" is met by removing the parts of the proposal that raised them.
+Guessed: that "the band" is 1 in 19 to about 1 in 24 (Part 5 called 23.5
+"within the ruled band"). The other agent's rulings on the day may move
+this again.
+
+**Tests.** `engine/battle/tests/skirmish.test.js` rewritten to the rule (14);
+the planner's test rewritten (crossbowmen in mail press too); the narrator
+test renamed; `ratings.test.js`, `army/tests/factions.test.js` (2) and
+`web/tests/army.test.js` for the sword. `asked-unchanged`,
+`messengers-unchanged` (Han's crossbowmen now press: the ashford battles)
+and `attack-named-unchanged` retaken, the old values in their headers.
+
+**Left open.** Horse archers and archers are still near a third; heavy
+infantry and pikes above 70% against the usual armies. Part 7 lists the
+levers that fit the ruling, each measured once or not at all, and the
+questions.

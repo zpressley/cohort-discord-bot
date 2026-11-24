@@ -993,7 +993,13 @@ factions), `0cc1731` (armour by weight), `42af3bb` (study scripts), `2d39d8d`
 (wind), `f1a27c6` (main merged), `268e307`, `580ed20` (usual armies
 re-picked), `239864a`, and this report.
 
-## Part 6. A skirmish rule (proposal, waiting on Zach)
+## Part 6. A skirmish rule (proposal; not taken)
+
+**Not taken.** Zach, November 24: "Skirmish rule makes sense but evidence
+like marathon shows heavy infantry can run a long way. I don't like the
+skirmish rule. Fire and retreat is ok"; on men on foot shooting as they
+fall back, "No firing on the move." What was built instead is Part 7. This
+part is kept as the record of what was proposed and measured.
 
 Part 5 ended on this: nothing in the engine let missile troops keep their
 distance from slower men, so the historical answer to heavy foot (the
@@ -1176,3 +1182,265 @@ Branch `worktree-agent-ad468ce5c58112598`, on top of `integration-7`:
 `ced2716` (the rule), `f0f37aa` (sight, the chase at full wind, tests),
 `04db838` (the report's words, the day's end counted in `classics.js`, a
 fingerprint retaken), and this report.
+
+## Part 7. Fire and retreat (taken 2026-11-24)
+
+Zach, November 24, on Part 6: "Skirmish rule makes sense but evidence like
+marathon shows heavy infantry can run a long way. I don't like the
+skirmish rule. Fire and retreat is ok"; on men on foot shooting as they
+fall back, "No firing on the move"; on the Commander taken about 1 battle
+in 17, "Retun commander taken odds"; on Kush's Golden Bows, "They don't
+hit hard from range? They can have a sword".
+
+### The rule, in plain words
+
+- **Fire.** A missile unit told to press the enemy (advance, or attack with
+  no target) closes to where it can shoot, not to blows, and stands there
+  shooting.
+- **Retreat.** When enemies it can see could reach it this tick, and its
+  own march beats every one of theirs, it falls back out of their reach
+  (still in shot if it can), and shoots again when it stands. Falling back
+  is a march like any other: its own pace, over the ground as it is, no
+  dearer in wind than any march.
+- **Who can get away.** No man is slower for his armour (Marathon). Every
+  man on foot marches 3 tiles a tick and every horse 5, so only horse get
+  away from foot; foot never get away from foot, and nothing from horse.
+  Archers and slingers on foot stand, shoot, and are caught.
+- **No firing on the move** for men on foot: a foot unit that moved does
+  not shoot that tick (as ruled on November 21). Horse archers shoot as
+  they ride, at the rate they had before Part 6 (`MISSILES.ON_THE_MOVE`
+  0.6, raised at `HORSE_ARCHER_NUMBERS` 0.6 of their men).
+- **Not when told otherwise.** A unit told to hold, defend, march
+  somewhere or hide, or already in a fight, does not fall back.
+- **The edges.** The field's edges and ground that cannot be crossed pin a
+  unit: with nowhere to go it stands.
+- **The computer.** Its missile troops on foot press any enemy it sees
+  within 7 tiles, whatever its line is doing, so that they shoot. Its horse
+  archers keep to the horse's way.
+- **Told.** "Your horse archers fell back before the legion, keeping out
+  of their reach", once a turn; the enemy hears of it only if he sees them.
+
+Gone from Part 6: light men outrunning men in mail or plate, the wind lost
+in a run (5 a tick) and the "spent" stop, the wind the chasers lost, and
+foot shooting as they fell back. The code: `engine/battle/skirmish.js`, its
+step in `battle/battle.js`, `tables.SKIRMISH` (one number, `WARY` 0),
+six lines in `opponent/planner.js`.
+
+### Measured
+
+As in Parts 5 and 6: the computer's planner on both sides, all four maps,
+both ways round, every battle its own seed, the same seeds before and
+after. "Before" is main at `d7622ab` (no skirmish rule). "After" is this
+branch with fire and retreat and the Golden Bows' sword. **A battle the
+day ends is no win for either side** (ruled November 24); the study's
+harness now counts it so (`army-study/lib.js`), before and after alike.
+
+**The classic armies against the usual armies** (`classics.js field
+--seeds 2`, 320 battles each; "day's end": of the 320, battles the day
+ended, with no winner):
+
+| Army | Before | After | Rome / Sarmatia / Han, after | Day's end, before / after |
+|---|---|---|---|---|
+| levy | 40% | 39% | 36 / 51 / 29% | 9 / 25 |
+| slingers | 51% | **57%** | 66 / 52 / 53% | 13 / 12 |
+| archers | 35% | **40%** | 45 / 38 / 37% | 38 / 41 |
+| horse | 40% | 39% | 28 / 68 / 19% | 14 / 19 |
+| horse archers | 35% | 33% | 17 / 70 / 12% | 17 / **56** |
+| heavy | 76% | **72%** | 72 / 79 / 65% | 26 / 54 |
+| pikes | 76% | 74% | 77 / 79 / 66% | 8 / 33 |
+| balanced | 45% | 44% | 31 / 78 / 23% | 29 / 29 |
+
+Every one of the 2,560 battles ended, before and after.
+
+**Kind against kind, after** (`classics.js kinds --seeds 2`, 144 battles a
+cell; before in brackets where a cell moved 8 points or more):
+
+| | levy | slingers | archers | horse | horse archers | heavy | pikes | balanced | All | Day's end |
+|---|---|---|---|---|---|---|---|---|---|---|
+| levy | - | 50% | 50% | 72% | 49% (70) | 22% | 20% | 45% | 44% (48) | 20 of 1008 (7) |
+| slingers | 49% | - | 84% | 59% (48) | 68% | **40% (28)** | 44% | 54% | 57% (51) | 8 (5) |
+| archers | 49% | 15% | - | 44% | 63% (46) | 23% | 27% | 46% | 38% (35) | 18 (21) |
+| horse | 28% | 40% (52) | 56% | - | 54% | 22% | 23% | 46% | 38% (41) | 5 (1) |
+| horse archers | 40% (29) | 32% | 37% (53) | 44% | - | 35% | 28% | 40% | 37% (38) | 48 (3) |
+| heavy | 78% | 59% (70) | 69% | 78% | 55% (67) | - | 46% | 68% | **65% (69)** | 34 (17) |
+| pikes | 79% | 56% | 72% | 76% | 61% (79) | 53% | - | 71% | 67% (68) | 22 (7) |
+| balanced | 55% | 44% | 54% | 54% | 60% | 31% | 28% | - | 47% (46) | 5 (13) |
+
+The "All" column ran from 35% (archers) to 69% (heavy); now from 37%
+(horse archers) to 67% (pikes). Slingers trouble heavy infantry (40%,
+from 28): standing and shooting as it comes on, rather than walking into
+it. Horse archers now beat levy less and lose to archers: they fall back
+from foot archers too, out of their own shot, where before they rode in.
+
+**The usual armies' league** (`usual.js league --seeds 4`, 6,080 battles,
+32 a pairing):
+
+| | Before | After |
+|---|---|---|
+| Range of factions | 40% (Kush) to 58% (Germania) | **40% (Sparta) to 58% (Germania)**; Kush 47% |
+| Factions outside 35-65% | 0 | 0 |
+| Pairings past 75/25 | 26 of 190 | 19 of 190 |
+| Ended by the day, no winner | 15 | 70 |
+| Player turns on average | 13.4 | 14.3 |
+| Commanders taken (killed) | 1 in 34 (1 in 368) | 1 in 31 (1 in 358) |
+
+No faction left 35-65%, so no usual army was re-picked.
+
+**The random search** (`search.js --per 30`: 600 legal armies, each against
+all twenty usual armies):
+
+| | Before | After |
+|---|---|---|
+| Best army | 3 professional spears, medium armour (Carthage): 93% | 3 professionals with clubs, medium armour (Carthage), and Parthia's 3 professional spears in medium armour: 88% |
+| Over 70% / under 20% | 63 / 154 of 600 | 47 / 154 |
+| Best army of missile troops only | 8 levy archers (Carthage): 81%; then 6 levy slingers 71%, Rome's 3 professional slingers 66% | the same army: 81%; then Rome's 3 professional slingers 72%, Macedon's 3 professional archers 69% |
+| Mean win: no missile troops / some / over half missile | 40 / 33 / 31% | 38 / 34 / 34% |
+| Armies with horse archers (85), mean | 33% | 34% |
+| Kush's 30 armies, mean | 8% | 11% |
+
+**Rounds** (one change at a time; `classics.js both --seeds 1`, 72 battles a
+cell, so a cell moves 5 to 8 points by chance alone; heavy infantry against
+the other kinds, and the "All" of the missile kinds):
+
+| Round | Change | Heavy v kinds | Slingers / archers / horse archers | Kept |
+|---|---|---|---|---|
+| 0 | main | 68% | 52 / 35 / 36% | |
+| 1 | Fire and retreat; fall back only from men whose march yours beats (reading a) | 64% | 59 / 37 / 37% | yes |
+| 2 | ... from any enemy about to reach it (reading b) | 66% | 43 / **26** / 41%; 109 of the archers' 320 battles against the usual armies ended by the day | no |
+| 3 | Fall back at the enemy's reach, not a tile beyond it (`WARY` 0) | 64% | 59 / 38 / 34% | yes, after the soak (below) |
+| 4 | The computer's foot missile troops do not press a near enemy | 65% | 54 / 37 / 37% (slingers v heavy 42 -> 33%) | no: pressing kept |
+| 5 | They press only in light armour or none | 64% | the same (no classic army has missile troops in mail) | no: simpler to press with all |
+| 6 | The computer presses with horse archers too | 64% | 59 / 34 / **41%**; horse archers' battles ended by the day 12 -> 32 of 320 | no (offered below) |
+| 7 | The other reading: horse archers do not shoot on the move either | 64% | 59 / 37 / 36% | no (measured for Zach) |
+
+Round 3 was taken for the soak, not for the numbers: with one tile of
+margin, horse archers shooting at men who held their ground walked in and
+out of that margin for ever, and one battle in the soak (Parthia's light
+horse against a Persian sword unit) never ended. At 0 every battle ends.
+
+**Checked after.** `npm run soak`: every battle ended; hotseat games 13.4
+-> 16.3 player turns on average, the computer's side 18.9 -> 19.5, faction
+armies 17.5 -> 19.2. `npm run balance`: the same, line for line (no
+missile troops in its duels). The Commander's odds: below.
+
+### Kush's Golden Bows: a sword
+
+Zach asked "They don't hit hard from range?" They do not. A volley's men
+felled depend on the bow and the number of men, not on how good the men
+are, so the Golden Bows (80 men, the professional war bow, reach 9 tiles)
+shoot exactly as any professional bowmen do, with a fifth fewer men. One
+volley at close range, against men with no shield (`ranged.volley`):
+
+| Unit | Men | Weapon | Reach | v light | v medium | v heavy |
+|---|---|---|---|---|---|---|
+| Kush, Golden Bows (elite) | 80 | war bow | 9 | 4.3 | 2.6 | 1.1 |
+| Mongolia, Eternal Sky Riders (elite, horse, riding) | 100 | war bow | 9 | 3.2 | 1.9 | 0.9 |
+| Maurya, bowmen (professional) | 100 | war bow | 9 | 5.3 | 3.2 | 1.4 |
+| Persia, archers (professional) | 100 | recurve bow | 8 | 6.4 | 4.0 | 2.0 |
+| any levy slingers | 100 | sling | 8 | 6.0 | 3.2 | 1.8 |
+| Han, crossbows (professional) | 100 | crossbow | 6 | 9.3 | 8.3 | 6.8 |
+
+Their only edge is reach. Hand to hand they fought, like every missile
+unit, with a knife (`MISSILES.SIDEARM`, daggers: effectiveness 0.70 / 0.30 /
+0.15 against light, medium and heavy armour).
+
+Now an elite may carry a **sidearm of its own** (`sidearm`, a key of
+`WEAPONS`, in `src/data/factions.js`), a hand weapon its culture may field;
+the builder still sells no second weapon. The Golden Bows carry the
+standard sword (Kush has no sword of its own in the builder): attack 13
+hand to hand, not 11. The army screen lists it: "elite, war bow and sword,
+light armour, no shield, on foot".
+
+Measured (fire and retreat in both; 160 battles each army against the
+twenty usual armies):
+
+| | Knife | Sword |
+|---|---|---|
+| Kush in the league (`usual.js league --seeds 4`) | 39% | 47% |
+| Kush's usual army against the field | 39% | 43% |
+| Kush's 30 random armies from the search: mean / median / best | 9 / 4 / 53% | 11 / 8 / 59% |
+| bought-league's kinds: levy / slingers / veterans / horse | 3 / 26 / 0 / 1% | 4 / 29 / 3 / 5% |
+
+The sword lifts Kush's usual army off the bottom; an army Kush buys is
+still among the worst drawn. The reason is the elite itself: it is free
+and a third of a small army, and where Rome's or Carthage's is 80 or 100 men in
+plate, Kush's is 80 men with bows and no armour beyond leather. Two
+veteran sword units in mail with the Golden Bows win 3%; the same with the
+Praetorians (Rome's veterans, bought the same way) won 9 of 16 in a probe.
+
+### The Commander's odds
+
+A player who sends everyone in (`captive-league.js --battles 2000 --policy
+wait`): taken in 1 battle in **19.0** (main 23.5; the skirmish proposal
+16.7). With the computer on both sides (the league): taken 1 in 31, killed
+1 in 358 (main 34 and 368). The odds were set on November 23 at "about 1
+battle in 19" for such a player, so fire and retreat leaves them where they
+were set, and `tables.COMMANDER` is not retuned. (The sword did not move
+them: 1 in 19.0 with the knife too.)
+
+### What is still out of line
+
+- **Heavy infantry 72% and pikes 74%** against the usual armies (target
+  70); against the other kinds 65 and 67%. Fire and retreat does less than
+  the proposal (heavy 70% and 61% there), as it must: with no kit speed and
+  no chase, foot cannot keep away from foot.
+- **Horse archers** 33% against the usual armies and 37% against the
+  kinds: where they were. Rome's and Han's (full-price militia, basic bow)
+  win 12 to 17%. They can keep their distance now, but their bow fells a
+  man or less in heavy armour a volley (about 0.3 for 60 men riding).
+- **Archers** 40% and 38%: better than before, and still beaten 85 to 15
+  by slingers.
+- **The day's end** now ends more battles: horse archers 56 of their 320
+  against the usual armies (17 before), heavy infantry 54 (26). They are
+  no win for anyone; a side that shoots and stands off can make a day end
+  where it would have lost.
+- **Professionals in medium armour** are still the best army (88%, the search above).
+- **Kush**: its usual army is no longer last in the league, but almost
+  any army it buys still loses (above).
+
+### Levers that fit the ruling (each measured once; none taken)
+
+Zach's direction: "the balance needs to come from the units themselves and
+the combination of weapons and armor"; "some units should be best but can
+then cost more"; "grounding in history".
+
+1. **The computer presses with its horse archers** (round 6): horse
+   archers 37 -> 41% against the kinds, Rome's 19 -> 33% against the
+   usual armies. The cost: twice the battles they are in run to the day's
+   end.
+2. **Medium armour at 3 SP** ("Maybe"): three professionals with the basic
+   spear in medium armour (the best army drawn, 92% in `try.js`) cost 33
+   and can no longer be bought; the nearest legal army (two professionals
+   and a militia unit, all in medium armour) wins 86%, and the same three
+   professionals in light armour 73%. It trims the top; it does not touch
+   heavy infantry or pikes.
+3. **Heavy armour dearer** does not bite on its own: at 5 to 7 SP a
+   heavy-infantry army still buys two units (13 to 15 SP each of a 30
+   budget). Only 8 SP would cut it to one. Not measured.
+4. **Better archers shoot better.** Today a volley depends on the bow
+   and the number of men alone; a professional or elite archer kills no
+   more than a levy one with the same bow. Training counting in the volley
+   (as it does hand to hand) would give the Golden Bows and Mongolia's
+   riders their reputation. Not built or measured: it is a new rule.
+5. **A Kush elite in armour or with more men** (the doc's "Forgers of
+   Meroe"): the elite is a third of a Kush army, and it is the weakest
+   elite of the twenty. Not measured.
+
+### Questions for Zach
+
+1. **Horse archers on the move** were left as they were: they shoot as
+   they ride. If "No firing on the move" meant them too, they win 36%
+   against the kinds rather than 37% (round 7) and would deserve their
+   men back (`HORSE_ARCHER_NUMBERS`).
+2. **Should the computer press with its horse archers** (lever 1)? They
+   do better, and more battles end with the day.
+3. **Medium armour at 3** (lever 2): it trims the best armies by 6 points.
+4. **Kush**: arm its elite better (armour, or more men), or leave an army
+   that must be bought around it?
+5. **Better archers shoot better** (lever 4): a new rule; worth building?
+
+### Where it is
+
+Branch `worktree-agent-a9bc961a7e9bb7e73`, on the skirmish proposal and
+main `d7622ab`: `62384fe` and `a84fef2` (fire and retreat), `16c0c0f`
+(the sword), `00a1338` (`WARY` 0, the soak), and this report.
