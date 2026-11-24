@@ -87,7 +87,12 @@ test('fog of war by rider: the tent shows a distant unit as word of it last came
       const word = game.word.red.units[u.id]
       assert.deepEqual([shown.position, shown.strength, shown.word.minutesAgo], [word.position, word.strength, (game.battle.turn - word.heard) * 10])
     }
-    for (const e of tent.enemies) assert.deepEqual(e.position, game.word.red.enemies[e.id].position, 'each enemy where he was told it stood')
+    // (An enemy whose kind no report told goes by a stand-in id: reports.test.js.)
+    for (const e of tent.enemies) {
+      const told = game.word.red.enemies[e.id] ?? Object.values(game.word.red.enemies).find(w => !w.told.kind && w.seenOnTurn === e.seenOnTurn && w.position.x === e.position.x && w.position.y === e.position.y)
+      assert.ok(told, 'each enemy where he was told it stood')
+      assert.deepEqual(e.position, told.position)
+    }
     // The status line the list of battles reads says nothing more.
     const summary = JSON.stringify((await app.api('GET', `/api/seat/${seat}/summary`)).body)
     for (const id of unheard) assert.ok(!summary.includes(id))

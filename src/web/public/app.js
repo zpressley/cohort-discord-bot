@@ -1081,7 +1081,7 @@ async function tent(token) {
       </div>`).join('')
     const fallen = v.fallen.length ? `<p class="label-caps">Lost</p>${v.fallen.map(f => `<p class="note">${esc(f.name)}: ${f.fled ? 'fled the field' : 'destroyed'}</p>`).join('')}` : ''
     const seen = v.enemies.length
-      ? `<p class="label-caps">${v.commander?.status === 'held' ? 'The enemy, as you can see it from where you are held' : 'The enemy, as you know it'}</p>${v.enemies.map(e => `<p class="note">${esc(e.name)} at ${esc(e.at)}: ${e.status === 'visible' ? `in sight, about ${e.strength} men` : `last seen ${e.minutesAgo} min ago`}</p>`).join('')}`
+      ? `<p class="label-caps">${v.commander?.status === 'held' ? 'The enemy, as you can see it from where you are held' : 'The enemy, as you know it'}</p>${v.enemies.map(e => `<p class="note">${esc(e.name)} at ${esc(e.at)}: ${esc(e.said)}</p>`).join('')}`
       : '<p class="note">No enemy in sight.</p>'
     body.innerHTML = `${units || '<p class="note">No units standing.</p>'}${fallen}${seen}`
     body.querySelectorAll('[data-pick]').forEach(b => b.addEventListener('click', () => {

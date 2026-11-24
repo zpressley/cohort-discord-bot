@@ -769,6 +769,42 @@ const COMMAND = {
   LONGEST: 36          // ten minutes the battle runs at most without asking a Commander anything (six hours): a guard so that a battle cannot run away
 }
 
+// What a report of the enemy holds, by the officer of the unit that made it
+// (ruled 2026-11-23: "additional details as progression happens but never
+// incorrect details"; the ladder as recorded in
+// docs/design/point-of-view-and-messengers.md, "What comes after"). Read by
+// orchestrator/reports.js. Each level tells what the one below tells, and:
+//   none       (a unit with no officer) that there is an enemy, and where
+//   green      what kind
+//   seasoned   roughly how many (a band from ABOUT)
+//   veteran    exactly how many
+//   legendary  how they are holding up: their heart, their wind, broken or not
+// Claude's choices, open to change (docs/DECISIONS.md, "How reports that
+// grow with the officer were built"):
+//   NO_OFFICERS  a battle with no officers at all (the soak, the hotseat,
+//                old scenarios) tells what reports told before: kind and
+//                exact numbers, a veteran's report
+//   OWN_EYES     what the Commander sees from his own unit is at least a
+//                veteran's report (the design says nothing of it: a guess)
+//   ABOUT        the bands "roughly how many" is told in: [from, to] men,
+//                each band's words in narrator/words.js (REPORT.about). No
+//                gaps, no overlaps, so the true number is always in the band
+//                told. Set for units of 40 to 100 men (src/data/factions.js),
+//                with room for larger ones from scenarios.
+const REPORTS = {
+  LADDER: ['none', 'green', 'seasoned', 'veteran', 'legendary'],
+  TELLS: {
+    none: { kind: false, about: false, count: false, state: false },
+    green: { kind: true, about: false, count: false, state: false },
+    seasoned: { kind: true, about: true, count: false, state: false },
+    veteran: { kind: true, about: true, count: true, state: false },
+    legendary: { kind: true, about: true, count: true, state: true }
+  },
+  NO_OFFICERS: 'veteran',
+  OWN_EYES: 'veteran',
+  ABOUT: [[1, 19], [20, 49], [50, 79], [80, 129], [130, 199], [200, 399], [400, Infinity]]
+}
+
 // ── Morale ─────────────────────────────────────────────
 //
 // [locked decision 5, replaced 2026-11-21] Morale falls in a fight and rises
@@ -896,6 +932,7 @@ module.exports = {
   LOYALTY,
   RIDE,
   COMMAND,
+  REPORTS,
   MORALE,
   DAMAGE,
   CHARGE,

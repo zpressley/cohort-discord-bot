@@ -43,6 +43,7 @@ const { unitsOnSide, sides } = require('../world')
 const { samePosition } = require('../map/labels')
 const { createIntel, updateIntel, learnFromCaptivity, sideView: fogSideView } = require('./fogOfWar')
 const { createWord, updateWord, wordFromCaptivity, arrivalOf } = require('./word')
+const { conditionOf } = require('./reports')
 const { evaluateVictory, objectiveController, objectiveArea, OBJECTIVE_HOLD_MINUTES } = require('./victory')
 const { bargainChips, commanderFate } = require('../command/commander')
 const { PARLEY, COMMAND } = require('../combat/tables')
@@ -102,7 +103,7 @@ function createGame(spec, options = {}) {
     game.startingStrength[side] =
       unitsOnSide(battle.world, side).reduce((sum, u) => sum + u.strength, 0)
     // Opening intel: you can see whatever is in range from your deployment.
-    updateIntel(game.intel[side], battle.world, side, 0, battle.map, battle.hidden)
+    updateIntel(game.intel[side], battle.world, side, 0, battle.map, battle.hidden, (e) => conditionOf(battle, e))
   }
   // What each Commander on the field knows, and when (word.js): only for a
   // side with one. A battle with none has no ledger and runs as before.
@@ -372,7 +373,7 @@ function processPlayerTurn(game) {
     const sightings = []
     const sightedBy = {}
     for (const side of sides(battle.world)) {
-      sightedBy[side] = updateIntel(game.intel[side], battle.world, side, battle.turn, battle.map, battle.hidden)
+      sightedBy[side] = updateIntel(game.intel[side], battle.world, side, battle.turn, battle.map, battle.hidden, (e) => conditionOf(battle, e))
       sightings.push(...sightedBy[side])
     }
 
