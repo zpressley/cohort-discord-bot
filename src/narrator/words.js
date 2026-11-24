@@ -502,3 +502,112 @@ const BATTLE_OVER = {
 }
 
 module.exports.BATTLE_OVER = BATTLE_OVER
+
+// A place's name, said inside a sentence (docs/REVIEW-2026-11.md, D13): one
+// rule wherever a place is named to the Commander. A name that describes
+// the place takes "the", in small letters: "the Crownhill", "the Old Mill
+// Bridge", "the North Ford", "the Merchant Road". A name that is the place's
+// own, as a village's is, takes none: "Harrow Bridge", "Raven Gap", "Thorn
+// Knoll", "Elderby". The map's data says which: a name written there with
+// "The" takes it; so does one that begins with a plain word of description
+// (`DESCRIBING`). The map's own labels keep the name as it is written there.
+const DESCRIBING = new Set(['old', 'new', 'north', 'south', 'east', 'west', 'upper', 'lower', 'high', 'low', 'long', 'great', 'little', 'middle'])
+const PLACE = {
+  name(name) {
+    const said = String(name ?? '')
+    if (/^the\s/i.test(said)) return `the ${said.slice(4)}`
+    return DESCRIBING.has(said.split(/\s+/)[0].toLowerCase()) ? `the ${said}` : said
+  }
+}
+module.exports.PLACE = PLACE
+
+// Reading orders with no AI (src/interpreter; docs/REVIEW-2026-11.md, D4):
+// what the Commander is told when an order is read in a way he may not have
+// meant, cannot be read, or asks for something the engine has no order for.
+// Each says what was not understood and offers the nearest orders that are,
+// in the order box's own words.
+const ORDERS_READ = {
+  // "the hill" on a field whose ground to fight for is a hill: that one.
+  ground: 'the ground to fight for',
+  // A line the grammar could not read at all, or only its unit.
+  notRead: (line, examples) => `I don't follow "${line}". Orders read like: ${examples.join(' · ')}`,
+  notReadFor: (who, rest, examples) => `I know ${who}, but I don't follow what you want of them: "${rest}". Orders read like: ${examples.join(' · ')}`,
+  // "everyone else hold" with no one else named.
+  othersAlone: (said, example) => `"${said}" means every unit not named in your other orders, and no other is named. Name the others first: "${example}".`,
+  // Keeping with another unit: the engine has no such order.
+  follow: (who, friend) => `There is no order to keep one unit with another as it moves: ${who} would not know where ${friend} go next. Send them to where ${friend} stand now, or give both the same order.`,
+  followNoOne: (who, words) => `There is no order to "${words}": ${who} can march to a place, hold it, advance on the enemy or fall back. Say where, or give them the same order as the others.`,
+  followTo: (friend) => `march to where ${friend} stand now`,
+  bothSame: 'give both the same order',
+  // Going round a flank: which way round is not the officers' to guess.
+  flank: (example) => `Going round a flank needs a way round, and your officers will not guess it. Pick a way round the enemy you have seen, or name where to go first, then what to do: "${example}".`,
+  flankEnd: (way) => `round the ${way} end of the enemy you have seen`,
+  flankUnseen: (example) => `You have seen no enemy, so there is no flank to go round yet. To go and find them, say "advance"; to go somewhere first, name the place: "${example}".`,
+  // Throwing: missile troops shoot; javelins and pila are thrown at blows.
+  thrown: (who, weapon) => `${who} have no bows or slings: they throw their ${weapon} as they come to blows, whether they close or are closed on. To throw them, close with the enemy, or hold and let him come.`,
+  advanceAndThrow: 'advance on the enemy, and throw as they close',
+  holdAndThrow: 'hold, and throw at any who come to blows with them',
+  nothingToThrow: (who) => `${who} have nothing to throw or shoot: only troops with bows, slings, crossbows or javelins can.`,
+  // Fire and retreat (engine/battle/skirmish.js), told as the engine does it.
+  skirmish: (mounted) => (mounted
+    ? 'advance on the enemy until in shot, shoot, and fall back before any who come at them on foot'
+    : 'advance on the enemy until in shot, and shoot (on foot they cannot keep away from men on foot)'),
+  // A place said by one of his own units.
+  where: (who) => `where ${who} stand now`,
+  behind: (who, metres) => `${metres} m behind where ${who} stand now`,
+  // "keep going", "carry on": an order stands until another is sent.
+  carryOn: (who) => `${who} keep the orders they have until you send them others: leave them out of this order, and they carry on.`,
+  // "fall back 200 m" with no side's edge to fall back toward.
+  noEdge: 'Which way is back? Say the way: "fall back 200 m west".'
+}
+module.exports.ORDERS_READ = ORDERS_READ
+
+// What kind of men a unit is, worked out from its kit, for the Army tab
+// ("levy skirmishers", "elite lancers"): its quality, then its kind. The
+// engine's role (army/builder.js, roleFor) goes by the weapon alone and is
+// for finding units by an order's words; this is what the player reads.
+//   on horse: horse archers (a bow), lancers (the kontos), light horse
+//     (javelins), else cavalry
+//   on foot: archers or crossbowmen (they shoot), slingers, skirmishers
+//     (javelins in hand, or javelins with no more than light armour and a
+//     light shield: velites, peltasts), pikemen (pike, sarissa), spearmen,
+//     heavy infantry (medium armour or more, or a heavy shield), else
+//     infantry
+// A unit is { quality, primaryWeapon, thrown?, armor, shield, mounted }, as
+// the battle has it (army/builder.js, toBattleUnits). Its weapons are known
+// by what KIT.unit calls the men who carry them.
+const KIND = {
+  quality: { levy: 'levy', militia: 'militia', tribal_warriors: 'tribal', professional: 'professional', veteran_mercenary: 'mercenary', elite: 'elite' },
+  lightArmour: ['no_armor', 'light_armor'],
+  lightShield: ['no_shield', 'light_shield']
+}
+function kindWords(unit) {
+  const called = (weapon) => KIT.unit[weapon] ?? ''
+  const first = called(unit.primaryWeapon)
+  const javelins = called(unit.thrown) === 'javelins'
+  const lightArmour = KIND.lightArmour.includes(unit.armor ?? 'no_armor')
+  const light = lightArmour && KIND.lightShield.includes(unit.shield ?? 'no_shield')
+  let kind
+  if (unit.mounted) {
+    kind = first === 'archers' ? 'horse archers' : first === 'lancers' ? 'lancers' : (javelins || first === 'javelins') ? 'light horse' : 'cavalry'
+  } else if (first === 'archers') kind = 'archers'
+  else if (first === 'crossbows') kind = 'crossbowmen'
+  else if (first === 'slingers') kind = 'slingers'
+  else if (first === 'javelins' || first === 'darts' || (javelins && light)) kind = 'skirmishers'
+  else if (first === 'pikes') kind = 'pikemen'
+  else if (first === 'spears' || first === 'long spears' || first === 'lancers') kind = 'spearmen'
+  else if (!lightArmour || unit.shield === 'heavy_shield') kind = 'heavy infantry'
+  else kind = 'infantry'
+  const quality = KIND.quality[unit.quality] ?? String(unit.quality ?? '').replace(/_/g, ' ')
+  return [quality, kind].filter(Boolean).join(' ')
+}
+
+module.exports.kindWords = kindWords
+
+// A battle fought on the next day is one battle (Your battles, a
+// Commander's record, his officers' records): its title, and over how many
+// days it was fought. One that night ended, with no next day fought, in
+// the list of your battles.
+const COUNT_WORDS = { 2: 'two', 3: 'three', 4: 'four', 5: 'five', 6: 'six', 7: 'seven', 8: 'eight', 9: 'nine', 10: 'ten' }
+NIGHT.overDays = (days) => `fought over ${COUNT_WORDS[days] ?? days} days`
+NIGHT.listed = 'Night fell, and neither side had won'

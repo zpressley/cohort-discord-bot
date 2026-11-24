@@ -77,7 +77,7 @@ test('places resolve from where the units stand, and the player gets a read-back
   const read = interpretLines(['spears to the ridge to the east'], context)
   assert.equal(read.questions.length, 0)
   assert.equal(toLabel(read.orders[0].target), 'T2', 'The Crownhill')
-  assert.match(read.understood[0], /red_spears: march to The Crownhill \d+ m east \(E1-NE\)/,
+  assert.match(read.understood[0], /red_spears: march to the Crownhill \d+ m east \(E1-NE\)/,
     'the read-back gives the grid quarter')
 
   const defend = interpretLines(['archers defend the woods'], context)
@@ -169,7 +169,7 @@ test('plain orders never reach the AI; only what the grammar cannot read does', 
   assert.deepEqual(mixed.orders.map(o => [o.unitRef, o.action]), [['red_spears', 'move'], ['red_horse', 'hold']])
 })
 
-test('a line that says two things goes to the AI even though the grammar could read half of it', async () => {
+test('a line that says two things goes to the AI when the grammar can read only half of it', async () => {
   const transport = scriptedTransport(() => ({
     text: JSON.stringify({ orders: [
       { units: ['red_spears'], action: 'move', place: 'Harrow Bridge', then_hold: false, careful: false, against: null, let_pass: 0, regardless: false },
@@ -178,9 +178,18 @@ test('a line that says two things goes to the AI even though the grammar could r
     usage: { inputTokens: 900, outputTokens: 60 }
   }))
   const ai = createAiClient({ transport, retries: 0 })
-  const read = await interpretText('spears to the bridge and archers hide in the woods', context, { ai })
+  const read = await interpretText('spears to the bridge and archers slip into the trees unseen', context, { ai })
   assert.equal(transport.calls.length, 1)
   assert.deepEqual(read.orders.map(o => [o.unitRef, o.action]), [['red_spears', 'move'], ['red_archers', 'hide']])
+})
+
+test('a line of two orders the grammar reads whole, each beginning with a unit, is two orders and costs no AI call', async () => {
+  const transport = scriptedTransport(() => { throw new Error('no AI call expected') })
+  const ai = createAiClient({ transport, retries: 0 })
+  const read = await interpretText('spears to C5 and archers hold', context, { ai })
+  assert.equal(transport.calls.length, 0)
+  assert.equal(read.source, 'grammar')
+  assert.deepEqual(read.orders.map(o => [o.unitRef, o.action]), [['red_spears', 'move'], ['red_archers', 'hold']])
 })
 
 test('two units named with "and" are both ordered, even when one name is also a kind of unit', async () => {

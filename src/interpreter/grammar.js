@@ -46,15 +46,15 @@ function clean(text) {
 }
 
 // Endings that mean "and then hold there".
-const THEN_HOLD = /\s*(?:,|\band\b|\bthen\b)\s*(?:then\s+)?(?:hold(?: it| there| the position)?|dig in|stand|set up (?:a )?defensive positions?|defend it|make a stand)\s*\.?$/i
+const THEN_HOLD = /\s*(?:,|\band\b|\bthen\b)\s*(?:then\s+)?(?:hold(?: it| there| the position)?|dig in|stand|set up (?:a )?defensive positions?|defend it|make a stand|stay(?: there| put)?|wait(?: there)?)\s*\.?$/i
 
 // Verb phrases, tried in this order. Each splits "units VERB place".
 // The unit words are optional: "fall back to K8" or "stop at the clearing"
 // with no one named means everyone.
 const VERBS = [
-  { action: 'defend', pattern: /^(?:(.+?)\s+)?(?:dig in at|dig in on|set up (?:a )?defensive positions? (?:at|on|in)|defend|hold at|hold on|make a stand at|take|occupy|hold)\s+(.+)$/i },
+  { action: 'defend', pattern: /^(?:(.+?)\s+)?(?:dig in at|dig in on|set up (?:a )?defensive positions? (?:at|on|in)|defend|hold at|hold on|make a stand at|take up (?:a )?positions? (?:at|on|in|by)|take (?:a )?positions? (?:at|on|in|by)|form up (?:at|on|in|by)|take|occupy|hold|wait in|wait at|wait on|wait by|stay in|stay at|stay on)\s+(.+)$/i },
   { action: 'withdraw', pattern: /^(?:(.+?)\s+)?(?:withdraw|fall back|retreat|pull back)(?:\s+(?:to|towards|toward)\s+(.+))?$/i },
-  { action: 'move', pattern: /^(?:(.+?)\s+)?(?:stop at|halt at|march to|march on|move to|go to|head for|make for|approach|towards|toward|to)\s+(.+)$/i }
+  { action: 'move', pattern: /^(?:(.+?)\s+)?(?:stop at|halt at|march to|march on|move to|go to|head for|make for|approach|go towards|go toward|move towards|move toward|march towards|march toward|head towards|head toward|towards|toward|move up to|go up to|advance to|run to|walk to|ride to|hurry to|rush to|push on to|press on to|march up to|to)\s+(.+)$/i }
 ]
 
 // "spring the trap": the player springs an ambush by ordering it to attack.
@@ -118,8 +118,8 @@ const RIDE_SHORT = /^(?:(?:the\s+)?commander\s+(?:to|with)|ride with|join)\s+(.+
  *   { kind: 'surrender' } | { kind: 'done' } | { kind: 'empty' }
  *   { kind: 'ask', question }   the line could not be read
  */
-function parseLine(line) {
-  let text = clean(line).replace(/[.!]+$/, '')
+function parseLine(line, options = {}) {
+  let text = tidy(clean(line).replace(/[.!?]+$/, ''), options)
   if (!text) return { kind: 'empty' }
 
   const lower = text.toLowerCase()
@@ -149,6 +149,8 @@ function parseLine(line) {
   }
 
   const stage3 = readStage3(text, extra)
+  // (What he typed, for a question whose answers replace the whole line.)
+  if (stage3 && (stage3.fire || stage3.said || stage3.skirmish)) stage3.said = clean(line)
   if (stage3) return stage3
 
   const read = readOlder(text, line)
@@ -194,8 +196,12 @@ function readCondition(words) {
 // One piece of a deep order, read as a plain line. A piece that names no
 // one ("on to the bridge", "fall back") is for the unit the line began with.
 function readPiece(piece, who) {
-  const text = clean(piece).replace(/^(?:then\s+)?(?:they\s+|he\s+|you\s+)?(?:should\s+|must\s+|can\s+)?/i, '')
+  let text = clean(piece).replace(/^(?:then\s+)?(?:they\s+|he\s+|you\s+)?(?:should\s+|must\s+|can\s+)?/i, '')
   if (!text) return null
+  // "..., then D6", "then the bridge": a bare place is a march there.
+  if (/^[a-z]{1,2}\d{1,2}(?:-[ns][ew])?$/i.test(text) || (/^the\s+\S/i.test(text) && !VERB_START.test(text.replace(/^the\s+/i, '')))) text = `to ${text}`
+  // "..., then east", "then 200 m north": a march that way.
+  else if (new RegExp(`^(?:${DISTANCE}\\s+)?(?:to the\\s+)?${FULL_WAY}(?:\\s+${DISTANCE})?$`, 'i').test(text)) text = `go ${text}`
   // Read with the unit's name put back in front. A piece that names some
   // other unit is not a step of this order, and comes out with the wrong
   // name, which the caller refuses.
@@ -241,6 +247,8 @@ function readDeep(text, extra) {
     const last = steps.at(-1) ?? first
     if (last.action === 'move') last.then = 'hold'
   }
+  // "legionaries march north 200 m, then hold": a march that ends by holding.
+  if (steps.length === 0 && !when && lastHolds && first.action === 'move' && /^\d+ m /.test(first.place ?? '')) return { ...first, action: 'defend', then: 'hold', ...extra }
   if (steps.length === 0 && !when) return null
 
   const out = { ...first, ...extra, deep: true }
@@ -264,8 +272,14 @@ function readOlder(text, line) {
   }
 
   if (!then) {
+    const plainHold = text.match(HOLD_TOO)
+    if (plainHold) return order(plainHold[1], 'hold', null, null)
+
     const hold = text.match(HOLD)
     if (hold) return order(hold[1], 'hold', null, null)
+
+    const compass = readCompass(text)
+    if (compass) return compass
 
     const go = text.match(GO_DIRECTION)
     if (go) return order(go[1], 'move', `${go[2] ?? 200} m ${go[3].toLowerCase()}`, null)
@@ -277,6 +291,12 @@ function readOlder(text, line) {
     if (advance && !/\s(?:to|towards|toward)\s/i.test(text)) return order(advance[1], 'advance', null, null)
   }
 
+  // (Guard, secure, protect: hold a place. Tried before the older verbs, and
+  // only where the words after it are no order of their own, so that
+  // "praetorian guard to D7" is a march by the Praetorian guard.)
+  const guard = text.match(GUARD)
+  if (guard && !NOT_A_PLACE.test(clean(guard[2]))) return order(guard[1], 'defend', clean(guard[2]).replace(THEN_HOLD, ''), null)
+
   for (const { action, pattern } of VERBS) {
     const match = text.match(pattern)
     if (!match) continue
@@ -285,8 +305,12 @@ function readOlder(text, line) {
     return order(match[1], action, place, action === 'move' ? then : null)
   }
 
+  // Not read. The question here is the plain one; the resolver, which knows
+  // his units and the field, says which part it did not follow and offers
+  // the nearest orders it does read (`unread`; words.js, NOT_READ).
   return {
     kind: 'ask',
+    unread: clean(line),
     question: `I don't follow "${clean(line)}". Orders read like: spears to the ridge to the east · ` +
       'archers defend the ford · everyone advance · swords fall back · hold · ' +
       'archers hide in the woods · scouts search the woods · spears ambush in the woods · ' +
@@ -296,7 +320,9 @@ function readOlder(text, line) {
 }
 
 function order(unitRef, action, place, then, extra = {}) {
-  return { kind: 'order', unitRef: clean(unitRef) || 'everyone', action, place, then, ...extra }
+  // (A verb left before the order's own, "go around the left", names no one.)
+  const who = /^(?:go|move|march|head|ride|walk|run|get|swing|wheel|sweep|circle|come|and|then)$/i.test(clean(unitRef)) ? '' : clean(unitRef)
+  return { kind: 'order', unitRef: who || 'everyone', action, place, then, ...extra }
 }
 
 // Ambush, hide, check and attack-a-place, or null for the older verbs.
@@ -319,6 +345,8 @@ function shootFirst(words) {
 }
 
 function readStage3(text, extra) {
+  const widened = readWidened(text, extra)
+  if (widened) return widened
   const holdFire = text.match(HOLD_FIRE)
   if (holdFire) return order(holdFire[1], 'hold', null, null, { ...extra, fire: 'hold', holdFire: true })
   const shoot = text.match(SHOOT)
@@ -371,4 +399,286 @@ function readStage3(text, extra) {
   return null
 }
 
-module.exports = { parseLine, KINDS }
+// ── The grammar widened (docs/REVIEW-2026-11.md, D4) ───
+//
+// Plain orders a new player types on a phone that the verbs above missed:
+//
+//   tell the legionaries to hold / i want the hastati to advance   filler
+//   ok legionaries advance now / legionaries, advance              filler
+//   legionnaires hold / evryone advance / legionaries atack        typos
+//   legionaries go north 300m / move east / fall back 200 m        compass
+//   legionaries go 2 squares north / velites go ne
+//   guard the bridge / secure the ford / hastati protect C5        hold a place
+//   legionaries stand your ground / dig in / stay where you are    hold
+//   everyone forward / move up / go get them                       advance
+//   back up 100 m / run away                                       fall back
+//   horse archers skirmish / harass the enemy / fire and fall back fire and
+//                                                                  retreat
+//   velites throw javelins                                         throw
+//   velites follow the legionaries / stay with / support / cover   no such
+//   go around their left / flank them / hit them in the flank      order: a
+//                                                                  question
+//
+// "everyone else", "the rest", "the others", "everyone except the velites",
+// "the first line", "the foot", "the pikes" are unit words, left to the
+// resolver, which knows the army.
+
+// Words that start an order: a piece of a line that begins with one of these
+// is an order of its own, not a unit's name or a place.
+const VERB_WORDS = [
+  'advance', 'attack', 'charge', 'engage', 'hold', 'halt', 'stop', 'stay', 'wait', 'stand', 'withdraw', 'retreat',
+  'fall', 'pull', 'back', 'march', 'move', 'go', 'head', 'to', 'defend', 'guard', 'secure', 'protect', 'occupy',
+  'take', 'seize', 'capture', 'storm', 'assault', 'hide', 'ambush', 'search', 'check', 'scout', 'shoot', 'loose',
+  'fire', 'throw', 'follow', 'support', 'cover', 'dig', 'press', 'push', 'run', 'skirmish', 'harass', 'flank',
+  'hunt', 'seek', 'lie', 'take', 'set', 'approach', 'make', 'ride', 'walk', 'forward', 'spring', 'strike', 'hit'
+]
+const VERB_START = new RegExp(`^(?:${VERB_WORDS.join('|')})\\b`, 'i')
+
+// The words a typo is put right to: the grammar's own, the compass, the
+// ground and the kinds of troops. Only a word of four letters or more that
+// is not one of these, nor a word of a unit's or a place's name, is put
+// right, and only when one word alone is near it: one letter off (a
+// letter wrong, missing, extra, or two swapped), two in a word of eight or
+// more.
+const VOCABULARY = [
+  ...VERB_WORDS, 'everyone', 'everybody', 'others', 'rest', 'except', 'forward', 'position', 'ground', 'carefully',
+  'cautiously', 'slowly', 'north', 'south', 'east', 'west', 'northeast', 'northwest', 'southeast', 'southwest',
+  'woods', 'wood', 'forest', 'trees', 'bridge', 'ford', 'hill', 'ridge', 'river', 'road', 'clearing', 'crossing',
+  'marsh', 'village', 'pass', 'flank', 'left', 'right', 'javelins', 'arrows', 'enemy', 'their', 'them', 'there',
+  'here', 'metres', 'meters', 'squares', 'yards', 'paces', 'infantry', 'cavalry', 'archers', 'horse', 'foot',
+  'riders', 'second', 'first', 'line', 'line', 'then', 'with', 'into', 'behind', 'objective', 'fight', 'trap',
+  'line', 'front', 'have', 'tell', 'order', 'send', 'want', 'please', 'that', 'this', 'they', 'when', 'after',
+  'anything', 'everything', 'nearest', 'closest', 'until', 'where', 'were', 'what', 'your', 'units', 'unit',
+  'all', 'army', 'pila', 'darts', 'spears', 'swords', 'cover', 'ambush', 'loose', 'fire', 'shoot', 'over',
+  'down', 'along', 'across', 'around', 'round', 'through', 'toward', 'towards', 'from', 'pass', 'passes', 'first',
+  'reach', 'break', 'breaks', 'attacked', 'see', 'sees', 'spot', 'more', 'some', 'about', 'only', 'just',
+  // Common words that are no order word, kept from being "put right" into one.
+  'kill', 'destroy', 'wipe', 'sure', 'keep', 'near', 'side', 'edge', 'base', 'away', 'home', 'camp', 'enemies',
+  'troops', 'while', 'unless', 'before', 'once', 'will', 'shall', 'would', 'could', 'should', 'must', 'also',
+  'both', 'each', 'every', 'other', 'else', 'again', 'still', 'well', 'good', 'safe', 'find', 'look', 'come',
+  'bring', 'slow', 'fast', 'quick', 'hard', 'high', 'lines', 'mill', 'gate', 'rush', 'form', 'tight', 'steady',
+  'still', 'orders', 'nothing', 'like', 'would', 'okay', 'alright', 'quickly', 'immediately', 'right', 'away',
+  'flee', 'lure', 'bait', 'feint', 'wheel', 'turn', 'swing', 'sweep', 'circle', 'around', 'round', 'rear',
+  'wing', 'close', 'closer', 'within', 'range', 'shot', 'volley', 'arrow', 'bows', 'slings', 'sling', 'stones',
+  'javelin', 'pilum', 'throwing', 'axes', 'rocks', 'gap', 'saddle', 'town', 'hamlet', 'farm', 'field', 'fields',
+  'stream', 'brook', 'bank', 'shore', 'water', 'track', 'path', 'lane', 'glade', 'copse', 'knoll', 'mound',
+  'heights', 'crest', 'rise', 'slope', 'summit', 'top', 'middle', 'centre', 'center', 'past', 'beyond', 'inside',
+  'square', 'grid', 'metre', 'meter', 'yard', 'pace',
+  // Troops, theirs and his: never "put right" into another word.
+  'slingers', 'spearmen', 'swordsmen', 'bowmen', 'crossbows', 'crossbowmen', 'pikemen', 'horsemen', 'hoplites',
+  'legionaries', 'javelinmen', 'skirmishers', 'peltasts', 'cataphracts', 'chariots', 'elephants', 'warriors',
+  'levy', 'militia', 'archer', 'spearman', 'swords', 'spear', 'sword', 'pikes', 'lancers', 'scouts', 'guard',
+  'guards', 'infantrymen', 'footmen', 'companions', 'velites', 'hastati', 'triarii', 'principes', 'thureophoroi'
+]
+VOCABULARY.push('ahead', 'backward', 'backwards', 'onward', 'onwards', 'alone', 'together', 'instead', 'already',
+  'enough', 'long', 'short', 'soon', 'later', 'first', 'last', 'next', 'away', 'again', 'outside', 'beside',
+  'between', 'among', 'under', 'above', 'below', 'against', 'upon', 'onto', 'quick', 'hurry', 'rush', 'slowly')
+const KNOWN = new Set(VOCABULARY)
+// What a typo is put right to: the words an order turns on.
+const TARGETS = [...VERB_WORDS, 'everyone', 'everybody', 'north', 'south', 'east', 'west', 'woods', 'forest', 'bridge',
+  'ford', 'hill', 'ridge', 'river', 'clearing', 'crossing', 'marsh', 'carefully', 'javelins', 'others', 'except',
+  'forward', 'flank', 'position', 'ground', 'cavalry', 'infantry', 'archers', 'legionaries', 'velites', 'hastati']
+
+// Letters apart: a letter changed, missing or extra, or two side by side
+// swapped (optimal string alignment), stopping once past `most`.
+function lettersApart(a, b, most = 2) {
+  if (Math.abs(a.length - b.length) > most) return most + 1
+  const d = Array.from({ length: a.length + 1 }, (_, i) => [i, ...Array(b.length).fill(0)])
+  for (let j = 1; j <= b.length; j++) d[0][j] = j
+  for (let i = 1; i <= a.length; i++) {
+    for (let j = 1; j <= b.length; j++) {
+      const cost = a[i - 1] === b[j - 1] ? 0 : 1
+      d[i][j] = Math.min(d[i - 1][j] + 1, d[i][j - 1] + 1, d[i - 1][j - 1] + cost)
+      if (i > 1 && j > 1 && a[i - 1] === b[j - 2] && a[i - 2] === b[j - 1]) d[i][j] = Math.min(d[i][j], d[i - 2][j - 2] + 1)
+    }
+  }
+  return d[a.length][b.length]
+}
+
+// How many letters off a word of this length may be and still be put right.
+const slack = (word) => (word.length >= 10 ? 2 : word.length >= 4 ? 1 : 0)
+
+// The one word of `words` this word is a typo of, or null.
+function nearestWord(word, words) {
+  const most = slack(word)
+  if (most === 0) return null
+  let found = null
+  for (const w of words) {
+    if (Math.abs(w.length - word.length) > most) continue
+    if (lettersApart(word, w, most) <= most) {
+      if (found && found !== w) return null
+      found = w
+    }
+  }
+  return found
+}
+
+function fixTypos(text, protect) {
+  return text.split(' ').map(raw => {
+    const word = raw.toLowerCase()
+    if (word.length < 4 || /[^a-z]/.test(word) || KNOWN.has(word) || protect.has(word)) return raw
+    // A typo of a unit's or a place's name is the resolver's to put right,
+    // which knows them: only grammar words here, and not one that is near a
+    // name as well.
+    const name = nearestWord(word, protect)
+    if (name && !KNOWN.has(name)) return raw
+    // Near a word of the vocabulary that is no order word ("ahead", not
+    // "head"): left as it is.
+    const near = nearestWord(word, VOCABULARY)
+    return near && TARGETS.includes(near) ? near : raw
+  }).join(' ')
+}
+
+// Distances, in the words people use. A square of the player's grid is
+// 100 m (engine/map/grid.js).
+const COUNT = { a: 1, an: 1, one: 1, two: 2, three: 3, four: 4, five: 5, six: 6, seven: 7, eight: 8, nine: 9, ten: 10 }
+const SQUARE_METRES = 100
+
+/**
+ * The line as an order is read: filler words gone, typos put right, the
+ * forms people use for the same thing made one. `options.names`: the
+ * words of his units' and the field's names, which are never "put right".
+ */
+function tidy(text, options = {}) {
+  const protect = new Set((options.names ?? []).flatMap(n => String(n).toLowerCase().split(/[^a-z0-9']+/)).filter(Boolean))
+  let out = clean(text)
+    .replace(/[’‘]/g, "'")
+    .replace(/\s+[-–—]+\s+|\s*[:–—]\s*/g, ' ')
+    .replace(/!+/g, '')
+  out = clean(fixTypos(out, protect))
+  out = out
+    .replace(/\bevery\s+(one|body)\b/ig, 'every$1')
+    .replace(/^(?:(?:ok(?:ay)?|alright|all right|right then|so|and|now|please|go on)\b,?\s+)+/i, '')
+    .replace(/\s+please\b|\bplease,?\s+/ig, ' ')
+    .replace(/,?\s+(?:now|at once|immediately|right away|right now|asap|quickly)$/i, '')
+  // "i want the legionaries to advance", "tell the hastati to hold", "get the
+  // velites to the woods", "send the legionaries to C5": the order itself.
+  const asked = out.match(/^(?:i\s+want|i'd\s+like|i\s+would\s+like|tell|order|command|instruct|get|send)\s+(.+?)\s+to\s+(.+)$/i)
+  if (asked && !/\b(?:to|towards?)\b/i.test(asked[1])) out = VERB_START.test(asked[2]) && !/^to\b/i.test(asked[2]) ? `${asked[1]} ${asked[2]}` : `${asked[1]} to ${asked[2]}`
+  const have = out.match(/^(?:have|make|let|get)\s+(?!(?:a|an|one|two|three|the first)\s+(?:\w+\s+)?pass\b)(.+?)\s+((?:advance|attack|charge|hold|stand|stay|fall back|withdraw|retreat|march|move|go|hide|shoot|defend|guard|take|search)\b.*)$/i)
+  if (have) out = `${have[1]} ${have[2]}`
+  out = out
+    .replace(/^send\s+(?:in\s+)?(.+?)\s+(?:in|forward)$/i, '$1 advance')
+    .replace(/^send in\s+(.+)$/i, '$1 advance')
+    .replace(/^(?:let'?s\s+)?go\s+(?=get\s+(?:them|em)$)/i, '')
+    // "velites go hide in the woods", "hastati go and search C5": the verb.
+    .replace(/\b(?:go|come|run)\s+(?:and\s+)?(?=(?:hide|search|check|scout|take|attack|defend|guard|ambush|secure|occupy|seize|charge|storm|capture|lie in wait|dig in)\b)/i, '')
+    // "hold until attacked, then fall back": a condition.
+    .replace(/^(.+?)\s+until\s+(.+?)(?:\s*,\s*|\s+)then\s+(.+)$/i, '$1, if $2, $3')
+    // "the legionaries, advance": a unit's name set off by a comma.
+    .replace(/^([^,]{2,40}),\s+(?=(?:advance|attack|charge|hold|stand|stay|fall back|withdraw|retreat|march|move|go|hide|shoot|defend|guard|take|search|engage|halt|stop|wait)\b)/i, '$1 ')
+    // "square C5", "grid C5": the square.
+    .replace(/\b(?:grid\s+square|square|grid)\s+([a-z]{1,2}\d{1,2}(?:-[ns][ew])?)\b/ig, '$1')
+    .replace(/\b([a-z]{1,2}\d{1,2}(?:-[ns][ew])?)\s+square\b/ig, '$1')
+    // "2 squares north": 200 m.
+    .replace(/\b(\d{1,2}|a|an|one|two|three|four|five|six|seven|eight|nine|ten)\s+squares?\b/ig, (_, n) => `${(COUNT[n.toLowerCase()] ?? Number(n)) * SQUARE_METRES} m`)
+  return clean(out)
+}
+
+// Holding, in more of the ways people say it.
+const HOLD_TOO = /^(?:(.+?)\s+)?(?:(?:defend|hold|guard) (?:here|this position|this spot|where (?:you|they|it) (?:are|is|stand))|stand (?:your|their|its) ground|stay where (?:you|they|it) (?:are|is|stand)|stay in place|stay in position|stay back|hang back|hold back|keep back|stand firm|stay still|keep (?:your|their) position|dig in|form up(?: and hold| and wait)?|hold (?:on|tight|steady)|stand still|wait for orders|do nothing)$/i
+
+// Guard, secure, protect a place: go there and hold it. Not when the words
+// after it are an order of their own ("praetorian guard to D7").
+const GUARD = new RegExp(`^(?:(.+?)\\s+)?(?:guard|secure|protect|hold onto|keep hold of|cover|garrison)\\s+(?!(?:${VERB_WORDS.join('|')}|them|the enemy|their|him|her|it|us)\\b)(.+)$`, 'i')
+
+// By the compass, with or without a distance either side of the direction:
+// "go north 300m", "move 300 m north", "go 2 squares north" (200 m), "go
+// ne", "legionaries 200m north", "advance 200 m east" (a march that way).
+// Falling back with a distance and no direction is falling back toward his
+// own edge ("fall back 200 m": `200 m back`).
+const DISTANCE = '(\\d{1,4})\\s*(?:m|metres?|meters?|paces|yards?)'
+const FULL_WAY = '(north[- ]?east|north[- ]?west|south[- ]?east|south[- ]?west|north|south|east|west)'
+const SHORT_WAY = '(ne|nw|se|sw|n|s|e|w)'
+const GO_WORDS = '(go|move|march|head|shift|step|ride|walk|advance|push|press on|go up|move up|withdraw|fall back|retreat|pull back|back up|back off|run)'
+const COMPASS_ORDER = new RegExp(`^(?:(.+?)\\s+)?${GO_WORDS}(?:\\s+(?:up|out|off|on))?\\s+(?:${DISTANCE}\\s+)?(?:(?:to\\s+the|due|to|towards?\\s+the|toward)\\s+)?(?:${FULL_WAY}|${SHORT_WAY})(?:\\s+(?:for\\s+|about\\s+|some\\s+)?${DISTANCE})?$`, 'i')
+const COMPASS_BARE = new RegExp(`^(.+?)\\s+${DISTANCE}\\s+(?:to the\\s+|due\\s+)?${FULL_WAY}$`, 'i')
+const BACK_A_WAY = new RegExp(`^(?:(.+?)\\s+)?(?:withdraw|fall back|retreat|pull back|back up|back off|go back|move back)\\s+(?:about\\s+|some\\s+)?${DISTANCE}(?:\\s+back)?$`, 'i')
+const WITHDRAWING = /^(?:withdraw|fall back|retreat|pull back|back up|back off|run)$/i
+const SHORT = { n: 'north', s: 'south', e: 'east', w: 'west', ne: 'north-east', nw: 'north-west', se: 'south-east', sw: 'south-west' }
+
+function readCompass(text) {
+  let m = text.match(COMPASS_ORDER)
+  if (m) {
+    const [, who, verb, before, full, short, after] = m
+    const way = full ? full.toLowerCase().replace(/\s+/, '-') : SHORT[short.toLowerCase()]
+    const metres = before ?? after ?? 200
+    return order(who, WITHDRAWING.test(verb) ? 'withdraw' : 'move', `${metres} m ${way}`, null)
+  }
+  m = text.match(COMPASS_BARE)
+  if (m && !/\b(?:to|towards?|at|in|on)$/i.test(m[1])) return order(m[1], 'move', `${m[2]} m ${m[3].toLowerCase().replace(/\s+/, '-')}`, null)
+  m = text.match(BACK_A_WAY)
+  if (m) return order(m[1], 'withdraw', `${m[2]} m back`, null)
+  return null
+}
+
+// Fire and retreat (engine/battle/skirmish.js): what the engine does with
+// missile troops pressing the enemy. "Skirmish", "harass", "fire and fall
+// back" are that; with an enemy named, it is the one to shoot first.
+const SKIRMISH = /^(?:(.+?)\s+)?(?:skirmish(?:\s+with)?|harass|harry|pepper|hit and run|(?:shoot|fire|loose) and (?:fall back|retreat|withdraw|pull back|run|move back|back off))(?:\s+(.+))?$/i
+// Throwing javelins, pila, darts: missile troops shoot; others throw them as
+// they come to blows, which the resolver says.
+const THROW = /^(?:(.+?)\s+)?(?:throw|hurl|cast|chuck|launch)(?:\s+(?:your|their|its|the|them|some))?(?:\s+(?:javelins?|pila|pilum|darts|plumbatae|axes|throwing axes|spears|weapons|missiles))?(?:\s+(?:at|on|into)\s+(.+))?$/i
+// Keeping with another of his units, which the engine has no order for: a
+// question, with what he can do instead.
+const FOLLOW = /^(?:(.+?)\s+)?(?:follow|stay with|keep with|keep up with|keep close to|stay close to|stick with|go with|march with|move with|support|escort|accompany|shadow)\s+(?!\d)(.+)$/i
+// Going round a flank: which way round is not his officers' to guess.
+const FLANK = [
+  /^(?:(.+?)\s+)?(?:go|move|march|swing|wheel|get|sweep|circle|come|ride|head)?\s*(?:a?round|round to|to)\s+(?:the|their|his|its|our|your|the enemy's)\s+(?:left|right)(?:\s+(?:flank|wing|side))?(?:\s+.*)?$/i,
+  /^(?:(.+?)\s+)?(?:outflank|flank|envelop|turn)\s+(?:them|the enemy|their\b.*|him|it)(?:\s+.*)?$/i,
+  /^(?:(.+?)\s+)?(?:go|move|march|swing|ride|get|sweep|circle)\s+(?:a?round)\s+(?:them|the enemy|their\b.*)$/i,
+  /^(?:(.+?)\s+)?(?:hit|attack|strike|take|charge|fall on|go for)\s+(?:them|the enemy|their\b.*?|him)\s+(?:in|on|from)\s+the\s+(?:left\s+|right\s+)?(?:flank|rear|side|back)\b.*$/i,
+  /^(?:(.+?)\s+)?(?:go|move|march|head|ride|get)?\s*(?:to|on)\s+(?:the|their|our)\s+(?:left|right)\s+(?:flank|wing)$/i,
+  /^(?:(.+?)\s+)?(?:flank|flanks|outflank)$/i
+]
+// What "advance" also is.
+const ADVANCE_TOO = /^(?:(.+?)\s+)?(?:forward|move forward|go forward|march forward|(?:march|move|go|advance) (?:on|at|against|toward|towards) (?:the enemy|them|the foe)|move up|push forward|push on|go in|go get (?:them|em)|get (?:them|em)|at them|go at them|kill them(?: all)?|destroy them|close with the enemy|close in)$/i
+const RUN_AWAY = /^(?:(.+?)\s+)?(?:run away|run|flee|get out of there|get back|disengage|back off|back up|go back|move back)$/i
+
+function readWidened(text, extra) {
+  let m = text.match(SKIRMISH)
+  if (m) {
+    const against = m[2] && !/^(?:the enemy|them|enemy|anything|everyone)$/i.test(clean(m[2])) ? shootFirst(m[2]) : null
+    return order(m[1], 'advance', null, null, { ...extra, skirmish: true, ...(against ? { against } : {}) })
+  }
+  m = text.match(THROW)
+  if (m && /\b(?:throw|hurl|cast|chuck|launch)\b/i.test(text)) {
+    const against = shootFirst(m[2])
+    return order(m[1], 'hold', null, null, { ...extra, fire: 'shoot', throws: true, ...(against ? { against } : {}) })
+  }
+  for (const pattern of FLANK) {
+    m = text.match(pattern)
+    if (m) return order(m[1], 'flank', null, null, { ...extra, said: clean(text) })
+  }
+  m = text.match(FOLLOW)
+  if (m) return order(m[1], 'follow', null, null, { ...extra, friendRef: clean(m[2]).replace(/^(?:the|our|my)\s+/i, ''), said: clean(text) })
+  m = text.match(ADVANCE_TOO)
+  if (m) return order(m[1], 'advance', null, null, extra)
+  // "velites scout ahead": go forward carefully, on their guard.
+  m = text.match(/^(?:(.+?)\s+)?(?:scout|probe|feel|reconnoitre|recon)\s+(?:ahead|forward|the way|out ahead|on ahead)$/i)
+  if (m) return order(m[1], 'advance', null, null, { ...extra, careful: true })
+  // "keep going", "carry on": the order they have stands; nothing to send.
+  m = text.match(/^(?:(.+?)\s+)?(?:keep going|carry on|continue|as you were|keep at it|same as before|same orders?)$/i)
+  if (m) return order(m[1], 'carryOn', null, null, { ...extra, said: clean(text) })
+  // "velites fall back behind the legionaries": by one of his own units, as
+  // the resolver places it.
+  m = text.match(/^(?:(.+?)\s+)?(withdraw|fall back|retreat|pull back|go|move|march|get)\s+((?:behind|in behind|beside|next to|alongside)\s+.+)$/i)
+  if (m) return order(m[1], /^(?:withdraw|fall back|retreat|pull back)$/i.test(m[2]) ? 'withdraw' : 'move', clean(m[3]), null, extra)
+  // "legionaries go to the woods and hide": hide (search, lie in wait) there.
+  m = text.match(/^(?:(.+?)\s+)?(?:go|move|march|run|head|get)?\s*(?:to|into|in)\s+(.+?)\s*(?:,\s*|\s+)(?:and\s+)?(?:then\s+)?(hide|search it|search|check it|check|lie in wait|ambush|take cover)$/i)
+  if (m && !/\b(?:to|into)\b/i.test(m[1] ?? '')) {
+    const action = /^hide|^take cover/i.test(m[3]) ? 'hide' : /^search|^check/i.test(m[3]) ? 'check' : 'ambush'
+    return order(m[1], action, clean(m[2]), null, extra)
+  }
+  m = text.match(RUN_AWAY)
+  if (m) return order(m[1], 'withdraw', null, null, extra)
+  // "go to C5", "move to the woods": the verb with no one named.
+  if (/^(?:go|move|march|head|walk|ride)\s+(?:to|towards?|toward)\s+\S/i.test(text)) {
+    const rest = text.replace(/^(?:go|move|march|head|walk|ride)\s+/i, '')
+    const read = readOlder(rest, rest)
+    if (read.kind === 'order') return { ...read, ...extra }
+  }
+  return null
+}
+
+module.exports = { parseLine, KINDS, tidy, VERB_START, lettersApart, nearestWord }

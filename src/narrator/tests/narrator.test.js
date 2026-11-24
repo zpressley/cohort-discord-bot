@@ -38,8 +38,10 @@ test('fog of war: own units, seen enemies and the verdict; never an unseen enemy
 })
 
 test('facts are words: places by name or feature, with the grid square the player orders by', () => {
-  assert.equal(placeName(map, at('T2')), 'on The Crownhill')
-  assert.equal(placeName(map, at('W6')), 'at North Ford')
+  // One rule for "the" (words.js, PLACE): small inside a sentence, and
+  // taken by a name that describes the place.
+  assert.equal(placeName(map, at('T2')), 'on the Crownhill')
+  assert.equal(placeName(map, at('W6')), 'at the North Ford')
   assert.equal(placeName(map, at('K18')), 'in a clearing')
   assert.equal(placeName(map, at('F9')), 'on the road')
   assert.match(fact(map, events[0]), /^red_spears marched 75 m east, now in open ground .* \(B2-SE\)$/)

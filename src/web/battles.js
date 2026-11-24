@@ -45,7 +45,7 @@ const { gradeOf, DEATH_ODDS, loyaltyBand } = require('../engine/command/officers
 const T = require('../engine/combat/tables')
 const { narrateTurn, report } = require('../narrator/turnNarrator')
 const { orderWords, RIDER, NIGHT, REPORT, GROUND, ENEMY_COMMANDER, FIELD } = require('../narrator/words')
-const { BATTLE_OVER } = require('../narrator/words')
+const { BATTLE_OVER, kindWords } = require('../narrator/words')
 const { loadScenario, SCENARIOS, mapChoices } = require('../adapters/hotseat/scenarios')
 const { MAPS, groundOf } = require('../data/maps')
 const { FACTIONS, factionChoices } = require('../engine/army/factions')
@@ -642,7 +642,7 @@ function createBattleStore({ dir = null, ai = null, now = () => Date.now() } = {
   function athome(commander, what) {
     if (commander.ended) mayLead(commander)
     const busy = fighting(commander)
-    if (busy) throw Object.assign(new Error(`${commander.name}'s army is in the field (${busy.title}). ${what} when the battle is over.`), { status: 409 })
+    if (busy) throw Object.assign(new Error(`Your army is in the field (${busy.title}). ${what} when the battle is over.`), { status: 409 })
   }
 
   /**
@@ -656,7 +656,7 @@ function createBattleStore({ dir = null, ai = null, now = () => Date.now() } = {
   function transfer(token, body = {}) {
     const commander = commanders.get(token)
     if (!commander) return null
-    athome(commander, 'His officers can be moved')
+    athome(commander, 'Your officers can be moved')
     const officer = commander.company.officers.find(o => o.id === body.officer)
     if (!officer) throw Object.assign(new Error('There is no such officer in your company.'), { status: 400 })
     const to = rosterOf(commander).find(u => u.name === body.to)
@@ -678,7 +678,7 @@ function createBattleStore({ dir = null, ai = null, now = () => Date.now() } = {
   function nameUnit(token, body = {}) {
     const commander = commanders.get(token)
     if (!commander) return null
-    athome(commander, 'His units can be named')
+    athome(commander, 'Your units can be named')
     const from = String(body.unit ?? '')
     const name = plainName(body.name)
     const refused = nameRefusal(commander, from, name)
@@ -703,7 +703,7 @@ function createBattleStore({ dir = null, ai = null, now = () => Date.now() } = {
     if (commander.ended) mayLead(commander)
     const busy = fighting(commander)
     if (busy) {
-      throw Object.assign(new Error(`${commander.name}'s army is in the field (${busy.title}). It can be changed when the battle is over.`), { status: 409 })
+      throw Object.assign(new Error(`Your army is in the field (${busy.title}). It can be changed when the battle is over.`), { status: 409 })
     }
     if (!commander.faction) throw Object.assign(new Error('Choose a faction first: the army is bought from its kit.'), { status: 409 })
     let units = null
@@ -863,13 +863,21 @@ function createBattleStore({ dir = null, ai = null, now = () => Date.now() } = {
    * freed, let go, killed; nothing when he came through untouched).
    */
   function recordOf(commander) {
-    return (commander.company.settled ?? []).map(id => battles.get(id)).filter(Boolean).flatMap(entry => {
+    const settled = commander.company.settled ?? []
+    return settled.map(id => battles.get(id)).filter(Boolean).flatMap(entry => {
       const side = Object.keys(entry.commanders ?? {}).find(s => entry.commanders[s] === commander.id)
       const game = entry.game
       if (!side || !game?.outcome?.decided) return []
+      // A battle fought on into the next day is one battle, told once its
+      // last day is written in: its first day's title and when, the last
+      // day's outcome.
+      if (entry.next && settled.includes(entry.next)) return []
+      const before = previousOf(entry)
+      let first = entry
+      for (let b = before, n = 0; b && n < 20; b = previousOf(b), n++) first = b
       const fate = commanderOf(game, side)?.fate
       return [{
-        title: entry.title, when: entry.createdAt ?? null,
+        title: before ? `${firstTitle(entry)}, ${NIGHT.overDays(entry.day ?? 2)}` : entry.title, when: first.createdAt ?? entry.createdAt ?? null,
         result: game.outcome.winner === 'draw' ? 'draw' : game.outcome.winner === side ? 'victory' : 'defeat',
         ...(fate && fate !== 'free' ? { fate } : {})
       }]
@@ -915,7 +923,10 @@ function createBattleStore({ dir = null, ai = null, now = () => Date.now() } = {
       turn: turnOf(game, side),
       minutes: game.minutesElapsed,
       // (Who was ahead when night fell is the harness's, not the player's.)
-      outcome: game.outcome.decided ? { decided: true, winner: game.outcome.winner, reason: game.outcome.reason, ...(game.outcome.reason === 'night fell' ? { title: NIGHT.title, said: NIGHT.ended } : {}),
+      // Fought on the next day: one battle in the list, under its first
+      // day's title, "fought over two days" (the day before is not listed).
+      ...(previousOf(entry) ? { firstTitle: firstTitle(entry), overDays: NIGHT.overDays(entry.day ?? 2) } : {}),
+      outcome: game.outcome.decided ? { decided: true, winner: game.outcome.winner, reason: game.outcome.reason, ...(game.outcome.reason === 'night fell' ? { title: NIGHT.title, said: NIGHT.ended, listed: NIGHT.listed } : {}),
         // The ground decided it: the verdict names it.
         ...(game.outcome.reason === 'objectives held' ? { said: GROUND.won(game.objectives.map(o => o.name), game.outcome.winner === side, game.spec.objectiveHoldMinutes ?? T.GROUND.HOLD_MINUTES) } : {}) } : null,
       updatedAt: entry.updatedAt,
@@ -976,6 +987,9 @@ function createBattleStore({ dir = null, ai = null, now = () => Date.now() } = {
       enemies: (word ? knownEnemies(word) : sideView(game, side).intel).map(enemyForOrders),
       // Where "fall back" takes a unit, for the read-back.
       homeEdge: game.spec.sides?.[side]?.homeEdge,
+      // The ground to fight for, which every side knows: "the hill" is it
+      // where it is a hill.
+      ground: game.battle.ground ?? [],
       lyingInWait: lyingInWait(game.battle, side),
       // For counsel: the units that would break at the first blow.
       shaken: game.battle.world.units.filter(u => u.side === side && game.battle.isShaken(u)).map(u => u.id),
@@ -1044,7 +1058,7 @@ function createBattleStore({ dir = null, ai = null, now = () => Date.now() } = {
     const own = ownUnits.map(u => {
       if (held && !held.seen.has(u.id)) {
         return {
-          id: u.id, name: unitName(u), role: u.role ?? null, quality: u.quality ?? null, mounted: Boolean(u.mounted),
+          id: u.id, name: unitName(u), role: u.role ?? null, kind: kindWords(u), quality: u.quality ?? null, mounted: Boolean(u.mounted),
           outOfSight: true,
           officer: !u.officer ? null : u.officer.headless ? { headless: true } : { name: u.officer.name, grade: gradeOf(u.officer), personality: u.officer.personality, loyalty: loyaltyBand(u.officer) },
           order: 'out of your sight: their officer leads them as he sees fit'
@@ -1054,7 +1068,7 @@ function createBattleStore({ dir = null, ai = null, now = () => Date.now() } = {
         // In sight from where he is held: where they are and about how
         // many, as he would see any unit; not their morale or orders.
         return {
-          id: u.id, name: unitName(u), role: u.role ?? null, quality: u.quality ?? null, mounted: Boolean(u.mounted),
+          id: u.id, name: unitName(u), role: u.role ?? null, kind: kindWords(u), quality: u.quality ?? null, mounted: Boolean(u.mounted),
           inSightOfCaptivity: true,
           position: { ...u.position }, at: where(u.position), strength: u.strength, maxStrength: u.maxStrength,
           broken: battle.broken.has(u.id),
@@ -1076,6 +1090,8 @@ function createBattleStore({ dir = null, ai = null, now = () => Date.now() } = {
         id: u.id,
         name: unitName(u),
         role: u.role ?? null,
+        // What kind of men they are, in words (words.js, kindWords).
+        kind: kindWords(u),
         quality: u.quality ?? null,
         mounted: Boolean(u.mounted),
         // Raised for the day on a big field (engine/army/secondLine.js).
@@ -1632,7 +1648,12 @@ function createBattleStore({ dir = null, ai = null, now = () => Date.now() } = {
     const taken = capturesOf(entry, written)
     for (const { side, commander, result, fates, prices, fresh } of written) {
       const end = commanderOf(game, side)
-      let after = settleBattle(commander.company, { id: entry.id, title: entry.title, result, seed: game.seed }, fates)
+      // The next day of a battle is the same battle: written in under the
+      // whole battle's title, and counted once (oneBattle).
+      const before = previousOf(entry)
+      const title = before ? `${firstTitle(entry)}, ${NIGHT.overDays(entry.day ?? 2)}` : entry.title
+      let after = settleBattle(commander.company, { id: entry.id, title, result, seed: game.seed }, fates)
+      if (before && fresh && (commander.company.settled ?? []).includes(before.id)) after = oneBattle(commander.company, after, before.id, entry.id)
       // (A Commander held as a lost battle ended keeps what came through it.)
       // The units his side was given in a deal join him, with their officers.
       const coming = fresh ? taken.filter(t => t.to === side) : []
@@ -1652,6 +1673,47 @@ function createBattleStore({ dir = null, ai = null, now = () => Date.now() } = {
       // Killed: everything ends with him. (A held Commander is never killed.)
       if (end?.fate === 'killed') commanders.end(commander, { how: end.fate, at: entry.title })
     }
+  }
+
+  // A battle fought on the next day (again), and the day before it: one
+  // battle. The day before, if this battle is a next day; and the title
+  // of its first day ("Crownhill: Rome against Gaul", not "..., day 2").
+  function previousOf(entry) {
+    if (!entry.day || entry.day < 2) return null
+    for (const other of battles.values()) if (other.next === entry.id) return other
+    return null
+  }
+  function firstTitle(entry) {
+    let first = entry
+    for (let before = previousOf(first), n = 0; before && n < 20; before = previousOf(before), n++) first = before
+    return String(first.title).replace(/, day \d+$/, '')
+  }
+  // Written into a company after the day before was (settleBattle wrote
+  // each): it counts as one battle. The company's count of battles, and
+  // each unit's count, go back by one; an officer who fought both days has
+  // one line for the battle, the last day's, and one battle's experience,
+  // the first day's (his loyalty moves with each day's outcome); each
+  // unit's men bank it once.
+  function oneBattle(was, after, beforeId, id) {
+    const next = JSON.parse(JSON.stringify(after))
+    next.battles = Math.max(0, next.battles - 1)
+    for (const officer of next.officers) {
+      const days = officer.record.filter(r => r.battle === beforeId || r.battle === id)
+      if (days.length < 2) continue
+      officer.record = officer.record.filter(r => r.battle !== beforeId)
+      const then = was.officers.find(o => o.id === officer.id)
+      if (then) officer.experience = Math.min(officer.experience, then.experience)
+    }
+    for (const [kind, state] of Object.entries(next.units ?? {})) {
+      const then = was.units?.[kind]
+      if (typeof state === 'object' && then && typeof then === 'object' && state.battlesParticipated > then.battlesParticipated) {
+        state.battlesParticipated -= 1
+        // Its men bank the battle once: what the second day added is not
+        // added again (what its fallen took with them stays taken).
+        state.totalExperience = Math.min(state.totalExperience, then.totalExperience)
+      }
+    }
+    return next
   }
 
   // The units given in a deal between two players' Commanders, each as it
