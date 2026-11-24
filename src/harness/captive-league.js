@@ -17,6 +17,8 @@
 //
 //   node src/harness/captive-league.js --battles 2000 --policy offer
 //   node src/harness/captive-league.js --root /path/to/an/older/src ...   (wait only)
+//   --character c   the computer's Commander: bold, steady, cautious, or mix
+//                   (drawn from each battle's seed, as the app's muster)
 
 const path = require('path')
 const arg = (name, fallback) => { const i = process.argv.indexOf(name); return i > -1 ? process.argv[i + 1] : fallback }
@@ -32,6 +34,11 @@ const { assignOfficers } = need('engine/command/roster')
 let captorAnswer = null
 try { ({ captorAnswer } = need('opponent/captor')) } catch { /* an older build has none */ }
 
+// --character bold|steady|cautious|mix: the computer's Commander's
+// character (opponent/planner.js, CHARACTERS); mix: drawn from each
+// battle's seed, as at the app's muster. None: steady, the planner as it was.
+const CHARACTER = arg('--character', null)
+const { withCommander } = require('../opponent/commander')
 const MAX_PLAYER_TURNS = 150
 
 function play(red, blue, { map, seed, policy }) {
@@ -44,6 +51,9 @@ function play(red, blue, { map, seed, policy }) {
   spec = { ...spec, units: spec.units.map(u => u.side !== 'red' ? u : u.id === elite ? u : { ...u, officer: { headless: true } }) }
   const blueMine = spec.units.filter(u => u.side === 'blue')
   const commanders = { red: { unitId: elite }, blue: { unitId: blueMine[leadUnit(blueMine)].id } }
+  // The computer's Commander's character (--character): one named, or
+  // drawn from the seed as the app's muster draws it ('mix'); none, steady.
+  if (CHARACTER) spec = withCommander(spec, 'blue', seed, CHARACTER === 'mix' ? null : { character: CHARACTER })
   const game = createGame({ ...spec, standingOrders: {}, commanders }, { seed })
 
   const r = { taken: false, offers: 0, accepted: 0, countered: 0, metCounter: false, heldTurns: 0 }
