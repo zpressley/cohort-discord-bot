@@ -582,8 +582,9 @@ const HEART = {
 
 // The end of the day (ruled 2026-11-23: "add a cap to the battle at end of
 // day like 40 turns"): a battle mustered from the app is over after this
-// many player turns, and the side that lost the smaller share of its men
-// has it.
+// many player turns, and (until 2026-11-24) the side that lost the smaller
+// share of its men had it. TURNS is no longer read
+// (the army study keeps its own forty turns).
 // Since the riders rulings (2026-11-23: "No the game keeps going"), each
 // Commander is asked only when wanted, so the day is counted in battle time:
 // forty turns at the fifteen minutes a turn ran on average before

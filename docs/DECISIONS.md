@@ -2540,3 +2540,172 @@ Zach's words, answering the questions left open on November 23.
   now on as well, until there are players. The other reading is that only
   today's saves are let go; then each save needs a rules stamp before the
   next change to combat.
+
+### How the day, the night and the hold were built (Claude's choices, open to change)
+
+Built from four of Zach's answers of November 24 (above): the day of twelve
+hours, the day that just ends the battle, the holding Commander, and the two
+rider rulings already built.
+
+**1. The day is twelve hours.** `tables.DAY.MINUTES` 600 -> 720; the app's
+battles take it at the muster (`spec.dayMinutes`), and the tent says "night
+falls at 12 h". A battle saved before keeps the day it was made with, for
+`dayMinutes` is in its spec: one mustered at 600 still ends at 10 h. The
+muster's note now gives the length of the day and what night does, from
+`narrator/words.js` (`NIGHT.day`, through `GET /api/day`), instead of "the
+day ends after 40 turns". `DAY.TURNS` is no longer read.
+
+**2. The day just ends the battle.** Every day's-end verdict, and what was
+done with it:
+- *The app's day* (`dayMinutes`) and *the older turn-count day*
+  (`turnLimit`, a testing aid the API still takes): both now end the
+  battle `{ winner: 'draw', reason: 'night fell' }`
+  (`orchestrator/victory.js`, `nightFalls` in the orchestrator). The stop
+  is `'night'`, not `'decided'`, so the dispatch's heading says "night
+  fell". A `nightfall` event is put in the log: both sides see the dark
+  come down, so it is told to everyone (`visibleEvents`, `fromCaptivity`,
+  and `arrivalOf` at once), weight 0. The plain account, and with it the
+  AI dispatch's fall-back, says "Night has ended the fighting, and neither
+  side has won" (`NIGHT.ended`); the AI is given the same line among its
+  facts. The tent's verdict is titled "Night fell", with the same line.
+- *Who was ahead* is kept on the outcome as `ahead` (the side the old rule
+  would have named: more ground held, then fewer men lost; or null), for
+  the harness's tables only. The server strips it from what it sends the
+  browser; the game never calls it a win. The army study
+  (`harness/army-study/lib.js`, a day of forty turns) counts `ahead` as
+  the winner, so its tables read as they did, and says so.
+- *The time limit* (`timeLimitMinutes`, ruled 2026-10-21 as a testing aid;
+  the hotseat terminal's default of four hours): left as it was, fewer
+  losses wins. Guessed: it is a test harness's clock, not the day. The
+  other reading is that the terminal game's clock is a day too, and should
+  end in night; that is one line in `victory.js` if so.
+- *The soak's "meeting battle: a verdict in 50 of 50"*: that battle has no
+  day (`runBattle`, decided only by the fighting), so the line means what
+  it did; unchanged. The soak's other games have no day either.
+- *The leagues* (messenger, faction, captive, bought): none sets a day.
+  The messenger league takes `--day 720` now, to measure it; a night is
+  counted there as drawn.
+
+What a battle ended by night does to what follows: it is a battle fought
+with no winner, which is what a draw already was everywhere a battle is
+settled, so the result written is `'draw'` and nothing new was needed.
+- Each Commander's record and his officers' records: "a draw". A battle
+  counted; no win, no loss.
+- Officers' experience, units' veterancy and training: as after any
+  battle (they never depended on the result).
+- Officers' fates: the odds of a draw (`FATES.BASE.draw`). Loyalty: moved
+  as by a draw (`LOYALTY.MOVES[values].draw`). Guessed: the plainest
+  reading of "no winner"; the other is to move loyalty not at all.
+- Capture: a Commander taken during the day is still taken. When night
+  falls with him held and no deal struck, he is let go, as at any end of a
+  battle his side did not win (`heldWhenTheBattleEnds`, 'released'); the
+  verdict says "Night fell with you still in the enemy's hands ... they let
+  you go" (`NIGHT.released`). Guessed: the other reading is that he stays
+  in their hands into the next day, which would need a captive carried
+  from battle to battle (a campaign). His offers end with the battle, as
+  they do at any end.
+
+*Fight again the next day.* After a battle night ended, the verdict's main
+button is "Fight again the next day" (`NIGHT.again`), with a line under it:
+"Against the same enemy, on the same field. Your army comes as it stands
+after today." It calls `POST /api/seat/:token/again`
+(`battles.js`, `again`), which musters a new battle as the muster does:
+the same field, kind of battle, side and day, the same Commander (his army
+as his company and roster carry it from any battle to the next, and who
+marched marches again), and the same enemy faction. Against the computer its army is
+its faction's again, matched to his veterancy, as at any muster. A new
+seed: a new day. The title ends ", day 2" (3, and so on). It is made once:
+the old battle remembers it (`next`, saved), and whoever asks after is
+given his own seat in it; the old verdict then links there.
+- *Against a friend*: the same, and the friend's Commander is put at the
+  head of his side at once, as if he had joined (`join`), so no one has to
+  choose again; the friend finds his seat from the old battle's verdict
+  (the same button), and each is shown only his own seat. If the friend
+  had no Commander, or his army is in another battle, the seat is left for
+  him to choose as on the first day. Not built: telling the friend that the
+  other has asked for the next day; he sees it when he looks at the old
+  battle.
+- Guessed: "the same enemy" is the same faction (and, against a friend,
+  his Commander). The computer keeps no army from battle to battle (it has
+  no roster), so its men are fresh. The other reading is that its losses
+  carry over too; that needs the computer to keep an army.
+
+**3. A Commander whose men hold is not called back by the clock.** Built
+as I read it: a free Commander with his army is asked when news reaches
+him (a sighting, a fight, shooting, a rout, a rally), when his orders are
+carried out, when ground changes hands, and no longer when an hour has
+passed with his men holding (`wantedNow`; `nothingToDo` retired). The
+guard stays: no one waits more than `COMMAND.LONGEST` (six hours). Two
+things kept, and why:
+- A held Commander is still asked every hour: he always has something to
+  do (an offer to make), which the ruling does not touch.
+- The computer is still asked on its own news and every hour: it is not
+  shown a screen, it does not stop the player, and asking it less would
+  only make it slower to answer what it sees.
+- Added, so that nothing waits on the hour any more: a rider back with
+  word that he could not get through (2b, below) calls him back
+  (`'rider'`), for he has commands to give. Before, the hour did it.
+The first stop asks everyone, as before. Two Commanders who both hold all
+day are each asked at six hours, and night ends it at twelve (tested).
+Every soak battle ends.
+
+Guessed: "Holding for several turns would still get interrupts from
+passing enemy troops" means he waits. The other reading is that Zach was
+only remarking that holders are interrupted anyway, and the hourly call
+stays; then it is one line back in `wantedNow`.
+
+Measured (`node src/harness/messenger-league.js --battles 400 --policy
+planner`, the same seeds; red the player with his Commander, blue the
+computer; no day, as before):
+
+| | before | after |
+|---|---|---|
+| Red's wins | 51% (205) | 57% (229) |
+| Red's own turns a battle | 12.8 | 12.3 |
+| Battle minutes | 252 | 220 |
+| Stops of the battle, either side | 16.3 | 15.6 |
+| Red's wait between turns | median 10, 90% 30, longest 360; over an hour 3% | median 10, 90% 20, longest 360; over an hour 4% |
+| Why red was asked | time 2%, long 1% | time 0% (held only), long 0%, rider 0% |
+
+Red wins more: the planner, not called back after an hour of holding, no
+longer re-plans into an advance; it holds until the enemy comes. With the
+rider's call taken out again the numbers are the same, so it is the hold.
+That is a real change in how a holding army fares against the computer.
+With the day (`--day 720`): red won 55%, lost 42%, 11 of 400 ended by
+night (`--day 600`: 20); the old code with a day of 600, where the day
+named a winner: 51%, 47%, 8 drawn.
+
+The soak: every battle ends (the computer's side 18.9 -> 19.2 player
+turns; the rest unchanged). The balance table is unchanged.
+
+**4. Two rulings already built, now tested by name.**
+- "You can interrupt units mid March. But orders don't come over till the
+  end of the turn." As built: a side not wanted may still send orders;
+  `submitOrders` holds them (`game.submitted`) and they go out as the next
+  stretch begins, when the side wanted answers. Units marching are
+  redirected then, not a step later. Test: "you can interrupt units mid
+  march, unasked, but the orders do not go out until the end of the turn in
+  play" (engine), and the server's "a Commander not asked may still send
+  new orders" (against a friend, the "Send new orders" button). Against the
+  computer every request ends on the player's own turn, so he is never
+  unasked there: his orders, on his turn, redirect a march at once.
+- "Like if the unit is surrounded, the rider should return with that news.
+  After turns of travel pass". As built, told when the rider would be back
+  (a ride there and back, as he knows the way). The words now say why:
+  "your rider to the hastati has come back: he could not get through, and
+  your order did not reach them" (`RIDER.blocked`; it was "no rider could
+  get through to ..."). And the rider's return now calls him back (above).
+  Test: "when a unit is surrounded, the rider returns with that news after
+  his ride there and back, and the battle stops for him then".
+
+**For Zach:**
+1. A holding army now waits for news, and against the computer it wins
+   more (57% from 51%). Right, or should the hour come back?
+2. Night falling with your Commander in the enemy's hands: let go, as at
+   the end of any battle you did not win. Or should he stay their captive
+   into the next day?
+3. The next day against the computer: its army is fresh, yours carries
+   your losses as it does from any battle to the next. Should its losses
+   carry over too?
+4. The terminal game's four-hour clock still names a winner on losses. Is
+   it a day too?

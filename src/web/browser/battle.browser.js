@@ -581,3 +581,42 @@ test('on a phone: a Commander the battle is not waiting on sees his orders with 
     }
   })
 })
+
+// Ruled 2026-11-24: "No the day just ends the battle, you can choose to
+// fight again the next day."
+test('on a phone: night ends the battle with no winner, and the main button fights again the next day', { skip }, async () => {
+  await withApp(async ({ base, browser, errors, store }) => {
+    const post = async (url, body) => (await fetch(base + url, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body ?? {}) })).json()
+    const p = await page(browser, errors, { width: 390, height: 844 })
+    // The muster says how long the day is, and what night does.
+    await p.goto(base + '/muster')
+    await p.waitForSelector('form#muster')
+    assert.match(await p.textContent('form#muster'), /The day is 12 h of battle\. If neither side has won by then, night ends the fighting/)
+    if (process.env.SHOT) await p.screenshot({ path: process.env.SHOT.replace('.png', '-muster-day.png') })
+
+    const commander = (await post('/api/commanders', { faction: 'rome' })).token
+    const seat = (await post('/api/battles', { opponent: 'standing', side: 'red', seed: 3, commander, enemyFaction: 'han', turnLimit: 2 })).seats.red
+    const game = store.seatOf(seat).entry.game
+    for (let i = 0; i < 10 && !game.outcome.decided; i++) await post(`/api/seat/${seat}/orders`, { text: 'everyone hold' })
+    assert.equal(game.outcome.reason, 'night fell')
+    await p.goto(`${base}/b/${seat}`)
+    await p.waitForSelector('.verdict h2')
+    assert.equal(await p.textContent('.verdict h2'), 'Night fell')
+    assert.match(await p.textContent('.verdict'), /Night has ended the fighting, and neither side has won/)
+    const again = p.locator('#again')
+    assert.equal(await again.textContent(), 'Fight again the next day')
+    assert.ok((await again.boundingBox()).height >= 44)
+    if (process.env.SHOT) await p.screenshot({ path: process.env.SHOT.replace('.png', '-night.png'), fullPage: true })
+    // The dispatch says it too.
+    await p.click('[data-tab="dispatches"]')
+    assert.match(await p.textContent('#panel-body'), /Night has ended the fighting, and neither side has won/)
+    if (process.env.SHOT) await p.screenshot({ path: process.env.SHOT.replace('.png', '-night-dispatch.png') })
+    await p.click('[data-tab="orders"]')
+    await p.click('#again')
+    await p.waitForURL(/\/b\/[A-Za-z0-9_-]+$/)
+    await p.waitForSelector('#map-scroll svg')
+    assert.notEqual(p.url(), `${base}/b/${seat}`)
+    assert.match(await p.textContent('.bar-title'), /Rome against Han, day 2/)
+    if (process.env.SHOT) await p.screenshot({ path: process.env.SHOT.replace('.png', '-day-2.png') })
+  })
+})
