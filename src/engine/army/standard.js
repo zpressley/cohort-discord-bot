@@ -28,6 +28,7 @@ const { resolveMap } = require('../map/map')
 const { deployArmies } = require('../map/deploy')
 const { createRng } = require('../rng')
 const { FACTIONS } = require('../../data/factions')
+const { withPerks } = require('./perks')
 
 // A unit's kit, and nothing else from what was sent. A second weapon
 // (docs/design/army-balance.md, part 8) only where it has one: an army
@@ -185,7 +186,8 @@ function standardUnits(key, units, side, homeEdge = side === 'red' ? 'west' : 'e
     ],
     faction: key
   }))
-  return formUp(out, homeEdge)
+  // Its people's perks (army/perks.js); a unit taken from another people has none.
+  return formUp(withPerks(key, out), homeEdge)
 }
 
 /**

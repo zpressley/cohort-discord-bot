@@ -22,6 +22,14 @@
 // legionaries and Praetorians throw pila, and its velites javelins, as they
 // come to blows. The battles were 1fb30748 22, abc6d6db 30, 76c134c8 29,
 // 7d98462c 31.
+//
+// Retaken for each people's perks (docs/design/army-balance.md part 9):
+// Rome's men a little steadier, Han's bought units a fifth larger. The
+// battles were a0fe2488 18, e70e50fe 25, 31e8e9f4 26, 6583ef4f 34. Both
+// on ashford now run to the 150-turn guard, the armies marching up and
+// down either side of the ford; not the perks' doing (it happens without
+// them, Mongolia against Tibet on ashford, seed 77), and in the app the
+// day ends such a battle.
 
 const { test } = require('node:test')
 const assert = require('node:assert/strict')
@@ -39,10 +47,10 @@ function fingerprint(text) {
 }
 
 const BEFORE = {
-  'crownhill 1': 'a0fe2488 18',
-  'crownhill 2': 'e70e50fe 25',
-  'ashford 1': '31e8e9f4 26',
-  'ashford 2': '6583ef4f 34'
+  'crownhill 1': '889c9e1e 18',
+  'crownhill 2': '27381837 24',
+  'ashford 1': '9de62f89 150',
+  'ashford 2': '6d782516 150'
 }
 
 test('a battle with no Commander on the field runs exactly as before riders, event for event', () => {

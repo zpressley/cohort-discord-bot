@@ -54,6 +54,9 @@ function createUnit(spec) {
     // throws it has left (battle/battle.js, the throw at contact; part 8 of
     // docs/design/army-balance.md). Carried only when set.
     ...(spec.thrown ? { thrown: spec.thrown, throws: spec.throws ?? THROWN.THROWS } : {}),
+    // Its people's perks that are its own (army/perks.js; combat/perks.js).
+    // Carried only when it has any.
+    ...(spec.perks?.length ? { perks: [...spec.perks] } : {}),
     // The officer who carries the Commander's orders to this unit
     // (command/officers.js): { name, experience, personality }. A unit
     // without one carries any order whole.

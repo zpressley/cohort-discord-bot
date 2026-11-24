@@ -74,6 +74,9 @@ function boughtArmies(key) {
   for (const [kind, wishes] of Object.entries(ARMIES)) {
     const units = buy(key, wishes)
     const checked = checkArmy(key, units)
+    // A kind its people's restrictions forbid (no foot for Sarmatia) is one
+    // its player cannot buy: left out (docs/design/army-balance.md, part 9).
+    if (!checked.ok && checkArmy(key, units, { restrictions: false }).ok) continue
     if (!checked.ok) throw new Error(`${key} ${kind}: ${checked.errors.join('; ')}`)
     out[kind] = units
   }

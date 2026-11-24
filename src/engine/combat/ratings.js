@@ -10,6 +10,7 @@
 // rounds and are handled in resolve.js. This file only reads them.
 
 const T = require('./tables')
+const P = require('./perks')
 
 // ── Lookups ────────────────────────────────────────────
 //
@@ -54,7 +55,8 @@ function staminaDrainPerRound(unit) {
   drain += resolveArmor(unit).staminaDrain
   drain += resolveShield(unit).staminaDrain
   if (unit.mounted) drain += T.MOUNT.staminaDrain
-  return drain
+  // (Kush's men of the hot lands tire more slowly: combat/perks.js.)
+  return drain * P.drainWeight(unit)
 }
 
 // The one universal fatigue curve. Full effectiveness while the tank is above
@@ -84,7 +86,7 @@ function fatigueMultiplier(staminaPct) {
 // see it.
 function moraleResistance(unit) {
   return 1 + resolveQuality(unit).morale * T.MORALE.RESISTANCE_PER_POINT +
-    (unit.veteranResistance ?? 0) + (veteranEdge(unit).stand ?? 0)
+    (unit.veteranResistance ?? 0) + (veteranEdge(unit).stand ?? 0) + P.moraleEdge(unit)
 }
 
 // docs/design/army-balance.md, part 4 (taken 2026-11-23): what a unit's earned
@@ -92,7 +94,8 @@ function moraleResistance(unit) {
 // tables.VETERANCY.STEPS it has reached, or nothing.
 const NO_EDGE = { fight: 0, stand: 0, survive: 0 }
 function veteranEdge(unit) {
-  const v = unit.veterancy ?? 0
+  // A people's perk may set the least it fights at (combat/perks.js).
+  const v = Math.max(unit.veterancy ?? 0, P.veterancyFloor(unit))
   let edge = NO_EDGE
   for (const step of T.VETERANCY.STEPS ?? []) if (v >= step.from) edge = step
   return edge
@@ -166,7 +169,8 @@ function chargeMultiplier(unit, roundsInContact, enemyBraced) {
 
   // Braced spears do not merely blunt the charge; only a fraction of the spike
   // above parity survives contact with the points.
-  return 1 + (spike - 1) * T.CHARGE.BRACED_MULTIPLIER
+  // (Parthia's heavy horse break through more of it: combat/perks.js.)
+  return 1 + (spike - 1) * P.bracedShare(unit)
 }
 
 // ── Terrain ────────────────────────────────────────────
@@ -276,7 +280,9 @@ function attackRating(unit, ctx = {}) {
   } = ctx
 
   const terrainMod = terrainModifier(terrain, enemyTerrain, prepared).attack
-  const base = Math.max(0, baseAttackRating(unit) + (veteranEdge(unit).fight ?? 0) + terrainMod + bonusAttack - crowding)
+  // Its people's perks (combat/perks.js): 0 for a unit with none.
+  const perkMod = P.fightEdge(unit, ctx).attack
+  const base = Math.max(0, baseAttackRating(unit) + (veteranEdge(unit).fight ?? 0) + terrainMod + perkMod + bonusAttack - crowding)
 
   return base
     * fatigueMultiplier(stamina / staminaPool(unit))
@@ -296,7 +302,11 @@ function defenseRating(unit, ctx = {}) {
   } = ctx
 
   const terrainMod = terrainModifier(terrain, enemyTerrain, prepared).defense
-  const base = Math.max(0, baseDefenseRating(unit) + (veteranEdge(unit).fight ?? 0) + terrainMod - crowding)
+  // Its people's perks, and the enemy's: wootz steel leaves less of its
+  // armour (combat/perks.js). Both 0 where neither has a perk.
+  const perkMod = P.fightEdge(unit, ctx).defense -
+    (ctx.enemy ? resolveArmor(unit).defense * (1 - P.armorLeft(ctx.enemy)) : 0)
+  const base = Math.max(0, baseDefenseRating(unit) + (veteranEdge(unit).fight ?? 0) + terrainMod + perkMod - crowding)
 
   // Defense does not scale with the strength snowball. A thinner line is
   // easier to kill because there are fewer men in it, which the casualty

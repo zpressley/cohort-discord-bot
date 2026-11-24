@@ -3767,3 +3767,122 @@ roster prices in `roster.test.js` (the hastati 11 to 9 SP). `npm run
 balance` is unchanged (no duel archetype carries a second weapon). The
 Commander's odds (`captive-league.js --battles 2000 --policy wait`): taken
 in 1 battle in 19.0, as on main (18.9).
+
+### How each people's perks were built (Claude's choices, open to change)
+
+Asked for as a roadmap piece, with the details mine to decide: the
+"Cultural Perks", "Cultural Restrictions" and "Adaptation Perk" of the
+owner's factions document (`docs/Context/final_20_cultures_complete.txt`),
+as far as the game can carry them. Built inside the rulings of November 23
+("The balance needs to come from the units themselves ... It should have a
+grounding in history"). Every perk and restriction of the twenty, sorted
+into true already, built, and left out with the reason, is Part 9 of
+`docs/design/army-balance.md`; with the rounds and the measures.
+
+**What was built.**
+- **Perks are data and a small rule each.** A faction names its perks
+  (`src/data/factions.js`, `perks`); `tables.PERKS` holds each perk's
+  numbers and whom in the army it is for (`who`: all, the elite, levy and
+  militia, missile troops, horse, horse archers, bought units). At the
+  muster each of the faction's own units gets the keys of its perks
+  (`engine/army/perks.js`); in battle `engine/combat/perks.js` reads them.
+  A unit with none gets 0 or 1 from every rule, so the balance duels and
+  every scenario without faction armies run as before (`npm run balance`
+  is unchanged, line for line).
+- **Every faction has a perk that acts in battle or at the muster**: Rome
+  steadier (morale resistance +0.02); Macedon's Silver Shields seasoned
+  (veterancy 10); Sparta breaks at morale 15, not 25, and its levy and
+  militia are seasoned; Carthage 32 supply points (true before); Kush tires
+  more slowly (wind x0.75), and its shooters shoot x1.25 with its horse
+  beside them; the Berbers +0.5 attack against a bigger unit, and slowed in
+  woods and marsh (x1.5); Sarmatia's horse take the parting blow at half
+  weight; Han's bought units a fifth larger; Maurya's blows leave 0.9 of the
+  enemy's armour; Silla +0.5 attack and defence on a hill; Persia saves one
+  man in twenty a blow would fell; Parthia's horse +0.5 attack on open
+  ground and half a charge's spike through braced spears (not 0.15), and
+  its horse archers lose nothing shooting on the move; Germania and the
+  Celts cross woods as open ground; Thrace +1 defence on a hill; Samnium
+  +0.5 attack on hills and in woods, and breaks at 22 (the elite 20);
+  Tibet's militia seasoned and its veteran mercenaries 7 supply points, not
+  9; Mongolia's horse archers shoot riding at full; the Celts' surprise
+  shakes x1.5; Bactria's horse +0.5 attack on an enemy fighting another;
+  Yayoi's archers x1.25 with its spearmen beside them, and +0.5 defence to
+  men who held their ground.
+- **Restrictions are checked when an army is bought** (`engine/army/
+  restrictions.js`, from `web/armies.js`, `checkArmy`), not when one is
+  mustered (`battles.js`, `musterArmies`, passes `restrictions: false`):
+  an army bought before keeps its units. On the army screen a choice that
+  breaks a rule a unit or a count can break (no foot, at most one unit of
+  horse) is struck through with the reason; a rule on the army as a whole
+  (half of it heavy foot) is said of the army. Built: Rome half heavy foot;
+  Macedon no levy or militia; Sparta and Thrace no veteran mercenaries;
+  Carthage at most two units of professionals or veteran mercenaries; Kush
+  and Yayoi no heavy armour; Sarmatia and Mongolia no foot; Maurya foot,
+  shooters and horse; Parthia 10 supply points of levy and half on horses;
+  Thrace nothing above light armour and shields; the Celts no trained
+  shooters; Bactria heavy foot at most 30%; Yayoi one unit of horse. Every
+  usual army keeps to its own (a test), so none was re-picked.
+- **Shown** where he chooses his faction, at the muster, and on the army
+  screen, a line each (`words.js`, `PERK_WORDS`: "**Woodsmen:** your men
+  cross woods as easily as open ground."). Not in the dispatch.
+- **No adaptation perk** (Part 9 says what each would need).
+
+**Measured** (Part 9 has the rounds). The usual armies' league
+(`usual.js league --seeds 4`, 6,080 battles): Sparta 39% to Rome and
+Germania 64% before; Han, Maurya, Sarmatia and Yayoi 44% to Rome 64% after.
+Pairings past 75/25: 30 of 190 before, 31 after. The Commander in the
+league taken 1 in 31 before, 1 in 32 after. The random search and the
+Commander's odds against a player who sends everyone in: Part 9.
+
+**Guessed, and the other reading.**
+- **"Fight to the last man, until 50% casualties"** (Sparta), "break at
+  30%, 40%" (Samnium): read as men who break later (a lower morale line),
+  not as men who cannot break until they have lost so many. The literal
+  reading won Sparta 97% of its battles (round 1): morale decides most
+  fights here, and a unit that cannot break wins them.
+- **"Cannot hire militia"** (Macedon): no levy either, the doc's reason
+  being "professional training standards". The other reading bans militia
+  alone.
+- **"Maximum 2 SP (200 men) of professional soldiers"** (Carthage): two
+  units of professionals or veteran mercenaries (a unit was 100 men and 1
+  SP in the old blocks). The other reading is 2 supply points, which buys
+  none at all.
+- **"Heavy infantry"** (Rome, Bactria): foot with a hand weapon in medium
+  or heavy armour, the elite counted as one unit of the army. The other
+  reading counts only heavy armour, and Rome's legionaries (mail) would not
+  count.
+- **"Cannot field large heavy infantry formations"** (Kush): no heavy
+  armour. The other reading caps the number of heavy units.
+- **"Metallurgy deficit: without heavy shields, weapons or armour
+  upgrades"** (Thrace): light armour and light shields at most, as the
+  usual army was kept already. The other reading allows medium.
+- **"Minimum 3 unit types"** (Maurya): foot, shooters and horse. The other
+  reading counts any three kinds of kit.
+- **Wootz steel** is every Mauryan unit's, free; the doc calls it "an
+  expensive upgrade available to any unit". The other reading sells it.
+- **Nearest honest things** where the doc's perk needs what the game has
+  not got: Kush's desert heat-resistance as wind; Sarmatia's feigned
+  retreat as a lighter parting blow; Persia's medical staff as men saved;
+  Yayoi's rapid fortification as digging in where they stand; Parthia's
+  "break defensive lines" as a charge that braced spears blunt less.
+- **The strong get their gentler perk** (as asked): Germania woods, not the
+  comitatus that never breaks; Thrace the hill, not veterans from the
+  start; Mongolia the Parthian shot, not larger units; Rome's discipline
+  set at 0.02 (0.19 put Rome at 73%, 0.05 at 65%).
+- **Restrictions on an army already bought**: left alone, by the brief.
+  Such an army is checked the next time he changes it; and the units that
+  march are not checked (a Parthian may leave his levies at home).
+- **Rome's restriction in the tests**: the army test's Roman army had too
+  little heavy foot; its second slingers are now levy hastati in mail, and
+  its legionaries militia, to stay in budget (`web/tests/army.test.js`).
+  The bought-league's kinds a people may not buy (all-levy Rome, foot for
+  Sarmatia) are left out of it and of the soak (`bought-league.js`).
+
+**Tests retaken**: the whole-battle fingerprints of Rome against Han
+(`asked-unchanged`, `messengers-unchanged`, old values in their headers):
+Rome steadier, Han larger. On ashford with no Commander the two battles now
+run to the 150-turn guard, marching up and down either side of the ford;
+not the perks' doing (it happens without them, Mongolia against Tibet on
+ashford, seed 77), and the day ends such a battle in the app.
+`held-commander.test.js`'s battle in which Macedon's Commander is taken
+(seed 708 to HELD_SEED).

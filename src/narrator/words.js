@@ -415,3 +415,40 @@ const ON_HIS_OWN = {
 }
 
 module.exports = { orderWords, moraleWords, ORDER, OWN_EDGE, HOLD_THERE, KIT, RIDE_WITH, LOYALTY_WORDS, VALUES_WORDS, VETERANCY_WORDS, RIDER, NIGHT, REPORT, GROUND, windWords, SKIRMISH_WORDS, THROWN_WORDS, MAKING, COMMANDER_KINDS, NATURE_SAID, HOLDS_DEAR, COMMANDER_TITLES, ENEMY_COMMANDER, ON_HIS_OWN }
+
+// Each people's perks (tables.PERKS; docs/design/army-balance.md, part 9),
+// one short line each, for the screen where he chooses his faction and the
+// army screen: a name, and what it does for him, in his words. `drawback`
+// marks one that costs him (the Berbers in woods and marsh).
+const PERK_WORDS = {
+  discipline: { name: 'Discipline', said: 'your men hold their nerve a little longer than others do.' },
+  old_soldiers: { name: 'Veterans of war', said: 'the Silver Shields fight as seasoned men from their first battle.' },
+  last_man: { name: 'To the last man', said: 'your men do not break until half of them have fallen.' },
+  perioeci: { name: 'The perioeci', said: 'your levy and militia fight as seasoned men.' },
+  merchant_wealth: { name: 'Merchant wealth', said: 'you have 32 supply points to buy your army, where most have 30.' },
+  sun_hardened: { name: 'Men of the hot lands', said: 'your men tire more slowly in a fight.' },
+  bow_and_horse: { name: 'Bow and horse', said: 'your bowmen and slingers shoot harder with your horse right beside them.' },
+  small_bands: { name: 'Small bands', said: 'your men fight harder against a unit bigger than their own.' },
+  dense_ground: { name: 'Men of the open desert', said: 'woods and marsh slow your men more than other men.', drawback: true },
+  feigned_retreat: { name: 'Feigned retreat', said: 'your horse break off a fight and get away with little harm.' },
+  larger_units: { name: 'Many hands', said: 'every unit you buy comes with a fifth more men.' },
+  crossbows: { name: 'Crossbows', said: 'you alone can field them.' },
+  wootz: { name: 'Wootz steel', said: 'your blades bite through a tenth of the enemy\'s armour.' },
+  mountain_warfare: { name: 'Mountain fighters', said: 'on a hill your men fight harder and stand firmer.' },
+  surgeons: { name: 'Surgeons', said: 'of the men who would fall in a fight, your surgeons save one in twenty.' },
+  plains_horse: { name: 'Horse of the plains', said: 'your horse fight harder on open ground, and more of their charge breaks into a wall of spears.' },
+  parthian_shot: { name: 'The Parthian shot', said: 'your horse archers shoot as hard riding as standing.' },
+  woodland: { name: 'Woodsmen', said: 'your men cross woods as easily as open ground.' },
+  hill_defence: { name: 'Hill men', said: 'on a hill your men stand firmer.' },
+  rhomphaia: { name: 'The rhomphaia', said: 'the long blade is yours alone, for any of your foot.' },
+  guerrilla: { name: 'Hill and forest fighters', said: 'your men fight harder on hills and in woods.' },
+  samnite_bravery: { name: 'Samnite courage', said: 'your men do not break until three in ten have fallen; your elite, four in ten.' },
+  militia_veterans: { name: 'Homeland militia', said: 'your militia fight as seasoned men.' },
+  cheap_mercenaries: { name: 'Hired swords', said: 'veteran mercenaries cost you 7 supply points, not 9.' },
+  berserker: { name: 'Fury', said: 'an enemy you catch by surprise is shaken half as much again.' },
+  noble_cavalry: { name: 'Noble horse', said: 'your horse fight harder against an enemy already in a fight.' },
+  bow_and_spear: { name: 'Bow and spear', said: 'your archers shoot harder with your spearmen right beside them.' },
+  rapid_fortification: { name: 'Quick to dig in', said: 'men who stand their ground to meet the enemy are harder to break into.' }
+}
+
+module.exports.PERK_WORDS = PERK_WORDS
