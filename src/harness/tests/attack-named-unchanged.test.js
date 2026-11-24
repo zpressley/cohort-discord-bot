@@ -38,9 +38,10 @@
 // would hold from the field's own forming-up places).
 //
 // Retaken when armies marched in column, a ford took one unit at a time,
-// broken units ran round the enemy and skirmishers stood with their backs
-// to the edge (docs/DECISIONS.md, "How columns, wavering under fire and
-// flight were mended"). They were d6b78ab1, fc0d511e, 7ceeb2cc, a9616de5,
+// broken units ran round the enemy, skirmishers stood with their backs
+// to the edge, and Ashford's east army formed up a tile further back and
+// Thornwood's west two tiles nearer (docs/DECISIONS.md, "How columns,
+// wavering under fire and flight were mended"). They were d6b78ab1, fc0d511e, 7ceeb2cc, a9616de5,
 // df860211, ade1ebaa, 29c7796a.
 
 const { test } = require('node:test')
@@ -62,8 +63,8 @@ function fingerprint(text) {
 const BEFORE = {
   'crownhill 1': '5378c566',
   'crownhill 2': '72acd97d',
-  'thornwood 1': '40d2a95a',
-  'thornwood 2': '47ba40bc',
+  'thornwood 1': '12b2e567',
+  'thornwood 2': '7b83f962',
   'meeting 1': 'b3d6f42f',
   'meeting 2': 'cfde19ad',
   'meeting 3': 'aa331d26'

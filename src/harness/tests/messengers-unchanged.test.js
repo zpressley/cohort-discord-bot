@@ -52,9 +52,10 @@
 // 4fa3b601 23.
 //
 // Retaken when armies marched in column, a ford took one unit at a time,
-// broken units ran round the enemy and skirmishers stood with their backs
-// to the edge (docs/DECISIONS.md, "How columns, wavering under fire and
-// flight were mended"). The battles were b01c713a 25, 39ecf1e5 26,
+// broken units ran round the enemy, skirmishers stood with their backs
+// to the edge, and Ashford's east army formed up a tile further back and
+// Thornwood's west two tiles nearer (docs/DECISIONS.md, "How columns,
+// wavering under fire and flight were mended"). The battles were b01c713a 25, 39ecf1e5 26,
 // 15f2219b 13, 842dd7c2 23.
 
 const { test } = require('node:test')
@@ -75,8 +76,8 @@ function fingerprint(text) {
 const BEFORE = {
   'crownhill 1': 'f15578bb 16',
   'crownhill 2': '3749bac6 18',
-  'ashford 1': '43ea0117 17',
-  'ashford 2': 'e9f21cee 16'
+  'ashford 1': '31e04a3 17',
+  'ashford 2': '5af5b192 16'
 }
 
 test('a battle with no Commander on the field runs exactly as before riders, event for event', () => {

@@ -62,9 +62,10 @@
 // 824d0cc9 27, 15f2219b 13, 4fa3b601 23 (no Commander).
 //
 // Retaken when armies marched in column, a ford took one unit at a time,
-// broken units ran round the enemy and skirmishers stood with their backs
-// to the edge (docs/DECISIONS.md, "How columns, wavering under fire and
-// flight were mended"). The battles were 48be1b7d 26, 630cf9be 32,
+// broken units ran round the enemy, skirmishers stood with their backs
+// to the edge, and Ashford's east army formed up a tile further back and
+// Thornwood's west two tiles nearer (docs/DECISIONS.md, "How columns,
+// wavering under fire and flight were mended"). The battles were 48be1b7d 26, 630cf9be 32,
 // b73254c7 12, c80e8547 23 (everyone asked) and b01c713a 25, 39ecf1e5 26,
 // 15f2219b 13, 842dd7c2 23 (no Commander).
 
@@ -107,8 +108,8 @@ test('a battle saved before the riders rulings (marked everyoneAsked) plays back
   assert.deepEqual(play({ everyoneAsked: true }, { commander: true }), {
     'crownhill 1': '215377e2 16',
     'crownhill 2': '32628ef1 18',
-    'ashford 1': 'e31d6dc4 16',
-    'ashford 2': '4a6dc1e6 15'
+    'ashford 1': 'a74cc9c8 16',
+    'ashford 2': 'a7d367ba 15'
   })
 })
 
@@ -116,7 +117,7 @@ test('a battle with no Commander on the field runs exactly as before the riders 
   assert.deepEqual(play({}, { commander: false }), {
     'crownhill 1': 'f15578bb 16',
     'crownhill 2': '3749bac6 18',
-    'ashford 1': '43ea0117 17',
-    'ashford 2': 'e9f21cee 16'
+    'ashford 1': '31e04a3 17',
+    'ashford 2': '5af5b192 16'
   })
 })
