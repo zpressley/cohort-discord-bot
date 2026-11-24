@@ -1089,9 +1089,11 @@ async function tent(token) {
         </div>`}
       </div>`).join('')
     const fallen = v.fallen.length ? `<p class="label-caps">Lost</p>${v.fallen.map(f => `<p class="note">${esc(f.name)}: ${f.fled ? 'fled the field' : 'destroyed'}</p>`).join('')}` : ''
+    // The computer's Commander: his name, and what is said of him.
+    const them = v.enemyCommander ? `<p class="note"><strong>The enemy's Commander:</strong> ${esc(v.enemyCommander.said)}</p>` : ''
     const seen = v.enemies.length
-      ? `<p class="label-caps">${v.commander?.status === 'held' ? 'The enemy, as you can see it from where you are held' : 'The enemy, as you know it'}</p>${v.enemies.map(e => `<p class="note">${esc(e.name)} at ${esc(e.at)}: ${esc(e.said)}</p>`).join('')}`
-      : '<p class="note">No enemy in sight.</p>'
+      ? `<p class="label-caps">${v.commander?.status === 'held' ? 'The enemy, as you can see it from where you are held' : 'The enemy, as you know it'}</p>${them}${v.enemies.map(e => `<p class="note">${esc(e.name)} at ${esc(e.at)}: ${esc(e.said)}</p>`).join('')}`
+      : `${them}<p class="note">No enemy in sight.</p>`
     body.innerHTML = `${units || '<p class="note">No units standing.</p>'}${fallen}${seen}`
     body.querySelectorAll('[data-pick]').forEach(b => b.addEventListener('click', () => {
       state.picked = state.picked === b.dataset.pick ? null : b.dataset.pick

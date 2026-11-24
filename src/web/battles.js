@@ -30,6 +30,7 @@ const { interpretText } = require('../interpreter/orders')
 const { lyingInWait } = require('../interpreter/resolve')
 const { assignOfficers } = require('../engine/command/roster')
 const { planTurn } = require('../opponent/planner')
+const { withCommander, commanderOf: enemyCommanderOf } = require('../opponent/commander')
 const { musterOfficers, settleBattle, ridesWith, createCompany } = require('../engine/command/company')
 const { unitsOf } = require('../engine/command/company')
 const { matchedVeterancy } = require('../engine/veterans/veterancy')
@@ -43,7 +44,7 @@ const { digest, summarise, placeName } = require('../narrator/turnNarrator')
 const { gradeOf, DEATH_ODDS, loyaltyBand } = require('../engine/command/officers')
 const T = require('../engine/combat/tables')
 const { narrateTurn, report } = require('../narrator/turnNarrator')
-const { orderWords, RIDER, NIGHT, REPORT, GROUND } = require('../narrator/words')
+const { orderWords, RIDER, NIGHT, REPORT, GROUND, ENEMY_COMMANDER } = require('../narrator/words')
 const { loadScenario, SCENARIOS, mapChoices } = require('../adapters/hotseat/scenarios')
 const { MAPS, groundOf } = require('../data/maps')
 const { FACTIONS, factionChoices } = require('../engine/army/factions')
@@ -454,6 +455,9 @@ function createBattleStore({ dir = null, ai = null, now = () => Date.now() } = {
       // the next day it is the army it had at nightfall.
       if (solo && !night) spec = matchComputer(spec, side, other)
     }
+    // Against the computer, its Commander: a name and a character from the
+    // seed (opponent/commander.js), or the day before's.
+    if (solo) spec = withCommander(spec, other, seed, m.enemyCommander ?? null)
     let game
     try {
       game = createGame(spec, { seed })
@@ -1104,6 +1108,9 @@ function createBattleStore({ dir = null, ai = null, now = () => Date.now() } = {
       choosing: !atGame && choosing(entry, side),
       // Whose army this side is (a faction of src/data/factions.js), if any.
       faction: sideFaction(game.spec, side),
+      // The computer's Commander against him: his name, and what is said
+      // of him (his character, in a word). Nothing of how he will fight.
+      enemyCommander: enemyCommanderView(game.spec, side),
       commander: commanderView_(game, side, atGame),
       // An enemy Commander this side holds, and what he offers for his
       // freedom (only what he chose to offer, and what this side has seen).
@@ -1113,6 +1120,12 @@ function createBattleStore({ dir = null, ai = null, now = () => Date.now() } = {
         ? { ...tally(game), officers: officerFates(game, side), company: Boolean(entry.commanders?.[side]), commander: commanderEnd(game, side), ...nightOf(entry, side) }
         : null
     }
+  }
+
+  function enemyCommanderView(spec, side) {
+    const other = Object.keys(spec.sides).find(s => s !== side)
+    const them = enemyCommanderOf(spec, other)
+    return them ? { name: them.name, said: ENEMY_COMMANDER.said(them.name, them.character) } : null
   }
 
   /**
@@ -1324,6 +1337,7 @@ function createBattleStore({ dir = null, ai = null, now = () => Date.now() } = {
       ...(game.spec.turnLimit ? { turnLimit: game.spec.turnLimit } : { dayMinutes: game.spec.dayMinutes }),
       nightBefore: night.units,
       ground: game.spec.objectives ?? [],
+      ...(solo ? { enemyCommander: enemyCommanderOf(game.spec, other) } : {}),
       day: (entry.day ?? 1) + 1
     })
     const next = battles.get(made.id)
@@ -1740,6 +1754,10 @@ function createBattleStore({ dir = null, ai = null, now = () => Date.now() } = {
         turn.seenEnemyIds = knownIds
         turn.whereIs = (id) => word.units[id]?.position ?? null
       }
+      // His first dispatch of a battle tells him, against the computer, whom
+      // he faces (after the ground, which goes first)...
+      const them = entry.dispatches[side].length === 0 ? enemyCommanderOf(game.spec, Object.keys(game.spec.sides).find(s => s !== side)) : null
+      if (them) lines.unshift(ENEMY_COMMANDER.faced(them.name, them.character))
       // His first dispatch of a battle tells him the ground to fight for.
       if (entry.dispatches[side].length === 0 && game.objectives.length > 0) {
         const names = game.objectives.map(o => o.name)

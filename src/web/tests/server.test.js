@@ -102,6 +102,16 @@ test('fog of war is held on the server: a side never receives an enemy it has no
     // The ground to fight for: where it is, who holds it (every side knows at
     // once), and its words; nothing of who stands on it.
     assert.deepEqual(raw.objectives.map(o => Object.keys(o).sort()), [['holder', 'id', 'name', 'said', 'tiles']])
+    // A friend's side has no computer's Commander to tell of.
+    assert.equal(raw.enemyCommander, null)
+    // Against the computer: its Commander's name and what is said of him,
+    // and nothing of how he plays (opponent/planner.js, CHARACTERS).
+    const solo = (await app.api('POST', '/api/battles', { opponent: 'standing', side: 'red', seed: 5 })).body.seats.red
+    const told = (await app.api('GET', `/api/seat/${solo}`)).body
+    assert.deepEqual(Object.keys(told.enemyCommander).sort(), ['name', 'said'])
+    for (const word of ['character', 'pullOut', 'engage', 'horseAt', 'horseInReserve', 'commanderName']) {
+      assert.equal(JSON.stringify(told).includes(word), false, `no "${word}" in the answer`)
+    }
   } finally { await app.close() }
 })
 

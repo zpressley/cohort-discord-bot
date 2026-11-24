@@ -30,6 +30,9 @@
 //                   it is ("20 min ago"); a unit no rider can get through
 //                   to is cut off ("no word of them since 1 h 20 min into
 //                   the battle")
+//   bold, steady, cautious
+//                   an officer's nature, and the enemy Commander's
+//                   character as it is told ("said to be cautious")
 //
 // Presentation only: nothing here decides anything.
 
@@ -320,4 +323,13 @@ const SKIRMISH_WORDS = {
   gaveGround: (unit, before) => `${unit} ${ORDER.withdraw.did} before ${before}, keeping out of their reach`
 }
 
-module.exports = { orderWords, moraleWords, ORDER, OWN_EDGE, HOLD_THERE, KIT, RIDE_WITH, LOYALTY_WORDS, VALUES_WORDS, VETERANCY_WORDS, RIDER, NIGHT, REPORT, GROUND, windWords, SKIRMISH_WORDS }
+// The computer's Commander (opponent/commander.js): his name, and his
+// character as his name goes before him, in the words of an officer's
+// nature (bold, steady, cautious). Told in the first dispatch and on the
+// Army tab, over the enemy as he knows it.
+const ENEMY_COMMANDER = {
+  said: (name, character) => `${name}, said to be ${character}`,
+  faced: (name, character) => `You face ${name}, who commands the enemy. He is said to be ${character}.`
+}
+
+module.exports = { orderWords, moraleWords, ORDER, OWN_EDGE, HOLD_THERE, KIT, RIDE_WITH, LOYALTY_WORDS, VALUES_WORDS, VETERANCY_WORDS, RIDER, NIGHT, REPORT, GROUND, windWords, SKIRMISH_WORDS, ENEMY_COMMANDER }
