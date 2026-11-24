@@ -295,3 +295,22 @@ test('the Army tab offers "ride with them" only for a unit beside the one he rid
     assert.match(tooFar.questions[0], /^Spears are \d+ tiles \(about \d+ m\) from Swords, whom you ride with/)
   } finally { await app.close() }
 })
+
+// Second playthrough, November 24 (S11): a held Commander was told "unless
+// you take it from him within 30 min, the field is his", though he can send
+// no orders.
+test('a held Commander is never told to take or hold the ground: the lines speak of his army', async () => {
+  const app = await start()
+  try {
+    const { seats } = await takenInBattle(app)
+    for (let t = 0; t < 12; t++) {
+      const tent = (await app.api('GET', `/api/seat/${seats.red}`)).body
+      if (tent.battle.status === 'finished' || tent.commander.status !== 'held') break
+      assert.doesNotMatch(tent.objectives[0].said, /^You hold|take it within/, tent.objectives[0].said)
+      const since = tent.dispatches.findIndex(d => d.lines.some(l => /^You were taken/.test(l)))
+      const lines = tent.dispatches.slice(0, Math.max(0, since)).flatMap(d => d.lines)
+      assert.ok(!lines.some(l => /unless you take|take it from him, or|^Hold .* more and|hold it alone and/.test(l)), lines.join(' / '))
+      await app.api('POST', `/api/seat/${seats.blue}/orders`, { text: 'everyone advance' })
+    }
+  } finally { await app.close() }
+})

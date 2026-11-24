@@ -22,12 +22,24 @@ const { REPORT } = require('./words')
 
 // Where a tile is, in words: the feature it is part of, or the nearest
 // feature with a name, or open ground near the nearest feature.
+//
+// One place has one name, to both sides (docs/REVIEW-2026-11.md, S13: the
+// same fight was "on the road (F6-NW)" to one side and "at Brook Ford
+// (F6-NW)" to the other). A place is told with its quarter of a grid square,
+// so it is named by the quarter: the most particular named feature in it
+// (the one of fewest tiles: a ford before the road through it), whichever
+// of its four tiles a unit stands on. With none named, the tile's own ground.
 function placeName(map, position) {
+  const named = quarterOf(position).flatMap(t => featuresAt(map, t)).filter(f => f.name)
+    .sort((a, b) => a.tiles.length - b.tiles.length || String(a.name).localeCompare(String(b.name)))
+  if (named.length > 0) {
+    const f = named[0]
+    return `${f.kind === 'hill' || f.kind === 'road' ? 'on' : 'at'} ${PLACE.name(f.name)}`
+  }
   if (map.terrainAt(position) === 'road') return 'on the road'
   const here = featuresAt(map, position).filter(f => f.kind !== 'road')
   if (here.length > 0) {
     const f = here[0]
-    if (f.name) return `${f.kind === 'hill' ? 'on' : 'at'} ${PLACE.name(f.name)}`
     return { hill: 'on the high ground', woods: 'in the woods', marsh: 'in the marsh', clearing: 'in a clearing', ford: 'at a ford', bridge: 'on a bridge', river: 'in the river' }[f.kind] ?? 'in the field'
   }
   let best = null
@@ -39,6 +51,13 @@ function placeName(map, position) {
   if (!best || best.tiles > 12) return 'in open ground'
   const what = best.f.name ? PLACE.name(best.f.name) : `the ${best.f.kind === 'hill' ? 'high ground' : best.f.kind}`
   return `in open ground ${best.tiles * TILE_METRES} m ${compassWord(best.f.centre, position)} of ${what}`
+}
+
+// The four tiles of a grid square's quarter (engine/map/grid.js: 2x2 tiles).
+function quarterOf(position) {
+  const x = position.x - (position.x % 2)
+  const y = position.y - (position.y % 2)
+  return [{ x, y }, { x: x + 1, y }, { x, y: y + 1 }, { x: x + 1, y: y + 1 }]
 }
 
 // The units an event is about.
@@ -210,7 +229,7 @@ function orderPlace(map, position) {
 }
 
 // What an order's condition was, and what the unit then did, in words.
-const REACTED_TO = { sees: 'saw the enemy it was warned of', attacked: 'was attacked', breaks: 'saw its friends break' }
+const REACTED_TO = { sees: 'saw the enemy they were warned of', attacked: 'were attacked', breaks: 'saw their friends break' }
 // (It has only just turned to the other thing, so "began to" where the plain
 // past would say it was already done.)
 function didWords(map, event) {
@@ -225,11 +244,18 @@ const possessive = (name) => (/s$/i.test(name) ? `${name}'` : `${name}'s`)
 const listOf = (names) => names.length <= 1 ? names.join('') : `${names.slice(0, -1).join(', ')} and ${names.at(-1)}`
 const men = (n) => (n === 1 ? '1 man' : `${n} men`)
 const capital = (word) => String(word).charAt(0).toUpperCase() + String(word).slice(1)
+// A unit is men, and plural in this game's English: "Hastati were pinned",
+// "enemy troops hold it". Only an enemy no one saw ("an unseen enemy",
+// maskNames) is one.
+const ONE = 'an unseen enemy'
+const was = (id) => (id === ONE ? 'was' : 'were')
+const is = (id) => (id === ONE ? 'is' : 'are')
+const s_ = (id, verb) => (id === ONE ? `${verb}s` : verb)
 
 // How a unit stands after a fight, when it is worth saying.
 function shaken(side) {
   const state = moraleWords(side.morale)
-  return state === 'firm' ? '' : `${side.unitId} is ${state}; `
+  return state === 'firm' ? '' : `${side.unitId} ${is(side.unitId)} ${state}; `
 }
 
 const NAME_FIELDS = ['unitId', 'aId', 'bId', 'by', 'on', 'blockedBy']
@@ -250,18 +276,18 @@ function plainFact(map, event, howMany = countAll) {
   switch (event.type) {
     case 'move': return `${event.unitId} marched ${distance(event.from, event.to) * TILE_METRES} m ${compassWord(event.from, event.to)}, now ${whereAt(map, event.to)}` +
       (event.blockedBy ? `, halted by ${event.blockedBy}` : '')
-    case 'arrived': return `${event.unitId} arrived ${whereAt(map, event.at)}` + (event.then === 'hold' ? ' and holds it' : '')
+    case 'arrived': return `${event.unitId} arrived ${whereAt(map, event.at)}` + (event.then === 'hold' ? ` and ${s_(event.unitId, 'hold')} it` : '')
     case 'halted': return `${event.unitId} could get no further${event.blockedBy ? `, ${event.blockedBy} in the way` : ''}`
     case 'contact': return `${event.aId} and ${event.bId} came to blows`
-    case 'surprise': return `${event.unitId} was caught on the march by ` +
-      (event.by === 'an unseen enemy' ? 'an enemy no one had seen' : `${event.by}, unseen until it struck`)
+    case 'surprise': return `${event.unitId} ${was(event.unitId)} caught on the march by ` +
+      (event.by === ONE ? 'an enemy no one had seen' : `${event.by}, unseen until they struck`)
     case 'exchange': return `${event.a.unitId} and ${event.b.unitId} fought` +
       (event.rounds > 1 ? ` for ${event.rounds * 10} minutes` : '') +
-      `: ${event.a.unitId} lost ${event.a.killed} men, ${event.b.unitId} lost ${event.b.killed}` +
+      `: ${event.a.unitId} lost ${men(event.a.killed)}, ${event.b.unitId} lost ${event.b.killed}` +
       `; ${shaken(event.a)}${shaken(event.b)}`.replace(/; $/, '')
     case 'standoff': return `${event.aId} and ${event.bId} were both close to breaking`
     case 'push': return `${event.by} drove ${event.unitId} back${event.lostHighGround ? ' off the high ground' : ''}`
-    case 'crush': return `${event.unitId} was pinned with nowhere to give way`
+    case 'crush': return `${event.unitId} ${was(event.unitId)} pinned with nowhere to give way`
     case 'reacted': return `${event.unitId} ${REACTED_TO[event.when] ?? 'saw the moment come'}${event.when === 'sees' && event.kind ? ` (${event.kind})` : ''} and, as ordered, ${didWords(map, event)}`
     case 'lostThread': return (event.headless
       ? `${event.unitId}, with no officer, had only the first of their orders`
@@ -291,13 +317,13 @@ function plainFact(map, event, howMany = countAll) {
     case 'deserted': return `${men(event.men)} of ${event.unitId} slipped away${event.officer ? `, ${event.officer} unable or unwilling to hold them` : ''}; ${event.strength} left`
     case 'fled': return `${event.unitId} left the field` + (howMany(event.unitId, event.strength) ? ` with ${howMany(event.unitId, event.strength)}` : '')
     case 'rallied': return `${event.unitId} rallied ${whereAt(map, event.at)}` + (howMany(event.unitId, event.strength) ? ` with ${howMany(event.unitId, event.strength)}` : '') +
-      (moraleWords(event.morale) === 'at breaking point' ? ', at breaking point: it will not stand long without a success near it' : '')
+      (moraleWords(event.morale) === 'at breaking point' ? ', at breaking point: they will not stand long without a success near them' : '')
     case 'heldBack': return HELD_BACK.line(event.unitId)
     case 'heartened': return `${listOf(event.units ?? [event.unitId])} took heart at the breaking of ${event.by}`
-    case 'destroyed': return `${event.unitId} was destroyed`
+    case 'destroyed': return `${event.unitId} ${was(event.unitId)} destroyed`
     case 'crowding': return event.tier === 'organized'
       ? `${event.unitId} had room to fight again`
-      : `${possessive(event.unitId)} ranks were ${event.tier}: ${event.men} men packed onto one spot ${whereAt(map, event.at)}, which blunts their fighting`
+      : `${possessive(event.unitId)} ranks were ${event.tier}: ${men(event.men)} packed onto one spot ${whereAt(map, event.at)}, which blunts their fighting`
     case 'objective': return event.close ? `${capital(event.side)} is ${event.close} minutes from taking the field by holding ${event.name}`
       : event.side
       ? `${capital(event.side)} took ${event.name}`
@@ -310,15 +336,15 @@ function plainFact(map, event, howMany = countAll) {
     case 'ambushHeld': return event.reason === 'on guard'
       ? `${event.unitId} let ${event.on} pass: it came on guard, not worth the strike`
       : `${event.unitId} let ${event.on} pass, as ordered`
-    case 'hidden': return `${event.unitId} went into hiding ${whereAt(map, event.at)} and is hidden`
+    case 'hidden': return `${event.unitId} went into hiding ${whereAt(map, event.at)} and ${is(event.unitId)} hidden`
     case 'hideFailed': return event.reason === 'watched'
       ? `${event.unitId} tried to hide but the enemy was watching`
       : `${event.unitId} found no cover to hide in`
     case 'checked': return `${event.unitId} searched the ground ${whereAt(map, event.at)}` +
       (event.found.length ? ` and found ${event.found.join(', ')} hidden there` : ' and found nothing')
-    case 'revealed': return event.reason === 'found' ? `${event.unitId} was discovered`
-      : event.reason === 'stumbled on' ? `${event.unitId} was stumbled upon`
-      : event.reason === 'noticed' ? `${event.unitId} was noticed, hidden close by`
+    case 'revealed': return event.reason === 'found' ? `${event.unitId} ${was(event.unitId)} discovered`
+      : event.reason === 'stumbled on' ? `${event.unitId} ${was(event.unitId)} stumbled upon`
+      : event.reason === 'noticed' ? `${event.unitId} ${was(event.unitId)} noticed, hidden close by`
       : `${event.unitId} came out of hiding`
     case 'victory': return event.winner === 'draw' ? `the battle ended with neither side the victor (${event.reason})` : `the battle is over: ${capital(event.winner)} won (${event.reason})`
     case 'nightfall': return NIGHT.ended
@@ -424,21 +450,21 @@ function digest(events, { map, ownIds, whereIs = () => null }) {
     }
     if (u.foes.length) parts.push(`lost ${men(u.lost)} and killed ${u.killed}`)
     if (u.shotAt.length) parts.push(`shot at ${list(u.shotAt)}` + (u.felled ? `, felling ${men(u.felled)}` : ', to little effect'))
-    if (u.shotBy.length) parts.push(`was shot at by ${list(u.shotBy)}` + (u.lostToFire ? `, losing ${men(u.lostToFire)}` : ', without loss'))
+    if (u.shotBy.length) parts.push(`were shot at by ${list(u.shotBy)}` + (u.lostToFire ? `, losing ${men(u.lostToFire)}` : ', without loss'))
     if (u.drove.length) parts.push(`drove ${list(u.drove)} back`)
     if (u.brokeEnemies.length) parts.push(`broke ${list(u.brokeEnemies)}` + (u.cutDown ? `, cutting down ${u.cutDown} as they ran` : ''))
     else if (u.cutDown) parts.push(`cut down ${u.cutDown} of the fleeing enemy`)
-    if (u.drivenBy.length && !u.broke) parts.push(`was driven back by ${list(u.drivenBy)}`)
+    if (u.drivenBy.length && !u.broke) parts.push(`were driven back by ${list(u.drivenBy)}`)
 
     let end
-    if (u.destroyed) end = 'was destroyed'
+    if (u.destroyed) end = 'were destroyed'
     else if (u.broke) {
       end = `then BROKE and fled from ${u.broke}` + (u.lostInFlight ? `, losing ${u.lostInFlight} more in flight` : '') +
-        (u.left !== null ? `, and left the field with ${u.left} men` : '')
-    } else if (u.left !== null) end = `left the field with ${u.left} men`
-    else if (u.lostInFlight) end = `lost ${u.lostInFlight} men while fleeing`
-    else if (u.morale !== null && moraleWords(u.morale) !== 'firm') end = `and is ${moraleWords(u.morale)}`
-    else if (u.foes.length) end = 'and holds firm'
+        (u.left !== null ? `, and left the field with ${men(u.left)}` : '')
+    } else if (u.left !== null) end = `left the field with ${men(u.left)}`
+    else if (u.lostInFlight) end = `lost ${men(u.lostInFlight)} while fleeing`
+    else if (u.morale !== null && moraleWords(u.morale) !== 'firm') end = `and are ${moraleWords(u.morale)}`
+    else if (u.foes.length) end = 'and hold firm'
     if (end) parts.push(end)
     if (parts.length === 0) continue
 
@@ -481,7 +507,10 @@ function toTheCommander(event, ownIds) {
 
 // The ground to fight for, told to one side (turn.side) as its own or the
 // enemy's: every side knows at once when it changes hands.
-function toTheSide(event, side, over = false) {
+//
+// A Commander in the enemy's hands (held) can send no orders: the lines
+// speak of his army, not of what he should do (S11).
+function toTheSide(event, side, over = false, held = false, seen = null) {
   // The battle's end, in the side's own words (not "Red won (enemy army
   // broken)"); night is told by its own line.
   if (event.type === 'victory' && side) {
@@ -491,9 +520,17 @@ function toTheSide(event, side, over = false) {
   if (event.type !== 'objective' || !side) return null
   // Once the battle is over, holding the ground decides nothing: no "hold
   // it alone and the field is yours" after "the battle is over".
-  if (event.close) return over ? '' : GROUND.close(event.name, event.side === side, event.close)
-  if (event.side) return over ? GROUND.tookAtTheEnd(event.name, event.side === side) : GROUND.took(event.name, event.side === side)
-  return event.was ? GROUND.lost(event.name, event.was === side) : null
+  const words = held ? GROUND.held : GROUND
+  if (event.close) return over ? '' : words.close(event.name, event.side === side, event.close)
+  if (event.side) return over ? (held && event.side === side ? GROUND.held.tookAtTheEnd(event.name) : GROUND.tookAtTheEnd(event.name, event.side === side)) : words.took(event.name, event.side === side)
+  // Who is on it now he may already know: an enemy reported there, or his
+  // own men there by their word (seen(name), from the caller). Else no more
+  // than that it is no one's alone (S12).
+  if (!event.was) return null
+  const there = seen?.(event.name) ?? {}
+  if (event.was === side && there.enemy) return GROUND.contested(event.name, true, Boolean(there.own))
+  if (event.was !== side && there.own) return GROUND.contested(event.name, false)
+  return GROUND.lost(event.name, event.was === side)
 }
 
 function report(turn) {
@@ -510,7 +547,7 @@ function report(turn) {
   const over = Boolean(turn.over) || told.some(e => e.type === 'victory')
   const others = rest
     .filter(e => !busy || weight(e) < 6)
-    .map(e => ({ weight: weight(e), text: toTheCommander(e, ownIds) ?? toTheSide(e, turn.side, over) ?? plainFact(map, e, turn.howMany ?? countAll) }))
+    .map(e => ({ weight: weight(e), text: toTheCommander(e, ownIds) ?? toTheSide(e, turn.side, over, Boolean(turn.held), turn.onGround) ?? plainFact(map, e, turn.howMany ?? countAll) }))
     .filter(f => f.text)
 
   return [...fights, ...others]
@@ -570,15 +607,15 @@ You are given the facts as notes, the most important first. Turn them into a dis
 - No advice, no questions, no mention of turns, rules or dice.
 - Tell every note, with its place and square: what was seen ("report enemy ...") as much as the fighting. You may shorten the rule of the ground to fight for, but keep its name.
 - Speak to the commander as "you". What happened to him is "you were taken", never "we were taken" or "the commander was taken". But nothing happened to him unless a note says so in those words: never say he was taken, killed or wounded otherwise.
-- A note on the ground to fight for says only how things stand now: "hold it 30 min more and the field is yours" means the field is not yet won, and "you took it: hold it alone and the field is yours" means it must still be held. Never say the field is won, secured or yours unless a note says the battle is over.
+- A note on the ground to fight for says only how things stand now: "hold it 30 min more and the field is yours" means the field is not yet won, and "you took it: hold it alone and the field is yours" means it must still be held. Never say the field is won, secured or yours unless a note says the battle is over. "No word yet of who is on it" means he does not know: never say who is on it.
 - A note that says the battle is over comes first, and you open with it in its own words.
 
 Example notes:
-- Guards: fought enemy axes at North Ford (D4-SW); lost 9 men and killed 21; broke enemy axes, cutting down 5 as they ran, and holds firm
+- Guards: fought enemy axes at North Ford (D4-SW); lost 9 men and killed 21; broke enemy axes, cutting down 5 as they ran, and hold firm
 - Levy: fought enemy horse in open ground 50 m south of the woods (C5-NE); lost 17 men and killed 3, then BROKE and fled from enemy horse, losing 6 more in flight
-- Slingers went into hiding in the woods (B3-NE) and is hidden
+- Slingers went into hiding in the woods (B3-NE) and are hidden
 Example dispatch, in a plain soldier's voice:
-The Levy is broken. Enemy horse caught them in the open south of the woods (C5-NE), where they lost 17 men for 3 of the enemy, and 6 more were cut down as they ran. At North Ford (D4-SW) the Guards did better: they broke the enemy axes, killing 21 for 9 of our own and cutting down 5 more in the pursuit, and they hold firm. The Slingers have gone to ground in the woods (B3-NE), unseen.`
+The Levy have broken. Enemy horse caught them in the open south of the woods (C5-NE), where they lost 17 men for 3 of the enemy, and 6 more were cut down as they ran. At North Ford (D4-SW) the Guards did better: they broke the enemy axes, killing 21 for 9 of our own and cutting down 5 more in the pursuit, and they hold firm. The Slingers have gone to ground in the woods (B3-NE), unseen.`
 }
 
 /**
