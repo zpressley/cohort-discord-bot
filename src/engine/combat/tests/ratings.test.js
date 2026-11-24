@@ -420,3 +420,12 @@ test('a veteran unit fights a little better at each step; a unit with none fight
   assert.ok(legendary.fight < T.QUALITY_TIERS.professional.attack - T.QUALITY_TIERS.militia.attack,
     'a legendary unit gains less than the step from militia to professional')
 })
+
+test('a missile unit with a sidearm of its own fights hand to hand with it, and still shoots with its bow', () => {
+  // Kush's Golden Bows carry a sword (ruled 2026-11-24: "They can have a sword").
+  const bows = unit({ primaryWeapon: 'self_bow_professional' })
+  const swords = unit({ primaryWeapon: 'self_bow_professional', sidearm: 'sword_standard' })
+  assert.equal(R.baseAttackRating(swords), R.baseAttackRating(unit({ primaryWeapon: 'sword_standard' })))
+  assert.ok(R.baseAttackRating(swords) > R.baseAttackRating(bows), 'a sword, not a knife')
+  assert.equal(R.missileEffectiveness(swords, unit()), R.missileEffectiveness(bows, unit()))
+})

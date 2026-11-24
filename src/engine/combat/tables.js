@@ -522,7 +522,8 @@ const MISSILES = {
   // WEAPONS): its knife, not its sling or bow (the notebook: "engaged
   // archers fight (poorly) in melee"). null: its missile weapon's numbers,
   // as before, when a sling was swung as hard as a sword and braced
-  // against horse like a spear.
+  // against horse like a spear. A unit's own `sidearm` comes first (Kush's
+  // Golden Bows carry a sword: src/data/factions.js).
   SIDEARM: 'daggers'
 }
 

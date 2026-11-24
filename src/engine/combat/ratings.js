@@ -119,10 +119,12 @@ function effectivenessAgainst(striker, target) {
 // Recommendation A (docs/design/army-balance.md; taken 2026-11-23): what a missile unit fights with
 // hand to hand. With MISSILES.SIDEARM set, a unit whose weapon shoots
 // fights a melee with that weapon instead (it does not swing its sling);
-// unset, it fights with its missile weapon's numbers, as before.
+// unset, it fights with its missile weapon's numbers, as before. A unit
+// that carries a sidearm of its own (`sidearm`, a key of WEAPONS: Kush's
+// Golden Bows' sword, ruled 2026-11-24) fights with that.
 function handWeapon(unit) {
   const weapon = resolveWeapon(unit)
-  const sidearm = T.MISSILES.SIDEARM
+  const sidearm = unit.sidearm ?? T.MISSILES.SIDEARM
   if (sidearm && (weapon.range ?? 0) >= T.MISSILES.MIN_RANGE_M) return T.WEAPONS[sidearm] ?? weapon
   return weapon
 }
