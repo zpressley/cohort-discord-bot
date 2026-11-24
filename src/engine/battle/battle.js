@@ -39,7 +39,7 @@ const {
   resolveSimultaneousMovement, expandOrders, buildOccupancy, canEnter, moveUnit, crowdingByUnit
 } = require('../movement')
 const { createEventLog } = require('./events')
-const { normalizeOrder, planUnit, nextStep, isSeeking, NEAR_TILES } = require('./orders')
+const { normalizeOrder, planUnit, nextStep, isSeeking, NEAR_TILES, SEEKING: SEEKING_ORDERS } = require('./orders')
 const { grasp, losingTheThread, ownCommand, wouldYield, loyaltyOf } = require('../command/officers')
 const { createCommanders, stepCommanders, canRide } = require('../command/commander')
 const { byRider, riders, ridersTaken } = require('../command/messengers')
@@ -261,6 +261,40 @@ function stepTurn(state, sideOrders = {}, { sameTurn = false } = {}) {
     groundBound.set(unit.id, pick)
     return pick
   }
+  // Ground taken is fought for (the loose ends of November 24: "everyone
+  // take the Old Mill Bridge" stood beside the bridge watching the enemy's
+  // horse hold it for an hour). A unit sent to go to or stand on the ground
+  // to fight for (state.groundPost) goes at any enemy its side can see on
+  // that ground (GROUND_FIGHT.BESIDE tiles more), rather than stand and let
+  // him share it or hold it; with none there, it goes back to its own place
+  // and holds. A unit rallied with no heart does not.
+  // Missile troops shoot from where they stand, as before.
+  const onGround = (area, position, beside = 0) => {
+    const reach = (area.reach ?? (area.single === false ? 0 : 1)) + beside
+    return area.tiles.some(t => tileDistance(position, t) <= reach)
+  }
+  // The ground an order sends a unit to stand on, and where: a move or a
+  // stand there, or a hold given to a unit already on it. Null for any
+  // other order, or a place off the ground.
+  const groundAt = (order) => {
+    let at = null
+    const holds = order.action === 'hold' || (!order.action && (!order.target || order.target === 'hold'))
+    if (holds && !order.steps?.length) at = getUnit(world, order.unitId)?.position ?? null
+    else if (T.GROUND_FIGHT.ORDERS.includes(order.action) && order.target && order.target !== 'hold') {
+      try { at = toPosition(order.target) } catch { return null }
+    }
+    if (!at) return null
+    const area = (state.ground ?? []).find(a => onGround(a, at))
+    return area ? { area, tile: { ...at } } : null
+  }
+  const groundFoe = (unit, areaId) => {
+    const area = (state.ground ?? []).find(a => a.id === areaId)
+    if (!area) return null
+    const seen = seenAtStart.get(unit.side) ?? new Set()
+    return livingUnits(world)
+      .filter(e => e.side !== unit.side && !broken.has(e.id) && seen.has(e.id) && onGround(area, e.position, T.GROUND_FIGHT.BESIDE))
+      .sort((a, b) => tileDistance(unit.position, a.position) - tileDistance(unit.position, b.position) || a.id.localeCompare(b.id))[0] ?? null
+  }
   // Whom a unit pressing the enemy makes for: the nearest enemy its side
   // can see; else the nearest place one was last seen; else, told to
   // advance, the ground to fight for; else the enemy's side of the field.
@@ -443,6 +477,12 @@ function stepTurn(state, sideOrders = {}, { sameTurn = false } = {}) {
 
   // ── Orders ──────────────────────────────────────
   const orders = []
+  // Units going at an enemy on the ground they were sent to fight for this
+  // tick: they look for the fight, whatever their order (groundFoe).
+  const forGround = new Set()
+  // Units rallied with no heart that would not go at the enemy this tick
+  // (below): they look for no fight, whatever their order says.
+  const heldBack = new Set()
   const freshThisTurn = state.fresh
 
   // Has the moment an order's condition spoke of come, as this unit's
@@ -624,6 +664,13 @@ function stepTurn(state, sideOrders = {}, { sameTurn = false } = {}) {
       state.commanders[side].unitId = o.ride
     }
     const { orders: spelled } = expandOrders(held ? [] : given, effective)
+    // An order to go to or stand on the ground to fight for is marked with
+    // it before the line forms (a unit's own place in the line may lie just
+    // off it): the unit fights for that ground (below, groundFoe).
+    for (const o of spelled) {
+      const there = groundAt(o)
+      if (there) { o.forGround = there.area.id; o.groundTile = there.tile }
+    }
     // Units sent to one place together form up beside one another there
     // (formUp.js), toward the enemy as the side knows of him.
     const expanded = formUp(spelled, {
@@ -668,6 +715,11 @@ function stepTurn(state, sideOrders = {}, { sameTurn = false } = {}) {
       }
       state.orderBook.set(order.unitId, given)
       freshThisTurn.add(order.unitId)
+      // Sent to the ground to fight for: it fights for it (groundFoe). Any
+      // other order ends that.
+      state.groundPost ??= new Map()
+      if (sent.forGround) state.groundPost.set(order.unitId, { area: sent.forGround, tile: { ...(given.target ?? sent.groundTile) } })
+      else state.groundPost.delete(order.unitId)
       // What his Commander last told him, and when it reached him: his
       // intent, for an officer who must act on it alone (initiative.js).
       ;(state.lastOrder ??= new Map()).set(order.unitId, { turn, action: given.action })
@@ -767,6 +819,34 @@ function stepTurn(state, sideOrders = {}, { sameTurn = false } = {}) {
       }
       if (order) state.orderBook.set(unit.id, order)
       else state.orderBook.delete(unit.id)
+      // Sent to the ground to fight for: at an enemy on it or beside it;
+      // else, holding there and pushed off its place, back to it.
+      const post = state.groundPost?.get(unit.id)
+      if (post && order && T.GROUND_FIGHT.ORDERS.concat('hold').includes(order.action) && !shaken(unit) && ranged.missileRange(unit) === 0) {
+        const foe = groundFoe(unit, post.area)
+        if (foe) {
+          orders.push({ unitId: unit.id, target: overTheWater(unit, foe.position), seeking: true, careful: Boolean(order.careful) })
+          forGround.add(unit.id)
+          continue
+        }
+        if (order.action === 'hold' && !samePosition(unit.position, post.tile)) move = { unitId: unit.id, target: { ...post.tile } }
+      }
+      // A unit rallied with no heart in it (shaken) will not go at the
+      // enemy: it would break at the first blow, rally, be sent in and
+      // break again, for ever (the loose ends of November 24: Raven Ridge,
+      // Kush against Samnium, seed 14880801 of the captive league). Told to,
+      // it holds where it stands, keeping the order, until its men take
+      // heart; its report says so, once an order.
+      if (order && shaken(unit) && (SEEKING_ORDERS.includes(order.action))) {
+        heldBack.add(unit.id)
+        state.heldBack ??= new Map()
+        if (state.heldBack.get(unit.id) !== order) {
+          state.heldBack.set(unit.id, order)
+          log.emit('heldBack', turn, { unitId: unit.id, action: order.action, morale: resolver.getState(unit.id)?.morale ?? null })
+        }
+        orders.push({ unitId: unit.id, target: 'hold', seeking: false })
+        continue
+      }
       // Missile troops told to press the enemy do it their own way: they
       // close until they can shoot, and stand there shooting.
       const pressing = order ? order.action === 'advance' : standingFor(unit) === 'advance'
@@ -976,7 +1056,8 @@ function stepTurn(state, sideOrders = {}, { sameTurn = false } = {}) {
   // hidden force lets a column march by unless it chooses to strike.
   const seeking = (id) => {
     const unit = getUnit(world, id)
-    return sprung.has(id) || joining.has(id) || isSeeking(state.orderBook.get(id), standingFor(unit))
+    if (heldBack.has(id)) return false
+    return sprung.has(id) || joining.has(id) || forGround.has(id) || isSeeking(state.orderBook.get(id), standingFor(unit))
   }
   const seenNow = sightBySide(map, world, state.hidden)
   const picksFight = (id, otherId) =>
@@ -1205,6 +1286,7 @@ function stepTurn(state, sideOrders = {}, { sameTurn = false } = {}) {
     broken.delete(unit.id)
     state.rallied.set(unit.id, (state.rallied.get(unit.id) ?? 0) + 1)
     state.orderBook.delete(unit.id)
+    state.groundPost?.delete(unit.id)
     const morale = resolver.rally(unit)
     log.emit('rallied', turn, { unitId: unit.id, at: { ...unit.position }, strength: unit.strength, morale })
   }
