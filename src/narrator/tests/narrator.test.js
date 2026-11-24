@@ -190,3 +190,17 @@ test('an officer reacting as ordered, or losing the thread, is told to his own s
   const theirs = { ownIds: new Set(['blue_swords']), seenEnemyIds: new Set(['red_spears', 'red_archers']) }
   assert.deepEqual(visibleEvents([reacted, lost, roll], theirs), [], 'the enemy learns nothing of your orders')
 })
+
+// Ruled 2026-11-24: "No the day just ends the battle, you can choose to
+// fight again the next day."
+test('when night ends the battle, each side is told plainly that night has ended the fighting and neither side has won', async () => {
+  const night = [{ type: 'nightfall', turn: 72 }]
+  for (const ownIds of [new Set(['red_spears']), new Set(['blue_swords'])]) {
+    const lines = report({ map, ownIds, seenEnemyIds: new Set(), events: night })
+    assert.deepEqual(lines, ['night has ended the fighting, and neither side has won'])
+    // With no AI, or when it does not answer, the dispatch is the plain
+    // account, and says it too.
+    const told = await narrateTurn(null, { map, side: 'red', culture: 'x', ownIds, seenEnemyIds: new Set(), events: night, plain: lines.join('\n') })
+    assert.match(told.text, /neither side has won/)
+  }
+})

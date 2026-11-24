@@ -10,7 +10,7 @@ const { test } = require('node:test')
 const assert = require('node:assert/strict')
 
 const { createGame, submitOrders, waitingOn } = require('../orchestrator')
-const { COMMAND } = require('../../combat/tables')
+const { COMMAND, DAY } = require('../../combat/tables')
 
 const MAP = { name: 'plain-40', width: 40, height: 20, terrain: {} }
 const unit = (o) => ({
@@ -56,11 +56,38 @@ test('a Commander on a march is asked as soon as his units spot the enemy', () =
   assert.equal(stretch.at(-1).wanted.red, 'sighting')
 })
 
-test(`a Commander whose men have nothing left to do is asked again after ${COMMAND.QUIET * 10} minutes`, () => {
+// Ruled 2026-11-24: "Holding for several turns would still get interrupts
+// from passing enemy troops".
+test(`a Commander whose men only hold is not called back by the clock: with no news he waits ${COMMAND.LONGEST * 10} minutes`, () => {
   const game = createGame(spec(), { seed: 1 })
   const stretch = redTurn(game, [{ unitRef: 'guard', action: 'hold' }, { unitRef: 'second', action: 'hold' }])
-  assert.equal(stretch.at(-1).wanted.red, 'time')
-  assert.equal(stretch.flatMap(h => h.ticks).length, COMMAND.QUIET)
+  assert.equal(stretch.at(-1).wanted.red, 'long')
+  assert.equal(stretch.flatMap(h => h.ticks).length, COMMAND.LONGEST)
+  assert.ok(stretch.slice(0, -1).every(h => !h.wanted.red), 'the hour did not call him back')
+  assert.ok(stretch.slice(0, -1).every(h => h.wanted.blue), 'the computer is still asked on its own stops in between')
+})
+
+test('a Commander whose men only hold is called back when passing enemy troops come in sight', () => {
+  const game = createGame(spec(), { seed: 1 })
+  submitOrders(game, 'red', [{ unitRef: 'guard', action: 'hold' }, { unitRef: 'second', action: 'hold' }])
+  // The enemy marches west along the field, past the holding men.
+  const pass = [{ unitRef: 'foe', target: { x: 2, y: 7 } }, { unitRef: 'foe2', target: { x: 3, y: 7 } }]
+  const from = game.history.length
+  for (let i = 0; i < 50 && !game.outcome.decided && !waitingOn(game).includes('red'); i++) submitOrders(game, 'blue', i === 0 ? pass : [])
+  const stretch = game.history.slice(from - 1)
+  assert.equal(game.history.at(-1).wanted.red, 'sighting')
+  assert.ok(stretch.flatMap(h => h.ticks).length < COMMAND.LONGEST, 'before the longest wait')
+})
+
+test('two Commanders who both only hold all day are each asked at the longest wait, and night ends the battle', () => {
+  const game = createGame(spec({ commanders: { red: { unitId: 'guard' }, blue: { unitId: 'foe' } }, dayMinutes: DAY.MINUTES }), { seed: 1 })
+  const holds = { red: [{ unitRef: 'guard', action: 'hold' }, { unitRef: 'second', action: 'hold' }], blue: blueHolds }
+  for (let i = 0; i < 20 && !game.outcome.decided; i++) for (const side of waitingOn(game)) submitOrders(game, side, holds[side])
+  assert.equal(game.outcome.reason, 'night fell')
+  assert.equal(game.minutesElapsed, DAY.MINUTES)
+  // Asked at the start, then every six hours: never left waiting longer.
+  assert.deepEqual(game.history.map(h => h.ticks.length), [COMMAND.LONGEST, COMMAND.LONGEST])
+  assert.deepEqual(game.history.map(h => h.interrupt), ['long', 'night'])
 })
 
 // Two Commanders: red on the long march, blue's men a short step.
@@ -76,13 +103,15 @@ test('between two Commanders the battle stops only for the one wanted: the other
   assert.deepEqual(waitingOn(game), ['blue'], 'only blue is asked')
   const ran = submitOrders(game, 'blue', blueHolds)
   assert.equal(ran.status, 'processed', 'the battle moves on as soon as blue has given his orders')
-  assert.equal(game.calls.red, 0, 'red has not been asked since he gave his first orders')
-  // Blue holds; the battle goes on until red's men arrive.
-  for (let i = 0; i < 20 && !waitingOn(game).includes('red'); i++) submitOrders(game, 'blue', blueHolds)
-  assert.equal(game.history.at(-1).wanted.red, 'ready')
+  // Blue's men hold, and he waits for news: the battle goes on, asking
+  // neither, until red's men arrive.
+  assert.deepEqual(game.history.at(-1).wanted, { red: 'ready' })
+  assert.equal(game.calls.red, 1, 'red asked once since his first orders, when they were carried out')
 })
 
-test('a Commander who is not wanted may still send new orders: they go out when the battle moves on', () => {
+// Ruled 2026-11-24: "You can interrupt units mid March. But orders don't
+// come over till the end of the turn."
+test('you can interrupt units mid march, unasked, but the orders do not go out until the end of the turn in play', () => {
   const game = two()
   submitOrders(game, 'red', march)
   submitOrders(game, 'blue', blueStep)
@@ -90,16 +119,20 @@ test('a Commander who is not wanted may still send new orders: they go out when 
   // Red changes his mind, unasked: his men halt where they are.
   assert.equal(submitOrders(game, 'red', [{ unitRef: 'guard', action: 'hold' }, { unitRef: 'second', action: 'hold' }]).status, 'waiting')
   assert.equal(game.battle.orderBook.get('guard').action, 'move', 'not until the battle moves on')
+  const where = { ...game.battle.world.units.find(u => u.id === 'guard').position }
   submitOrders(game, 'blue', blueHolds)
-  assert.equal(game.battle.orderBook.get('guard').action, 'hold')
+  assert.equal(game.battle.orderBook.get('guard').action, 'hold', 'the march is broken off')
+  // They went out as the next stretch began: not a step further.
+  assert.deepEqual(game.battle.world.units.find(u => u.id === 'guard').position, where)
 })
 
-test('the day is counted in battle time when the spec says so', () => {
+test('the day is counted in battle time when the spec says so, and night ends the battle with no winner', () => {
   const game = createGame(spec({ dayMinutes: 60 }), { seed: 1 })
   for (let i = 0; i < 20 && !game.outcome.decided; i++) redTurn(game, [])
   assert.equal(game.outcome.decided, true)
   assert.equal(game.minutesElapsed, 60)
-  assert.match(game.outcome.reason, /^time ran out/)
+  assert.equal(game.outcome.reason, 'night fell')
+  assert.equal(game.outcome.winner, 'draw')
 })
 
 test('a battle saved before the rulings (everyoneAsked) asks every side at every stop, and a turn still ends within the hour', () => {
