@@ -34,6 +34,17 @@ A friend who opens their link to a two-player battle first sees "Who
 leads?": their Commanders whose armies are free, a new Commander, or none.
 Their orders wait on that choice; once the first turn has run it is closed.
 
+## Making a Commander
+
+"A new Commander" (`/commander/new?then=...`) is one screen: what kind of
+commander you are (ten), what you fight for (glory or survival), your
+faction for life, and your name (a plain one offered). Every answer is
+already chosen; "Take command" makes him and goes on to the muster, or back
+to "Who leads?". A browser with no Commander free to lead is sent there
+from the muster. His own page (`/commander/<his link>`, "His record" on
+Your officers) shows his answers, his title, his battles and how he fell.
+`docs/DECISIONS.md`, "How making a Commander was built".
+
 ## Buying the army
 
 A Commander buys his standard army himself, within his faction's budget,
