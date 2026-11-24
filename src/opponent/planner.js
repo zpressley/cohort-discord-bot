@@ -34,6 +34,7 @@ const { missileRange } = require('../engine/combat/ranged')
 const { canSkirmish } = require('../engine/battle/skirmish')
 const { createRng } = require('../engine/rng')
 const { positionKey } = require('../engine/map/labels')
+const { arrivalOf } = require('../engine/orchestrator/word')
 
 const TUNING = {
   // How near (tiles) an enemy in sight must be for the line to go in.
@@ -54,7 +55,12 @@ const TUNING = {
   // How far short of the enemy (tiles) the line forms before going in.
   FORM_UP: 5,
   // At or under this morale a unit in a fight is pulled out, if covered.
-  PULL_OUT: 30
+  PULL_OUT: 30,
+  // Minutes for which the place named in an order on a caught enemy rider
+  // is taken as where the enemy is going (forewarned, below): an hour, the
+  // longest most orders take to carry out. Claude's guess, not measured
+  // apart (docs/DECISIONS.md, "How the enemy catching a rider was built").
+  FOREWARNED: 60
 }
 
 // ── The computer's Commander: his character ─────────────
@@ -184,7 +190,9 @@ function planTurn(game, side) {
     // Where he is: the enemy in sight, else where this side's units last
     // saw him (the battle's own memory, which forgets a place once someone
     // has stood there and found it empty; the same thing "advance" goes by).
-    const remembered = [...(battle.lastSeen.get(side) ?? new Map()).values()]
+    // And where an enemy rider this side caught said his men were sent
+    // (forewarned, below): a place the enemy is going.
+    const remembered = [...(battle.lastSeen.get(side) ?? new Map()).values(), ...forewarned(game, side)]
     const known = inSight.length > 0 ? inSight.map(e => e.position) : remembered
     if (known.length > 0) {
       // Form up short of him; if he is already close, where we are.
@@ -285,6 +293,22 @@ function planTurn(game, side) {
 }
 
 const lineFighting = (line, fighting) => line.some(u => fighting.has(u.id))
+
+// ── An enemy rider caught ───────────────────────────────
+// The places named in the orders of enemy riders this side caught in the
+// last TUNING.FOREWARNED minutes (engine/command/messengers.js,
+// ridersTaken), once word of it has reached its Commander, if it has one
+// on the field: where the enemy is going. The simplest fair use of what
+// the order gives away: he knows what the order said, no more. An order
+// with no place in it (hold, advance on the enemy) tells it nothing here.
+function forewarned(game, side) {
+  const battle = game.battle
+  const since = battle.turn - TUNING.FOREWARNED / 10
+  return battle.log.ofType('riderTaken')
+    .filter(e => e.side === side && e.turn > since && e.order?.target)
+    .filter(e => !game.word?.[side] || arrivalOf(game, side, e) <= battle.turn)
+    .map(e => ({ ...e.order.target }))
+}
 
 // ── Character ───────────────────────────────────────────
 // The character of a side's Commander, from the battle's spec
@@ -394,4 +418,4 @@ function standable(map, wanted, taken) {
   return null
 }
 
-module.exports = { planTurn, temperament, strongpoint, formation, characterOf, TUNING, CHARACTERS, CHARACTER_NAMES }
+module.exports = { planTurn, temperament, strongpoint, formation, characterOf, forewarned, TUNING, CHARACTERS, CHARACTER_NAMES }

@@ -195,10 +195,24 @@ All three steps are built. Not built: everything under "What comes after".
   The level-30 officer as a "second" near whom orders arrive at once was
   ruled out as too powerful, and stays out.
 
+- **The enemy catching a rider and reading the order** is built
+  (`engine/command/messengers.js`, `ridersTaken`; see `docs/DECISIONS.md`,
+  "How the enemy catching a rider was built"). A rider keeps a tile clear
+  of the enemy he knows of as he sets out, but the enemy moves while he
+  rides: foot that come within a tile of his road, or horse within two,
+  may catch him (1 in 10, 1 in 4, each ten minutes). His order never
+  arrives and his side is never told (no word comes back). The side that
+  caught him hears it with the report of the unit that took him: the order
+  in the game's own words, for which unit, and where. The computer's
+  riders can be caught the same way; when it catches one, it takes the
+  place the order names as where the enemy is going. Reports going back
+  are not caught.
+
 ## What comes after, not in this build
 
 - Long missions for legendary officers (ruled November 23: "a great
   feature for legendary 20+").
 - A unit choosing to send word of something urgent faster than the
   routine report.
-- The enemy catching a rider and reading the order.
+- The enemy catching a rider who carries word back to his Commander (a rider
+  carrying an order can be caught: above).

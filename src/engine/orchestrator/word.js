@@ -283,6 +283,10 @@ function arrivalOf(game, side, event) {
     const shut = word.blocked.find(b => b.unitId === event.unitId && b.sent === event.turn)
     if (shut) return shut.back
   }
+  // An enemy rider caught by one of his units, and the order he carried:
+  // with that unit's report. The side whose rider it was never hears of it
+  // (no word comes back).
+  if (event.type === 'riderTaken') return event.side === side && event.turn >= word.since ? heardAt(word, event.unitId, event.turn) : Infinity
   if ((event.type.startsWith('rider') || event.type === 'cutOff' || event.type === 'inTouch') && event.side === side) return event.turn
   if (event.turn < word.since) return Infinity
   const mine = (id) => Boolean(word.units[id])
