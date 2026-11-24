@@ -812,7 +812,7 @@ async function armyScreen(token) {
           <header><h3>${esc(cap(eliteName() ?? s.elite.name))}</h3><span class="cost">Free</span></header>
           <span class="note">${esc(s.elite.words)}</span>
           <span class="note">Your elite unit, and ${esc(s.title)}'s own. Not for sale: it comes with every army, and always marches. You ride with them.</span>
-          <span class="note">${officerLine(eliteName() ?? s.elite.name)}</span>
+          <span class="note">${!commander.battles && !commander.officers.length ? 'Officer: your veteran, who leads them from your first battle' : officerLine(eliteName() ?? s.elite.name)}</span>
           ${state.naming === eliteName() ? nameBox(eliteName()) : `<div class="actions">${nameBox(eliteName())}</div>`}
         </div>
         ${s.units.map((u, i) => `
@@ -1471,6 +1471,23 @@ async function tent(token) {
     </div>`
   }
 
+  // The empty orders box shows orders of the kind the game reads, in his
+  // own units' names (not "spears" and "archers" he may not have).
+  function placeholder() {
+    const v = state.view
+    const own = v.own.filter(u => !u.broken)
+    if (!own.length) return ''
+    const pick = (i) => own[Math.min(i, own.length - 1)].name
+    const ground = (v.objectives ?? [])[0]?.name
+    const a = own[0]
+    const ref = gridRef(Math.min(v.map.width - 1, a.position.x + 3), a.position.y)
+    return [
+      ground ? `${pick(0)} to ${ground}; if the enemy is there, hold` : `${pick(0)} to ${ref}, then hold`,
+      `${pick(1)} to ${ref}, then advance`,
+      `${pick(2)} hold`
+    ].join('\n')
+  }
+
   // You hold the enemy Commander: his offer, and your answer. You need not
   // answer at all.
   function captiveCard() {
@@ -1593,7 +1610,7 @@ async function tent(token) {
     const rb = state.readback
     body.innerHTML = `${captiveCard()}
       <label for="orders" style="font-weight: 600; font-size: 14px">Your orders, as you would say them</label>
-      <textarea id="orders" class="orders-box" spellcheck="false" placeholder="spears to the ford; if their horse is there, hold&#10;swords to C4, then on to the bridge&#10;archers shoot the horse">${esc(state.draft)}</textarea>
+      <textarea id="orders" class="orders-box" spellcheck="false" placeholder="${esc(placeholder())}">${esc(state.draft)}</textarea>
       <div style="display: flex; gap: 8px; flex-wrap: wrap">
         <button class="btn" type="button" id="read-back">Read them back</button>
         ${state.draft ? '<button class="btn btn-quiet" type="button" id="clear">Clear</button>' : ''}
@@ -1611,6 +1628,7 @@ async function tent(token) {
         ${(rb.counsel ?? []).map(c => `<p class="counsel">${esc(c)}</p>`).join('')}
         ${(rb.notes ?? []).map(n => `<p class="note">Note: ${esc(n)}</p>`).join('')}
         ${rb.canSendRest ? '<button class="btn" type="button" id="send-rest">Send the orders that were understood</button>' : ''}
+        ${rb.notSent && !rb.canSendRest ? `<p class="note" role="status">Nothing was sent: your officers need an answer first. ${(rb.choices ?? []).length ? 'Tap an answer above, change the words,' : 'Change the words'} or Clear to send no new orders.</p>` : ''}
         ${rb.error ? `<p class="error">${esc(rb.error)}</p>` : ''}` : ''}`
     foot.innerHTML = `
       <button class="btn btn-main btn-wide" type="button" id="send"${state.sending ? ' disabled' : ''}>${state.sending ? 'Sending…' : 'Send the orders'}</button>
@@ -1654,7 +1672,7 @@ async function tent(token) {
         const result = await api('POST', `/api/seat/${token}/orders`, { text: state.draft, sendClear })
         state.sending = false
         if (result.status === 'clarify') {
-          state.readback = { understood: result.understood, questions: result.questions, choices: result.choices, counsel: result.counsel, canSendRest: result.canSendRest }
+          state.readback = { understood: result.understood, questions: result.questions, choices: result.choices, counsel: result.counsel, canSendRest: result.canSendRest, notSent: true }
           return renderPanel()
         }
         state.draft = ''

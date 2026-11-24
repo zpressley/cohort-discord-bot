@@ -54,7 +54,10 @@ function nextName(key, kit, names) {
   const bases = namesFor(key, kit)
   const free = bases.find(b => !taken(b, names))
   if (free) return free
-  let n = 2
+  // Where its fellows are numbered from 1 (the usual army's "Horse archers
+  // 1, 2, 3"), a gap in the numbers is filled first: a unit changed and
+  // changed back is "Horse archers 1" again, not "Horse archers 4".
+  let n = names.includes(bases[0]) ? 2 : 1
   while (names.includes(`${bases[0]} ${n}`)) n++
   return `${bases[0]} ${n}`
 }

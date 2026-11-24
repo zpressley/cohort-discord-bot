@@ -1811,7 +1811,9 @@ function createBattleStore({ dir = null, ai = null, now = () => Date.now() } = {
         // How many an enemy unit is, as far as his reports of it tell.
         howMany: menAsTold(game, side, captivity ? theirIds : ownIds),
         // Where each unit of the side told of stands now, to say where it fought.
-        whereIs: (id) => (captivity ? theirs : own).find(u => u.id === id)?.position ?? null
+        whereIs: (id) => (captivity ? theirs : own).find(u => u.id === id)?.position ?? null,
+        // The battle ended in this stretch: the ground no longer decides it.
+        over: Boolean(game.outcome.decided)
       }
       // The plain account: what this side could know, most important first,
       // the fighting told unit by unit.
@@ -1882,7 +1884,7 @@ function createBattleStore({ dir = null, ai = null, now = () => Date.now() } = {
         lines.unshift(`${GROUND.toFightFor(names)} ${GROUND.rule(names, game.spec.objectiveHoldMinutes ?? T.GROUND.HOLD_MINUTES, game.objectives.some(o => (o.reach ?? (o.single ? 1 : 0)) > 0))}`)
       }
       if (captivity?.captor) {
-        lines.unshift(`You are held by ${name(captivity.captor.id)} ${where(captivity.captor.position)}, and hear the reports as they come in to your captors`)
+        lines.unshift(`You are held by ${name(captivity.captor.id)} at ${where(captivity.captor.position)}, and hear the reports as they come in to your captors`)
       }
       // The battle's end, first, to every side: a battle decided by the
       // ground (or by a bargain) leaves no event of its own in the log, and
@@ -1891,7 +1893,7 @@ function createBattleStore({ dir = null, ai = null, now = () => Date.now() } = {
         const over = BATTLE_OVER.line(game.outcome.reason, game.outcome.winner === 'draw' ? null : game.outcome.winner === side)
         lines = [over, ...lines.filter(l => !l.startsWith('The battle is over'))]
       }
-      const told = await narrateTurn(ai, { ...turn, plain: lines.join('\n') })
+      const told = await narrateTurn(ai, { ...turn, plain: lines.join('\n'), facts: lines })
       entry.dispatches[side].push({
         turn: turnEntry.playerTurn,
         minutes: game.minutesElapsed,
