@@ -48,6 +48,7 @@ const { canSee, visionRange } = require('../map/sight')
 const { coverFor } = require('./hiding')
 const { canSkirmish, fallBack } = require('./skirmish')
 const { formUp } = require('./formUp')
+const { intoTheCrossing } = require('./crossing')
 
 const DEFAULT_MAX_TURNS = 20
 
@@ -195,6 +196,13 @@ function stepTurn(state, sideOrders = {}, { sameTurn = false } = {}) {
     const reach = Math.min(ranged.missileRange(unit), visionRange(unit, map))
     const stop = path?.find(tile => tileDistance(tile, target) <= reach)
     return stop && !samePosition(stop, unit.position) ? stop : target
+  }
+  // Where a unit going at the enemy at `target` steps: into a ford or
+  // bridge beside it when the enemy, in its side's sight, is close across
+  // it (crossing.js); else the target.
+  const overTheWater = (unit, target) => {
+    const there = livingUnits(world).some(e => e.side !== unit.side && samePosition(e.position, target) && seenAtStart.get(unit.side)?.has(e.id))
+    return (there && intoTheCrossing(map, unit, target)) || target
   }
   const standingFor = (unit) => {
     const standing = spec.standingOrders?.[unit.side]
@@ -687,6 +695,9 @@ function stepTurn(state, sideOrders = {}, { sameTurn = false } = {}) {
       }
       // Missile troops close to shooting distance, not to blows.
       if (pressing && move && move.target !== 'hold' && canSkirmish(unit)) move = { ...move, target: withinShot(unit, move.target) }
+      // Going in at an enemy in sight close across a ford or bridge: into
+      // the crossing first (crossing.js).
+      else if (move && move.target !== 'hold' && (pressing || order?.enemy)) move = { ...move, target: overTheWater(unit, move.target) }
       if (move) {
         const held = state.orderBook.get(unit.id)
         orders.push({
@@ -705,7 +716,7 @@ function stepTurn(state, sideOrders = {}, { sameTurn = false } = {}) {
       // is also a choice: a unit is allowed to stand.)
       if (standingFor(unit) === 'advance') {
         const enemy = toPress(unit)
-        if (enemy) orders.push({ unitId: unit.id, target: enemy.position, seeking: true })
+        if (enemy) orders.push({ unitId: unit.id, target: overTheWater(unit, enemy.position), seeking: true })
       }
     }
   }

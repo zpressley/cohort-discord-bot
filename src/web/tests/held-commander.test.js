@@ -37,9 +37,13 @@ async function start(store = createBattleStore({})) {
 // only with his army all but gone, and none of some thousands of seeds
 // searched left a battle on a turn later. Seed 646 until Rome carried
 // pila (part 8).
+// (Seed 708 until armies were made to come to grips and Crownhill's east
+// army formed up further south, November 24: then he was taken there with
+// the battle as good as over. 1477 is the first found since in which he is
+// taken, his army fights on, and both sides' dispatches line up.)
 async function takenInBattle(app) {
   const red = (await app.api('POST', '/api/commanders', { faction: 'persia' })).body
-  const seats = (await app.api('POST', '/api/battles', { opponent: 'friend', side: 'red', seed: 708, commander: red.token, faction: 'persia' })).body.seats
+  const seats = (await app.api('POST', '/api/battles', { opponent: 'friend', side: 'red', seed: 1477, commander: red.token, faction: 'persia' })).body.seats
   // Blue brings a Commander of Rome, so that both armies are fixed and the
   // battle is the same one whatever faction the lot would have given him.
   const blue = (await app.api('POST', '/api/commanders', { faction: 'rome' })).body

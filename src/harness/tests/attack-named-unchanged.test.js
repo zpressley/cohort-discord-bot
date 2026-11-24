@@ -23,6 +23,19 @@
 // Crownhill (docs/DECISIONS.md, "How the first battle, being asked, and
 // forming up were built"). Nothing else changed these battles: with the old
 // forming-up place they were as before. On crownhill they were d99dbaa6 and 9d3ccd07.
+//
+// Retaken when armies were made to come to grips (docs/DECISIONS.md, "How
+// armies were made to come to grips"): a side that knows nothing of the
+// enemy now looks for him where he would hold before it searches. The
+// computer's battles were d99dbaa6, 9d3ccd07, 7ceeb2cc, a9616de5 (the
+// meeting battle has no planner, and is as it was).
+//
+// Retaken when the two were put together (the east army's new place on
+// Crownhill, forming up, advance to the ground, and the planner's coming to
+// grips, with its step into a crossing moved into the engine for every
+// unit). Alone, the planner's change had made them 21bfd107, 9d3ccd07, 398af68c, 1305e5a5 (thornwood is
+// back as it was before both: the computer now guesses where the enemy
+// would hold from the field's own forming-up places).
 
 const { test } = require('node:test')
 const assert = require('node:assert/strict')
@@ -41,8 +54,8 @@ function fingerprint(text) {
 }
 
 const BEFORE = {
-  'crownhill 1': '669fa1f3',
-  'crownhill 2': 'b261c53b',
+  'crownhill 1': 'd6b78ab1',
+  'crownhill 2': 'fc0d511e',
   'thornwood 1': '7ceeb2cc',
   'thornwood 2': 'a9616de5',
   'meeting 1': 'df860211',

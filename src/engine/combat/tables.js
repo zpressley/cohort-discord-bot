@@ -1215,3 +1215,9 @@ module.exports.FIRE_NEWS = {
   HEAVY: 0.05,     // ... a unit of his losing this share of its mustered men in one ten minutes of it
   SHAKEN: 50       // ... or a unit of his down to this heart (of 100) as its report has it
 }
+
+// A unit going in at an enemy this near (tiles) across a ford or bridge
+// steps straight into the crossing (battle/crossing.js). From the
+// computer's planner (TUNING.CROSSING_NEAR, "How armies were made to come
+// to grips"), where it was 3; in the engine for every unit since.
+module.exports.CROSSING = { NEAR: 3 }
