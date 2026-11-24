@@ -3530,3 +3530,132 @@ making of a Commander asks his kind); a fourth character; anything the
 enemy Commander does on the field himself (he is not on the field: the
 computer's side has no Commander there, as before); telling, after the
 battle, how he fought.
+
+### How officers acting on their Commander's intent were built (Claude's choices, open to change)
+
+Builds the first item of "What comes after" in
+`docs/design/point-of-view-and-messengers.md`: "Officers who act on their
+Commander's intent when out of contact (veterans and above)". Zach's own
+words it is built inside: a veteran "fills gaps the way you would";
+"Personality sets the default (an aggressive officer attacks, a cautious
+one fortifies), loyalty decides how hard he honors your intent, and
+experience decides how well he reads it"; "once a long march starts, the
+officer is the one who reacts to what he finds"
+(`docs/design/officers-memory-delegation.md`); and, ruled out on
+November 23, a level-30 officer as a "second" near whom orders arrive at
+once ("The second perk is too powerful"). It stays out. The code:
+`engine/command/initiative.js` (who may, and what he chooses),
+`engine/battle/battle.js` (`ownJudgement`: what his unit sees, and the
+order he gives himself), `tables.INITIATIVE`, the `initiative` event
+(`narrator/turnNarrator.js`, `words.js` `ON_HIS_OWN`, the hotseat's
+`render.js`), and `battle.ground` (the map's ground, set by the
+orchestrator so that the officers know it).
+
+- **Who.** An officer of veteran grade or above (13 battles; `INITIATIVE.FROM`),
+  not disaffected, of a side whose Commander is on the field and free.
+  Below veteran nothing changes: he carries on, or loses the thread as
+  before. The computer's side has no Commander on the field, and no
+  initiative. A held Commander's officers run their own units as before
+  (`ownCommand`).
+- **When he is out of contact.** No rider can get through to his unit
+  (the riders' path rule, `command/messengers.js`), and none has for
+  `INITIATIVE.WAIT` ten minutes (2: the same slack, `COMMAND.OVERDUE`, his
+  Commander gives before he notices that no word has come). An order that
+  reaches him, or a rider able to, is word: he obeys, and forgets what he
+  chose. So a Commander in touch with his men commands exactly as before.
+  **Guess:** "cut off or overdue" read as cut off only. A unit merely far
+  off, whose Commander chooses to send nothing, does not act: acting there
+  would be playing without commanding. The other reading, that a unit with
+  no order for a long while acts too, is the question below.
+- **What has plainly changed**, as his own unit sees it, and since he last
+  had word (so it is never something his Commander already knew when he
+  gave the order): the enemy has taken ground to fight for and he can see
+  them on it (`groundLost`); half or more of his own men in his sight have
+  broken (`friendsBroke`); the enemy he was sent at is beaten or gone
+  (`quarryGone`); he is fought or shot at (`attacked`); his order is done,
+  or he had none, and an enemy is in his sight (`done`). In that order, if
+  several. Nothing from the engine's whole truth: enemies are those his own
+  unit sees, the ground is the map's (which every officer knows), and
+  where his Commander is, is where he was when the officer last had word.
+- **What he does**, one of four orders that already exist: press the enemy
+  (advance), go for the ground (attack toward its nearest tile), stand
+  (hold), or fall back toward where his Commander was when he last had word
+  (withdraw to that tile, then hold). By his nature: **bold** goes for the
+  ground being lost, else at an enemy he can see, else holds; **cautious**
+  holds good ground (`INITIATIVE.GOOD_GROUND`: hill or woods), else falls
+  back toward his Commander; **steady** finishes what he was sent to do,
+  and when it is done or cannot be done, holds. **Survival** tips it: one
+  who looks to his men falls back when half his men are down
+  (`INITIATIVE.BLED`) or the men about him break. **Glory** tips nothing
+  (a guess: a bold man already goes at the enemy). **Loyal** officers read
+  the intent as steady ones do, as they do when losing the thread; the
+  disaffected act on nothing (they keep "half an ear").
+- **The intent.** Orders carry no stated purpose today, so the intent is
+  his Commander's last order to him. An order to stand (hold, defend, hide,
+  ambush) is kept when he is attacked or sees the enemy; only the ground or
+  the men about him being lost moves him off it. **Guess:** the other
+  reading is that any change frees him.
+- **Once.** He does not choose the same thing twice before he has word
+  again, and is not told what he is already doing (a steady man with
+  nothing to do who "holds" is not news).
+- **No roll.** The choice is worked out from the battle's state, so a saved
+  battle replays it (tested); no new random stream, and a battle with no
+  veteran cut off runs exactly as before: every whole-battle fingerprint
+  test passed unchanged, and `npm run balance`'s last table is unchanged.
+- **His Commander hears of it in his report** (`initiative`, private to
+  his side): when the next report from that unit reaches him, as with any
+  news of it (`word.js`, `arrivalOf`), in words that make it the officer's
+  judgement: "Decimus of Hastati, with no word from you, fell back toward
+  you when he saw your men about him break". The dispatch tells late news
+  with its age, so the web app needed nothing new to show it.
+
+**Measured** (`node src/harness/messenger-league.js --battles 1344 --ground
+--day 720`, the player's stand-in planning as the computer does; before is
+the same harness on the tree before this, by `--root`; the new
+`--veterans` puts every unit of his under a veteran):
+
+| Army | Before: won, men lost | After: won, men lost | Officers who acted |
+|---|---|---|---|
+| A new Commander's (one veteran, with the elite) | 47.3%, 34% | 47.3%, 34% | none |
+| All veterans | 47.3%, 34% | 47.3%, 34% | 35 times in 31 battles (2.3%) |
+| All veterans, `--policy charge` | 43.0% | 43.0% | 20 times in 15 battles (1.1%) |
+
+- A new Commander's one veteran rides with him (he leads the elite), so
+  he is never cut off: nothing changes for a new player.
+- All veterans, planner: what they did: 18 fell back when the men about
+  them broke, 3 bold ones went at the enemy then; 5 went at the enemy with
+  their orders done; 4 went for the ground being lost, 3 cautious ones fell
+  back from it; 2 fell back with their orders done. In those 31 battles:
+  6 won before and 6 after (2 battles changed hands, one each way), and
+  his men lost 41.4% before, 40.8% after. Under charge: 15 battles, 3 won
+  before and after, men lost 45.1% and 46.6%.
+- So it moves no win rate, well inside the five points asked; it changes a
+  battle here and there, and never decides many. It is rare because a unit
+  is seldom cut off: in a quarter of battles one is at some point, for 2%
+  of unit-turns, mostly briefly, an enemy passing between it and him.
+- Of the 35, his Commander heard 30 within the same ten minutes (the unit
+  had been cut off close by, and the way opened as the officer moved or the
+  enemy did), 2 after 10 minutes, 2 after 30, and 1 never (the battle
+  ended with no more word from that unit).
+- Every soak battle ended (`npm run soak`). The Commander's odds of being
+  taken (`captive-league.js --battles 2000 --policy wait`): 1 in 18.9,
+  unchanged.
+
+**Tests.** `src/engine/command/tests/initiative.test.js` (21): the rule by
+grade, loyalty, nature, what he holds dear and an order to stand; and in a
+battle: the twenty minutes he waits, going at the enemy, falling back
+toward where his Commander was, going for ground the enemy took, falling
+back when the men about him break, nothing for an officer a rider can
+reach or below veteran or on the computer's side, the Commander hearing of
+it only when a rider gets through, the enemy never, replay, and a new order
+obeyed.
+
+**Left undone.** Long missions for legendary officers (his own words,
+November 23: "Being able to carry out long missions would be a great
+feature for legendary 20+") are not this: a legend acts as a veteran does
+here. Orders with a stated purpose ("hold the ford so the horse can
+cross"), which would give him a truer intent than his last order. The
+battle does not stop for the Commander when such a report reaches him; it
+is in the dispatch at the next stop. The other first-company veterans of
+a Commander who musters more than one are not measured in the app's own
+battles, only in the league.

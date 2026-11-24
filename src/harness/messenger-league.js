@@ -21,6 +21,10 @@
 //   --computer instant   blue's orders at once (as before step 3), not by rider
 //   --day 720            the app's end of the day: night ends a battle drawn
 //   --ground             each map's ground to fight for, as the app has it
+//   --veterans           every unit of red's under a veteran officer (13 to
+//                        16 battles, each his own nature), not a new
+//                        Commander's one: to measure officers who act on
+//                        their own when cut off (command/initiative.js)
 //   --character c        the computer's Commander: bold, steady, cautious,
 //                        or mix (drawn from each battle's seed, as the app)
 //
@@ -53,6 +57,7 @@ const DAY_MINUTES = Number(arg('--day', 0))
 const CHARACTER = arg('--character', null)
 // --ground: each map's own ground to fight for, as the app's muster gives.
 const GROUND = process.argv.includes('--ground')
+const VETERANS = process.argv.includes('--veterans')
 const { groundOf } = require('../data/maps')
 const { withCommander } = require('../opponent/commander')
 const MAX_PLAYER_TURNS = 150
@@ -62,11 +67,14 @@ function play(red, blue, { map, seed, policy }) {
   spec = { ...spec, units: assignOfficers(spec.units, seed) }
   const mine = spec.units.filter(u => u.side === 'red')
   const elite = mine[leadUnit(mine)].id
-  spec = { ...spec, units: spec.units.map(u => u.side !== 'red' ? u : u.id === elite ? u : { ...u, officer: { headless: true } }) }
+  spec = { ...spec, units: spec.units.map(u => u.side !== 'red' ? u : u.id === elite ? u
+    : VETERANS ? { ...u, officer: { ...u.officer, experience: Math.max(13, u.officer.experience) } } : { ...u, officer: { headless: true } }) }
   // The computer's Commander's character (--character): one named, or
   // drawn from the seed as the app's muster draws it ('mix'); none, steady.
   if (CHARACTER) spec = withCommander(spec, 'blue', seed, CHARACTER === 'mix' ? null : { character: CHARACTER })
   const game = createGame({ ...spec, standingOrders: {}, commanders: { red: { unitId: elite } }, ...(DAY_MINUTES ? { dayMinutes: DAY_MINUTES } : {}), ...(GROUND && groundOf(map).length ? { objectives: groundOf(map) } : {}) }, { seed })
+  const mineIds = new Set(mine.map(u => u.id))
+  const mineMen = mine.reduce((n, u) => n + u.strength, 0)
   const r = { orders: 0, cutOffUnits: new Set(), cutOffTurns: 0, unitTurns: 0, noWord: 0, noWordCut: 0, noWordGone: 0 }
   let turns = 0
   let stops = 0
@@ -137,7 +145,11 @@ function play(red, blue, { map, seed, policy }) {
     noWord: r.noWord,
     noWordCut: r.noWordCut,
     noWordGone: r.noWordGone,
-    unitTurns: r.unitTurns
+    unitTurns: r.unitTurns,
+    // Red's officers who acted on their own, cut off (initiative.js), and
+    // the share of red's men lost.
+    initiative: events.filter(e => e.type === 'initiative' && mineIds.has(e.unitId)).map(e => `${e.why}: ${e.did}`),
+    lost: 1 - [...game.battle.world.units, ...game.battle.fledUnits].filter(u => u.side === 'red').reduce((n, u) => n + Math.max(0, u.strength), 0) / mineMen
   }
 }
 
@@ -159,7 +171,7 @@ function league({ battles = 336, policy = 'planner' } = {}) {
   const factions = Object.keys(FACTIONS)
   const pairs = []
   for (const a of factions) for (const b of factions) if (a !== b) for (const map of maps) pairs.push([a, b, map])
-  const all = { noWord: 0, noWordCut: 0, noWordGone: 0, stops: 0, waits: [], why: {}, battles: 0, stuck: 0, wins: 0, losses: 0, draws: 0, turns: 0, minutes: 0, orders: 0, delays: [], blocked: 0, blueDelays: [], blueBlocked: 0, battlesCutOff: 0, cutOffTurns: 0, unitTurns: 0 }
+  const all = { noWord: 0, noWordCut: 0, noWordGone: 0, stops: 0, waits: [], why: {}, battles: 0, stuck: 0, wins: 0, losses: 0, draws: 0, turns: 0, minutes: 0, orders: 0, delays: [], blocked: 0, blueDelays: [], blueBlocked: 0, battlesCutOff: 0, cutOffTurns: 0, unitTurns: 0, lost: 0, initiative: {}, battlesInitiative: 0 }
   for (let i = 0; i < battles; i++) {
     const [a, b, map] = pairs[i % pairs.length]
     const r = play(a, b, { map, seed: 1000 + i * 7919, policy })
@@ -184,6 +196,9 @@ function league({ battles = 336, policy = 'planner' } = {}) {
     all.noWordCut += r.noWordCut
     all.noWordGone += r.noWordGone
     all.unitTurns += r.unitTurns
+    all.lost += r.lost
+    if (r.initiative.length > 0) all.battlesInitiative++
+    for (const k of r.initiative) all.initiative[k] = (all.initiative[k] ?? 0) + 1
   }
   return all
 }
@@ -217,6 +232,9 @@ if (require.main === module) {
     console.log(`the computer's orders by rider: ${b.length}, median ${b[Math.floor(b.length / 2)] ?? 0} min, longest ${b.at(-1) ?? 0}; not sent ${all.blueBlocked}`)
   }
   console.log(`a unit cut off at some turn's start in ${all.battlesCutOff} battles (${pct(all.battlesCutOff, done)}); ${pct(all.cutOffTurns, all.unitTurns)} of unit-turns cut off`)
+  const acts = Object.values(all.initiative).reduce((a, b) => a + b, 0)
+  console.log(`red lost ${pct(all.lost, done)} of his men on average; his officers acted on their own, cut off, ${acts} times in ${all.battlesInitiative} battles (${pct(all.battlesInitiative, done)})` +
+    (acts ? `: ${Object.entries(all.initiative).sort((a, b) => b[1] - a[1]).map(([k, n]) => `${k} ${n}`).join(', ')}` : ''))
   if (all.noWord) console.log(`units marked "no word" as red is asked: ${all.noWord} (${pct(all.noWord, all.unitTurns)} of unit-turns); of those truly cut off ${pct(all.noWordCut, all.noWord)}, gone from the field ${pct(all.noWordGone, all.noWord)}, only late ${pct(all.noWord - all.noWordCut - all.noWordGone, all.noWord)}`)
 }
 

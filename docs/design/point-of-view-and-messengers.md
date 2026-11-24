@@ -182,11 +182,23 @@ All three steps are built. Not built: everything under "What comes after".
   the two rulings on orders unasked and a rider who could not get through
   are tested by name.
 
+- **Officers who act on their Commander's intent when out of contact**
+  (veterans and above) are built (`engine/command/initiative.js`; see
+  `docs/DECISIONS.md`, "How officers acting on their Commander's intent
+  were built"). A veteran or legendary officer whom no rider has reached
+  for twenty minutes, seeing things plainly changed (ground lost, the men
+  about him broken, his quarry gone, attacked, his order done with the
+  enemy in sight), does by his nature one of four orders: bold go at the
+  enemy or the ground, cautious hold good ground or fall back toward their
+  Commander, steady finish what they were sent to do and hold. His
+  Commander hears of it in the officer's report, when a rider gets through.
+  The level-30 officer as a "second" near whom orders arrive at once was
+  ruled out as too powerful, and stays out.
+
 ## What comes after, not in this build
 
-- Officers who act on their Commander's intent when out of contact
-  (veterans and above). The level-30 officer as a "second" near whom
-  orders arrive at once was ruled out as too powerful.
+- Long missions for legendary officers (ruled November 23: "a great
+  feature for legendary 20+").
 - A unit choosing to send word of something urgent faster than the
   routine report.
 - The enemy catching a rider and reading the order.
