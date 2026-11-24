@@ -181,11 +181,25 @@ async function route() {
   }
 }
 
+// Your battles' lines, with any next day's battle you were called out to
+// (ruled 2026-11-24: "no they need a notice"): the old battle's line names
+// your seat in it, and it is kept in this browser from then on.
+async function seatLines(seats) {
+  if (!seats.length) return []
+  const lines = await api('GET', `/api/seats?tokens=${seats.map(s => s.token).join(',')}`)
+  const known = new Set(lines.map(l => l.token))
+  const found = lines.map(l => l.nextDay).filter(n => n?.token && !known.has(n.token))
+  if (!found.length) return lines
+  const more = await api('GET', `/api/seats?tokens=${found.map(n => n.token).join(',')}`)
+  for (const l of more) saveSeat({ token: l.token, title: l.title, side: l.side })
+  return [...more, ...lines]
+}
+
 // ── Home: straight to the battle waiting on you ────────
 async function home() {
   const seats = loadSeats()
   if (seats.length === 0) return go('/muster', { replace: true })
-  const lines = await api('GET', `/api/seats?tokens=${seats.map(s => s.token).join(',')}`)
+  const lines = await seatLines(seats)
   const waiting = lines.filter(l => l.status === 'your-orders').sort((a, b) => b.updatedAt - a.updatedAt)
   if (waiting.length > 0) return go(`/b/${waiting[0].token}`, { replace: true })
   return go('/battles', { replace: true })
@@ -193,8 +207,7 @@ async function home() {
 
 // ── Your battles ───────────────────────────────────────
 async function battles() {
-  const seats = loadSeats()
-  const lines = seats.length ? await api('GET', `/api/seats?tokens=${seats.map(s => s.token).join(',')}`) : []
+  const lines = await seatLines(loadSeats())
   const group = (status) => lines.filter(l => l.status === status)
   const card = (l) => {
     const verdict = verdictWords(l)
@@ -204,6 +217,7 @@ async function battles() {
       <strong>${esc(l.title)}</strong>
       <span>${esc(sideName(l.side))}, ${opponent}</span>
       <span>${esc(verdict ? `${verdict.title}: ${verdict.reason}` : when)}</span>
+      ${l.calledOut ? `<span class="called-out">${esc(l.calledOut)}</span>` : ''}
     </a>`
   }
   const section = (title, list) => list.length ? `<p class="label-caps">${title}</p>${list.map(card).join('')}` : ''
@@ -271,6 +285,7 @@ async function officers(note = null) {
         : c.battle
         ? `His army is in the field${c.battle.seat ? `: <a href="/b/${esc(c.battle.seat)}" data-link>${esc(c.battle.title)}</a>` : ` (${esc(c.battle.title)})`}.`
         : 'His army is ready to muster.'}</p>
+      ${c.battle?.calledOut && c.battle.seat ? `<a class="notice" href="/b/${esc(c.battle.seat)}" data-link role="status"><strong>${esc(c.battle.calledOut)}</strong><span>${esc(c.battle.title)}</span></a>` : ''}
       ${!c.ended && c.faction ? `<a class="btn btn-wide" href="/army/${esc(c.token)}" data-link>${c.battle ? 'His army' : c.army?.own ? 'Change his army' : 'Buy his own army'}</a>` : ''}
       ${c.officers.map(o => card(o, c)).join('')}
       ${(c.units ?? []).filter(u => u.trained > 0).map(u => `<p class="note">The ${esc(u.kind)} have been trained up ${u.trained} level${u.trained === 1 ? '' : 's'} by an officer of thirty battles.</p>`).join('')}
@@ -1343,10 +1358,15 @@ async function tent(token) {
         <h2>${esc(words.title)}</h2>
         <p>${esc(words.reason)}${words.night ? '' : `, after ${esc(clock(state.view.battle.minutes))}`}.</p>
       </div>
-      ${v?.night ? (v.night.next
+      ${v?.night?.calledOut && v.night.next ? `<a class="notice" href="/b/${esc(v.night.next)}" data-link role="status"><strong>${esc(v.night.calledOut)}</strong><span>${esc(v.night.again)}</span></a>` : ''}
+      ${v?.night && v.night.noNextDay ? `<p class="note">${esc(v.night.noNextDay)}</p>` : ''}
+      ${v?.night && !v.night.noNextDay && !v.night.calledOut ? (v.night.next
         ? `<a class="btn btn-main btn-wide" href="/b/${esc(v.night.next)}" data-link>${esc(v.night.again)}</a>`
         : `<button class="btn btn-main btn-wide" type="button" id="again">${esc(v.night.again)}</button>`)
         + `<p class="note">${esc(v.night.againNote)}</p>` : '' }
+      ${v?.night?.calledOut ? `<p class="note">${esc(v.night.againNote)}</p>` : ''}
+      ${v?.night?.tellMe && 'Notification' in window && Notification.permission === 'default'
+        ? `<button class="btn btn-quiet btn-wide" type="button" id="tell-me">${esc(v.night.tellMe)}</button>` : ''}
       ${v ? `<table class="losses"><thead><tr><th scope="col">Side</th><th scope="col">Standing</th><th scope="col">Fled</th><th scope="col">Fallen</th></tr></thead><tbody>
         ${Object.entries(v.sides).map(([s, n]) => `<tr><td>${esc(sideName(s))}${s === state.view.battle.side ? ' (you)' : ''}</td><td>${n.standing}</td><td>${n.fled}</td><td>${n.fallen}</td></tr>`).join('')}
       </tbody></table>` : ''}
@@ -1368,6 +1388,12 @@ async function tent(token) {
         event.target.disabled = false
         event.target.insertAdjacentHTML('afterend', `<p class="error">${esc(error.message)}</p>`)
       }
+    })
+    // The browser's own notice, while this page is open in the background:
+    // asked for here, at his word, and shown by watch().
+    document.getElementById('tell-me')?.addEventListener('click', async (event) => {
+      const answer = await Notification.requestPermission().catch(() => 'denied')
+      event.target.outerHTML = answer === 'granted' ? `<p class="note">${esc(v.night.toldYou)}</p>` : ''
     })
     const slider = document.getElementById('replay')
     slider.addEventListener('change', async () => {
@@ -1421,10 +1447,21 @@ async function tent(token) {
     // Waiting on the turn; or across the table from a Commander held, for an
     // offer or an answer that can come at any time.
     const table = state.view.captive || state.view.commander?.status === 'held'
-    if (state.view.battle.status === 'finished' || (state.view.battle.status !== 'waiting' && !table)) return
+    // Night fell, against a friend, and no next day yet: he may call one.
+    const night = state.view.verdict?.night && !state.view.verdict.night.next && state.view.verdict.night.tellMe
+    if (!night && (state.view.battle.status === 'finished' || (state.view.battle.status !== 'waiting' && !table))) return
     const check = async () => {
       try {
         const s = await api('GET', `/api/seat/${token}/summary`)
+        if (night && s.nextDay) {
+          if (s.nextDay.calledOut && document.visibilityState === 'hidden' && 'Notification' in window && Notification.permission === 'granted') {
+            try { new Notification(s.nextDay.title, { body: s.nextDay.calledOut }) } catch { /* the page shows it */ }
+          }
+          await load()
+          renderAll()
+          return watch()
+        }
+        if (night) return
         if (s.status !== state.view.battle.status || s.turn !== state.view.battle.turn || (s.table ?? null) !== (state.view.battle.table ?? null)) {
           const turned = s.turn !== state.view.battle.turn
           await load()

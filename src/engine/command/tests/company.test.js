@@ -7,7 +7,7 @@ const { test } = require('node:test')
 const assert = require('node:assert/strict')
 
 const { createCompany, musterOfficers, settleBattle, unitsOf, trainedQuality, ridesWith, HEADLESS } = require('../company')
-const { TRAINING, LOYALTY } = require('../../combat/tables')
+const { TRAINING, LOYALTY, VETERANCY } = require('../../combat/tables')
 const { applyBattle, averageExperience } = require('../../veterans/veterancy')
 const { gradeOf, grasp, EARNED_AT, MAX_EXPERIENCE, loyaltyMove, losingTheThread, chanceToKeep } = require('../officers')
 
@@ -318,5 +318,25 @@ test('a loyal officer holds to his orders when he loses the thread; a disloyal o
   assert.equal(losingTheThread(bold(LOYALTY.DISLOYAL), 'condition', true), 'advance')
   assert.equal(chanceToKeep(bold(LOYALTY.DISLOYAL), 1), chanceToKeep(bold(LOYALTY.NEUTRAL), 1) * LOYALTY.DISLOYAL_GRASP)
   assert.equal(chanceToKeep(bold(LOYALTY.LOYAL), 1), chanceToKeep(bold(LOYALTY.NEUTRAL), 1), 'loyalty does not make him cleverer')
+})
+
+test('the next day of a battle, a unit goes in with the men the day before left it and no recruits; it is made up to strength only once the fight is over', () => {
+  // Day one: a hundred went in, sixty came out. Made up to a hundred.
+  const day1 = musterOfficers(createCompany(), units(), 1)
+  const after1 = settleBattle(day1.company, battle(1), day1.units.map(u => fate(u, 'unhurt', { mustered: 100, survivors: u.kind === 'spears' ? 60 : 100 })))
+  assert.equal(after1.units.spears.strength, 100)
+  assert.equal(after1.units.spears.totalExperience, 60, 'sixty men with one battle each; the forty recruits know nothing')
+  // Day two: the sixty go in, fifty come out. No recruit is counted among
+  // the fallen, for none came.
+  const day2 = musterOfficers(after1, units(), 2)
+  const after2 = settleBattle(day2.company, battle(2), day2.units.map(u => fate(u, 'unhurt', { mustered: u.kind === 'spears' ? 60 : 100, survivors: u.kind === 'spears' ? 50 : 100, full: 100 })))
+  assert.equal(after2.units.spears.strength, 100, 'made up to strength once the fight is over')
+  const alone = { strength: 60, totalExperience: 60, battlesParticipated: 1 }
+  applyBattle(alone, { survivors: 50, fallenShare: VETERANCY.FALLEN_SHARE })
+  assert.equal(after2.units.spears.totalExperience, alone.totalExperience, 'as if the sixty had fought alone')
+  // Without `full`, a battle is settled as ever.
+  const plain = settleBattle(day2.company, battle(3), day2.units.map(u => fate(u, 'unhurt', { mustered: 100, survivors: 100 })))
+  assert.equal(plain.units.spears.strength, 100)
+  assert.equal(plain.units.spears.totalExperience, 160)
 })
 

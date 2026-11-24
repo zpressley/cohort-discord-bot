@@ -205,7 +205,9 @@ function musterOfficers(company, units, seed, { benched = [] } = {}) {
  *   { officerId (null for a unit with no officer), unit, culture?,
  *     fate: 'unhurt'|'wounded'|'captured'|'killed'|'given up', how?,
  *     destroyed?: boolean, mustered?: number (men it went in with),
- *     survivors?: number (men it came out with), deeds?, orders? }
+ *     survivors?: number (men it came out with), deeds?, orders?,
+ *     full?: number (the next day of a battle: the men it is made up to
+ *     once the fight is over; it went in with `mustered`) }
  * @returns {Object} the company after it
  */
 function settleBattle(company, battle, fates) {
@@ -244,12 +246,16 @@ function settleBattle(company, battle, fates) {
     const mustered = f.mustered ?? next.units[f.unit]?.strength ?? 0
     let state = next.units[f.unit] ?? createVeteranState({ strength: mustered })
     if (gone) {
-      state = createVeteranState({ strength: mustered })
+      state = createVeteranState({ strength: f.full ?? mustered })
     } else {
       if (state.strength === 0) state.strength = mustered
+      // The next day of a battle night ended (`full`: the men it is made up
+      // to between battles): it went in with the men the day before left
+      // it, and no recruits came in the night.
+      if (f.full != null && mustered > 0) state.strength = mustered
       // The newest men fall first: the fallen take less than their share.
       applyBattle(state, { survivors: f.survivors == null ? null : Math.min(state.strength, Math.max(0, f.survivors)), fallenShare: VETERANCY.FALLEN_SHARE })
-      state.strength = mustered || state.strength   // made up to strength again
+      state.strength = f.full ?? (mustered || state.strength)   // made up to strength again
     }
     next.units[f.unit] = state
 
