@@ -155,7 +155,10 @@ test('a battle with veterans replays exactly as it was played, from its saved sp
 // this change: Commanders whose units had 12 and 20 battles behind them, whose
 // veterancy then went into no battle. (It pins the combat rules of that day:
 // a change to combat replays it differently, as it does every saved battle.)
-test('a battle saved before veterans went into battle has none in its spec, and replays exactly as it was played', async () => {
+// Ruled 2026-11-24: "There are not any old battles I care about": it is no
+// longer held to the battle it was (combat has changed since); it loads
+// with nothing added, and goes on.
+test('a battle saved before veterans went into battle loads with none in its spec, and goes on', async () => {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'cohort-veterans-old-'))
   try {
     const from = path.join(__dirname, 'fixtures', 'before-veterans')
@@ -166,10 +169,7 @@ test('a battle saved before veterans went into battle has none in its spec, and 
     for (const key of ['open', 'done']) {
       const now = store.seatOf(expected.seats[key]).entry.game
       assert.ok(now.spec.units.every(u => !('veterancy' in u)), 'nothing added to the old spec')
-      assert.deepEqual({
-        outcome: now.outcome, turn: now.playerTurn, minutes: now.minutesElapsed,
-        units: [...now.battle.world.units, ...now.battle.fledUnits].map(u => [u.id, u.strength, u.position.x, u.position.y])
-      }, expected.games[key], key)
+      assert.deepEqual([...now.battle.world.units, ...now.battle.fledUnits].map(u => u.id).sort(), expected.games[key].units.map(u => u[0]).sort(), key)
     }
     // The open one goes on, as it was.
     const app = await start(store)

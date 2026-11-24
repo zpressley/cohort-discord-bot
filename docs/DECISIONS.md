@@ -2496,3 +2496,47 @@ replays exactly. Like every saved battle, it pins the combat rules of the
 day: a change to combat replays it differently (as `before-roster` already
 does on this base). `roster.test.js` compares a Commander's units without
 the new `level`.
+
+## Rulings, November 24, 2026 (riders again, the day, old battles, fire and retreat)
+
+Zach's words, answering the questions left open on November 23.
+
+**Riders.**
+- On whether a Commander who is not being asked may send new orders:
+  "You can interrupt units mid March. But orders don't come over till the
+  end of the turn."
+- On a Commander whose men only hold: "Holding for several turns would
+  still get interrupts from passing enemy troops".
+- On the length of the day: "10 hours is fine... might as well make it 12
+  armies did not fight in the dark."
+- On an order no rider could carry: "Like if the unit is surrounded, the
+  rider should return with that news. After turns of travel pass".
+
+**Old saved battles.** "There are not any old battles I care about".
+
+**Armies.**
+- Medium armour at 3 SP: "Maybe". (Not taken; left as it is.)
+- Kush's Golden Bows: "They don't hit hard from range? They can have a
+  sword".
+- The skirmish rule (docs/design/army-balance.md, Part 6): "Skirmish rule
+  makes sense but evidence like marathon shows heavy infantry can run a
+  long way. I don't like the skirmish rule. Fire and retreat is ok".
+- On men on foot shooting as they fall back: "No firing on the move."
+- On the Commander being taken more often: "Retun commander taken odds".
+- On a side winning at the day's end on fewer losses: "No the day just
+  ends the battle, you can choose to fight again the next day."
+
+### How the ruling on old battles was built (Claude's choices, open to change)
+
+- A battle saved under older combat rules still loads and plays back under
+  today's rules, so it may not be the battle it was (a finished one can
+  come back unfinished). Nothing was built to stamp saves with their rules.
+- The three tests that held old saves to the battle they were
+  (`roster.test.js`, `asked.test.js`, `veterans.test.js`, fixtures
+  `before-roster`, `before-asked`, `before-veterans`) now show only that
+  such a save loads with the same units, keeps what marked it as old, and
+  goes on. The fixtures are untouched.
+- Guessed: that "not any old battles I care about" covers battles saved from
+  now on as well, until there are players. The other reading is that only
+  today's saves are let go; then each save needs a rules stamp before the
+  next change to combat.

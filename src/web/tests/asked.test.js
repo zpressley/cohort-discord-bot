@@ -151,7 +151,11 @@ test('a unit with no word is shown as he knows it: "no word of them since", neve
   } finally { await app.close() }
 })
 
-test('battles saved before the riders rulings load, replay to the same battle, and go on with everyone asked at every stop', async () => {
+// Ruled 2026-11-24: "There are not any old battles I care about". A battle
+// saved under older combat rules plays back under today's, so it is not the
+// same battle; what is kept is that it loads, keeps the old way of asking,
+// and goes on. (The fixture's expected.json.txt holds it as it was.)
+test('battles saved before the riders rulings load, and go on with everyone asked at every stop', async () => {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'cohort-before-asked-'))
   const from = path.join(__dirname, 'fixtures', 'before-asked')
   fs.cpSync(from, dir, { recursive: true })
@@ -168,8 +172,8 @@ test('battles saved before the riders rulings load, replay to the same battle, a
         units: [...game.battle.world.units, ...game.battle.fledUnits].map(u => [u.id, u.strength, u.position.x, u.position.y])
       }
     }
-    assert.deepEqual(facts(expected.seats.solo), expected.games.solo)
-    assert.deepEqual(facts(expected.seats.openBlue), expected.games.open)
+    assert.deepEqual(facts(expected.seats.solo).units.map(u => u[0]).sort(), expected.games.solo.units.map(u => u[0]).sort(), 'the same units')
+    assert.deepEqual(facts(expected.seats.openBlue).units.map(u => u[0]).sort(), expected.games.open.units.map(u => u[0]).sort(), 'the same units')
     const open = store.seatOf(expected.seats.openBlue).entry.game
     assert.equal(open.spec.everyoneAsked, true)
     assert.deepEqual(waitingOn(open).sort(), ['blue', 'red'], 'both are asked, as then')

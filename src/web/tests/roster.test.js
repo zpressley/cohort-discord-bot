@@ -407,7 +407,11 @@ test('a unit taken whose name is borne already is given the next free one, and a
   assert.throws(() => addToRoster(commander, unit, 'found'), /no avenue/)
 })
 
-test('battles and Commanders saved before the roster still load, and replay to the same battle', async () => {
+// Ruled 2026-11-24: "There are not any old battles I care about". A battle
+// saved under older combat rules plays back under today's, so it is not the
+// same battle; what is kept is that it loads, and goes on. (The fixture's
+// expected.json.txt still holds the battle as it was on its day.)
+test('battles and Commanders saved before the roster still load, and go on', async () => {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'cohort-before-'))
   const from = path.join(__dirname, 'fixtures', 'before-roster')
   fs.cpSync(from, dir, { recursive: true })
@@ -423,8 +427,10 @@ test('battles and Commanders saved before the roster still load, and replay to t
         units: [...game.battle.world.units, ...game.battle.fledUnits].map(u => [u.id, u.strength, u.position.x, u.position.y])
       }
     }
-    assert.deepEqual(facts(expected.seats.done), expected.games.done)
-    assert.deepEqual(facts(expected.seats.openBlue), expected.games.open)
+    for (const token of [expected.seats.done, expected.seats.openBlue]) {
+      const now = facts(token)
+      assert.deepEqual(now.units.map(u => u[0]).sort(), expected.games[token === expected.seats.done ? 'done' : 'open'].units.map(u => u[0]).sort(), 'the same units')
+    }
     // The Commanders: their officers and units as they were; every unit they
     // had marches, as every unit always did.
     for (const key of ['a', 'b']) {
