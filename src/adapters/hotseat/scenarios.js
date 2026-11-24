@@ -82,9 +82,14 @@ function loadScenario(name, { map = null, deploy = false } = {}) {
   return { ...spec, map, units: deployArmies(resolveMap(map), spec.units, spec.sides) }
 }
 
-// The maps a battle can be fought on, for choosing.
-function mapChoices() {
-  return Object.values(MAPS).map(m => ({ id: m.name, title: m.title ?? m.name }))
+// The maps a battle can be fought on, for choosing, each with its size in
+// kilometres. { big: false } leaves out the fields wider than 1 km: the
+// harnesses measure the four 1 km fields as they always have, and the big
+// ones only when asked (docs/DECISIONS.md, "How the big map was built").
+function mapChoices({ big = true } = {}) {
+  return Object.values(MAPS)
+    .filter(m => big || m.width <= 40)
+    .map(m => ({ id: m.name, title: m.title ?? m.name, km: m.width * 25 / 1000 }))
 }
 
 module.exports = { SCENARIOS, loadScenario, mapChoices }

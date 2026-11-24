@@ -104,7 +104,7 @@ function playBought(key, units, enemy, { side = 'red', map = 'crownhill', seed =
   }
 }
 
-function league({ seeds = 2, maps = mapChoices().map(m => m.id), factions = Object.keys(FACTIONS) } = {}) {
+function league({ seeds = 2, maps = mapChoices({ big: false }).map(m => m.id), factions = Object.keys(FACTIONS) } = {}) {
   const rows = []
   const all = { battles: 0, stuck: [], reasons: {}, turns: 0 }
   let n = 0
@@ -133,7 +133,7 @@ function league({ seeds = 2, maps = mapChoices().map(m => m.id), factions = Obje
 if (require.main === module) {
   const arg = (name) => { const i = process.argv.indexOf(name); return i > -1 ? process.argv[i + 1] : null }
   const seeds = Number(arg('--seeds') ?? 2)
-  const maps = arg('--maps') ? arg('--maps').split(',') : mapChoices().map(m => m.id)
+  const maps = arg('--maps') ? arg('--maps').split(',') : mapChoices({ big: false }).map(m => m.id)
   const { rows, all } = league({ seeds, maps })
   const pct = (a, b) => `${Math.round(100 * a / Math.max(1, b))}%`
   console.log(`${all.battles} battles: each bought army against every faction's default army, on ${maps.join(', ')}, both sides, ${seeds} seed(s) each\n`)

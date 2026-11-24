@@ -78,8 +78,12 @@ a { color: var(--accent); }
 .panel { flex: 1 1 360px; max-width: 100%; display: flex; flex-direction: column; background: var(--panel); border-left: 1px solid var(--rule); }
 @media (min-width: 900px) {
   .panel { max-width: 440px; }
-  .map-scroll, .map-wrap.tall .map-scroll { height: auto; flex: 1; }
+  .map-scroll, .map-wrap.tall .map-scroll { height: auto; flex: 1 1 0; min-height: 0; }
   .tent { height: calc(100vh - 58px); flex-wrap: nowrap; }
+  /* The tent fills the window and no more: the map scrolls inside its own
+     box (a 2 km field is taller than any screen), not the page. */
+  #app:has(.tent) { height: 100%; }
+  #app:has(.tent) .tent { flex: 1 1 0; height: auto; }
   .panel-body { overflow: auto; }
   /* The ground to fight for: one line. */
   .ground-line { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }

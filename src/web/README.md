@@ -70,6 +70,24 @@ the muster names it under the field chosen, the tent marks it on the map
 and says under the top bar who holds it, the first dispatch tells it, and
 the verdict says so when holding it alone for an hour decided the battle.
 
+The fields are 1 km (Crownhill, Ashford Vale, Thornwood, Raven Ridge) or
+2 km (Greywater: "Greywater (2 km)" in the list). On a 2 km field each army
+comes in two lines (`src/engine/army/secondLine.js`): its own, and its
+faction's usual army again, raised for the day. The muster says so under
+the field; in the tent those units are "Second legionaries" and the like,
+all of them answer to "second line", the first turn's examples offer
+"second line hold", and they go home after the battle (not on the roster,
+not in the company).
+
+The map in the tent opens at about 15 px a tile on a phone (a 1 km field
+as it always did; a 2 km field is then three screens wide), centred on
+your army. It moves by finger (drag to pan, pinch to zoom) or by mouse
+(drag to pan, the wheel to zoom about the pointer), and by its buttons:
++ and − zoom, ⤢ shows the whole field in the window and, pressed again,
+goes back to your army at the zoom you had; ⇕ (phone) makes the map
+taller. On a desktop the tent fills the window and the map scrolls inside
+its own box.
+
 ```
 armies.js      buying an army: each choice priced and judged, the
                builder's reasons in plain words, the names units are given

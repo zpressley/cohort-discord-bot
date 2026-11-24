@@ -29,6 +29,7 @@ const { createGame, submitOrders, waitingOn } = require('../engine/orchestrator'
 const { planTurn } = require('../opponent/planner')
 const { loadScenario, mapChoices } = require('../adapters/hotseat/scenarios')
 const { fieldFactions, FACTIONS } = require('../engine/army/factions')
+const { withSecondLine } = require('../engine/army/secondLine')
 const { leadUnit } = require('../engine/command/company')
 const { byCommandPost } = require('../engine/command/messengers')
 const { groundOf } = require('../data/maps')
@@ -57,7 +58,7 @@ const OTHER = Object.fromEntries(String(arg('--ground', '')).split(',map:').filt
 const MAX_STOPS = 600
 
 function play(map, red, blue, seed) {
-  let spec = fieldFactions(loadScenario('meeting-battle', { map, deploy: true }), { red, blue })
+  let spec = withSecondLine(fieldFactions(loadScenario('meeting-battle', { map, deploy: true }), { red, blue }), { red, blue })
   const objectives = NONE ? [] : OTHER[map] ?? groundOf(map)
   spec = { ...spec, standingOrders: {}, dayMinutes: T.DAY.MINUTES, ...(objectives.length ? { objectives } : {}) }
   if (MODE !== 'mirror') {
@@ -86,7 +87,7 @@ function play(map, red, blue, seed) {
 const keys = Object.keys(FACTIONS)
 const rows = []
 const ONLY = arg('--map', null)
-for (const { id: map } of mapChoices().filter(m => !ONLY || m.id === ONLY)) {
+for (const { id: map } of mapChoices({ big: Boolean(ONLY) }).filter(m => !ONLY || m.id === ONLY)) {
   const r = { map, red: 0, blue: 0, night: 0, draw: 0, byGround: 0, minutes: 0, n: 0, reasons: {}, stuck: 0, first: { red: 0, blue: 0 }, firstWon: 0, firstAt: 0 }
   keys.forEach((red, i) => {
     for (let round = 0; round < ROUNDS; round++) {

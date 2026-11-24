@@ -477,7 +477,7 @@ async function muster() {
       <form id="muster" class="page" style="padding: 0">
         <p class="note">A battle to the end. It is won when the other side yields the field, its army breaks or is destroyed, or its Commander is killed; or by holding the field's ground to fight for. ${esc(day.said)}</p>
         <label class="field">The field
-          <select name="map">${maps.map(m => `<option value="${esc(m.id)}">${esc(m.title)}</option>`).join('')}</select>
+          <select name="map">${maps.map(m => `<option value="${esc(m.id)}">${esc(m.title)}${m.size ? ` (${esc(m.size)})` : ''}</option>`).join('')}</select>
         </label>
         <p class="note ground-note" id="ground-note"></p>
         <fieldset>
@@ -1042,6 +1042,7 @@ async function tent(token) {
         <div class="map-tools">
           <button class="btn" type="button" id="zoom-in" aria-label="Zoom in">+</button>
           <button class="btn" type="button" id="zoom-out" aria-label="Zoom out">−</button>
+          <button class="btn" type="button" id="whole" aria-label="The whole field" aria-pressed="false">⤢</button>
           <button class="btn btn-tall" type="button" id="tall" aria-label="Taller map" aria-pressed="false">⇕</button>
         </div>
         <div class="map-hint" id="map-hint"></div>
@@ -1078,6 +1079,9 @@ async function tent(token) {
       onPick: (id) => { state.picked = id; state.stack = null; state.place = null; state.flash = null; renderMap(); renderHint(); if (state.tab === 'army') renderPanel() },
       onStack: (units) => { state.stack = units.map(u => u.id); state.place = null; state.flash = null; renderHint() },
       onPinch: (factor, x, y) => zoomBy(factor, { x, y }),
+      // A mouse dragged across the map (not from a unit) moves it, as a
+      // finger does.
+      onPan: (dx, dy) => { scroll.scrollLeft -= dx; scroll.scrollTop -= dy },
       onOrder: (unit, x, y) => addLine(`${unit.name} to ${gridRef(x, y)}`),
       onPlace: (x, y) => { state.place = { x, y }; state.flash = null; renderHint() }
     })
@@ -1106,7 +1110,8 @@ async function tent(token) {
     const py = about ? about.y - rect.top : scroll.clientHeight / 2
     const centreX = (scroll.scrollLeft + px) / svg.clientWidth
     const centreY = (scroll.scrollTop + py) / svg.clientHeight
-    state.zoom = Math.min(2.5, Math.max(scroll.clientWidth / W / 1.2, state.zoom * factor))
+    state.zoom = Math.min(2.5, Math.max(wholeZoom(), state.zoom * factor))
+    if (before !== null) { before = null; document.getElementById('whole').setAttribute('aria-pressed', 'false') }
     svg.style.width = `${Math.round(W * state.zoom)}px`
     scroll.scrollLeft = centreX * svg.clientWidth - px
     scroll.scrollTop = centreY * svg.clientHeight - py
@@ -1119,6 +1124,41 @@ async function tent(token) {
   })
   document.getElementById('zoom-in').addEventListener('click', () => zoomBy(1.4))
   document.getElementById('zoom-out').addEventListener('click', () => zoomBy(1 / 1.4))
+  // The least the map zooms out to: the whole field in the window (on a
+  // 2 km field a phone shows it whole only so small), or a little under
+  // the window's width, as it always was.
+  function wholeZoom() {
+    const svg = scroll.querySelector('svg')
+    const W = Number(svg.getAttribute('width'))
+    const H = Number(svg.getAttribute('height'))
+    return Math.min(scroll.clientWidth / W / 1.2, scroll.clientWidth / W, scroll.clientHeight / H)
+  }
+  // The whole field at a glance, and back to your army at the zoom you
+  // had: one thumb, for a field too big to see at once.
+  let before = null
+  document.getElementById('whole').addEventListener('click', (event) => {
+    const svg = scroll.querySelector('svg')
+    const W = Number(svg.getAttribute('width'))
+    if (before === null) {
+      before = state.zoom
+      state.zoom = wholeZoom()
+      svg.style.width = `${Math.round(W * state.zoom)}px`
+      scroll.scrollLeft = 0
+      scroll.scrollTop = 0
+    } else {
+      state.zoom = before
+      before = null
+      svg.style.width = `${Math.round(W * state.zoom)}px`
+      centreOnArmy()
+    }
+    event.currentTarget.setAttribute('aria-pressed', String(before !== null))
+  })
+  // The wheel zooms the map about the pointer, on a desktop.
+  scroll.addEventListener('wheel', (event) => {
+    if (!scroll.querySelector('svg')) return
+    event.preventDefault()
+    zoomBy(Math.exp(-event.deltaY * (event.deltaMode === 1 ? 0.05 : 0.0015)), { x: event.clientX, y: event.clientY })
+  }, { passive: false })
 
   function renderHint() {
     const hint = document.getElementById('map-hint')
@@ -1287,7 +1327,9 @@ async function tent(token) {
       `${a.name} to ${east(a, 4)}`,
       `${b.name} defend ${east(b, 2)}`,
       `${a.name} hold`,
-      `${b.name} fall back`
+      `${b.name} fall back`,
+      // On a big field, the second line as one: a short order for many units.
+      ...(own.some(u => u.secondLine) ? ['second line hold'] : [])
     ]
     return `<div class="how-to">
       <strong>How to give orders</strong>

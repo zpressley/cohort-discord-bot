@@ -6,8 +6,9 @@ const crownhill = require('./crownhill')
 const ashford = require('./ashford')
 const thornwood = require('./thornwood')
 const ravenridge = require('./ravenridge')
+const greywater = require('./greywater')
 
-const MAPS = { crownhill, ashford, thornwood, ravenridge }
+const MAPS = { crownhill, ashford, thornwood, ravenridge, greywater }
 
 // A map's own ground to fight for, as a battle spec's objectives
 // (engine/orchestrator/victory.js, objectiveArea). None for a map without.

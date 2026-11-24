@@ -55,7 +55,7 @@ const SETS = applySets()
 
 const MAX_PLAYER_TURNS = 60
 const DAY_TURNS = 40
-const MAPS = mapChoices().map(m => m.id)
+const MAPS = mapChoices({ big: false }).map(m => m.id)
 
 // ── Seeds ────────────────────────────────────────────
 function hash(text) {

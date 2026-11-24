@@ -44,11 +44,12 @@ const { digest, summarise, placeName } = require('../narrator/turnNarrator')
 const { gradeOf, DEATH_ODDS, loyaltyBand } = require('../engine/command/officers')
 const T = require('../engine/combat/tables')
 const { narrateTurn, report } = require('../narrator/turnNarrator')
-const { orderWords, RIDER, NIGHT, REPORT, GROUND, ENEMY_COMMANDER } = require('../narrator/words')
+const { orderWords, RIDER, NIGHT, REPORT, GROUND, ENEMY_COMMANDER, FIELD } = require('../narrator/words')
 const { loadScenario, SCENARIOS, mapChoices } = require('../adapters/hotseat/scenarios')
 const { MAPS, groundOf } = require('../data/maps')
 const { FACTIONS, factionChoices } = require('../engine/army/factions')
 const { fieldArmies, anyFaction, usualArmy, kitOf, baseOf } = require('../engine/army/standard')
+const { withSecondLine, linesOf } = require('../engine/army/secondLine')
 const { armyChanged, handOver, takeIn, moveOfficer, renameUnit } = require('../engine/command/company')
 const { checkArmy, appraise, unitNoun } = require('./armies')
 const { rosterOf, marchingOf, checkMarching, fieldingOf, benchedOf, plainName, nameRefusal, renamed, without, addToRoster } = require('./roster')
@@ -519,7 +520,11 @@ function createBattleStore({ dir = null, ai = null, now = () => Date.now() } = {
   function leadSide(spec, side, company, seed, benched = [], { night = false } = {}) {
     // (The quality a unit was raised at, before training, for the next day:
     // it is trained again from there, not twice.)
-    const mine = spec.units.filter(u => u.side === side).map(u => ({ ...u, quality: u.raisedAs ?? u.quality, kind: unitName(u).toLowerCase() }))
+    // (The second line, raised for the day, is not his company's: its
+    // officers are drawn for the battle and go home with it.)
+    const mine = spec.units.filter(u => u.side === side && !u.secondLine).map(u => ({ ...u, quality: u.raisedAs ?? u.quality, kind: unitName(u).toLowerCase() }))
+    const raised = spec.units.filter(u => u.side === side && u.secondLine && !u.officer)
+    const drawn = new Map(raised.length ? assignOfficers(raised, seed).map(u => [u.id, u.officer]) : [])
     const led = musterOfficers(company, mine, seed, { benched })
     const officerOf = new Map(led.units.map(u => [u.id, u.officer]))
     // The quality each unit takes the field at: what it was raised as, and
@@ -541,7 +546,7 @@ function createBattleStore({ dir = null, ai = null, now = () => Date.now() } = {
       company: led.company,
       spec: {
         ...spec,
-        units: spec.units.map(u => (officerOf.has(u.id) ? { ...trained(u), officer: officerOf.get(u.id), ...(veterancyOf.has(u.id) ? { veterancy: veterancyOf.get(u.id) } : {}) } : u)),
+        units: spec.units.map(u => (officerOf.has(u.id) ? { ...trained(u), officer: officerOf.get(u.id), ...(veterancyOf.has(u.id) ? { veterancy: veterancyOf.get(u.id) } : {}) } : drawn.has(u.id) ? { ...u, officer: drawn.get(u.id) } : u)),
         commanders: { ...(spec.commanders ?? {}), [side]: { unitId: ridesWith(led.units) } }
       }
     }
@@ -552,7 +557,7 @@ function createBattleStore({ dir = null, ai = null, now = () => Date.now() } = {
   // (veterancy.js, matchedVeterancy; ruled 2026-11-23). Fixed here, in the
   // spec, for the whole battle.
   function matchComputer(spec, side, other) {
-    const v = matchedVeterancy(spec.units.filter(u => u.side === side))
+    const v = matchedVeterancy(spec.units.filter(u => u.side === side && !u.secondLine))
     if (!(v > 0)) return spec
     return { ...spec, units: spec.units.map(u => (u.side === other ? { ...u, veterancy: v } : u)) }
   }
@@ -590,7 +595,9 @@ function createBattleStore({ dir = null, ai = null, now = () => Date.now() } = {
       }
       armies[side] = { faction, ...field }
     }
-    return fieldArmies(spec, armies)
+    // On a field of more than one line (the big map), each army's second
+    // line: its faction's usual army again, raised for the day.
+    return withSecondLine(fieldArmies(spec, armies), Object.fromEntries(Object.entries(sides).map(([side, { faction }]) => [side, faction])))
   }
 
   // The names of the units that march with a Commander: those asked (an
@@ -1046,6 +1053,8 @@ function createBattleStore({ dir = null, ai = null, now = () => Date.now() } = {
         role: u.role ?? null,
         quality: u.quality ?? null,
         mounted: Boolean(u.mounted),
+        // Raised for the day on a big field (engine/army/secondLine.js).
+        ...(game.spec.units.find(s => s.id === u.id)?.secondLine ? { secondLine: true } : {}),
         position: { ...now.position },
         at: where(now.position),
         strength: now.strength,
@@ -1572,7 +1581,9 @@ function createBattleStore({ dir = null, ai = null, now = () => Date.now() } = {
       const prices = commanderOf(game, side)?.prices ?? []
       // Every unit that fought: an officer's fate, or (officerId null) a
       // unit with none, which is a battle nearer to earning one.
-      const fates = officerFates(game, side).map(f => {
+      // (Not the second line's: raised for the day, it goes home.)
+      const raisedForTheDay = new Set(game.spec.units.filter(u => u.secondLine).map(u => u.id))
+      const fates = officerFates(game, side).filter(f => !raisedForTheDay.has(f.unitId)).map(f => {
         const deeds = digest(events, { map: game.battle.map, ownIds: new Set([f.unitId]) })[0]?.text ?? ''
         return {
           unitId: f.unitId, culture: game.spec.units.find(u => u.id === f.unitId)?.culture ?? null,
@@ -1826,7 +1837,10 @@ function createBattleStore({ dir = null, ai = null, now = () => Date.now() } = {
     maps: () => mapChoices().map(m => {
       const ground = groundOf(m.id)
       const names = ground.map(g => g.name)
-      return { ...m, ground: names, said: names.length ? `${GROUND.toFightFor(names)} ${GROUND.rule(names, T.GROUND.HOLD_MINUTES, ground.some(g => g.reach > 0))}` : '' }
+      const said = names.length ? `${GROUND.toFightFor(names)} ${GROUND.rule(names, T.GROUND.HOLD_MINUTES, ground.some(g => g.reach > 0))}` : ''
+      // A big field says so, and that its armies come in two lines.
+      const lines = linesOf(m.id) > 1 ? FIELD.lines : ''
+      return { ...m, ground: names, said: [said, lines].filter(Boolean).join(' '), ...(m.km > 1 ? { size: FIELD.size(m.km) } : {}) }
     }),
     factions: () => factionChoices(),
     setArmy,
