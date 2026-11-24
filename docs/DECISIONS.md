@@ -4901,3 +4901,82 @@ fairness between two computer armies.
    still pace the banks for ever if both are crowded (the computer now
    steps into the water instead). Should the rules make any unit going in
    across a crossing step into it first?
+
+### How the first battle and coming to grips were put together (Claude's choices, open to change)
+
+Both changes alter how battles fall out, so they were put together
+(with the grammar and the app's rough spots, `integration-21`) and
+measured again. Four things were done in putting them together:
+
+- **The step into a crossing is the engine's now, for every unit.** A unit
+  going at an enemy in its side's sight within `tables.CROSSING.NEAR` (3)
+  tiles, whose way to him lies over a ford or bridge, steps into the
+  crossing first (`battle/crossing.js`, from the planner's
+  `intoTheCrossing`; `battle.js`, `overTheWater`, for advance, an attack on
+  a named enemy, and a side's standing order to advance). The planner now
+  simply orders "advance" and its copy is gone (`TUNING.CROSSING_NEAR`
+  with it); its test calls the engine's. So a player's own units pressing
+  across a crossing no longer pace the banks either. `npm run balance` is
+  unchanged (a duel does not move).
+- **The computer guesses where the enemy would hold from the field's own
+  forming-up place for his edge** (`planner.js`, `theirGround`), where the
+  field has one, not from its own start mirrored across the field: with
+  Crownhill's east army further south the mirror no longer stood where the
+  west forms up, and the planner's own test found it. The planner's other
+  numbers are untouched.
+- **Raven Ridge's east army forms up a tile nearer, at (31, 22)** (it was
+  (32, 22)): on the combined code the computer against itself gave the
+  west 59% there. Now both are 285 and 284 m from Raven Gap, first unit on
+  it after 19 and 20 minutes (19 and 24 before), and the west wins 51%.
+  The other fields were within 45/55 and were left. The test of equal
+  marches now covers all four 1 km fields.
+- **A bug the soak found once both were in**: an enemy in sight began a
+  search afresh every ten minutes even when it was broken. A broken unit
+  that could not get away (on Ashford, wedged at the bridge) kept the
+  searchers walking up and down for ever, and the battle never ended
+  (`battle.js`; Sarmatia against Germania, seed 27 of the soak's faction
+  armies). Only an enemy not broken ends a search now. Tested: "a broken
+  enemy left in sight does not begin a search afresh every ten minutes".
+  No fingerprint changed with it.
+
+Fingerprints retaken on the combined code, the planner's values alone in
+their headers: `asked-unchanged` and `messengers-unchanged` (Crownhill and
+Ashford's second seed), `attack-named-unchanged` (Crownhill; Thornwood is
+back to its value before both). One web test's battle
+(`held-commander.test.js`, `takenInBattle`) moved from seed 708 to 1477:
+at 708 he was now taken with his army as good as beaten.
+
+**The numbers, combined, against each change alone** (the same seeds):
+
+| | before both | first battle alone | planner alone | combined |
+|---|---|---|---|---|
+| Crownhill, "everyone advance" | 4% | 43% | 4% | 45% |
+| Crownhill, "everyone take the Crownhill" | 24% | 45% | 21% | 45% |
+| Crownhill, the planner as player | 29% | 50% | 33% | 54% |
+| Ashford, advance / take / planner | 58 / 50 / 63% | 53 / 33 / 63% | 55 / 46 / 64% | 50 / 30 / 58% |
+| Thornwood, advance / take / planner | 46 / 28 / 43% | 48 / 23 / 40% | 45 / 31 / 45% | 50 / 28 / 39% |
+| Raven Ridge, advance / take / planner | 73 / 49 / 58% | 44 / 60 / 58% | 70 / 50 / 60% | 43 / 40 / 56% |
+| Computer against itself, west's share: Crownhill, Ashford, Thornwood, Raven Ridge | 40, 51, 43, 54% | 52, 51, 43, 54% | 36, 55, 48, 59% | 47, 49, 48, 51% |
+| As the app plays (`--mode app`), west's share | 39, 61, 52, 61% | 49, 60, 51, 61% | | 52, 58, 50, 48% |
+| Battles that come to nothing (`no-fight.js`, red computer / planner / charge / idle) | | | 0 / 0 / 0 / 0 | 0 / 0 / 0 / 0 |
+| Character league (steady, bold, cautious) | 51, 49, 50% | 50, 50, 50% | 52, 48, 50% | 52, 50, 48% |
+| Messenger league: red won; turns a battle; asked for shooting | 50%; 11.9; 12% | 55%; 11.1; 7% | 50%; 11.9 | 53%; 11.0; 6% |
+| Commander taken, 1 km fields / Greywater | 1 in 21.5 / 10.8 | 1 in 20.4 / 10.8 | 1 in 20.4 / | 1 in 17.7 / 12.5 |
+| Soak: computer's side, faction armies (player turns) | 19.8, 19.6 | 20.6, 20.1 | | 19.1, 17.8 |
+| Soak: the map's ground (by the ground, night, minutes) | 146, 4, 139 | 139, 5, 154 | | 145, 0, 139 |
+| `npm run balance` | | unchanged | unchanged | unchanged |
+
+A new player on Crownhill still gets a real battle (blows struck in all
+but 3 of 80 with "take", every one with "advance") and wins 45% with
+either simple order. The soak ends every battle; "coming to grips" 456 of
+456. The Commander taken 1 in 17.7 on the 1 km fields is more often than
+either change alone (1 in 20.4 each): the captive league's player sends
+everyone in every turn, and both changes bring armies to grips sooner.
+Not retuned; set beside Zach's ruling on the odds before anyone retunes
+them.
+
+**Guessed, and the other reading.** That the step into a crossing belongs
+to every unit (it is how men cross water, not how the computer thinks);
+the other reading keeps it the computer's alone, and a player's own units
+may pace the banks until he names the ford. That the field's forming-up
+places are known to both Commanders (the planner's own reading, kept).
