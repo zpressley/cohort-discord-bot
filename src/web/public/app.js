@@ -139,13 +139,15 @@ function verdictWords(battle) {
   const o = battle.outcome
   if (!o) return null
   // Night ended it (words from the server: narrator/words.js, NIGHT).
-  if (o.said) return { title: o.title, reason: o.said.charAt(0).toUpperCase() + o.said.slice(1), night: true }
+  if (o.said && o.reason === 'night fell') return { title: o.title, reason: o.said.charAt(0).toUpperCase() + o.said.slice(1), night: true }
   if (o.winner === 'draw') {
     const why = { 'both commanders killed': 'Both Commanders were killed', 'mutual collapse': 'Both armies broke', 'mutual ruin': 'Both armies were ruined', 'time ran out: equal losses': 'The day ended with losses even' }
     return { title: 'A draw', reason: why[o.reason] ?? o.reason }
   }
   const won = o.winner === battle.side
   const words = REASONS[o.reason]
+  // The ground to fight for decided it (words from the server: GROUND).
+  if (o.said) return { title: won ? 'Victory' : 'Defeat', reason: o.said }
   return { title: won ? 'Victory' : 'Defeat', reason: words ? words[won ? 0 : 1] : o.reason }
 }
 
@@ -346,10 +348,11 @@ async function muster() {
     <header class="bar"><a href="/battles" data-link>Your battles</a><strong style="font-family: var(--font-display); font-size: 18px">Muster a battle</strong><span></span></header>
     <main class="page">
       <form id="muster" class="page" style="padding: 0">
-        <p class="note">A battle to the end. It is won when the other side yields the field, its army breaks or is destroyed, or its Commander is killed. ${esc(day.said)}</p>
+        <p class="note">A battle to the end. It is won when the other side yields the field, its army breaks or is destroyed, or its Commander is killed; or by holding the field's ground to fight for. ${esc(day.said)}</p>
         <label class="field">The field
           <select name="map">${maps.map(m => `<option value="${esc(m.id)}">${esc(m.title)}</option>`).join('')}</select>
         </label>
+        <p class="note ground-note" id="ground-note"></p>
         <fieldset>
           <legend>Your opponent</legend>
           <label class="choice"><input type="radio" name="opponent" value="standing" checked> The computer (play alone)</label>
@@ -456,6 +459,11 @@ async function muster() {
     document.getElementById('enemy-field').style.display = friend ? 'none' : ''
     document.getElementById('enemy-note').hidden = !friend
   }
+  // Each field's own ground to fight for, under the field chosen.
+  const pickMap = document.querySelector('select[name="map"]')
+  const showGround = () => { document.getElementById('ground-note').textContent = maps.find(m => m.id === pickMap.value)?.said ?? '' }
+  pickMap.addEventListener('change', showGround)
+  showGround()
   pickCommander?.addEventListener('change', showFaction)
   pickFaction.addEventListener('change', showFaction)
   document.querySelectorAll('input[name="opponent"]').forEach(r => r.addEventListener('change', showEnemy))
@@ -888,6 +896,7 @@ async function tent(token) {
 
   app.innerHTML = `
     <header class="bar" id="bar"></header>
+    <p class="ground-line" id="ground-line" hidden></p>
     <div class="tent">
       <section class="map-wrap" aria-label="The map">
         <div class="map-scroll" id="map-scroll"></div>
@@ -1433,8 +1442,17 @@ async function tent(token) {
     return shown.turn === 0 ? 'The field before the first orders.' : `The field after turn ${shown.turn}, ${clock(shown.battle.minutes)}.`
   }
 
+  // The ground to fight for, and who holds it (every side knows at once).
+  function renderGround() {
+    const line = document.getElementById('ground-line')
+    const said = (state.view.objectives ?? []).map(o => o.said).filter(Boolean)
+    line.hidden = said.length === 0
+    line.textContent = said.join(' ')
+  }
+
   function renderAll() {
     renderBar()
+    renderGround()
     renderMap()
     renderHint()
     renderPanel()

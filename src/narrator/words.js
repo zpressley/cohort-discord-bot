@@ -221,6 +221,38 @@ const NIGHT = {
 }
 const DAYS = { 2: 'second', 3: 'third', 4: 'fourth', 5: 'fifth', 6: 'sixth', 7: 'seventh', 8: 'eighth', 9: 'ninth', 10: 'tenth' }
 
+// The ground to fight for: each map's own (src/data/maps, `ground`), held
+// alone for an hour to take the field (combat/tables.js, GROUND). Every side
+// knows at once when it changes hands. `mine`: true for the side told's
+// own, false for the enemy's, null for no one's. `names`: the ground's names
+// ("the Old Mill Bridge").
+const both = (names) => (names.length <= 1 ? names.join('') : `${names.slice(0, -1).join(', ')} and ${names.at(-1)}`)
+const GROUND = {
+  // The muster, under the field chosen; and the first dispatch.
+  toFightFor: (names) => `The ground to fight for: ${both(names)}.`,
+  // `beside`: it is held, and contested, from beside it as well as on it.
+  rule: (names, minutes, beside = false) => `Hold ${names.length > 1 ? 'all of it' : 'it'} alone for ${clock(minutes)}, with no enemy on it${beside ? ' or beside it' : ''}, and the field is yours, as surely as if the enemy's army broke. Let the enemy hold it as long, and the field is his.`,
+  // The dispatch, when it changes hands.
+  took: (name, mine) => (mine ? `you took ${name}: hold it alone and the field is yours` : `the enemy took ${name}: take it from him, or the field is his`),
+  lost: (name, wasMine) => (wasMine ? `you no longer hold ${name}` : `the enemy no longer holds ${name}`),
+  // ... and when it is close to deciding the battle.
+  close: (name, mine, minutes) => (mine
+    ? `hold ${name} ${clock(minutes)} more and the field is yours`
+    : `the enemy has held ${name} long: unless you take it from him within ${clock(minutes)}, the field is his`),
+  // The tent, under the map: one piece of the ground. `leftMinutes` only
+  // when one side holds all of it.
+  status: (name, mine, leftMinutes = null) => (mine === null
+    ? `The ground to fight for, ${name}, is held by no one.`
+    : mine ? `You hold ${name}, the ground to fight for${leftMinutes === null ? '.' : `: ${clock(leftMinutes)} more and the field is yours.`}`
+      : `The enemy holds ${name}, the ground to fight for${leftMinutes === null ? '.' : `: take it within ${clock(leftMinutes)}, or the field is his.`}`),
+  // The map's label.
+  heldBy: (mine) => (mine === null ? '' : mine ? 'held by you' : 'held by the enemy'),
+  // The verdict, when the ground decided it.
+  won: (names, mine, minutes) => (mine
+    ? `You held ${both(names)} alone for ${clock(minutes)}, and the field is yours`
+    : `The enemy held ${both(names)} alone for ${clock(minutes)}, and the field is his`)
+}
+
 // A unit's wind in a word, as its share of what it can spend: fresh, tiring
 // or spent (fresh above 60%, as combat counts a unit at full wind:
 // tables.STAMINA.FULL_ABOVE; spent at a quarter or under).
@@ -281,4 +313,4 @@ const REPORT = {
   }
 }
 
-module.exports = { orderWords, moraleWords, ORDER, OWN_EDGE, HOLD_THERE, KIT, RIDE_WITH, LOYALTY_WORDS, VALUES_WORDS, VETERANCY_WORDS, RIDER, NIGHT, REPORT, windWords }
+module.exports = { orderWords, moraleWords, ORDER, OWN_EDGE, HOLD_THERE, KIT, RIDE_WITH, LOYALTY_WORDS, VALUES_WORDS, VETERANCY_WORDS, RIDER, NIGHT, REPORT, GROUND, windWords }

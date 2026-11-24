@@ -74,6 +74,12 @@ const CELLS = {
   }
 }
 
+// Raven Gap as ground to hold: the open tiles of the saddle, from the road's
+// way in on the west (x 19) to the ridge's eastern foot (x 22). With its
+// westmost column too, the west army won 66 battles in 100.
+const GAP = []
+for (let y = 19; y <= 21; y++) for (let x = 19; x <= 22; x++) if (map.get(x, y) !== 'hill') GAP.push({ x, y })
+
 module.exports = {
   name: 'ravenridge',
   title: 'Raven Ridge',
@@ -81,5 +87,9 @@ module.exports = {
   height: H,
   cells: CELLS,
   terrain: map.terrain(),
-  deploy: { west: { x: 9, y: 22 }, east: { x: 32, y: 22 } }
+  deploy: { west: { x: 9, y: 22 }, east: { x: 32, y: 22 } },
+  // The ground to fight for (engine/orchestrator/victory.js, objectiveArea):
+  // the saddle where the road goes through the ridge, held from on it (the
+  // open ground between the two halves of the ridge, not the whole road).
+  ground: [{ name: 'Raven Gap', tiles: GAP }]
 }

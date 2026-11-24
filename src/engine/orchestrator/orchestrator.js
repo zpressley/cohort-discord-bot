@@ -46,7 +46,7 @@ const { createWord, updateWord, wordFromCaptivity, arrivalOf } = require('./word
 const { conditionOf } = require('./reports')
 const { evaluateVictory, objectiveController, objectiveArea, OBJECTIVE_HOLD_MINUTES } = require('./victory')
 const { bargainChips, commanderFate } = require('../command/commander')
-const { PARLEY, COMMAND } = require('../combat/tables')
+const { PARLEY, COMMAND, GROUND } = require('../combat/tables')
 
 const MAX_TICKS_PER_TURN = 6   // one hour of battle time per decision
 const MINUTES_PER_TICK = 10    // locked decision 1
@@ -564,6 +564,22 @@ function updateObjectiveHolds(game) {
       changed = true
       game.battle.log.emit('objective', game.battle.turn, { objectiveId: objective.id, name: objective.name, side: controller, was })
     }
+  }
+
+  // A side holding all the ground, close to taking the field by it: every
+  // side is told, once a hold, and the battle stops for them (so the side
+  // about to lose has time to answer). Not with a hold counted in turns.
+  const length = game.spec.objectiveHoldMinutes ?? OBJECTIVE_HOLD_MINUTES
+  const warn = length - GROUND.CLOSE_MINUTES
+  const holds = objectives.map(o => game.objectiveHolds[o.id])
+  if (!game.spec.objectiveTurnsToWin && warn > 0 && holds.length > 0 && holds.every(h => h && h.side === holds[0].side)) {
+    objectives.forEach((objective, i) => {
+      const hold = holds[i]
+      if (hold.close || game.minutesElapsed - hold.sinceMinute < warn) return
+      hold.close = true
+      changed = true
+      game.battle.log.emit('objective', game.battle.turn, { objectiveId: objective.id, name: objective.name, side: hold.side, was: hold.side, close: length - (game.minutesElapsed - hold.sinceMinute) })
+    })
   }
 
   // The consecutive-turn count itself advances once per player turn, in

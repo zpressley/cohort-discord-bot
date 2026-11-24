@@ -84,5 +84,10 @@ module.exports = {
   cells: CELLS,
   terrain: map.terrain(),
   // The armies form up in the fields on either side of the wood.
-  deploy: { west: { x: 5, y: 20 }, east: { x: 35, y: 20 } }
+  deploy: { west: { x: 5, y: 20 }, east: { x: 35, y: 20 } },
+  // The ground to fight for (engine/orchestrator/victory.js, objectiveArea):
+  // the bald rise in the heart of the wood, held from on it or beside it
+  // (the brook cuts its eastern foot: held from on it alone, the west army
+  // won 63 battles in 100).
+  ground: [{ feature: 'Thorn Knoll', name: 'Thorn Knoll', reach: 1 }]
 }

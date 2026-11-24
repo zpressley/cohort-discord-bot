@@ -111,9 +111,12 @@ function planTurn(game, side) {
   const closeBy = inSight.some(e => mine.some(u => tileDistance(u.position, e.position) <= TUNING.ENGAGE))
   const everFought = battle.log.ofType('contact').length > 0
   const patient = game.minutesElapsed < temper.patience
-  // The enemy on the ground we meant to hold: nothing left to hold.
-  const taken = strong && inSight.some(e => tileDistance(e.position, strong.anchor) <= 1) &&
-    !mine.some(u => tileDistance(u.position, strong.anchor) <= 2)
+  // The enemy on the ground we meant to hold: nothing left to hold. On the
+  // battle's ground to fight for, an enemy seen holding or contesting it is
+  // gone for at once: he is not left to take the field.
+  const taken = strong && (strong.objective
+    ? inSight.some(e => onTheGround(game, e.position))
+    : inSight.some(e => tileDistance(e.position, strong.anchor) <= 1) && !mine.some(u => tileDistance(u.position, strong.anchor) <= 2))
   const holding = Boolean(strong) && !taken && (strong.objective || (temper.holds && patient && !everFought))
 
   // ── Where the line stands ───────────────────────────
@@ -233,7 +236,13 @@ function strongpoint(game, side, forward, across) {
 
   if (game.objectives?.length) {
     const tiles = game.objectives.flatMap(o => o.tiles ?? (o.coord ? [o.coord] : []))
-    if (tiles.length > 0) return { anchor: centroid(tiles), objective: true, kind: 'objective' }
+    if (tiles.length > 0) {
+      // Ground a line cannot form on (a bridge, a ford) is held from its
+      // near end: the line stands back from it, a tile at a time.
+      let anchor = centroid(tiles)
+      for (let back = 1; back <= 3 && NOT_HERE.includes(map.terrainAt(anchor)); back++) anchor = add(centroid(tiles), forward, -back)
+      return { anchor, objective: true, kind: 'objective' }
+    }
   }
 
   const candidates = detectFeatures(map)
@@ -250,6 +259,14 @@ function strongpoint(game, side, forward, across) {
   const anchor = best.feature.kind === 'hill' ? best.feature.centre : add(best.feature.centre, forward, -2)
   return { anchor: standable(map, anchor, new Set()) ?? best.feature.centre, objective: false, kind: best.feature.kind }
 }
+
+// A place on, or near enough to hold or contest, the battle's ground to
+// fight for (as engine/orchestrator/victory.js counts it).
+const onTheGround = (game, position) => game.objectives.some(o => {
+  const tiles = o.tiles ?? [o.coord]
+  const reach = o.reach ?? (o.single === false ? 0 : 1)
+  return tiles.some(t => tileDistance(position, t) <= reach)
+})
 
 const toXY = (position) => (typeof position === 'string' ? require('../engine/map/labels').fromLabel(position) : position)
 

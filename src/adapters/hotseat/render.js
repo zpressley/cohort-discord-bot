@@ -240,6 +240,7 @@ function wordEvent(event) {
         ? `${event.unitId} has room to fight again at ${where(event.at)}`
         : `${event.unitId} is ${event.tier} at ${where(event.at)} — ${event.men} men packed on one spot`
     case 'objective':
+      if (event.close) return `${event.side.toUpperCase()} is ${event.close} minutes from taking the field by holding ${event.name}`
       return event.side
         ? `${event.side.toUpperCase()} takes ${event.name}`
         : `${event.name} is no longer held${event.was ? ` by ${event.was}` : ''}`

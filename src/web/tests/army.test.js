@@ -247,9 +247,11 @@ test('the same faction may fight on both sides, by choice or by lot, and each si
   } finally { await app.close() }
 })
 
-test('a deathmatch ends when a side yields the field, loses its army or loses its Commander, or at the end of the day; and the app has words for each', async () => {
+test('a deathmatch ends when a side yields the field, loses its army or loses its Commander, holds the ground to fight for, or at the end of the day; and the app has words for each', async () => {
   const app = await start()
   const ENDS = ['enemy surrendered', 'enemy commander bargained', 'enemy army broken', 'enemy army collapsed', 'enemy commander killed', 'both commanders killed', 'mutual collapse', 'mutual ruin',
+    // Each map's own ground, held alone for an hour.
+    'objectives held',
     // The end of the day: night ends it, and neither side has won (ruled
     // 2026-11-24: "No the day just ends the battle").
     'night fell']
@@ -257,11 +259,12 @@ test('a deathmatch ends when a side yields the field, loses its army or loses it
     const reasons = new Set()
     for (let seed = 1; seed <= 6; seed++) {
       const made = (await app.api('POST', '/api/commanders', { faction: Object.keys(FACTIONS)[seed % 4] })).body
-      // As the app musters: a day of forty turns, no ground to hold.
+      // As the app musters: a day of twelve hours, and the map's own ground
+      // to fight for.
       const seat = (await app.api('POST', '/api/battles', { opponent: 'standing', side: 'red', commander: made.token, seed, map: ['crownhill', 'ashford', 'thornwood'][seed % 3] })).body.seats.red
       let tent = (await app.api('GET', `/api/seat/${seat}`)).body
       assert.equal(tent.battle.timeLimitMinutes, null)
-      assert.deepEqual(tent.objectives, [])
+      assert.equal(tent.objectives.length, 1)
       for (let turn = 0; turn < 60 && tent.battle.status !== 'finished'; turn++) {
         await app.api('POST', `/api/seat/${seat}/orders`, { text: seed === 1 && turn === 2 ? 'yield' : 'everyone advance' })
         tent = (await app.api('GET', `/api/seat/${seat}`)).body
