@@ -177,3 +177,26 @@ test('it does not leave the enemy on the ground to fight for: an enemy seen on i
   const offIt = planTurn(game({ x: 6, y: 12 }), 'blue')
   assert.ok(offIt.every(o => o.action === 'defend' || o.action === 'hold'), JSON.stringify(offIt))
 })
+
+test('a holding side\'s missile troops on foot press a near enemy, so as to shoot; its line and its horse stand', () => {
+  // (Fire and retreat, docs/design/army-balance.md part 7.)
+  const game = createGame({
+    name: 'plain', map: PLAIN, seed: 1, turns: [],
+    objectives: [{ id: 'hold', coord: { x: 15, y: 12 } }],
+    units: [
+      unit({ id: 'blue_a', side: 'blue', position: { x: 15, y: 12 } }),
+      archers({ id: 'blue_c', side: 'blue', position: { x: 17, y: 12 } }),
+      archers({ id: 'blue_h', side: 'blue', position: { x: 17, y: 15 }, mounted: true, movementRange: 5 }),
+      archers({ id: 'blue_m', side: 'blue', position: { x: 16, y: 10 }, armor: 'medium_armor' }),
+      unit({ id: 'red_a', position: { x: 11, y: 12 } })
+    ],
+    sides: { red: { homeEdge: 'west' }, blue: { homeEdge: 'east' } }
+  }, { seed: 1 })
+  submitOrders(game, 'red', [])
+  submitOrders(game, 'blue', [])
+  const orders = planTurn(game, 'blue')
+  assert.equal(order(orders, 'blue_c').action, 'advance', 'light foot with bows')
+  assert.notEqual(order(orders, 'blue_a')?.action, 'advance', 'the line holds')
+  assert.notEqual(order(orders, 'blue_h')?.action, 'advance', 'horse archers keep to the horse')
+  assert.equal(order(orders, 'blue_m').action, 'advance', 'crossbowmen in mail too: no kit makes a man slower')
+})

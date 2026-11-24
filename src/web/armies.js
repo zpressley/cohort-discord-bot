@@ -67,7 +67,8 @@ const cap = (s) => s.charAt(0).toUpperCase() + s.slice(1)
 /** A unit's kit in words: "militia, spear, light armour, medium shield, on foot". */
 function kitWords(kit) {
   const k = kitOf(kit)
-  return [KIT.quality[kit.quality] ?? kit.quality, KIT.weapon[k.weapon] ?? k.weapon, KIT.armor[k.armor] ?? k.armor,
+  const weapon = (w) => KIT.weapon[w] ?? w
+  return [KIT.quality[kit.quality] ?? kit.quality, weapon(k.weapon) + (kit.sidearm ? ` and ${weapon(kit.sidearm)}` : ''), KIT.armor[k.armor] ?? k.armor,
     KIT.shield[k.shield] ?? k.shield, KIT.mounted[String(k.mounted)]].join(', ')
 }
 

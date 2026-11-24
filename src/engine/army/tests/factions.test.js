@@ -204,3 +204,25 @@ test('the enemy\'s faction, when none is chosen, is another faction, the same fo
   const drawn = new Set(Array.from({ length: 300 }, (_, s) => enemyFaction('rome', s + 1)))
   assert.equal(drawn.size, keys.length - 1, 'each of the others comes up')
 })
+
+test('Kush\'s Golden Bows carry a sword for the melee, and no other unit carries a second weapon', () => {
+  // Ruled 2026-11-24: "They don't hit hard from range? They can have a sword".
+  const spec = fieldFactions(loadScenario('meeting-battle', { map: 'ashford', deploy: true }), { red: 'kush', blue: 'rome' })
+  const bows = spec.units.find(u => u.id === 'red_golden_bows')
+  assert.equal(bows.primaryWeapon, 'self_bow_professional')
+  assert.equal(bows.sidearm, 'sword_standard')
+  assert.deepEqual(spec.units.filter(u => u.sidearm).map(u => u.id), ['red_golden_bows'])
+  const game = require('../../orchestrator').createGame({ ...spec, standingOrders: {} }, { seed: 1 })
+  assert.equal(game.battle.world.units.find(u => u.id === 'red_golden_bows').sidearm, 'sword_standard', 'and take it into battle')
+})
+
+test('an elite\'s sidearm must be a hand weapon its culture may field', () => {
+  const was = FACTIONS.kush.elite.sidearm
+  try {
+    FACTIONS.kush.elite.sidearm = 'roman_gladius'
+    assert.equal(buildFaction('kush').ok, false, 'not a Roman sword')
+    FACTIONS.kush.elite.sidearm = 'sling'
+    assert.equal(buildFaction('kush').ok, false, 'not a second missile weapon')
+  } finally { FACTIONS.kush.elite.sidearm = was }
+  assert.equal(buildFaction('kush').ok, true)
+})

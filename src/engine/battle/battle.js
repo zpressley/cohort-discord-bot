@@ -44,6 +44,7 @@ const { createCommanders, stepCommanders, canRide } = require('../command/comman
 const { byRider, riders } = require('../command/messengers')
 const { canSee, visionRange } = require('../map/sight')
 const { coverFor } = require('./hiding')
+const { canSkirmish, fallBack } = require('./skirmish')
 
 const DEFAULT_MAX_TURNS = 20
 
@@ -164,6 +165,30 @@ function stepTurn(state, sideOrders = {}, { sameTurn = false } = {}) {
   const standsOff = (unit) => ranged.missileRange(unit) > 0 && !meleeLastTurn.has(unit.id) &&
     !state.orderBook.get(unit.id)?.holdFire &&
     livingUnits(world).some(e => canShootAt(unit, e, seenAtStart))
+  // Who could come at a missile unit: enemies its side sees, formed and
+  // not already fighting.
+  const skirmishing = new Map()
+  const skirmishFrom = (unit) => {
+    if (!canSkirmish(unit)) return null
+    const seen = seenAtStart.get(unit.side) ?? new Set()
+    const enemies = livingUnits(world).filter(e => e.side !== unit.side && !broken.has(e.id) &&
+      seen.has(e.id) && !meleeLastTurn.has(e.id))
+    const enemyAt = (tile) => enemies.some(e => samePosition(e.position, tile))
+    return fallBack(unit, enemies, { map, engagementRange, enemyAt })
+  }
+  // The first place on the way to an enemy in sight from which a unit can
+  // shoot at it (in reach of its weapon, and of its own sight). Not for a
+  // place an enemy was last seen, and not where it already stands: there,
+  // with no shot, it must go on, or it would wait for ever.
+  const withinShot = (unit, target) => {
+    const inSight = livingUnits(world).some(e => e.side !== unit.side && samePosition(e.position, target) &&
+      seenAtStart.get(unit.side)?.has(e.id))
+    if (!inSight) return target
+    const path = findPath(map, unit.position, target)
+    const reach = Math.min(ranged.missileRange(unit), visionRange(unit, map))
+    const stop = path?.find(tile => tileDistance(tile, target) <= reach)
+    return stop && !samePosition(stop, unit.position) ? stop : target
+  }
   const standingFor = (unit) => {
     const standing = spec.standingOrders?.[unit.side]
     return shaken(unit) ? null : standing
@@ -492,9 +517,19 @@ function stepTurn(state, sideOrders = {}, { sameTurn = false } = {}) {
       // close until they can shoot, and stand there shooting.
       const pressing = order ? order.action === 'advance' : standingFor(unit) === 'advance'
       if (pressing && standsOff(unit)) {
+        // Fire and retreat: it falls back before men it can outmarch
+        // coming at it, and shoots again when it stands (skirmish.js).
+        const back = skirmishFrom(unit)
+        if (back) {
+          skirmishing.set(unit.id, back.from)
+          orders.push({ unitId: unit.id, target: back.to, seeking: false })
+          continue
+        }
         orders.push({ unitId: unit.id, target: 'hold', seeking: true })
         continue
       }
+      // Missile troops close to shooting distance, not to blows.
+      if (pressing && move && move.target !== 'hold' && canSkirmish(unit)) move = { ...move, target: withinShot(unit, move.target) }
       if (move) {
         const held = state.orderBook.get(unit.id)
         orders.push({
@@ -575,6 +610,14 @@ function stepTurn(state, sideOrders = {}, { sameTurn = false } = {}) {
   for (const move of movement) {
     if (move.tilesMoved > 0) reveal(move.unitId, 'moved')
     if (move.stumbledOn) reveal(move.stumbledOn, 'stumbled on', move.unitId)
+  }
+
+  // The log says who fell back (only those that moved: one hemmed in
+  // stands where it is).
+  for (const [id, from] of [...skirmishing].sort(([x], [y]) => x.localeCompare(y))) {
+    const move = movement.find(m => m.unitId === id)
+    if (!(move?.tilesMoved > 0)) continue
+    log.emit('gaveGround', turn, { unitId: id, from, to: { ...getUnit(world, id).position } })
   }
 
   // ── Leaving a fight ─────────────────────────────

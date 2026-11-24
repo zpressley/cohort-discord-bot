@@ -46,6 +46,9 @@ function createUnit(spec) {
     // docs/design/army-balance.md, part 4 (taken 2026-11-23): the unit's men's
     // average experience, 0 to 30 (command/company.js). Carried only when set.
     ...(spec.veterancy ? { veterancy: spec.veterancy } : {}),
+    // A missile unit's own hand weapon, where it has one (combat/ratings.js,
+    // handWeapon: Kush's Golden Bows' sword). Carried only when set.
+    ...(spec.sidearm ? { sidearm: spec.sidearm } : {}),
     // The officer who carries the Commander's orders to this unit
     // (command/officers.js): { name, experience, personality }. A unit
     // without one carries any order whole.

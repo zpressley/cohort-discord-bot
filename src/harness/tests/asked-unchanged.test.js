@@ -15,6 +15,11 @@
 // same battles under the old rules were 2f842b7 17, 5350ea95 18, 645c3e91 17,
 // 558dd4b1 19 (everyone asked) and ec82c3c2 17, 1765942a 18, 1690181b 18,
 // 5c67514a 20 (no Commander).
+//
+// Retaken for fire and retreat (docs/design/army-balance.md part 7): Han's
+// crossbowmen, in mail, now close to shooting distance and stand, and the
+// computer presses with them. On ashford the battles were 10fbde01 34, 976d3898 35 (everyone
+// asked) and 9b2d3801 31, 551c795d 37 (no Commander).
 
 const { test } = require('node:test')
 const assert = require('node:assert/strict')
@@ -55,8 +60,8 @@ test('a battle saved before the riders rulings (marked everyoneAsked) plays back
   assert.deepEqual(play({ everyoneAsked: true }, { commander: true }), {
     'crownhill 1': 'fdb72ba5 22',
     'crownhill 2': '5c62ed49 30',
-    'ashford 1': '10fbde01 34',
-    'ashford 2': '976d3898 35'
+    'ashford 1': 'ad618256 34',
+    'ashford 2': '56ca8eee 36'
   })
 })
 
@@ -64,7 +69,7 @@ test('a battle with no Commander on the field runs exactly as before the riders 
   assert.deepEqual(play({}, { commander: false }), {
     'crownhill 1': '1fb30748 22',
     'crownhill 2': 'abc6d6db 30',
-    'ashford 1': '9b2d3801 31',
-    'ashford 2': '551c795d 37'
+    'ashford 1': '76c134c8 29',
+    'ashford 2': '7d98462c 31'
   })
 })

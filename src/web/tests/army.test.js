@@ -282,3 +282,9 @@ test('a deathmatch ends when a side yields the field, loses its army or loses it
     assert.match(page, /'enemy surrendered': \['The enemy yielded the field', 'You yielded the field'\]/)
   } finally { await app.close() }
 })
+
+test('the army screen names the Golden Bows\' sword in their kit', () => {
+  const { appraise } = require('../armies')
+  assert.equal(appraise('kush').elite.words, 'elite, war bow and sword, light armour, no shield, on foot')
+  assert.equal(appraise('rome').elite.words, 'elite, gladius, heavy armour, heavy shield, on foot')
+})
