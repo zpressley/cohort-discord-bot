@@ -108,6 +108,15 @@ test('horse archers stand before horse, and are caught', () => {
   assert.ok(of(state, 'contact').length > 0)
 })
 
+test('horse archers pressing men who hold their ground stand at shooting distance and shoot, and do not fall back', () => {
+  const state = battle([horseArchers({ position: { x: 10, y: 12 } }), foe()])
+  stepTurn(state, { red: [{ unitRef: 'riders', action: 'advance' }], blue: [{ unitRef: 'foe', action: 'hold' }] })
+  for (let i = 0; i < 5; i++) stepTurn(state, {})
+  assert.equal(of(state, 'gaveGround').length, 0)
+  assert.ok(of(state, 'volley').filter(v => v.by === 'riders').length >= 5)
+  assert.equal(of(state, 'contact').length, 0)
+})
+
 test('a unit told to hold its ground does not fall back', () => {
   const state = battle([horseArchers(), foe()])
   stepTurn(state, { red: [{ unitRef: 'riders', action: 'hold' }], blue: [{ unitRef: 'foe', action: 'advance' }] })

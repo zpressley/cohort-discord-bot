@@ -540,9 +540,14 @@ const MISSILES = {
 // docs/design/army-balance.md, part 7.
 const SKIRMISH = {
   // How many tiles beyond the enemy's reach (its march and one tile to come
-  // to blows) a missile unit falls back at: from the skirmish proposal
-  // (part 6), kept.
-  WARY: 1
+  // to blows) a missile unit falls back at. The skirmish proposal (part 6)
+  // had 1; with it, horse archers that closed to shoot at men holding their
+  // ground stood one tile inside that margin, fell back, closed again, and
+  // a battle in the soak never ended (Parthia's light horse against a
+  // Persian sword unit, 150 turns). At 0 a unit falls back only from men
+  // who could reach it this tick; measured against 1 on the classic armies
+  // (72 battles a cell) every kind moved 2 points or less.
+  WARY: 0
 }
 
 // ── Pace ───────────────────────────────────────────────
