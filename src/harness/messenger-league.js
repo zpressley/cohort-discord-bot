@@ -20,6 +20,9 @@
 //   node src/harness/messenger-league.js --root /path/to/an/older/src ...
 //   --computer instant   blue's orders at once (as before step 3), not by rider
 //   --day 720            the app's end of the day: night ends a battle drawn
+//   --ground             each map's ground to fight for, as the app has it
+//   --character c        the computer's Commander: bold, steady, cautious,
+//                        or mix (drawn from each battle's seed, as the app)
 //
 // The rider counts are read from the battle's events (riderSent,
 // riderBlocked); a build before them has none. Units cut off are counted
@@ -44,6 +47,14 @@ const COMPUTER = arg('--computer', 'rider')
 // (tables.DAY.MINUTES); night ends a battle with no winner, counted as drawn.
 const DAY_MINUTES = Number(arg('--day', 0))
 
+// --character bold|steady|cautious|mix: the computer's Commander's
+// character (opponent/planner.js, CHARACTERS); mix: drawn from each
+// battle's seed, as at the app's muster. None: steady, the planner as it was.
+const CHARACTER = arg('--character', null)
+// --ground: each map's own ground to fight for, as the app's muster gives.
+const GROUND = process.argv.includes('--ground')
+const { groundOf } = require('../data/maps')
+const { withCommander } = require('../opponent/commander')
 const MAX_PLAYER_TURNS = 150
 
 function play(red, blue, { map, seed, policy }) {
@@ -52,7 +63,10 @@ function play(red, blue, { map, seed, policy }) {
   const mine = spec.units.filter(u => u.side === 'red')
   const elite = mine[leadUnit(mine)].id
   spec = { ...spec, units: spec.units.map(u => u.side !== 'red' ? u : u.id === elite ? u : { ...u, officer: { headless: true } }) }
-  const game = createGame({ ...spec, standingOrders: {}, commanders: { red: { unitId: elite } }, ...(DAY_MINUTES ? { dayMinutes: DAY_MINUTES } : {}) }, { seed })
+  // The computer's Commander's character (--character): one named, or
+  // drawn from the seed as the app's muster draws it ('mix'); none, steady.
+  if (CHARACTER) spec = withCommander(spec, 'blue', seed, CHARACTER === 'mix' ? null : { character: CHARACTER })
+  const game = createGame({ ...spec, standingOrders: {}, commanders: { red: { unitId: elite } }, ...(DAY_MINUTES ? { dayMinutes: DAY_MINUTES } : {}), ...(GROUND && groundOf(map).length ? { objectives: groundOf(map) } : {}) }, { seed })
   const r = { orders: 0, cutOffUnits: new Set(), cutOffTurns: 0, unitTurns: 0, noWord: 0, noWordCut: 0, noWordGone: 0 }
   let turns = 0
   let stops = 0

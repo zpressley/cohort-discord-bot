@@ -365,6 +365,7 @@ dispatches all take them from there.
 | The man who carries his orders to a unit | an officer (green, seasoned or veteran; bold, steady or cautious) |
 | The other side's player | your opponent; its forces are the enemy |
 | The side with no player | the computer |
+| The computer's Commander | his name, "said to be" bold, steady or cautious (an officer's natures) |
 | The engine's move, hold, advance, attack, withdraw, hide, check, ambush | march, hold, advance on the enemy, attack, fall back, hide, search, lie in ambush |
 | Go somewhere and hold it (the engine's defend) | march to ... and hold it |
 | Missile troops | shoot, hold fire |
@@ -3403,3 +3404,129 @@ battles; the computer's Commanders (another agent's work).
    it meant to be lore and name only?
 2. Before any record book open to every player: are Commanders' names to be
    moderated, and how?
+
+### How the computer's Commanders were given character (Claude's choices, open to change)
+
+Item 5 of the work list (`docs/REVIEW-2026-11.md`): "Commanders with a
+personality ... starting with the enemy's: a cautious one, a rash one."
+Built inside the ruling of October 21 ("Every commander has the same
+quality ... Commanders differ in personality"): equal quality, different
+character. The code: `CHARACTERS` in `src/opponent/planner.js`,
+`src/opponent/commander.js`, the muster and the tent in `src/web/battles.js`
+and `public/app.js`, the words in `src/narrator/words.js`
+(`ENEMY_COMMANDER`), the league in `src/harness/character-league.js`.
+
+**The characters.** Three, named in the words the game already has for an
+officer's nature, so there is one vocabulary: "rash" is told as *bold*.
+Each is the one planner with five of its numbers set another way, never a
+second planner.
+
+| | goes in at an enemy in sight within | pulls a unit out of the fight at morale | his horse ride at | within | his horse in reserve until the line fights |
+|---|---|---|---|---|---|
+| steady (the planner as it was) | 7 tiles | 30 | enemy missile troops on foot | 10 tiles | no |
+| bold | 9 | 20 | any enemy | 14 | no |
+| cautious | 5 | 40 | (they do not hunt) | 0 | yes, while a line fit to fight has not met the enemy |
+
+All three go for the map's ground to fight for and hold it in the same way,
+and wait on good ground (with no ground named) by the same seeded
+temperament: see below for why.
+
+**Seeded, in the spec, told by name.** At the muster of a battle against the
+computer, `commander.js` draws from the seed (a stream of its own, so
+nothing else drawn from the seed moves) a character, each a third, and a
+name from his army's culture's names (`src/data/officers.js`, the officers'
+lists), never one of his own officers'. Both go into the spec
+(`sides[side].character`, `.commanderName`): a saved battle replays with
+him, and the next day passes him on (`again`), so it is the same man. A
+spec with no character (every battle before this, every harness that does
+not ask, the army study's leagues) is played steady, number for number:
+a test plays a whole battle both ways and compares every order.
+
+**What the player is told.** His name and what is said of him: "You face
+Lucius, who commands the enemy. He is said to be cautious." in his first
+dispatch (after the ground to fight for), and "The enemy's Commander:
+Lucius, said to be cautious" on the Army tab, over the enemy as he knows
+it. Nothing else of the character reaches the browser (the fog test checks
+that the view carries only `name` and `said`). A battle against a friend
+has no such line. The muster does not tell it: the man is drawn with the
+seed when the battle is made.
+- Guessed: that a reputation is something his side could know (the
+  point-of-view rulings), and that a character never noticed is wasted.
+  The other reading: he is told only the name, and learns the character by
+  fighting him (or by a dispatch that remarks on it after a few turns).
+  Changing it is one line in `enemyCommanderView` and one in the first
+  dispatch.
+- The reputation is always true. Another reading: said to be cautious, and
+  sometimes not.
+
+**Measured: equal.** `node src/harness/character-league.js --rounds 4`:
+each character against each other, the same faction on both sides, all 20
+factions, every map with its ground to fight for and the twelve-hour day,
+each pairing from both ends of the field; 2,880 battles, all ended. Share
+against the field (a win 1, night a half): steady 50%, bold 49%, cautious
+51%. Pairings: steady-bold 50/50, steady-cautious 50/50, bold-cautious
+48/52. With no ground to fight for (`--none`, 1,440 battles): steady 48%,
+bold 49%, cautious 53%; worst pairing 47/53.
+
+**Measured: different** (each against itself, with the ground and the day):
+
+| | battle length | first contact | decided by the ground | an army broken | ended by night |
+|---|---|---|---|---|---|
+| steady | 187 min | 57 min | 36% | 62% | 3% |
+| bold | 148 min | 53 min | 35% | 65% | 0% |
+| cautious | 193 min | 56 min | 43% | 53% | 5% |
+
+First contact hardly moves: the ground draws both armies to the same place
+at the same pace, whoever leads them. They differ in how they fight once
+there: the bold man's horse are in at once and his men fight on, so his
+battles are short and end in a broken army; the cautious man's horse wait
+and his worn units come out, so his battles run longer and are more often
+decided by the ground or by night.
+
+**Against the player.** `messenger-league.js --battles 672 --policy planner
+--day 720 --ground --character c` (the player's stand-in, a Commander on the
+field, orders by rider, the map's ground, the day): the player won 45%
+against steady, 45% against bold, 47% against cautious, 47% against the mix
+the app draws (two points apart; the bound was ten).
+
+**The Commander's odds.** `captive-league.js --battles 2000 --policy wait`:
+1 in 18.9 against steady (unchanged), 1 in 18.2 against bold, 1 in 20.4
+against cautious, 1 in 20.8 against the mix the app draws. Inside 1 in 17
+to 1 in 24; `tables.COMMANDER` is not changed.
+
+**Tried and dropped** (each measured against steady with only that changed,
+160 battles, or the three together, 960):
+- A bold Commander who leaves the ground to meet an enemy he sees coming
+  ("sally"): 37% against steady, and 43 to 45% at shorter reach; leaving
+  the missile troops on the ground did not help. The ground is worth more
+  than going out to meet the enemy.
+- A cautious Commander who waits on his own ground and goes for the map's
+  only when his patience runs out or he sees the enemy on it: 19% against
+  steady. Holding the map's ground for an hour wins the field, so waiting
+  away from it loses.
+- A reserve of foot kept back until the line fights: 33 to 37%, as the
+  November planner found (its comment).
+- Waiting on good ground with no ground named, by character (a bold man
+  seldom, a cautious man always): with no ground to fight for, waiting is
+  the stronger play, and the cautious man won 67% against the others and the
+  bold 34%. So all three keep the seeded temperament as it was. The
+  characters differ less in battles with no ground named (a player's
+  choice, not the default).
+- A cautious man pulling out at 45: 54% against the field; 40 brings him
+  to 51%.
+- Keeping the horse in reserve while the army has no foot fit to fight
+  left the battle stuck (an all-horse Mongol army waited for ever): the
+  horse wait only while there is a line fit to fight. The soak plays bold
+  and cautious Commanders as well now (480 battles, no end of the day).
+
+**The army study** (`src/harness/army-study`) and the other leagues
+(`ground-league`, `faction-league`, `bought-league`) name no character, so
+they are played steady, the planner their tables were measured with, and
+stay comparable. `messenger-league` and `captive-league` take
+`--character bold|steady|cautious|mix`; `messenger-league` also `--ground`.
+
+**Left undone.** The player's own Commander's character (the other agent's
+making of a Commander asks his kind); a fourth character; anything the
+enemy Commander does on the field himself (he is not on the field: the
+computer's side has no Commander there, as before); telling, after the
+battle, how he fought.

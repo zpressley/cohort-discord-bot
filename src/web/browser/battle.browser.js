@@ -108,6 +108,8 @@ test('alone, on a phone: muster, an order written on the map, turns to a verdict
     const cards = await p.locator('.unit-card h3').allTextContents()
     assert.deepEqual(cards, ['Sarissa foot 1', 'Sarissa foot 2', 'Peltasts', 'Silver shields'])
     assert.match(await p.locator('.unit-card', { hasText: 'Silver shields' }).textContent(), /You ride with them[\s\S]*Officer:.*veteran/)
+    // Against the computer: its Commander's name, and what is said of him.
+    assert.match(await p.textContent('#panel-body'), /The enemy's Commander: [A-Z][a-z]+, said to be (bold|steady|cautious)/)
     if (process.env.SHOT) await p.screenshot({ path: process.env.SHOT.replace('.png', '-army.png'), fullPage: true })
 
     // The map gesture: pick the Silver Shields in the army panel, then tap a place.

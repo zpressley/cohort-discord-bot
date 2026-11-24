@@ -57,6 +57,61 @@ const TUNING = {
   PULL_OUT: 30
 }
 
+// ── The computer's Commander: his character ─────────────
+// Every Commander has the same quality and they differ in personality
+// (ruled October 21, 2026); the enemy's first, "a cautious one, a rash
+// one" (docs/REVIEW-2026-11.md). A character is not a better or a worse
+// planner: it is this one planner with some of its numbers set another way.
+// The words are the officers' natures (bold, steady, cautious:
+// engine/command/officers.js), so the game has one word for each.
+// "steady" is the planner as it was before characters, number for number:
+// a battle that names none is played by him.
+// Measured with harness/character-league.js (docs/DECISIONS.md, "How the
+// computer's Commanders were given character", has the tables and what was
+// tried and dropped). Points below are a character's share against the
+// steady one with only that number changed, 160 battles each.
+const CHARACTERS = {
+  steady: {
+    // How near (tiles) an enemy in sight must be for the line to go in, and
+    // the morale at which a unit in a fight is pulled out: as TUNING above.
+    engage: TUNING.ENGAGE,
+    pullOut: TUNING.PULL_OUT,
+    // Tiles within which the horse ride at an enemy they have seen.
+    prey: 10,
+    // What the horse ride at: enemy missile troops on foot ('archers'), or
+    // any enemy ('any').
+    horseAt: 'archers',
+    // Whether the horse are kept back off the line's flank, as a reserve,
+    // until the line is fighting.
+    horseInReserve: false
+  },
+  // Throws his horse at whatever he sees, goes in from further off, and
+  // fights on with men near breaking. His battles are the shortest.
+  bold: {
+    engage: 9,
+    pullOut: 20,         // fights on (alone: 46% against steady)
+    prey: 14,
+    horseAt: 'any',      // (alone: 47%, and his battles 20 minutes shorter)
+    horseInReserve: false
+  },
+  // Keeps his horse back until his line is fighting, lets the enemy come
+  // closer before going in, and pulls men out of the fight early. His
+  // battles are the longest, and the likeliest to be decided by the
+  // ground or ended by night.
+  cautious: {
+    engage: 5,
+    pullOut: 40,         // pulls out early (alone, 45: 53% against steady; with the rest, 45 made him 54% against the field)
+    prey: 0,             // his horse do not go hunting...
+    horseAt: 'archers',
+    horseInReserve: true // ...but wait (with prey 0, alone: 46%; a battle in twelve ends at night)
+  }
+}
+// (Where a side waits on good ground, and for how long, is left to the
+// seed for all three, as TUNING has it: with no ground to fight for,
+// waiting is the stronger play, and a cautious Commander who always waited
+// won 67% against the others, a bold one who seldom did 34%.)
+const CHARACTER_NAMES = Object.keys(CHARACTERS)
+
 // Ground a formed line does not stand on.
 const NOT_HERE = ['river', 'marsh', 'ford', 'bridge']
 
@@ -82,6 +137,7 @@ function planTurn(game, side) {
   if (mine.length === 0) return []
 
   const temper = temperament(game, side)
+  const ch = characterOf(game, side)
   const view = sideView(game, side)
   const kindOf = (id) => battle.world.units.find(u => u.id === id) ?? battle.fledUnits.find(u => u.id === id)
   const enemies = view.intel
@@ -109,7 +165,7 @@ function planTurn(game, side) {
 
   // ── Hold, or go and find him ────────────────────────
   const strong = strongpoint(game, side, forward, across)
-  const closeBy = inSight.some(e => mine.some(u => tileDistance(u.position, e.position) <= TUNING.ENGAGE))
+  const closeBy = inSight.some(e => mine.some(u => tileDistance(u.position, e.position) <= ch.engage))
   const everFought = battle.log.ofType('contact').length > 0
   const patient = game.minutesElapsed < temper.patience
   // The enemy on the ground we meant to hold: nothing left to hold. On the
@@ -156,8 +212,8 @@ function planTurn(game, side) {
   // ── A unit near breaking is pulled out, if someone covers it ────────
   const pulledOut = new Set()
   for (const unit of mine) {
-    if (!fighting.has(unit.id) || morale(unit) > TUNING.PULL_OUT || battle.isShaken(unit)) continue
-    const covered = mine.some(o => o !== unit && !battle.isShaken(o) && morale(o) > TUNING.PULL_OUT && tileDistance(o.position, unit.position) <= 2)
+    if (!fighting.has(unit.id) || morale(unit) > ch.pullOut || battle.isShaken(unit)) continue
+    const covered = mine.some(o => o !== unit && !battle.isShaken(o) && morale(o) > ch.pullOut && tileDistance(o.position, unit.position) <= 2)
     if (!covered) continue
     pulledOut.add(unit.id)
     give(unit, { action: 'withdraw', target: standable(map, add(unit.position, forward, -4), new Set()) ?? undefined })
@@ -165,9 +221,9 @@ function planTurn(game, side) {
   // One that was pulled out before, and is no steadier, stays out, as long
   // as there is a steadier unit to fight in its place. When there is none,
   // the worn fight on: an army does not stand and watch.
-  const fit = (unit) => !battle.isShaken(unit) && morale(unit) > TUNING.PULL_OUT
+  const fit = (unit) => !battle.isShaken(unit) && morale(unit) > ch.pullOut
   const anyFit = mine.some(fit)
-  const spent = (unit) => anyFit && !fighting.has(unit.id) && morale(unit) <= TUNING.PULL_OUT
+  const spent = (unit) => anyFit && !fighting.has(unit.id) && morale(unit) <= ch.pullOut
 
   // ── The fight ───────────────────────────────────────
   // Formed up short of where the enemy was, and no fight yet: go in. (A
@@ -195,18 +251,22 @@ function planTurn(game, side) {
     // end).
     if (canSkirmish(unit) && !unit.mounted && !fighting.has(unit.id)) {
       const foe = nearestSeen(unit.position)
-      if (foe && foe.d <= TUNING.ENGAGE) { give(unit, { action: 'advance' }); continue }
+      if (foe && foe.d <= ch.engage) { give(unit, { action: 'advance' }); continue }
     }
 
     if (horse.includes(unit)) {
-      // Horse go for archers they have seen, wherever the line stands; else
-      // they fight with the line, or keep its flank.
+      // Horse go for archers they have seen (a bold Commander's for any
+      // enemy), wherever the line stands; else they fight with the line, or
+      // keep its flank (a cautious Commander's until his line is fighting).
       const prey = inSight
-        .filter(e => e.unit && missileRange(e.unit) > 0 && !e.unit.mounted)
+        .filter(e => e.unit && (ch.horseAt === 'any' || (missileRange(e.unit) > 0 && !e.unit.mounted)))
         .map(e => ({ e, d: tileDistance(unit.position, e.position) }))
         .sort((a, b) => a.d - b.d || a.e.id.localeCompare(b.e.id))[0]
-      if (prey && prey.d <= 10 && !fighting.has(unit.id)) give(unit, { action: 'attack', target: { ...prey.e.position } })
-      else if (attacking || (holding && lineFighting(line, fighting))) give(unit, { action: 'advance' })
+      // (Not with no line fit to fight, or none at all: the horse are all
+      // there is.)
+      const inReserve = ch.horseInReserve && line.some(fit) && !lineFighting(line, fighting)
+      if (prey && prey.d <= ch.prey && !fighting.has(unit.id)) give(unit, { action: 'attack', target: { ...prey.e.position } })
+      else if ((attacking && !inReserve) || (holding && lineFighting(line, fighting))) give(unit, { action: 'advance' })
       else toSlot(unit, holding)
       continue
     }
@@ -225,6 +285,15 @@ function planTurn(game, side) {
 }
 
 const lineFighting = (line, fighting) => line.some(u => fighting.has(u.id))
+
+// ── Character ───────────────────────────────────────────
+// The character of a side's Commander, from the battle's spec
+// (spec.sides[side].character, set at the muster from the seed: see
+// opponent/commander.js); a side that names none, or one not known, is
+// played steady, as before characters.
+function characterOf(game, side) {
+  return CHARACTERS[game.spec?.sides?.[side]?.character] ?? CHARACTERS.steady
+}
 
 // ── Temperament ─────────────────────────────────────────
 // Drawn once from the battle's seed and the side, so it is the same every
@@ -325,4 +394,4 @@ function standable(map, wanted, taken) {
   return null
 }
 
-module.exports = { planTurn, temperament, strongpoint, formation, TUNING }
+module.exports = { planTurn, temperament, strongpoint, formation, characterOf, TUNING, CHARACTERS, CHARACTER_NAMES }
