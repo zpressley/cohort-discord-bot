@@ -67,7 +67,7 @@ const how = (reason) => (reason === 'objectives held' ? 'ground' : reason === 'n
 function league({ rounds = 2, only = null } = {}) {
   const chars = only ?? CHARACTER_NAMES
   const factions = Object.keys(FACTIONS)
-  const maps = mapChoices().map(m => m.id)
+  const maps = mapChoices({ big: false }).map(m => m.id)
   const score = {}      // score[a][b] = { n, points } for a against b
   const style = {}      // each against itself
   const stuck = []
