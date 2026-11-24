@@ -2709,3 +2709,108 @@ turns; the rest unchanged). The balance table is unchanged.
    carry over too?
 4. The terminal game's four-hour clock still names a winner on losses. Is
    it a day too?
+
+## Rulings, November 24, 2026 (the next day)
+
+- Asked whether, on the next day against the computer, the computer's
+  losses should carry over as the player's do: "lol yes, it's just night
+  time. Computer does not get to reset." (November 24, 2026)
+- Asked whether it is good enough that a friend gets no notice that a next
+  day was started: "no they need a notice" (November 24, 2026)
+- Asked about a Commander held captive when night falls (built: he is let
+  go if no deal was struck): "The battle ends today, I don't have a good
+  solution atm" (November 24, 2026). So it stays as built.
+
+### How the next day was built (Claude's choices, open to change)
+
+**1. The next day is the same two armies, as they stood at nightfall.**
+"It's just night time": the next day's battle is fought by the armies that
+left the field, on both sides, whoever leads them.
+- *What carries* (`nightArmies` in `web/battles.js`). Every unit of either
+  side with men left, and no other. Its men are those standing, and those
+  who ran: men who fled come back to the standards in the night; the dead
+  do not. A unit destroyed is gone. Its kit, faction, quality and where it
+  was drawn up are the day's. Guessed: the other reading is that a unit
+  that fled the field is lost to that battle; I took "it's just night
+  time" to mean the men drift back to camp.
+- *Strength when whole* (`maxStrength`) stays what it was. A unit of a
+  hundred with sixty left is a battered unit of a hundred, not a fresh
+  unit of sixty, so it hits softer (`strengthScale`) and its morale reads
+  losses against its whole strength. Guessed; the other reading (a fresh
+  smaller unit) would make day 2 forgive the day's losses.
+- *The computer's side*: no fresh units, no muster from its faction, its
+  veterancy not matched again (it keeps the day's); each unit keeps its
+  officer, or has a new man if he was killed, taken or wounded in the day.
+  The computer keeps no roster: the army is carried in the next battle's
+  making (its spec), as the brief said, not in a store.
+- *A Commander's side*: the same men, and no recruits or buying in the
+  night. Between two battles a unit is made up to strength with recruits
+  who know nothing (`settleBattle`), and he may buy or change his army;
+  over one night neither happens. So: the units that marched on the day,
+  with the men left, whatever he has bought or changed since (that waits
+  for his next battle). His officers come from his company as the day
+  left them (the dead gone, the wounded sitting it out, a successor where
+  one came forward), and training as built. Each unit's veterancy is its
+  own men's: the company's experience over the men left
+  (`totalExperience / men`), not thinned by recruits who did not come.
+  The other reading, that a night between days is like any time between
+  battles, is what was built before; it refilled every unit.
+- *The company after the next day*: `settleBattle` takes `full` on each
+  unit's fate. The unit is counted as going in with the men it had (none
+  of the missing are counted among the fallen), and is made up to `full`
+  only once the fight is over. With no `full`, every battle settles as it
+  did (tested).
+- *Against a friend*: the same for both. His Commander is put at his
+  side's head at once if he can lead it, as before; if not, the friend
+  still chooses who leads (`join`), but the army is the day's: a Commander
+  of another faction is refused, and his own roster is not read.
+- *Day 3* after a second night is the same (tested to day 3).
+- *Nothing left*: if one side has no unit with men left, there is no next
+  day: the verdict says "There is no next day: one side has no one left
+  able to take the field." (`NIGHT.noNextDay`) in place of the button, and
+  the server refuses it (409). In practice a side with nothing left has
+  lost before night falls.
+- *What he is told*: the note under the button now reads "Against the same
+  enemy, on the same field. Both armies come as they stand after today,
+  yours and the enemy's: the fallen are gone, those who ran are back with
+  the standards, and no fresh men come to either side in the night." No
+  numbers of the enemy beyond the verdict's own table; the next day's tent
+  is cut to his side as every battle is (tested).
+- Replays: the armies are in the next battle's spec (`units`, and
+  `nextDay`: its day) when it is made, so a saved next day replays.
+- Small change outside the web app: `engine/command/company.js`
+  (`settleBattle`, `full`), and `leadSide` now writes `raisedAs` into the
+  spec for a unit trained above what it was raised as, so the next day
+  trains it from there and not twice (the engine does not read it; the
+  balance table and the soak are unchanged).
+
+**2. The friend is told a next day has begun.** No accounts, no email, no
+push: the notice is inside the game, wherever he next opens it.
+- The words (`NIGHT.calledOut`): "The enemy has called you out for a
+  second day. Your orders are wanted." ("third", and so on.) "The enemy",
+  not the other Commander's name: the plainest choice that tells nothing
+  new across the fog. Naming him is one line if wanted.
+- *When*: the other side called the next day (`calledBy`, saved), and the
+  new battle is still waiting on this side's first orders (or his choice
+  of who leads). Once his orders go it is gone. The one who called it is
+  never told he was called out.
+- *His list of battles*: the old battle's line names his own seat in the
+  new one (`nextDay`); the browser keeps it from then on, so the new day's
+  battle is in "Waiting on you", with the notice on it. The home page,
+  which opens the battle waiting on him, finds it the same way.
+- *His Commander's page*: under "His army is in the field", the notice as
+  a dark banner that links to his seat.
+- *The old verdict*: the same banner, in place of the button, linking to
+  his seat; the note under it as before.
+- *Without a reload*: the tent already polls (every 30 s, and when the
+  page comes back into view) while a battle runs. A verdict of a night
+  between friends with no next day yet now polls its summary the same way,
+  and shows the banner when the next day appears.
+- *The browser's own notice*: on that verdict, a quiet button "Tell me here
+  if the enemy calls a next day" asks for the browser's permission
+  (`Notification.requestPermission`); granted, the polling page shows a
+  notification when it finds the next day while hidden. Only while the
+  page is open: no service worker, no push. Real "your move" messages to
+  a closed phone need hosting and an address: a later piece of the
+  roadmap, not built.
+- Either way round: whoever asks first, the other is told (tested).

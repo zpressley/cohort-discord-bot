@@ -620,3 +620,67 @@ test('on a phone: night ends the battle with no winner, and the main button figh
     if (process.env.SHOT) await p.screenshot({ path: process.env.SHOT.replace('.png', '-day-2.png') })
   })
 })
+
+// Ruled 2026-11-24: "no they need a notice".
+test('on a phone: a friend called out to a next day is told on the old verdict without a reload, on his list of battles and on his Commander\'s page', { skip }, async () => {
+  await withApp(async ({ base, browser, errors, store }) => {
+    const post = async (url, body) => (await fetch(base + url, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body ?? {}) })).json()
+    const red = (await post('/api/commanders', { faction: 'rome' })).token
+    const blue = (await post('/api/commanders', { faction: 'han' })).token
+    const seats = (await post('/api/battles', { opponent: 'friend', side: 'red', seed: 5, commander: red, turnLimit: 2 })).seats
+    await post(`/api/seat/${seats.blue}/join`, { commander: blue })
+    const game = store.seatOf(seats.red).entry.game
+    const { waitingOn } = require('../../engine/orchestrator')
+    for (let i = 0; i < 20 && !game.outcome.decided; i++) for (const side of waitingOn(game)) await post(`/api/seat/${seats[side]}/orders`, { text: 'everyone hold' })
+    assert.equal(game.outcome.reason, 'night fell')
+
+    // The friend's browser: his Commander and the old battle are kept in it.
+    const p = await page(browser, errors, { width: 390, height: 844 })
+    await p.goto(base + '/battles')
+    await p.evaluate((token) => localStorage.setItem('cohort.commanders', JSON.stringify([token])), blue)
+    await p.goto(`${base}/b/${seats.blue}`)
+    await p.waitForSelector('.verdict h2')
+    assert.equal(await p.locator('.notice').count(), 0)
+
+    // Red calls the next day; the friend's open page finds it when it looks again.
+    const called = await post(`/api/seat/${seats.red}/again`)
+    const next = store.seatOf(called.token).entry
+    await p.evaluate(() => document.dispatchEvent(new Event('visibilitychange')))
+    await p.waitForSelector('.notice')
+    assert.match(await p.textContent('.notice'), /The enemy has called you out for a second day\. Your orders are wanted\./)
+    assert.equal(await p.getAttribute('.notice', 'href'), `/b/${next.seats.blue}`)
+    assert.ok((await p.locator('.notice').boundingBox()).height >= 44)
+    if (process.env.SHOT) await p.screenshot({ path: process.env.SHOT.replace('.png', '-called-out-verdict.png'), fullPage: true })
+
+    // His list of battles: the new day's battle, waiting on him, marked plainly.
+    await p.goto(base + '/battles')
+    await p.waitForSelector('.battle-link')
+    const mine = p.locator('.battle-link.mine')
+    assert.equal(await mine.count(), 1)
+    assert.match(await mine.textContent(), /day 2/)
+    assert.match(await mine.textContent(), /The enemy has called you out for a second day/)
+    if (process.env.SHOT) await p.screenshot({ path: process.env.SHOT.replace('.png', '-called-out-battles.png'), fullPage: true })
+
+    // His Commander's page.
+    await p.goto(base + '/officers')
+    await p.waitForSelector('.notice')
+    assert.match(await p.textContent('.notice'), /called you out/)
+    if (process.env.SHOT) await p.screenshot({ path: process.env.SHOT.replace('.png', '-called-out-officers.png') })
+    const width = await p.evaluate(() => document.documentElement.scrollWidth)
+    assert.ok(width <= 390, 'no sideways scroll')
+    if (process.env.SHOT) {
+      await p.setViewportSize({ width: 1280, height: 800 })
+      await p.goto(`${base}/b/${seats.blue}`)
+      await p.waitForSelector('.notice')
+      await p.screenshot({ path: process.env.SHOT.replace('.png', '-called-out-desktop.png') })
+      await p.setViewportSize({ width: 390, height: 844 })
+      await p.goto(base + '/officers')
+      await p.waitForSelector('.notice')
+    }
+
+    // He answers: his orders go, and the notice is done.
+    await p.click('.notice')
+    await p.waitForSelector('#map-scroll svg')
+    assert.match(p.url(), new RegExp(`/b/${next.seats.blue}$`))
+  })
+})

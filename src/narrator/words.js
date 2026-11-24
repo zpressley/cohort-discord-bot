@@ -207,9 +207,18 @@ const NIGHT = {
   ended: 'night has ended the fighting, and neither side has won',
   day: (minutes) => `The day is ${clock(minutes)} of battle. If neither side has won by then, night ends the fighting and neither side has won; you can fight again the next day.`,
   again: 'Fight again the next day',
-  againNote: 'Against the same enemy, on the same field. Your army comes as it stands after today.',
+  againNote: 'Against the same enemy, on the same field. Both armies come as they stand after today, yours and the enemy\'s: the fallen are gone, those who ran are back with the standards, and no fresh men come to either side in the night.',
   // A Commander held when night fell: let go, as at any end he did not win.
-  released: 'Night fell with you still in the enemy\'s hands, and no deal struck. Honor forbids them your life: they let you go, with whatever of your army came through the day.'
+  released: 'Night fell with you still in the enemy\'s hands, and no deal struck. Honor forbids them your life: they let you go, with whatever of your army came through the day.',
+  // The other side has asked to fight again: the notice, wherever he next
+  // opens the game (ruled 2026-11-24: "no they need a notice").
+  calledOut: (day) => `The enemy has called you out for a ${DAYS[day] ?? `${day}th`} day. Your orders are wanted.`,
+  // One side has no one left able to fight.
+  noNextDay: 'There is no next day: one side has no one left able to take the field.',
+  // Notices from the browser, when the page is open in the background.
+  tellMe: 'Tell me here if the enemy calls a next day',
+  toldYou: 'This browser will tell you while the page is open.'
 }
+const DAYS = { 2: 'second', 3: 'third', 4: 'fourth', 5: 'fifth', 6: 'sixth', 7: 'seventh', 8: 'eighth', 9: 'ninth', 10: 'tenth' }
 
 module.exports = { orderWords, moraleWords, ORDER, OWN_EDGE, HOLD_THERE, KIT, RIDE_WITH, LOYALTY_WORDS, VALUES_WORDS, VETERANCY_WORDS, RIDER, NIGHT }

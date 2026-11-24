@@ -205,6 +205,8 @@ function createBattleStore({ dir = null, ai = null, now = () => Date.now() } = {
       // battle of the day after, once there is one.
       ...(entry.day ? { day: entry.day } : {}),
       ...(entry.next ? { next: entry.next } : {}),
+      // The side that called the next day, for the other's notice.
+      ...(entry.calledBy ? { calledBy: entry.calledBy } : {}),
       // Played with orders and news by rider (a battle saved before them
       // plays back without: engine/command/messengers.js).
       riders: entry.game.spec.messengers !== false,
@@ -316,22 +318,28 @@ function createBattleStore({ dir = null, ai = null, now = () => Date.now() } = {
     const enemy = faction ? (FACTIONS[m.enemyFaction] ? m.enemyFaction : anyFaction(seed)) : null
     // Which of his units march: as asked, else as last time (roster.js).
     if (commander) mayLead(commander)
-    const marching = commander?.faction ? whoMarches(commander, m.marching) : null
-    if (faction) spec = musterArmies(spec, { [side]: { faction, commander, marching }, [other]: { faction: enemy } })
+    // The next day of a battle night ended: both armies as they stood at
+    // nightfall (nightArmies), not mustered afresh.
+    const night = Array.isArray(m.nightBefore) ? m.nightBefore : null
+    const marching = commander?.faction && !night ? whoMarches(commander, m.marching) : null
+    if (night) spec = { ...spec, units: night, nextDay: m.day }
+    else if (faction) spec = musterArmies(spec, { [side]: { faction, commander, marching }, [other]: { faction: enemy } })
     // Every unit gets an officer to carry the Commander's orders: a name,
-    // his experience and his nature, drawn from the battle's seed.
+    // his experience and his nature, drawn from the battle's seed. (On the
+    // next day, a unit whose officer was lost the day before gets a new man.)
     spec = { ...spec, units: assignOfficers(spec.units, seed) }
     // The mustering Commander's own officers lead his side. His army can
     // fight one battle at a time (ruled 2026-11-22).
     let company = null   // his company with this battle's officers given out
     if (commander) {
-      const led = leadSide(spec, side, commander.company, seed, marching ? benchedOf(commander, marching) : [])
+      const led = leadSide(spec, side, commander.company, seed, marching ? benchedOf(commander, marching) : night ? stayedHome(commander, spec, side) : [], { night: Boolean(night) })
       company = led.company
       // He is on the field himself, riding with his best unit (his
       // veteran's): there he can be taken, or killed.
       spec = led.spec
-      // Against the computer, its army matches his (ruled 2026-11-23).
-      if (solo) spec = matchComputer(spec, side, other)
+      // Against the computer, its army matches his (ruled 2026-11-23); on
+      // the next day it is the army it had at nightfall.
+      if (solo && !night) spec = matchComputer(spec, side, other)
     }
     let game
     try {
@@ -388,23 +396,35 @@ function createBattleStore({ dir = null, ai = null, now = () => Date.now() } = {
   // the unit his most experienced officer leads (a new Commander's veteran
   // is with the elite unit). For the muster and for the friend who joins.
   // `benched`: the units he owns that stay at home; their officers stay with them.
-  function leadSide(spec, side, company, seed, benched = []) {
-    const mine = spec.units.filter(u => u.side === side).map(u => ({ ...u, kind: unitName(u).toLowerCase() }))
+  // `night`: the next day of a battle, whose units come as they stood at
+  // nightfall, their veterancy with them (nightArmies): trained afresh from
+  // what they were raised as, but their veterancy not read again.
+  function leadSide(spec, side, company, seed, benched = [], { night = false } = {}) {
+    // (The quality a unit was raised at, before training, for the next day:
+    // it is trained again from there, not twice.)
+    const mine = spec.units.filter(u => u.side === side).map(u => ({ ...u, quality: u.raisedAs ?? u.quality, kind: unitName(u).toLowerCase() }))
     const led = musterOfficers(company, mine, seed, { benched })
     const officerOf = new Map(led.units.map(u => [u.id, u.officer]))
     // The quality each unit takes the field at: what it was raised as, and
     // what an officer of the greatest experience has since made of it.
     const qualityOf = new Map(led.units.map(u => [u.id, u.quality]))
+    const raisedOf = new Map(mine.map(u => [u.id, u.quality]))
     // Each unit's own veterancy, its men's average experience, as it goes
     // into this battle (army-balance.md, part 4). Saved in the spec, so the
-    // battle replays with it; a unit with none carries none.
+    // battle replays with it; a unit with none carries none. (The next day,
+    // the veterancy it came off the field with.)
     const earned = new Map(unitsOf(led.company).map(u => [u.kind, u.veterancy]))
-    const veterancyOf = new Map(mine.filter(u => earned.get(u.kind) > 0).map(u => [u.id, earned.get(u.kind)]))
+    const veterancyOf = new Map(night ? [] : mine.filter(u => earned.get(u.kind) > 0).map(u => [u.id, earned.get(u.kind)]))
+    const trained = (u) => {
+      const quality = qualityOf.get(u.id) ?? u.quality
+      const { raisedAs: _was, ...rest } = u
+      return { ...rest, quality, ...(quality !== raisedOf.get(u.id) ? { raisedAs: raisedOf.get(u.id) } : {}) }
+    }
     return {
       company: led.company,
       spec: {
         ...spec,
-        units: spec.units.map(u => (officerOf.has(u.id) ? { ...u, officer: officerOf.get(u.id), quality: qualityOf.get(u.id) ?? u.quality, ...(veterancyOf.has(u.id) ? { veterancy: veterancyOf.get(u.id) } : {}) } : u)),
+        units: spec.units.map(u => (officerOf.has(u.id) ? { ...trained(u), officer: officerOf.get(u.id), ...(veterancyOf.has(u.id) ? { veterancy: veterancyOf.get(u.id) } : {}) } : u)),
         commanders: { ...(spec.commanders ?? {}), [side]: { unitId: ridesWith(led.units) } }
       }
     }
@@ -466,6 +486,14 @@ function createBattleStore({ dir = null, ai = null, now = () => Date.now() } = {
       throw Object.assign(new Error(error), { status: Array.isArray(asked) ? 400 : 409, errors: checked.errors })
     }
     return checked.names
+  }
+
+  // The units of his that are not on this field (the next day: those that
+  // stayed at home the day before, and any he has had since): their
+  // officers stay with them.
+  function stayedHome(commander, spec, side) {
+    const fielded = new Set(spec.units.filter(u => u.side === side).map(u => unitName(u).toLowerCase()))
+    return rosterOf(commander).filter(u => u.how !== 'elite' && !fielded.has(u.name)).map(u => u.name)
   }
 
   // Not while his army is in the field.
@@ -647,15 +675,19 @@ function createBattleStore({ dir = null, ai = null, now = () => Date.now() } = {
     // Their Commander's own army (the one he bought, or his faction's
     // usual one), where the muster gave this side another.
     const mustered = sideFaction(record.spec, side)
-    const faction = mustered ? musterFaction(commander, asked) ?? mustered : null
+    // The next day of a battle night ended: the army is the one this side
+    // had at nightfall, whoever leads it now; a Commander of its faction.
+    const night = Boolean(record.spec.nextDay)
+    const faction = mustered ? (night ? musterFaction(commander, mustered) : musterFaction(commander, asked) ?? mustered) : null
     // Those of his units that marched last time march (roster.js).
-    const marching = commander?.faction ? whoMarches(commander, marchingAsked) : null
-    let spec = faction && (faction !== mustered || commander?.army || (marching && fieldingOf(commander, marching).units))
+    const marching = commander?.faction && !night ? whoMarches(commander, marchingAsked) : null
+    let spec = !night && faction && (faction !== mustered || commander?.army || (marching && fieldingOf(commander, marching).units))
       ? musterArmies(record.spec, { [side]: { faction, commander, marching } })
       : record.spec
     // A seed of the side's own, so the two sides' first veterans are not
     // drawn alike.
-    const led = leadSide(spec, side, commander ? commander.company : createCompany(), (Math.imul(record.seed, 31) + 17) >>> 0, marching ? benchedOf(commander, marching) : [])
+    const benched = marching ? benchedOf(commander, marching) : night && commander ? stayedHome(commander, spec, side) : []
+    const led = leadSide(spec, side, commander ? commander.company : createCompany(), (Math.imul(record.seed, 31) + 17) >>> 0, benched, { night })
     spec = led.spec
     entry.game = replayGame({ ...record, spec })
     entry.joining = null
@@ -678,7 +710,7 @@ function createBattleStore({ dir = null, ai = null, now = () => Date.now() } = {
     if (!commander) return null
     const entry = fighting(commander)
     const side = entry && Object.keys(entry.commanders ?? {}).find(s => entry.commanders[s] === commander.id)
-    return { ...commanders.view(token), battle: entry ? { title: entry.title, seat: entry.seats[side] ?? null } : null }
+    return { ...commanders.view(token), battle: entry ? { title: entry.title, seat: entry.seats[side] ?? null, ...calledOut(entry, side) } : null }
   }
 
   // ── Reading ───────────────────────────────────────
@@ -723,8 +755,27 @@ function createBattleStore({ dir = null, ai = null, now = () => Date.now() } = {
       // How the table between a held Commander and his captors stands, as
       // this side may know it: a page waiting on the turn looks again when
       // it changes (an offer made to it, or an answer to its own).
-      table: tableStamp(game, side)
+      table: tableStamp(game, side),
+      // The next day's battle, once there is one, and whether he has been
+      // called out to it (this side's seat only).
+      ...nextDayOf(entry, side),
+      ...calledOut(entry, side)
     }
+  }
+  // The next day's battle after this one, if there is one: this side's seat
+  // in it, and the notice if the other side called it and his orders are
+  // wanted there.
+  function nextDayOf(entry, side) {
+    const next = entry.next ? battles.get(entry.next) : null
+    if (!next?.seats[side]) return {}
+    return { nextDay: { token: next.seats[side], title: next.title, ...calledOut(next, side) } }
+  }
+  // The other side called this next day, and it waits on this side's first
+  // orders (or his choice of who leads): he is told so, plainly.
+  function calledOut(entry, side) {
+    if (!entry.calledBy || entry.calledBy === side || entry.game.outcome.decided) return {}
+    if (entry.game.playerTurn > 0 || entry.pending[side] || !waitingOn(entry.game).includes(side)) return {}
+    return { calledOut: NIGHT.calledOut(entry.day ?? 2) }
   }
   function tableStamp(game, side) {
     const mine = game.parley?.[side]
@@ -1062,18 +1113,72 @@ function createBattleStore({ dir = null, ai = null, now = () => Date.now() } = {
     return {
       night: {
         title: NIGHT.title, ended: NIGHT.ended, again: NIGHT.again, againNote: NIGHT.againNote, released: NIGHT.released,
-        next: next?.seats[side] ?? null
+        next: next?.seats[side] ?? null,
+        // Called by the other side: the notice, while his orders are wanted.
+        ...(next ? calledOut(next, side) : {}),
+        // Against a friend, before either has asked: the browser may tell
+        // him if the other does, while the page is open.
+        ...(!next && !entry.auto ? { tellMe: NIGHT.tellMe, toldYou: NIGHT.toldYou } : {}),
+        // Nothing left on one side to take the field: no next day to offer.
+        ...(!next && Object.values(nightArmies(entry).left).some(n => n === 0) ? { noNextDay: NIGHT.noNextDay } : {})
       }
     }
+  }
+
+  /**
+   * Both armies as they stood when night fell, for the next day's battle
+   * (ruled 2026-11-24: "lol yes, it's just night time. Computer does not
+   * get to reset."). Every unit with men left, and no other: its men
+   * standing, and those who ran come back to the standards in the night;
+   * the fallen do not. Its kit, its faction and where it was drawn up are
+   * the day's; its strength when whole stays what it was, so a unit that
+   * has lost men hits softer (combat/ratings.js, strengthScale). No
+   * recruits come, and nothing is bought, in one night.
+   *
+   * A side led by a Commander: its officers are given again from his
+   * company at the muster (as the day left it: the dead gone, the wounded
+   * sitting it out), and each unit's veterancy is its own men's, the day's
+   * battle banked, with no recruits to thin it (the company's veterancy,
+   * over the men left). A side with none (the computer's): each unit keeps
+   * its officer, or has a new one if he was lost in the day; and its
+   * veterancy, which is not matched again.
+   *
+   * @returns {{ units, left: { [side]: number } }} the next day's unit specs,
+   *   and how many units each side has left
+   */
+  function nightArmies(entry) {
+    const game = entry.game
+    const now = (id) => game.battle.world.units.find(u => u.id === id) ?? game.battle.fledUnits.find(u => u.id === id)
+    const left = Object.fromEntries(Object.keys(game.spec.sides).map(s => [s, 0]))
+    const fates = {}
+    const units = []
+    for (const spec of game.spec.units) {
+      const men = Math.max(0, Math.round(now(spec.id)?.strength ?? 0))
+      if (men <= 0) continue
+      left[spec.side] = (left[spec.side] ?? 0) + 1
+      const company = entry.commanders?.[spec.side] ? commanders.byId(entry.commanders[spec.side])?.company : null
+      const unit = { ...spec, strength: men, maxStrength: spec.maxStrength ?? spec.strength, ...(spec.position ? { position: { ...spec.position } } : {}) }
+      if (company) {
+        // His officers come from his company at the muster.
+        const state = company.units?.[unitName(spec).toLowerCase()]
+        const v = state?.totalExperience > 0 ? Math.round(state.totalExperience / men * 100) / 100 : 0
+        delete unit.veterancy
+        if (v > 0) unit.veterancy = v
+      } else {
+        fates[spec.side] ??= new Map(officerFates(game, spec.side).map(f => [f.unitId, f.fate]))
+        if (!spec.officer?.headless && fates[spec.side].get(spec.id) !== 'unhurt') delete unit.officer
+      }
+      units.push(unit)
+    }
+    return { units, left }
   }
 
   /**
    * Fight again the next day (ruled 2026-11-24: "No the day just ends the
    * battle, you can choose to fight again the next day"). After a battle
    * night ended: a new battle on the same field, against the same enemy,
-   * mustered as any battle is. Each Commander's army comes as it stands
-   * after the day (his company and roster carry it, as from any battle to
-   * the next); the computer's is its faction's again. Against a friend, his
+   * both armies as they stood at nightfall (nightArmies), on both sides,
+   * whoever leads them. Against a friend, his
    * Commander leads his side again if he can; if not (he had none, or his
    * army is in another battle), the friend chooses when he comes, as he did
    * the first day. Made once: whoever asks after is given his own seat in it.
@@ -1092,6 +1197,9 @@ function createBattleStore({ dir = null, ai = null, now = () => Date.now() } = {
       const next = battles.get(entry.next)
       return { token: next?.seats[side] ?? null, title: next?.title ?? null }
     }
+    // A side with nothing left able to fight has no next day.
+    const night = nightArmies(entry)
+    if (Object.values(night.left).some(n => n === 0)) throw Object.assign(new Error(NIGHT.noNextDay), { status: 409 })
     const other = Object.keys(game.spec.sides).find(s => s !== side)
     const solo = Boolean(entry.auto)
     const own = entry.commanders?.[side] ? commanders.byId(entry.commanders[side]) : null
@@ -1104,10 +1212,14 @@ function createBattleStore({ dir = null, ai = null, now = () => Date.now() } = {
       commander: own?.token ?? null,
       faction: own ? null : sideFaction(game.spec, side),
       enemyFaction: sideFaction(game.spec, other),
-      ...(game.spec.turnLimit ? { turnLimit: game.spec.turnLimit } : { dayMinutes: game.spec.dayMinutes })
+      ...(game.spec.turnLimit ? { turnLimit: game.spec.turnLimit } : { dayMinutes: game.spec.dayMinutes }),
+      nightBefore: night.units,
+      day: (entry.day ?? 1) + 1
     })
     const next = battles.get(made.id)
     if (!solo && theirs && !theirs.ended && !fighting(theirs)) join(next.seats[other], theirs.token)
+    // Who called it: the other is told (nextDayNotice).
+    next.calledBy = side
     next.day = (entry.day ?? 1) + 1
     next.title = `${next.title}, day ${next.day}`
     entry.next = next.id
@@ -1313,6 +1425,9 @@ function createBattleStore({ dir = null, ai = null, now = () => Date.now() } = {
         return {
           unitId: f.unitId, culture: game.spec.units.find(u => u.id === f.unitId)?.culture ?? null,
           officerId: f.officerId, unit: f.unit.toLowerCase(), destroyed: f.destroyed, mustered: f.mustered, survivors: f.survivors, fought: f.fought,
+          // The next day of a battle: it went in short, and is made up to
+          // strength only once the fight is over (company.js, `full`).
+          ...(game.spec.nextDay ? { full: game.spec.units.find(u => u.id === f.unitId)?.maxStrength ?? f.mustered } : {}),
           fate: f.headless && prices.includes(f.unitId) ? 'given up' : f.fate, ...(f.how ? { how: f.how } : {}),
           // Given in a deal: the unit is gone, whatever befell its officer.
           ...(prices.includes(f.unitId) ? { given: true } : {}),
