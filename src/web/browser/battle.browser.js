@@ -51,16 +51,31 @@ async function page(browser, errors, viewport) {
   return p
 }
 
+// A new browser has no Commander: the muster sends it to make one first,
+// and one tap, every answer as offered, makes him and brings him back.
+async function toMuster(p, base, { faction = null } = {}) {
+  await p.goto(base + '/muster')
+  await p.waitForSelector('form#muster, form#make')
+  if (await p.locator('form#make').count()) {
+    if (faction) await p.selectOption('#make select[name="faction"]', faction)
+    await p.click('#make button[type="submit"]')
+    await p.waitForSelector('form#muster')
+  }
+}
+
 test('alone, on a phone: muster, an order written on the map, turns to a verdict, the replay', { skip }, async () => {
   await withApp(async ({ base, browser, errors }) => {
     const p = await page(browser, errors, { width: 390, height: 844 })
     await p.goto(base + '/')
-    await p.waitForSelector('form#muster')
-    assert.match(p.url(), /\/muster$/, 'a new browser starts at the muster')
+    await p.waitForSelector('form#make')
+    assert.match(p.url(), /\/commander\/new\?then=\/muster$/, 'a new browser makes its Commander first')
     // A new Commander chooses his faction; the enemy's is drawn by lot
     // unless chosen.
     await p.selectOption('select[name="faction"]', 'macedon')
     assert.match(await p.textContent('#faction-note'), /Silver shields, comes free/)
+    await p.click('#make button[type="submit"]')
+    await p.waitForSelector('form#muster')
+    assert.match(await p.textContent('#faction-note'), /you fight for Macedon/)
     await p.selectOption('select[name="enemyFaction"]', 'rome')
     // One kind of battle, to the end: no kind, no day's end, no ground to hold to choose.
     assert.equal(await p.locator('select[name="scenario"], select[name="timeLimit"], input[name="objectives"]').count(), 0)
@@ -149,7 +164,7 @@ test('alone, on a phone: muster, an order written on the map, turns to a verdict
       await p.locator('.officer summary').first().click()
       assert.match(await p.locator('.officer li').first().textContent(), /a victory|a defeat|a draw/)
     }
-    assert.match(await p.textContent('main'), /Commander \w+ of Macedon/)
+    assert.match(await p.textContent('main'), /Commander \w+ the Builder of Macedon/, 'the Engineer, for glory, after one battle')
     assert.match(await p.textContent('main'), /ready to muster/)
     if (process.env.SHOT) await p.screenshot({ path: process.env.SHOT, fullPage: true })
 
@@ -165,10 +180,8 @@ test('alone, on a phone: muster, an order written on the map, turns to a verdict
     await p.click('button[type="submit"]')
     await p.waitForSelector('#orders')
     await p.goto(base + '/muster')
-    await p.waitForSelector('select[name="commander"]')
-    assert.match(await p.locator('select[name="commander"] option:checked').textContent(), /A new Commander/)
-    assert.equal(await p.locator('select[name="commander"] option[disabled]').count(), 1, 'his army is in the field')
-    if (process.env.SHOT) await p.screenshot({ path: process.env.SHOT.replace('.png', '-muster.png'), fullPage: true })
+    await p.waitForSelector('form#make')
+    assert.match(p.url(), /\/commander\/new/, 'his army is in the field: a new Commander must be made to muster')
     await p.goto(base + '/officers')
     await p.waitForSelector('.commander')
     assert.match(await p.textContent('main'), /His army is in the field/)
@@ -178,7 +191,7 @@ test('alone, on a phone: muster, an order written on the map, turns to a verdict
 test('two players by link, on desktops: the turn waits for both, then both read the dispatch', { skip }, async () => {
   await withApp(async ({ base, browser, errors }) => {
     const red = await page(browser, errors, { width: 1440, height: 900 })
-    await red.goto(base + '/muster')
+    await toMuster(red, base)
     await red.check('input[name="opponent"][value="friend"]')
     // Against a friend the enemy's faction is not asked: his Commander brings his own.
     assert.equal(await red.locator('#enemy-field').isHidden(), true)
@@ -194,16 +207,21 @@ test('two players by link, on desktops: the turn waits for both, then both read 
     await red.click('#send')
     await red.waitForSelector('.calm')
 
-    // The friend's first screen: who leads? A new Commander, in one tap.
+    // The friend's first screen: who leads? A new Commander, made on his
+    // own screen, who comes back here to lead.
     await blue.goto(link)
     await blue.waitForSelector('#who-leads')
     assert.match(await blue.textContent('#who-leads h1'), /Who leads\?/)
     assert.equal(await blue.locator('[data-lead]').count(), 2, 'no Commanders yet in this browser: a new one, with the usual army or one he buys first')
-    // A new Commander's faction, for life: the army the muster gave this side first.
-    assert.equal(await blue.locator('select[name="faction"]').count(), 1)
-    await blue.selectOption('select[name="faction"]', 'sarmatia')
     if (process.env.SHOT) await blue.screenshot({ path: process.env.SHOT.replace('.png', '-who-leads-desktop.png'), fullPage: true })
     await blue.click('[data-lead="new"]')
+    await blue.waitForSelector('form#make')
+    // A new Commander's faction, for life: the army the muster gave this side first.
+    await blue.selectOption('select[name="faction"]', 'sarmatia')
+    await blue.click('#make button[type="submit"]')
+    await blue.waitForSelector('#who-leads')
+    assert.equal(await blue.locator('[data-lead]').count(), 3, 'he is offered first, and a new one still')
+    await blue.click('[data-lead] >> nth=0')
     await blue.waitForSelector('#map-scroll svg')
     assert.match(await blue.textContent('.bar-title'), /Blue/)
     assert.equal((await blue.evaluate(() => JSON.parse(localStorage.getItem('cohort.commanders')))).length, 1, 'his link is kept in this browser')
@@ -247,10 +265,8 @@ test('on a phone: a new Commander buys his army, is told why a pick is refused, 
     const p = await page(browser, errors, { width: 390, height: 844 })
     const shot = (name) => process.env.SHOT ? p.screenshot({ path: process.env.SHOT.replace('.png', `-${name}.png`) }) : null
     const noSideways = async () => assert.ok(await p.evaluate(() => document.documentElement.scrollWidth <= 390), 'no sideways scroll')
-    await p.goto(base + '/muster')
-    await p.waitForSelector('form#muster')
-    await p.selectOption('select[name="faction"]', 'han')
-    await p.click('#make-and-buy')
+    await toMuster(p, base, { faction: 'han' })
+    await p.click('#to-army')
     await p.waitForSelector('#army-screen')
     // He starts from the usual army; the elite is free and not for sale.
     assert.match(await p.textContent('#budget'), /26 of 30 supply points/)
@@ -375,7 +391,7 @@ test('a dispatch says so when the AI is on but gave only the plain report', { sk
   const ai = { configured: true, complete: async () => ({ ok: false }) }
   await withApp(async ({ base, browser, errors }) => {
     const p = await page(browser, errors, { width: 390, height: 844 })
-    await p.goto(base + '/muster')
+    await toMuster(p, base)
     await p.click('button[type="submit"]')
     await p.waitForSelector('#orders')
     await p.fill('#orders', 'everyone advance')
@@ -589,8 +605,7 @@ test('on a phone: night ends the battle with no winner, and the main button figh
     const post = async (url, body) => (await fetch(base + url, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body ?? {}) })).json()
     const p = await page(browser, errors, { width: 390, height: 844 })
     // The muster says how long the day is, and what night does.
-    await p.goto(base + '/muster')
-    await p.waitForSelector('form#muster')
+    await toMuster(p, base)
     assert.match(await p.textContent('form#muster'), /The day is 12 h of battle\. If neither side has won by then, night ends the fighting/)
     if (process.env.SHOT) await p.screenshot({ path: process.env.SHOT.replace('.png', '-muster-day.png') })
 
@@ -690,8 +705,7 @@ test('on a phone: the muster names the field\'s ground to fight for; the tent ma
   await withApp(async ({ base, browser, errors, store }) => {
     const p = await page(browser, errors, { width: 390, height: 844 })
     const shot = (name) => process.env.SHOT ? p.screenshot({ path: process.env.SHOT.replace('.png', `-${name}.png`), fullPage: true }) : null
-    await p.goto(base + '/muster')
-    await p.waitForSelector('form#muster')
+    await toMuster(p, base)
     assert.match(await p.textContent('#ground-note'), /^The ground to fight for: the Crownhill\. Hold it alone for 1 h/)
     await p.selectOption('select[name="map"]', 'ashford')
     assert.match(await p.textContent('#ground-note'), /^The ground to fight for: the Old Mill Bridge\./)
@@ -724,5 +738,81 @@ test('on a phone: the muster names the field\'s ground to fight for; the tent ma
     assert.equal(await p.textContent('.verdict h2'), 'Defeat')
     assert.match(await p.textContent('.verdict'), /The enemy held the Old Mill Bridge alone for 1 h, and the field is his/)
     await shot('ground-verdict')
+  })
+})
+
+test('on a phone: a new Commander is made on one screen, two questions and a name, every one answered already; his answers show on his page and in his record', { skip }, async () => {
+  await withApp(async ({ base, browser, errors, store }) => {
+    const p = await page(browser, errors, { width: 390, height: 844 })
+    const shot = (name) => process.env.SHOT ? p.screenshot({ path: process.env.SHOT.replace('.png', `-${name}.png`), fullPage: true }) : null
+    const noSideways = async () => assert.ok(await p.evaluate(() => document.documentElement.scrollWidth <= 390), 'no sideways scroll')
+    await p.goto(base + '/muster')
+    await p.waitForSelector('form#make')
+    // The two questions, in the game's words, each with its answer chosen.
+    assert.match(await p.textContent('#make'), /What kind of commander are you\?[\s\S]*What do you fight for\?[\s\S]*Your faction, for life[\s\S]*Your name/)
+    assert.equal(await p.locator('[data-kind]').count(), 10)
+    assert.equal(await p.locator('[data-kind][aria-pressed="true"]').count(), 1)
+    assert.equal(await p.locator('[data-holds][aria-pressed="true"]').count(), 1)
+    for (const b of await p.locator('[data-kind], [data-holds]').all()) assert.ok((await b.boundingBox()).height >= 44, 'every answer is a 44 px target')
+    assert.match(await p.inputValue('input[name="name"]'), /^[A-Z][a-z]+$/, 'a plain name is offered')
+    assert.match(await p.textContent('#kind-note'), /The Engineer: Victory through preparation\. Your veteran officer is steady/)
+    await noSideways()
+    await shot('make')
+    const button = await p.locator('#make button[type="submit"]').boundingBox()
+    assert.ok(button.y + button.height <= 844 * 1.6, `"Take command" at ${Math.round(button.y)} px: a short screen`)
+
+    // Each answer says what it does.
+    await p.click('[data-kind="wall"]')
+    await p.click('[data-holds="survival"]')
+    assert.match(await p.textContent('#kind-note'), /The Wall: Nothing breaks your line\. Your veteran officer is cautious: if he loses the thread of an order, he stops and holds/)
+    assert.match(await p.textContent('#holds-note'), /Your veteran looks to his men, as you do/)
+    // A name refused says why, and nothing is made.
+    await p.fill('input[name="name"]', 'Aurelian the Bold')
+    await p.click('#make button[type="submit"]')
+    await p.waitForSelector('#make-error .error')
+    assert.match(await p.textContent('#make-error'), /"the" is a word the game uses for something else/)
+    assert.equal(await p.evaluate(() => JSON.parse(localStorage.getItem('cohort.commanders') ?? '[]').length), 0)
+    // The refusal is the server's 400, which the page logs: expected here.
+    const logged = errors.findIndex(e => /status of 400/.test(e))
+    if (logged >= 0) errors.splice(logged, 1)
+    await noSideways()
+    await shot('make-refused')
+    await p.fill('input[name="name"]', 'aurelian')
+    assert.match(await p.textContent('#name-note'), /After your first battle you are known as aurelian the Patient/)
+    await p.selectOption('select[name="faction"]', 'rome')
+    await p.click('#make button[type="submit"]')
+
+    // At the muster, and leading it.
+    await p.waitForSelector('form#muster')
+    assert.match(await p.locator('select[name="commander"] option:checked').textContent(), /^Aurelian, 0 battles fought/)
+    assert.match(await p.textContent('#faction-note'), /As Aurelian, you fight for Rome/)
+    await p.click('#muster button[type="submit"]')
+    await p.waitForSelector('#orders')
+    const seat = p.url().split('/b/')[1]
+    await fetch(`${base}/api/seat/${seat}/orders`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ text: 'yield' }) })
+
+    // His title, his answers, his record.
+    await p.goto(base + '/officers')
+    await p.waitForSelector('.commander')
+    assert.match(await p.textContent('.commander'), /Commander Aurelian the Patient of Rome/)
+    assert.match(await p.textContent('main'), /The Wall, for survival\./)
+    assert.match(await p.textContent('.officer'), /cautious[\s\S]*looks to his men/)
+    await shot('officers')
+    await p.click('text=His record')
+    await p.waitForSelector('#commander-page')
+    assert.match(await p.textContent('#his-answers'), /You are the Wall: nothing breaks your line\. You fight for survival\./)
+    assert.match(await p.textContent('.record'), /a defeat/)
+    await noSideways()
+    await shot('record')
+
+    // A Commander made before the questions, fallen: his page says what is kept, and asks nothing.
+    const old = await (await fetch(base + '/api/commanders', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: '{}' })).json()
+    store.commanders.end(store.commanders.get(old.token), { how: 'killed', at: 'Crownhill: the meeting battle' })
+    await p.goto(`${base}/commander/${old.token}`)
+    await p.waitForSelector('#commander-page')
+    assert.equal(await p.locator('#his-answers').count(), 0)
+    assert.match(await p.textContent('#commander-page'), /You were killed at Crownhill: the meeting battle, on \d+ \w+ \d{4}\. Your name stays in the record/)
+    assert.equal(await p.locator('text=Muster a new battle').count(), 0)
+    await shot('record-fallen')
   })
 })
