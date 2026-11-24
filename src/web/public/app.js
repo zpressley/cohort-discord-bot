@@ -115,6 +115,7 @@ const WHY = {
   commander: 'a Commander fell into enemy hands, or got out of them',
   stalled: 'all was quiet', ready: 'your orders were carried out', fire: 'there was shooting', rallied: 'a broken unit rallied', objective: 'ground changed hands', decided: 'the battle was decided',
   rider: 'a rider came back: he could not get through', night: 'night fell',
+  riderTaken: 'your men caught an enemy rider',
   surrender: 'a commander yielded'
 }
 const sideName = (side) => side.charAt(0).toUpperCase() + side.slice(1)

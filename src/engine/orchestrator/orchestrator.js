@@ -509,7 +509,7 @@ function wantedNow(game, turnRecord, sightedBy, heard, objectiveChanges) {
   const quiet = (side) => battle.turn - (game.askedAt[side] ?? 0) >= COMMAND.QUIET
   const ofSide = (id, side) => [...battle.world.units, ...battle.fledUnits].some(u => u.id === id && u.side === side)
   const by = {}
-  const order = ['contact', 'fire', 'sighting', 'ready', 'rallied', 'rider', 'stalled', 'time']
+  const order = ['contact', 'fire', 'sighting', 'ready', 'rallied', 'riderTaken', 'rider', 'stalled', 'time']
   for (const side of all) {
     const c = battle.commanders?.[side]
     const reasons = []
@@ -519,6 +519,9 @@ function wantedNow(game, turnRecord, sightedBy, heard, objectiveChanges) {
       // commands to give (ruled 2026-11-24: "the rider should return with
       // that news"). Now that the hour does not call him back, it must.
       if (recent.some(e => e.type === 'riderBlocked' && e.side === side && arrivalOf(game, side, e) === battle.turn)) reasons.push('rider')
+      // Word from one of his units that it caught an enemy rider and read
+      // his order: something to act on.
+      if (recent.some(e => e.type === 'riderTaken' && e.side === side && arrivalOf(game, side, e) === battle.turn)) reasons.push('riderTaken')
     } else if (game.word[side] && c?.status === 'held') {
       reasons.push(...heldNews(game, side, turnRecord, sightedBy, now))
       if (quiet(side)) reasons.push('time')
@@ -688,6 +691,9 @@ function ordersCarriedOut(battle, { side = null, events = null } = {}) {
     if (doneIds.has(unit.id) || battle.broken.has(unit.id) || unit.strength <= 0) return false
     // An order still on the road to it (command/messengers.js): not done.
     if (battle.riders?.some(r => r.unitId === unit.id)) return true
+    // ... or one the enemy caught, until it should have arrived: he does
+    // not know it never will.
+    if (battle.lostRiders?.some(r => r.unitId === unit.id && r.arrives > battle.turn)) return true
     const order = battle.orderBook.get(unit.id)
     if (!order) return false
     // Going for a named enemy never finishes, as pressing the enemy does not.

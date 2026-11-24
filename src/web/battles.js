@@ -1003,7 +1003,10 @@ function createBattleStore({ dir = null, ai = null, now = () => Date.now() } = {
     // ride would take, as far as he knows (word.js, blocked): that the way
     // is shut he learns only when the rider is back.
     const onTheRoad = (id) => {
-      const real = (battle.riders ?? []).filter(r => r.side === side && r.unitId === id).at(-1) ?? null
+      // (A rider the enemy caught he still believes on the road, until he
+      // should have arrived: no word comes back.)
+      const real = [...(battle.riders ?? []), ...(battle.lostRiders ?? []).filter(r => r.arrives > battle.turn)]
+        .filter(r => r.side === side && r.unitId === id).sort((a, b) => a.sent - b.sent).at(-1) ?? null
       const shut = (word?.blocked ?? []).filter(b => b.unitId === id && b.arrives > battle.turn).at(-1)
       if (!shut || (real && real.sent >= shut.sent)) return real
       const given = game.orderLog.filter(l => l.side === side && Array.isArray(l.orders)).flatMap(l => l.orders).filter(o => o.unitRef === id).at(-1)

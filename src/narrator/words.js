@@ -415,3 +415,17 @@ const ON_HIS_OWN = {
 }
 
 module.exports = { orderWords, moraleWords, ORDER, OWN_EDGE, HOLD_THERE, KIT, RIDE_WITH, LOYALTY_WORDS, VALUES_WORDS, VETERANCY_WORDS, RIDER, NIGHT, REPORT, GROUND, windWords, SKIRMISH_WORDS, THROWN_WORDS, MAKING, COMMANDER_KINDS, NATURE_SAID, HOLDS_DEAR, COMMANDER_TITLES, ENEMY_COMMANDER, ON_HIS_OWN }
+
+// The enemy catching a rider and reading the order he carried (engine/
+// command/messengers.js, ridersTaken). Told only to the side that caught
+// him, with the report of the unit that did; the side that sent him is
+// never told (no word comes back). The order is told in the game's own
+// words (orderWords), never as it was typed.
+const RIDER_TAKEN = {
+  // The dispatch: "Light horse took one of the enemy's riders at Old Mill
+  // Bridge (F6-NW), carrying an order for enemy spears: attack Crownhill (G5-NE)".
+  line: (unit, where, to, order) => `${unit} took one of the enemy's riders ${where}, carrying an order for ${to}: ${order}`,
+  // The map's mark where he was taken.
+  mark: 'enemy rider taken here'
+}
+module.exports.RIDER_TAKEN = RIDER_TAKEN

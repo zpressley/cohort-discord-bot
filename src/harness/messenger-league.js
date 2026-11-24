@@ -61,6 +61,12 @@ const VETERANS = process.argv.includes('--veterans')
 const { groundOf } = require('../data/maps')
 const { withCommander } = require('../opponent/commander')
 const MAX_PLAYER_TURNS = 150
+// --no-catch: no rider is caught (tables.RIDER_TAKEN at nothing), to
+// measure the enemy catching riders against the same seeds without it.
+if (process.argv.includes('--no-catch')) {
+  const { RIDER_TAKEN } = need('engine/combat/tables')
+  if (RIDER_TAKEN) { RIDER_TAKEN.FOOT.CHANCE = 0; RIDER_TAKEN.HORSE.CHANCE = 0 }
+}
 
 function play(red, blue, { map, seed, policy }) {
   let spec = fieldFactions(loadScenario('meeting-battle', { map, deploy: true }), { red, blue })
@@ -140,6 +146,11 @@ function play(red, blue, { map, seed, policy }) {
     blocked: events.filter(e => e.type === 'riderBlocked' && e.side === 'red').length,
     blueDelays: events.filter(e => e.type === 'riderSent' && e.side === 'blue').map(e => e.minutes),
     blueBlocked: events.filter(e => e.type === 'riderBlocked' && e.side === 'blue').length,
+    // Riders caught (command/messengers.js, ridersTaken): red's by blue,
+    // and blue's by red; and by horse.
+    redTaken: events.filter(e => e.type === 'riderTaken' && e.from === 'red').length,
+    blueTaken: events.filter(e => e.type === 'riderTaken' && e.from === 'blue').length,
+    takenByHorse: events.filter(e => e.type === 'riderTaken' && game.battle.world.units.concat(game.battle.fledUnits).find(u => u.id === e.unitId)?.mounted).length,
     cutOff: r.cutOffUnits.size,
     cutOffTurns: r.cutOffTurns,
     noWord: r.noWord,
@@ -171,7 +182,7 @@ function league({ battles = 336, policy = 'planner' } = {}) {
   const factions = Object.keys(FACTIONS)
   const pairs = []
   for (const a of factions) for (const b of factions) if (a !== b) for (const map of maps) pairs.push([a, b, map])
-  const all = { noWord: 0, noWordCut: 0, noWordGone: 0, stops: 0, waits: [], why: {}, battles: 0, stuck: 0, wins: 0, losses: 0, draws: 0, turns: 0, minutes: 0, orders: 0, delays: [], blocked: 0, blueDelays: [], blueBlocked: 0, battlesCutOff: 0, cutOffTurns: 0, unitTurns: 0, lost: 0, initiative: {}, battlesInitiative: 0 }
+  const all = { noWord: 0, noWordCut: 0, noWordGone: 0, stops: 0, waits: [], why: {}, battles: 0, stuck: 0, wins: 0, losses: 0, draws: 0, turns: 0, minutes: 0, orders: 0, delays: [], blocked: 0, blueDelays: [], blueBlocked: 0, battlesCutOff: 0, cutOffTurns: 0, unitTurns: 0, lost: 0, initiative: {}, battlesInitiative: 0, redTaken: 0, blueTaken: 0, takenByHorse: 0, battlesTaken: 0, battlesRedCaught: 0 }
   for (let i = 0; i < battles; i++) {
     const [a, b, map] = pairs[i % pairs.length]
     const r = play(a, b, { map, seed: 1000 + i * 7919, policy })
@@ -190,6 +201,11 @@ function league({ battles = 336, policy = 'planner' } = {}) {
     all.blocked += r.blocked
     all.blueDelays.push(...r.blueDelays)
     all.blueBlocked += r.blueBlocked
+    all.redTaken += r.redTaken
+    all.blueTaken += r.blueTaken
+    all.takenByHorse += r.takenByHorse
+    if (r.redTaken + r.blueTaken > 0) all.battlesTaken++
+    if (r.blueTaken > 0) all.battlesRedCaught++
     if (r.cutOff > 0) all.battlesCutOff++
     all.cutOffTurns += r.cutOffTurns
     all.noWord += r.noWord
@@ -231,6 +247,7 @@ if (require.main === module) {
     const b = [...all.blueDelays].sort((x, y) => x - y)
     console.log(`the computer's orders by rider: ${b.length}, median ${b[Math.floor(b.length / 2)] ?? 0} min, longest ${b.at(-1) ?? 0}; not sent ${all.blueBlocked}`)
   }
+  console.log(`riders caught: red's ${all.redTaken} (of ${d.length} sent), the computer's ${all.blueTaken} (of ${all.blueDelays.length}); ${all.takenByHorse} by horse; in ${all.battlesTaken} battles (${pct(all.battlesTaken, done)}); red caught one in ${all.battlesRedCaught} (${pct(all.battlesRedCaught, done)})`)
   console.log(`a unit cut off at some turn's start in ${all.battlesCutOff} battles (${pct(all.battlesCutOff, done)}); ${pct(all.cutOffTurns, all.unitTurns)} of unit-turns cut off`)
   const acts = Object.values(all.initiative).reduce((a, b) => a + b, 0)
   console.log(`red lost ${pct(all.lost, done)} of his men on average; his officers acted on their own, cut off, ${acts} times in ${all.battlesInitiative} battles (${pct(all.battlesInitiative, done)})` +
