@@ -1356,14 +1356,15 @@ async function tent(token) {
       'everyone advance',
       `${a.name} to ${east(a, 4)}`,
       `${b.name} defend ${east(b, 2)}`,
-      `${a.name} hold`,
-      `${b.name} fall back`,
+      // By the compass, and every unit the other orders leave out.
+      `${a.name} go north 200 m`,
+      'everyone else hold',
       // On a big field, the second line as one: a short order for many units.
       ...(own.some(u => u.secondLine) ? ['second line hold'] : [])
     ]
     return `<div class="how-to">
       <strong>How to give orders</strong>
-      <span class="note">Say them as you would to an officer: a unit, then what it should do and where. One order to a line. Tap one to put it in the box.</span>
+      <span class="note">Say them as you would to an officer: a unit, then what it should do and where. One order to a line, or several with commas. Tap one to put it in the box.</span>
       <div class="examples">${examples.map(e => `<button class="btn btn-quiet" type="button" data-example="${esc(e)}">${esc(e)}</button>`).join('')}</div>
       <button class="btn btn-quiet" type="button" id="how-to-hide">Hide this</button>
     </div>`

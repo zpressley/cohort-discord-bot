@@ -15,6 +15,7 @@ const { orderWords, moraleWords, ORDER, RIDER, NIGHT, GROUND, SKIRMISH_WORDS, TH
 const { gridLabel } = require('../engine/map/grid')
 const { RIDER_TAKEN } = require('./words')
 const { BATTLE_OVER } = require('./words')
+const { PLACE } = require('./words')
 
 // Where a tile is, in words: the feature it is part of, or the nearest
 // feature with a name, or open ground near the nearest feature.
@@ -23,7 +24,7 @@ function placeName(map, position) {
   const here = featuresAt(map, position).filter(f => f.kind !== 'road')
   if (here.length > 0) {
     const f = here[0]
-    if (f.name) return `${f.kind === 'hill' ? 'on' : 'at'} ${f.name}`
+    if (f.name) return `${f.kind === 'hill' ? 'on' : 'at'} ${PLACE.name(f.name)}`
     return { hill: 'on the high ground', woods: 'in the woods', marsh: 'in the marsh', clearing: 'in a clearing', ford: 'at a ford', bridge: 'on a bridge', river: 'in the river' }[f.kind] ?? 'in the field'
   }
   let best = null
@@ -33,7 +34,7 @@ function placeName(map, position) {
     if (!best || tiles < best.tiles) best = { f, tiles }
   }
   if (!best || best.tiles > 12) return 'in open ground'
-  const what = best.f.name ?? `the ${best.f.kind === 'hill' ? 'high ground' : best.f.kind}`
+  const what = best.f.name ? PLACE.name(best.f.name) : `the ${best.f.kind === 'hill' ? 'high ground' : best.f.kind}`
   return `in open ground ${best.tiles * TILE_METRES} m ${compassWord(best.f.centre, position)} of ${what}`
 }
 
@@ -200,7 +201,7 @@ function whereAt(map, position) {
 // feature there, if it has a name, with its grid square ("The Crownhill
 // (E1-SE)"); else the grid square alone, as the Army tab gives it.
 function orderPlace(map, position) {
-  const named = /^(?:at|on) ([A-Z].*)$/.exec(placeName(map, position))
+  const named = /^(?:at|on) ((?:the )?[A-Z].*)$/.exec(placeName(map, position))
   const square = gridLabel(position, { quarter: true })
   return named ? `${named[1]} (${square})` : square
 }

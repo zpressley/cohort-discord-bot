@@ -976,6 +976,9 @@ function createBattleStore({ dir = null, ai = null, now = () => Date.now() } = {
       enemies: (word ? knownEnemies(word) : sideView(game, side).intel).map(enemyForOrders),
       // Where "fall back" takes a unit, for the read-back.
       homeEdge: game.spec.sides?.[side]?.homeEdge,
+      // The ground to fight for, which every side knows: "the hill" is it
+      // where it is a hill.
+      ground: game.battle.ground ?? [],
       lyingInWait: lyingInWait(game.battle, side),
       // For counsel: the units that would break at the first blow.
       shaken: game.battle.world.units.filter(u => u.side === side && game.battle.isShaken(u)).map(u => u.id),

@@ -502,3 +502,62 @@ const BATTLE_OVER = {
 }
 
 module.exports.BATTLE_OVER = BATTLE_OVER
+
+// A place's name, said inside a sentence (docs/REVIEW-2026-11.md, D13): one
+// rule wherever a place is named to the Commander. A name that describes
+// the place takes "the", in small letters: "the Crownhill", "the Old Mill
+// Bridge", "the North Ford", "the Merchant Road". A name that is the place's
+// own, as a village's is, takes none: "Harrow Bridge", "Raven Gap", "Thorn
+// Knoll", "Elderby". The map's data says which: a name written there with
+// "The" takes it; so does one that begins with a plain word of description
+// (`DESCRIBING`). The map's own labels keep the name as it is written there.
+const DESCRIBING = new Set(['old', 'new', 'north', 'south', 'east', 'west', 'upper', 'lower', 'high', 'low', 'long', 'great', 'little', 'middle'])
+const PLACE = {
+  name(name) {
+    const said = String(name ?? '')
+    if (/^the\s/i.test(said)) return `the ${said.slice(4)}`
+    return DESCRIBING.has(said.split(/\s+/)[0].toLowerCase()) ? `the ${said}` : said
+  }
+}
+module.exports.PLACE = PLACE
+
+// Reading orders with no AI (src/interpreter; docs/REVIEW-2026-11.md, D4):
+// what the Commander is told when an order is read in a way he may not have
+// meant, cannot be read, or asks for something the engine has no order for.
+// Each says what was not understood and offers the nearest orders that are,
+// in the order box's own words.
+const ORDERS_READ = {
+  // "the hill" on a field whose ground to fight for is a hill: that one.
+  ground: 'the ground to fight for',
+  // A line the grammar could not read at all, or only its unit.
+  notRead: (line, examples) => `I don't follow "${line}". Orders read like: ${examples.join(' · ')}`,
+  notReadFor: (who, rest, examples) => `I know ${who}, but I don't follow what you want of them: "${rest}". Orders read like: ${examples.join(' · ')}`,
+  // "everyone else hold" with no one else named.
+  othersAlone: (said, example) => `"${said}" means every unit not named in your other orders, and no other is named. Name the others first: "${example}".`,
+  // Keeping with another unit: the engine has no such order.
+  follow: (who, friend) => `There is no order to keep one unit with another as it moves: ${who} would not know where ${friend} go next. Send them to where ${friend} stand now, or give both the same order.`,
+  followNoOne: (who, words) => `There is no order to "${words}": ${who} can march to a place, hold it, advance on the enemy or fall back. Say where, or give them the same order as the others.`,
+  followTo: (friend) => `march to where ${friend} stand now`,
+  bothSame: 'give both the same order',
+  // Going round a flank: which way round is not the officers' to guess.
+  flank: (example) => `Going round a flank needs a way round, and your officers will not guess it. Pick a way round the enemy you have seen, or name where to go first, then what to do: "${example}".`,
+  flankEnd: (way) => `round the ${way} end of the enemy you have seen`,
+  flankUnseen: (example) => `You have seen no enemy, so there is no flank to go round yet. To go and find them, say "advance"; to go somewhere first, name the place: "${example}".`,
+  // Throwing: missile troops shoot; javelins and pila are thrown at blows.
+  thrown: (who, weapon) => `${who} have no bows or slings: they throw their ${weapon} as they come to blows, whether they close or are closed on. To throw them, close with the enemy, or hold and let him come.`,
+  advanceAndThrow: 'advance on the enemy, and throw as they close',
+  holdAndThrow: 'hold, and throw at any who come to blows with them',
+  nothingToThrow: (who) => `${who} have nothing to throw or shoot: only troops with bows, slings, crossbows or javelins can.`,
+  // Fire and retreat (engine/battle/skirmish.js), told as the engine does it.
+  skirmish: (mounted) => (mounted
+    ? 'advance on the enemy until in shot, shoot, and fall back before any who come at them on foot'
+    : 'advance on the enemy until in shot, and shoot (on foot they cannot keep away from men on foot)'),
+  // A place said by one of his own units.
+  where: (who) => `where ${who} stand now`,
+  behind: (who, metres) => `${metres} m behind where ${who} stand now`,
+  // "keep going", "carry on": an order stands until another is sent.
+  carryOn: (who) => `${who} keep the orders they have until you send them others: leave them out of this order, and they carry on.`,
+  // "fall back 200 m" with no side's edge to fall back toward.
+  noEdge: 'Which way is back? Say the way: "fall back 200 m west".'
+}
+module.exports.ORDERS_READ = ORDERS_READ

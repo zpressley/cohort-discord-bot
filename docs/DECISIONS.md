@@ -4212,3 +4212,178 @@ line).
 - **The AI's instructions** gained two lines: the Commander is "you", and
   ground not yet held an hour has not won the field. Not measured live
   again: the task allowed one AI battle, and it was spent finding this.
+
+### How the grammar was widened (Claude's choices, open to change)
+
+From the playthrough of November 24 (`docs/REVIEW-2026-11.md`, D4 and D13):
+with no AI, the grammar did not read "everyone else hold", "the rest hold",
+"legionaries go north 300m", "guard the bridge", "velites throw javelins",
+"velites skirmish", "legionnaires", "evryone", "go around the left flank"
+or "stay with the legionaries"; "everyone take the hill" went to the
+nearest hill; the read-back said "The Crownhill" beside "Old Mill Bridge".
+Zach: a new player with no AI must be able to give ordinary orders in
+ordinary words and be understood, or be asked a clear question.
+
+**What was measured.** 352 plain orders, as a new player types them on a
+phone (`src/interpreter/tests/fixtures/plain-orders.js`): every kind of
+order the engine has, units by name, kind, number, "everyone", "everyone
+else", "the rest", "the second line"; places by name, grid square, compass
+and distance, "the hill", "the ground"; typos, filler words, no
+punctuation, several orders on a line. Each is run through the grammar
+alone on every field it fits, with a real army mustered as the app musters
+it (Rome mostly; Macedon and Parthia for their kinds): 1,609 readings.
+`node src/interpreter/tests/fixtures/score.js` prints the table (add
+`--by-order` or `--misses` for the detail); `plain-orders.test.js` holds it.
+
+| | Before (main `07b6201`) | After |
+|---|---|---|
+| Read rightly | 784 (49%) | 1,508 (94%) |
+| A fair "which do you mean?" (two woods, two fords) | 76 (5%) | 101 (6%) |
+| Read wrongly | 68 (4%) | 0 |
+| Not read | 681 (42%) | 0 |
+| Orders understood on every field | 195 of 352 | 352 of 352 |
+
+The first 262 orders were written before the work and the grammar was
+taught them, so their rate flatters it. Two batches were written after, to
+see how an order no one has tried fares. 60 "fresh" orders, run once
+before any change for them: 208 of 296 readings right, 13 asked, 0 wrong,
+75 not read (75% understood). Then 30 "held out", written last and run
+once: 106 of 148 right, 2 asked, 0 wrong, 40 not read (73%). Both batches
+were then taught what they showed (the table is after). Expect about three
+in four of the orders no one has tried yet to be read, and almost none to
+be read wrongly.
+
+**What the grammar reads now** (`grammar.js`, `resolve.js`, `orders.js`;
+the words in `words.js`, `PLACE` and `ORDERS_READ`):
+- *Everyone else, the rest, the others, all others, everybody else*: every
+  unit not named in the same set of orders, on that line or another.
+  Alone, with no one else named, a question that says so.
+- *Everyone except the velites, all but the velites; the first line, the
+  front line; all troops, the men; the foot, the horse, the cavalry, the
+  archers, the pikes* (kinds by what the units are: on horse, on foot, with
+  a bow, sling or javelin, with a pike); *sarissa 2, spears 2* (a word of a
+  name and its number).
+- *Compass and distance*: "go north 300m", "move 300 m north", "go 2
+  squares north" (a square is 100 m), "go ne", "legionaries 200m north",
+  "advance 200 m east" (a march that way, not an advance on the enemy).
+  "Fall back 200 m" falls back toward his own edge.
+- *Guard, secure, protect, defend, take, occupy, take up position at, wait
+  in*: go there and hold it. "Seize", "capture", "storm" stay what they
+  were: attack a place.
+- *Hold* in more words: stand your ground, stay where you are, stay in
+  position, stay back, dig in, form up, defend here. *Advance*: forward,
+  move up, push on, go get them, march on the enemy. *Fall back*: back up,
+  run away, go back.
+- *Typos*: a unit's name one letter off (two in a name of eight letters or
+  more; "legionary" for legionaries; "legion", the start of one name), and
+  the words an order turns on (advance, hold, north, everyone, woods ...)
+  one letter off (two at ten letters or more); only when one word alone is
+  that near, and never into a word when it is as near a unit's or a
+  place's name.
+- *Filler*: ok, now, please, "tell the legionaries to", "I want the hastati
+  to", "have the velites", "send the legionaries to", "square C5",
+  "legionaries, advance", "legionaries: advance".
+- *Several orders on one line*: cut where the rest begins with a unit (or
+  "everyone else") and every piece is an order the grammar reads whole and
+  can place. A chain or a condition is never cut ("legionaries to C5,
+  hastati to D6", "legionaries hold velites advance").
+- *Chains*: "then D6" (a bare place), "then east"; "march north 200 m then
+  hold"; "go to the woods and hide"; "hold until attacked, then fall back"
+  (read as "hold, if attacked, fall back").
+- *Places*: a name without its apostrophe, run together or apart, a letter
+  or two off, or in part when only one name fits ("millers crossing",
+  "crown hill", "the mill bridge"). "Behind the legionaries", "beside the
+  hastati": where that unit stands now as he knows it (50 m toward his own
+  edge for behind), and the read-back says so.
+- *The ground to fight for*: "the ground", "the objective", its name, or
+  the kind of ground it is ("the hill" on Crownhill and Thornwood, "the
+  bridge" on Ashford and Greywater, "the gap" and "the pass" on Raven
+  Ridge, "the village" on Greywater) is it, and the read-back says "the
+  Crownhill, the ground to fight for, 550 m north". Where it is not of that
+  kind, the nearest of that kind he knows, as before. (The app now gives
+  the reader the ground: `web/battles.js`, `context`, one line.)
+- *Skirmish, harass, fire and fall back*: for troops with bows or slings,
+  the engine's fire and retreat, which is an advance (`skirmish.js`: only a
+  unit pressing the enemy falls back), read back as the engine does it
+  ("advance on the enemy until in shot, shoot, and fall back before any
+  who come at them on foot"; on foot: "they cannot keep away from men on
+  foot"). For men with no bow, a question.
+- *Throw javelins, throw pila*: troops whose weapon is the javelin shoot;
+  men who carry them beside a sword (velites, legionaries) are told they
+  throw them as they come to blows, and offered two answers to tap:
+  "velites advance" or "velites hold".
+- *Stay with, follow, support, cover, escort* another of his units: the
+  engine has no such order. A question that says so, offering where that
+  unit stands now, or the same order for both.
+- *Go around their left, flank them, hit them in the flank*: a question.
+  Left and right are not his officers' to guess, so it offers the two ends
+  of the enemy he has seen, by the compass ("round the north end of the
+  enemy you have seen"), as a march there then an advance. With no enemy
+  seen, it says there is no flank yet.
+- *Keep going, carry on*: a unit keeps its order until sent another; said.
+- *What it cannot read* is answered with the part it did not follow and
+  five orders it does read, in his own units' names and on his field: "I
+  know Legionaries, but I don't follow what you want of them: "go nuts".
+  Orders read like: everyone take the Crownhill · legionaries advance ·
+  legionaries to E6 · legionaries go north 200 m · legionaries hold".
+- The first turn's "How to give orders" card (`web/public/app.js`, its
+  text only) shows "Legionaries go north 200 m" and "everyone else hold"
+  in place of a bare hold and fall back, and says several orders may go on
+  a line with commas.
+
+**D13, one rule for place names** (`words.js`, `PLACE.name`): a name that
+describes the place takes "the", small inside a sentence ("the Crownhill",
+"the Old Mill Bridge", "the North Ford", "the Merchant Road"); a name that
+is the place's own takes none ("Harrow Bridge", "Raven Gap", "Thorn Knoll",
+"Elderby"). The map's data says which: a name written there with "The"
+takes it, and so does one beginning with a plain word of description (old,
+north, south, long, low, high ...). Applied in the read-back, in "which do
+you mean?" and in the dispatches (`turnNarrator.js`, `placeName`). The
+map's labels keep the names as written there. The ground's names in the
+map data already followed the rule.
+
+**Guessed, and the other reading.**
+- *"Everyone else"* is every unit not named anywhere in the orders sent
+  together, not only on the lines before it.
+- *"Stay back", "hold back"* are hold where they stand; the other reading
+  is to fall back a little behind the others.
+- *"Form up"* is hold; the engine has no formations to form.
+- *"Scout ahead"* is advance carefully (half speed, on guard); the other
+  reading is to search the ground where they stand.
+- *"Skirmish"* is fire and retreat as the engine does it, for missile
+  troops only; men on foot do not fall back from men on foot (ruled
+  November 24), and the read-back says so rather than promise it.
+- *"Behind the legionaries"* is 50 m toward his own edge from where he
+  last heard they were; they do not keep it if the legionaries move.
+- *"The archers"* is every unit with a bow, sling or javelin (horse archers
+  and light horse alike); a unit whose own name is the word keeps it.
+- *"The horse"* is every unit on horse, unless a unit is called "horse".
+- *The D13 rule* reads "the" from the map's own spelling and a short list
+  of describing words; the other way was to change the map data ("The Old
+  Mill Bridge"), which is another agent's.
+- *A typo near two units or two words* is not put right: a question.
+- *A line of two orders* the grammar can read whole is now the grammar's,
+  and costs no AI call; before, any line with "and" or a comma went to the
+  AI. A line the grammar can read only half of still goes to the AI.
+
+**The AI's path.** Its prompt, schema and model are unchanged; `npm run
+ai:bench` was not run (it costs tokens). What changed around it: (1) fewer
+lines reach it, since the grammar reads more whole, the follow and flank
+questions among them, which the grammar now answers itself with choices
+(the AI used to read "stay with the legionaries" as a march to their
+square, which is now one of the two choices); (2) its readings go through
+the same resolver, which now also knows "everyone else", kinds, typos in
+names, loose place names and the ground to fight for: these only widen
+what it can place; (3) the read-back's place names follow D13.
+
+**Left undone, and what the engine would need.**
+- *Following another unit* as it moves: a new order (go where a friend is,
+  each tick). Not built.
+- *Going round a flank* by left and right: needs the enemy's facing, which
+  the Commander is never told. The ends of what he has seen are offered.
+- *Throwing javelins from range* for men who carry them beside a sword:
+  they are thrown at blows only (part 8 of `docs/design/army-balance.md`);
+  a ranged throw would be a new rule.
+- Conditions the engine does not have ("unless", "until" anything but
+  "until attacked", "when the horse arrive") are left to the AI; with no
+  AI, they are a question.
