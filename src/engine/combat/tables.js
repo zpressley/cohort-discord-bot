@@ -807,6 +807,30 @@ const COMMAND = {
   LONGEST: 36          // ten minutes the battle runs at most without asking a Commander anything (six hours): a guard so that a battle cannot run away
 }
 
+// Officers who act on their Commander's intent when out of contact
+// (docs/design/point-of-view-and-messengers.md, "What comes after"; the
+// design: a veteran "fills gaps the way you would", and "once a long march
+// starts, the officer is the one who reacts to what he finds"). Read by
+// command/initiative.js. Claude's starting values, open to change (docs/
+// DECISIONS.md, "How officers acting on their Commander's intent were
+// built"):
+//   FROM        the lowest grade that acts on his own: veteran (13 battles),
+//               as the roadmap says ("veterans and above")
+//   WAIT        ten minutes a unit must be cut off (no rider can get
+//               through to it) before its officer gives up waiting for word
+//               and uses his head: COMMAND.OVERDUE's slack, the same wait
+//               his Commander gives before he notices no word has come
+//   BLED        the share of his men lost at which an officer who looks to
+//               his men (values: survival) saves the rest
+//   GOOD_GROUND the terrain a cautious officer will stand on rather than
+//               fall back: high ground, and woods (cover from missiles)
+const INITIATIVE = {
+  FROM: 'veteran',
+  WAIT: 2,
+  BLED: 0.5,
+  GOOD_GROUND: ['hill', 'forest']
+}
+
 // What a report of the enemy holds, by the officer of the unit that made it
 // (ruled 2026-11-23: "additional details as progression happens but never
 // incorrect details"; the ladder as recorded in
@@ -972,6 +996,7 @@ module.exports = {
   LOYALTY,
   RIDE,
   COMMAND,
+  INITIATIVE,
   REPORTS,
   MORALE,
   DAMAGE,

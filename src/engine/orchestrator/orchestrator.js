@@ -97,6 +97,9 @@ function createGame(spec, options = {}) {
     outcome: { decided: false, winner: null, reason: 'battle still open' },
     history: []                 // one entry per player turn
   }
+  // The ground to fight for, as the battle's officers know it: one cut off
+  // from his Commander may go for it (command/initiative.js).
+  battle.ground = game.objectives
 
   for (const side of sides(battle.world)) {
     game.intel[side] = createIntel()

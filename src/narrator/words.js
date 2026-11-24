@@ -381,4 +381,25 @@ const ENEMY_COMMANDER = {
   faced: (name, character) => `You face ${name}, who commands the enemy. He is said to be ${character}.`
 }
 
-module.exports = { orderWords, moraleWords, ORDER, OWN_EDGE, HOLD_THERE, KIT, RIDE_WITH, LOYALTY_WORDS, VALUES_WORDS, VETERANCY_WORDS, RIDER, NIGHT, REPORT, GROUND, windWords, SKIRMISH_WORDS, MAKING, COMMANDER_KINDS, NATURE_SAID, HOLDS_DEAR, COMMANDER_TITLES, ENEMY_COMMANDER }
+// An officer who acted on his Commander's intent when no word could reach
+// him (engine/command/initiative.js). Told in his report, when a rider gets
+// through: his own judgement, in the words of the orders (ORDER).
+const ON_HIS_OWN = {
+  did: {
+    advance: () => ORDER.advance.did,
+    ground: (on) => `${ORDER.attack.did} to take ${on ?? 'the ground'} back`,
+    hold: () => `${ORDER.hold.did} where he stood`,
+    'fall back': () => `${ORDER.withdraw.did} toward you`
+  },
+  why: {
+    groundLost: (on) => ` when he saw the enemy take ${on ?? 'the ground'}`,
+    friendsBroke: () => ' when he saw your men about him break',
+    quarryGone: () => ' when the enemy you sent him at was beaten or gone',
+    attacked: () => ' when the enemy came at him',
+    done: () => ', his orders done and the enemy in sight',
+    bled: () => ', half his men down'
+  },
+  line: (who, did, why) => `${who}, with no word from you, ${did}${why}`
+}
+
+module.exports = { orderWords, moraleWords, ORDER, OWN_EDGE, HOLD_THERE, KIT, RIDE_WITH, LOYALTY_WORDS, VALUES_WORDS, VETERANCY_WORDS, RIDER, NIGHT, REPORT, GROUND, windWords, SKIRMISH_WORDS, MAKING, COMMANDER_KINDS, NATURE_SAID, HOLDS_DEAR, COMMANDER_TITLES, ENEMY_COMMANDER, ON_HIS_OWN }
