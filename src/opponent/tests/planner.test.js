@@ -6,7 +6,7 @@
 const { test } = require('node:test')
 const assert = require('node:assert/strict')
 
-const { planTurn, temperament, strongpoint } = require('../planner')
+const { planTurn, temperament, strongpoint, theirGround } = require('../planner')
 const { createGame, submitOrders } = require('../../engine/orchestrator')
 const { loadScenario, SCENARIOS, mapChoices } = require('../../adapters/hotseat/scenarios')
 const { tileDistance } = require('../../engine/world')
@@ -68,9 +68,12 @@ test('a side that holds takes good ground: foot abreast, archers behind, no one 
 })
 
 test('a side that does not hold goes to find the enemy; one that holds loses patience in the end', () => {
+  // (Not by the engine's search at once, as before: first where the enemy
+  // would hold, the crossing opposite: opponent/tests/grips.test.js.)
   const seeker = onTheMap('crownhill', false)
   const first = planTurn(seeker, 'blue')
-  assert.ok(first.every(o => o.action === 'advance'), 'no enemy known: the engine\'s advance goes and looks')
+  const theirs = theirGround(seeker, 'blue', { x: -1, y: 0 }, { x: 0, y: -1 })
+  assert.ok(first.every(o => o.action === 'move' && tileDistance(o.target, theirs) <= 6), 'no enemy known: it goes to look where he would hold')
 
   const holder = onTheMap('crownhill', true)
   assert.ok(planTurn(holder, 'blue').some(o => o.action === 'defend'))

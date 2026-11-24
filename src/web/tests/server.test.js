@@ -69,7 +69,7 @@ test('read back, then send: alone, the turn runs at once and a dispatch arrives'
 test('two players by link: the turn waits for both, and orders can change until it runs', async () => {
   const app = await start()
   try {
-    const seats = (await app.api('POST', '/api/battles', { opponent: 'friend', side: 'red' })).body.seats
+    const seats = (await app.api('POST', '/api/battles', { opponent: 'friend', side: 'red', objectives: [] })).body.seats
     assert.deepEqual(Object.keys(seats).sort(), ['blue', 'red'])
 
     const first = (await app.api('POST', `/api/seat/${seats.red}/orders`, { text: 'everyone hold' })).body

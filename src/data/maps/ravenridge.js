@@ -87,7 +87,13 @@ module.exports = {
   height: H,
   cells: CELLS,
   terrain: map.terrain(),
-  deploy: { west: { x: 9, y: 22 }, east: { x: 32, y: 22 } },
+  // Where each army forms up. The east army one tile nearer the ridge, at
+  // (31, 22) (it was (32, 22)): both as far from Raven Gap (285 and 284 m),
+  // first unit on it after 19 and 20 minutes (it was 19 and 24), and between
+  // equal armies played by the computer the west won 59% before, 51% now.
+  // docs/DECISIONS.md, "How the first battle, being asked, and forming up
+  // were built" (combined with the planner's change).
+  deploy: { west: { x: 9, y: 22 }, east: { x: 31, y: 22 } },
   // The ground to fight for (engine/orchestrator/victory.js, objectiveArea):
   // the saddle where the road goes through the ridge, held from on it (the
   // open ground between the two halves of the ridge, not the whole road).

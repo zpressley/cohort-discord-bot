@@ -581,7 +581,7 @@ test('on a phone: a Commander the battle is not waiting on sees his orders with 
     for (let seed = 5; seed <= 40; seed++) {
       const redC = (await post('/api/commanders', { faction: 'rome' })).token
       const blueC = (await post('/api/commanders', { faction: 'han' })).token
-      const seats = (await post('/api/battles', { opponent: 'friend', side: 'red', seed, commander: redC })).seats
+      const seats = (await post('/api/battles', { opponent: 'friend', side: 'red', seed, commander: redC, objectives: [] })).seats
       await post(`/api/seat/${seats.blue}/join`, { commander: blueC })
       const game = store.seatOf(seats.red).entry.game
       await post(`/api/seat/${seats.red}/orders`, { text: 'everyone advance' })

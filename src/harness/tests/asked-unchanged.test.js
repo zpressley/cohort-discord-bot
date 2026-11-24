@@ -36,6 +36,30 @@
 // never cross. That is not the perks' doing (the same happens without
 // them, Mongolia against Tibet on ashford, seed 77); in the app the day
 // ends such a battle.
+//
+// Retaken when the east army on Crownhill was moved to form up further
+// south, at (30, 29), so that both armies are as long marching to the
+// Crownhill (docs/DECISIONS.md, "How the first battle, being asked, and
+// forming up were built"). Nothing else changed these battles: with the old
+// forming-up place they were as before. On crownhill they were ae680b96
+// 18, 6261aa5e 26 (everyone asked) and 889c9e1e 18, 27381837 24 (no
+// Commander).
+//
+// Retaken when armies were made to come to grips (docs/DECISIONS.md, "How
+// armies were made to come to grips"): a unit going in across a ford steps
+// into it, a side that knows nothing of the enemy looks for him at the
+// map's ground and then where he would hold, and an army of horse forms its
+// line of horse. With no Commander the ashford battles now meet at the Old
+// Mill Bridge and are over in 13 and 23 turns. The battles were ae680b96
+// 18, 6261aa5e 26, c401099d 33, 556641ef 31 (everyone asked) and 889c9e1e
+// 18, 27381837 24, 9de62f89 150, 6d782516 150 (no Commander).
+//
+// Retaken when the two were put together (the east army's new place on
+// Crownhill, forming up, advance to the ground, and the planner's coming to
+// grips, with its step into a crossing moved into the engine for every
+// unit). Alone, the planner's change had made them 1ec586ea 25,
+// 2570d8ea 26, b73254c7 12, 7ea53132 23 (everyone asked) and 61e100aa 25,
+// 824d0cc9 27, 15f2219b 13, 4fa3b601 23 (no Commander).
 
 const { test } = require('node:test')
 const assert = require('node:assert/strict')
@@ -74,18 +98,18 @@ function play(extra, { commander }) {
 
 test('a battle saved before the riders rulings (marked everyoneAsked) plays back exactly as it was played, event for event', () => {
   assert.deepEqual(play({ everyoneAsked: true }, { commander: true }), {
-    'crownhill 1': 'ae680b96 18',
-    'crownhill 2': '6261aa5e 26',
-    'ashford 1': 'c401099d 33',
-    'ashford 2': '556641ef 31'
+    'crownhill 1': '48be1b7d 26',
+    'crownhill 2': '630cf9be 32',
+    'ashford 1': 'b73254c7 12',
+    'ashford 2': 'c80e8547 23'
   })
 })
 
 test('a battle with no Commander on the field runs exactly as before the riders rulings, event for event', () => {
   assert.deepEqual(play({}, { commander: false }), {
-    'crownhill 1': '889c9e1e 18',
-    'crownhill 2': '27381837 24',
-    'ashford 1': '9de62f89 150',
-    'ashford 2': '6d782516 150'
+    'crownhill 1': 'b01c713a 25',
+    'crownhill 2': '39ecf1e5 26',
+    'ashford 1': '15f2219b 13',
+    'ashford 2': '842dd7c2 23'
   })
 })
