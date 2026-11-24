@@ -187,7 +187,10 @@ function battle(red, blue, { map = 'crownhill', seed = 1, turnLimit = DAY_TURNS,
   }
   return {
     decided: game.outcome.decided,
-    winner: game.outcome.winner ?? null,
+    // Night ends a battle with no winner (ruled 2026-11-24); this study
+    // still counts the side ahead as night fell (fewer men lost) as the
+    // winner, so its tables read as they did. The game never does.
+    winner: game.outcome.reason === 'night fell' ? (game.outcome.ahead ?? 'draw') : game.outcome.winner ?? null,
     reason: game.outcome.reason,
     turns,
     lost: { red: lost('red'), blue: lost('blue') },

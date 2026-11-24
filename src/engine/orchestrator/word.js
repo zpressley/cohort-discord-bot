@@ -248,7 +248,7 @@ const involved = (e) => [e.unitId, e.aId, e.bId, e.by, e.a?.unitId, e.b?.unitId]
 function arrivalOf(game, side, event) {
   const word = game.word?.[side]
   if (!word) return event.turn
-  if (event.type === 'victory' || event.type === 'objective' || event.type === 'officerYielded') return event.turn
+  if (event.type === 'victory' || event.type === 'objective' || event.type === 'officerYielded' || event.type === 'nightfall') return event.turn
   if (event.side === side && event.type.startsWith('commander')) return event.turn
   if (event.type === 'riderBlocked' && event.side === side && word.blocked) {
     const shut = word.blocked.find(b => b.unitId === event.unitId && b.sent === event.turn)

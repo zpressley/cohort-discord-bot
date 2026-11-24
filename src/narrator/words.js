@@ -172,8 +172,10 @@ const RIDER = {
     if (blocked.length > 0) parts.unshift(`No rider can get through to ${blocked.join(', ')}: ${blocked.length === minutes.length ? 'the order is not sent' : 'they are not sent it'}`)
     return parts.join('. ')
   },
-  // A dispatch line for an order that could not be sent.
-  blocked: (unit) => `no rider could get through to ${unit}: your order did not reach them`,
+  // A dispatch line for an order that could not be carried: told when the
+  // rider is back (ruled 2026-11-24: "the rider should return with that
+  // news. After turns of travel pass").
+  blocked: (unit) => `your rider to ${unit} has come back: he could not get through, and your order did not reach them`,
   sent: (unit, minutes) => `a rider set out for ${unit}, ${minutes} minutes' ride away`,
   // A unit cut off, and back in touch (the dispatch).
   lostTouch: (unit) => `no rider can get through to ${unit} now: you will hear nothing of them, and they nothing of you, until the way is open`,
@@ -196,4 +198,18 @@ const RIDER = {
   clock
 }
 
-module.exports = { orderWords, moraleWords, ORDER, OWN_EDGE, HOLD_THERE, KIT, RIDE_WITH, LOYALTY_WORDS, VALUES_WORDS, VETERANCY_WORDS, RIDER }
+// The end of the day (ruled 2026-11-24: "No the day just ends the battle,
+// you can choose to fight again the next day"). The battle's end when night
+// falls on it undecided, the dispatch's line, the tent's verdict, the muster's
+// note and the button to fight on.
+const NIGHT = {
+  title: 'Night fell',
+  ended: 'night has ended the fighting, and neither side has won',
+  day: (minutes) => `The day is ${clock(minutes)} of battle. If neither side has won by then, night ends the fighting and neither side has won; you can fight again the next day.`,
+  again: 'Fight again the next day',
+  againNote: 'Against the same enemy, on the same field. Your army comes as it stands after today.',
+  // A Commander held when night fell: let go, as at any end he did not win.
+  released: 'Night fell with you still in the enemy\'s hands, and no deal struck. Honor forbids them your life: they let you go, with whatever of your army came through the day.'
+}
+
+module.exports = { orderWords, moraleWords, ORDER, OWN_EDGE, HOLD_THERE, KIT, RIDE_WITH, LOYALTY_WORDS, VALUES_WORDS, VETERANCY_WORDS, RIDER, NIGHT }

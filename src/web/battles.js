@@ -42,7 +42,7 @@ const { digest, summarise } = require('../narrator/turnNarrator')
 const { gradeOf, DEATH_ODDS, loyaltyBand } = require('../engine/command/officers')
 const T = require('../engine/combat/tables')
 const { narrateTurn, report } = require('../narrator/turnNarrator')
-const { orderWords, RIDER } = require('../narrator/words')
+const { orderWords, RIDER, NIGHT } = require('../narrator/words')
 const { loadScenario, SCENARIOS, mapChoices } = require('../adapters/hotseat/scenarios')
 const { MAPS } = require('../data/maps')
 const { FACTIONS, factionChoices } = require('../engine/army/factions')
@@ -201,6 +201,10 @@ function createBattleStore({ dir = null, ai = null, now = () => Date.now() } = {
       joining: entry.joining ?? null,
       said: entry.said ?? {},
       settled: Boolean(entry.settled),
+      // Fought again the next day (again): this battle's day, and the
+      // battle of the day after, once there is one.
+      ...(entry.day ? { day: entry.day } : {}),
+      ...(entry.next ? { next: entry.next } : {}),
       // Played with orders and news by rider (a battle saved before them
       // plays back without: engine/command/messengers.js).
       riders: entry.game.spec.messengers !== false,
@@ -712,7 +716,8 @@ function createBattleStore({ dir = null, ai = null, now = () => Date.now() } = {
       status: status(entry, side),
       turn: turnOf(game, side),
       minutes: game.minutesElapsed,
-      outcome: game.outcome.decided ? game.outcome : null,
+      // (Who was ahead when night fell is the harness's, not the player's.)
+      outcome: game.outcome.decided ? { decided: true, winner: game.outcome.winner, reason: game.outcome.reason, ...(game.outcome.reason === 'night fell' ? { title: NIGHT.title, said: NIGHT.ended } : {}) } : null,
       updatedAt: entry.updatedAt,
       sentAt: entry.pending[side]?.at ?? null,
       // How the table between a held Commander and his captors stands, as
@@ -946,7 +951,7 @@ function createBattleStore({ dir = null, ai = null, now = () => Date.now() } = {
       captive: captiveView(game, side, atGame),
       dispatches: [...entry.dispatches[side]].reverse(),
       verdict: game.outcome.decided && !atGame
-        ? { ...tally(game), officers: officerFates(game, side), company: Boolean(entry.commanders?.[side]), commander: commanderEnd(game, side) }
+        ? { ...tally(game), officers: officerFates(game, side), company: Boolean(entry.commanders?.[side]), commander: commanderEnd(game, side), ...nightOf(entry, side) }
         : null
     }
   }
@@ -1047,6 +1052,68 @@ function createBattleStore({ dir = null, ai = null, now = () => Date.now() } = {
     const end = commanderOf(game, side)
     const name = namer(game, side)
     return end ? { fate: end.fate, price: end.price ? name(end.price) : null, prices: end.prices.map(name) } : null
+  }
+
+  // A battle night ended (ruled 2026-11-24): its words, and this side's
+  // seat in the next day's battle once there is one.
+  function nightOf(entry, side) {
+    if (entry.game.outcome.reason !== 'night fell') return {}
+    const next = entry.next ? battles.get(entry.next) : null
+    return {
+      night: {
+        title: NIGHT.title, ended: NIGHT.ended, again: NIGHT.again, againNote: NIGHT.againNote, released: NIGHT.released,
+        next: next?.seats[side] ?? null
+      }
+    }
+  }
+
+  /**
+   * Fight again the next day (ruled 2026-11-24: "No the day just ends the
+   * battle, you can choose to fight again the next day"). After a battle
+   * night ended: a new battle on the same field, against the same enemy,
+   * mustered as any battle is. Each Commander's army comes as it stands
+   * after the day (his company and roster carry it, as from any battle to
+   * the next); the computer's is its faction's again. Against a friend, his
+   * Commander leads his side again if he can; if not (he had none, or his
+   * army is in another battle), the friend chooses when he comes, as he did
+   * the first day. Made once: whoever asks after is given his own seat in it.
+   *
+   * @returns {{ token, title }} this side's seat in the next day's battle
+   */
+  function again(token) {
+    const seat = seatOf(token)
+    if (!seat) return null
+    const { entry, side } = seat
+    const game = entry.game
+    if (game.outcome.reason !== 'night fell') {
+      throw Object.assign(new Error('Only a battle that night ended can be fought again the next day.'), { status: 409 })
+    }
+    if (entry.next) {
+      const next = battles.get(entry.next)
+      return { token: next?.seats[side] ?? null, title: next?.title ?? null }
+    }
+    const other = Object.keys(game.spec.sides).find(s => s !== side)
+    const solo = Boolean(entry.auto)
+    const own = entry.commanders?.[side] ? commanders.byId(entry.commanders[side]) : null
+    const theirs = entry.commanders?.[other] ? commanders.byId(entry.commanders[other]) : null
+    const made = muster({
+      scenario: entry.scenario,
+      map: game.spec.map,
+      opponent: solo ? 'standing' : 'friend',
+      side,
+      commander: own?.token ?? null,
+      faction: own ? null : sideFaction(game.spec, side),
+      enemyFaction: sideFaction(game.spec, other),
+      ...(game.spec.turnLimit ? { turnLimit: game.spec.turnLimit } : { dayMinutes: game.spec.dayMinutes })
+    })
+    const next = battles.get(made.id)
+    if (!solo && theirs && !theirs.ended && !fighting(theirs)) join(next.seats[other], theirs.token)
+    next.day = (entry.day ?? 1) + 1
+    next.title = `${next.title}, day ${next.day}`
+    entry.next = next.id
+    save(next)
+    save(entry)
+    return { token: next.seats[side], title: next.title }
   }
 
   /**
@@ -1449,6 +1516,9 @@ function createBattleStore({ dir = null, ai = null, now = () => Date.now() } = {
     submit: (token, text, options) => inTurn(token, () => submit(token, text, options)),
     offer: (token, units) => inTurn(token, () => offer(token, units)),
     answer: (token, given) => inTurn(token, () => answer(token, given)),
+    again,
+    // The length of the day, and what night does, for the muster.
+    day: () => ({ minutes: T.DAY.MINUTES, said: NIGHT.day(T.DAY.MINUTES) }),
     seatOf,
     commanders,
     commanderView,

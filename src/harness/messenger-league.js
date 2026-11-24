@@ -19,6 +19,7 @@
 //   node src/harness/messenger-league.js --battles 336 --policy planner
 //   node src/harness/messenger-league.js --root /path/to/an/older/src ...
 //   --computer instant   blue's orders at once (as before step 3), not by rider
+//   --day 720            the app's end of the day: night ends a battle drawn
 //
 // The rider counts are read from the battle's events (riderSent,
 // riderBlocked); a build before them has none. Units cut off are counted
@@ -39,6 +40,9 @@ const { riders } = require('../engine/command/messengers')
 let byCommandPost = null
 try { ({ byCommandPost } = need('engine/command/messengers')) } catch { /* a build before riders */ }
 const COMPUTER = arg('--computer', 'rider')
+// --day 720: an end of the day in battle time, as the app's battles have
+// (tables.DAY.MINUTES); night ends a battle with no winner, counted as drawn.
+const DAY_MINUTES = Number(arg('--day', 0))
 
 const MAX_PLAYER_TURNS = 150
 
@@ -48,7 +52,7 @@ function play(red, blue, { map, seed, policy }) {
   const mine = spec.units.filter(u => u.side === 'red')
   const elite = mine[leadUnit(mine)].id
   spec = { ...spec, units: spec.units.map(u => u.side !== 'red' ? u : u.id === elite ? u : { ...u, officer: { headless: true } }) }
-  const game = createGame({ ...spec, standingOrders: {}, commanders: { red: { unitId: elite } } }, { seed })
+  const game = createGame({ ...spec, standingOrders: {}, commanders: { red: { unitId: elite } }, ...(DAY_MINUTES ? { dayMinutes: DAY_MINUTES } : {}) }, { seed })
   const r = { orders: 0, cutOffUnits: new Set(), cutOffTurns: 0, unitTurns: 0, noWord: 0, noWordCut: 0, noWordGone: 0 }
   let turns = 0
   let stops = 0

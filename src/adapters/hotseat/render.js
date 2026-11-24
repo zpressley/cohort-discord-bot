@@ -18,6 +18,7 @@ const where = (position) => gridLabel(position, { quarter: true })
 const { sideView } = require('../../engine/orchestrator')
 const { describeCombatEvent } = require('../../narrator/eventText')
 const { visibleEvents, publicEvents, maskNames } = require('../../narrator/turnNarrator')
+const { NIGHT } = require('../../narrator/words')
 
 const TERRAIN_GLYPHS = {
   plains: '.', road: '=', hill: '^', forest: 'F',
@@ -182,7 +183,9 @@ function renderTurnReport(game, turnEntry, viewer = null) {
 
   if (game.outcome.decided) {
     lines.push('')
-    lines.push(game.outcome.winner === 'draw'
+    lines.push(game.outcome.reason === 'night fell'
+      ? `── ${NIGHT.ended.toUpperCase()} ──`
+      : game.outcome.winner === 'draw'
       ? `── THE FIELD IS A RUIN: ${game.outcome.reason} ──`
       : `── VICTORY: ${game.outcome.winner.toUpperCase()} — ${game.outcome.reason} ──`)
   }
@@ -266,6 +269,7 @@ function wordEvent(event) {
         noticed: `${event.by} notices ${event.unitId} hidden close by`
       }[event.reason] ?? `${event.unitId} is seen`
     case 'victory': return null // rendered as the banner instead
+    case 'nightfall': return null // rendered as the banner instead
     default: return null
   }
 }

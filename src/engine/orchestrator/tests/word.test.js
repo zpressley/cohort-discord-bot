@@ -10,6 +10,7 @@ const assert = require('node:assert/strict')
 
 const { createGame, submitOrders, gameRecord, replayGame, waitingOn } = require('../orchestrator')
 const { newsBetween, arrivalOf, wordFromCaptivity } = require('../word')
+const { report } = require('../../../narrator/turnNarrator')
 
 const MAP = { name: 'plain-40', width: 40, height: 20, terrain: {} }
 const unit = (o) => ({
@@ -123,6 +124,20 @@ test('an order no rider can carry is news to him only when the rider is back, a 
   assert.equal(shut.unitId, 'far')
   assert.equal(arrivalOf(game, 'red', shut), shut.turn + 6, 'thirty minutes there, thirty back')
   assert.deepEqual(game.word.red.blocked, [{ unitId: 'far', sent: shut.turn, arrives: shut.turn + 3, back: shut.turn + 6 }])
+})
+
+// Ruled 2026-11-24: "Like if the unit is surrounded, the rider should return
+// with that news. After turns of travel pass".
+test('when a unit is surrounded, the rider returns with that news after his ride there and back, and the battle stops for him then', () => {
+  const game = createGame(spec(wall()), { seed: 1 })
+  submitOrders(game, 'red', [{ unitRef: 'far', target: { x: 28, y: 2 } }, { unitRef: 'guard', action: 'hold' }, { unitRef: 'near', action: 'hold' }])
+  for (let i = 0; i < 50 && !waitingOn(game).includes('red'); i++) submitOrders(game, 'blue', wall().map(w => ({ unitRef: w.id, action: 'hold' })))
+  const shut = game.battle.log.all().find(e => e.type === 'riderBlocked')
+  assert.equal(game.history.at(-1).wanted.red, 'rider')
+  assert.equal(game.battle.turn, shut.turn + 6, 'not before the rider is back')
+  // What he reads says why, in plain words.
+  const lines = report({ map: game.battle.map, ownIds: new Set(['guard', 'near', 'far']), seenEnemyIds: new Set(), events: [shut] })
+  assert.deepEqual(lines, ['your rider to far has come back: he could not get through, and your order did not reach them'])
 })
 
 test('a battle saved before the riders rulings (everyoneAsked) still tells him at once that a unit is cut off', () => {

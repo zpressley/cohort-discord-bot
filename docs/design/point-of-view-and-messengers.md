@@ -97,13 +97,24 @@ one to a unit a few hundred metres off takes 10.
   23: "No the game keeps going ... both would only be notified when there
   are commands to give or things happen to them"): the other side is not
   told the battle stopped, nor waited for. A march of three hours with no
-  news is one wait. A Commander whose men have nothing left to do is asked
-  again after an hour; no one waits more than six hours.
+  news is one wait. A Commander whose men only hold is not called back by
+  the clock: he waits for news, such as passing enemy troops (ruled
+  November 24: "Holding for several turns would still get interrupts from
+  passing enemy troops"); no one waits more than six hours.
+- He may give new orders unasked, interrupting units mid march; they go
+  out at the end of the turn in play, when the battle moves on (ruled
+  November 24: "You can interrupt units mid March. But orders don't come
+  over till the end of the turn").
 - His dispatch, when he is next asked, tells all that reached him since
   his last orders.
 - An order no rider can carry is told him when the rider is back, a ride
-  there and back as far as he knows, not at once.
+  there and back as far as he knows, not at once (ruled November 24: "the
+  rider should return with that news. After turns of travel pass"); the
+  rider's return calls him back.
 - The verdict, when the battle ends, tells all.
+- The day is twelve hours of battle (ruled November 24). If neither side
+  has won by then, night ends the fighting and neither side has won; he
+  may fight again the next day against the same enemy.
 
 ## The computer's side
 
@@ -154,6 +165,12 @@ All three steps are built. Not built: everything under "What comes after".
   the road still arrives, and no word returns; and each side is asked only
   when wanted (`game.wanted`, `waitingOn` in the orchestrator), the day
   counted in battle time (`dayMinutes`).
+- **Zach's answers of November 24 are built** (see `docs/DECISIONS.md`,
+  "How the day, the night and the hold were built"): the day is twelve
+  hours and night ends the battle with no winner, with the next day
+  offered; a Commander whose men hold waits for news, not the hour; and
+  the two rulings on orders unasked and a rider who could not get through
+  are tested by name.
 
 ## What comes after, not in this build
 

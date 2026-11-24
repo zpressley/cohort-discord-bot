@@ -11,7 +11,7 @@
 const { featuresAt, detectFeatures } = require('../engine/map/features')
 const { distance } = require('../engine/map/labels')
 const { compassWord, TILE_METRES } = require('../engine/map/places')
-const { orderWords, moraleWords, ORDER, RIDER } = require('./words')
+const { orderWords, moraleWords, ORDER, RIDER, NIGHT } = require('./words')
 const { gridLabel } = require('../engine/map/grid')
 
 // Where a tile is, in words: the feature it is part of, or the nearest
@@ -55,7 +55,7 @@ const UNTOLD = new Set(['grasp'])
 function visibleEvents(events, { ownIds, seenEnemyIds }) {
   return events.filter(e => {
     if (UNTOLD.has(e.type)) return false
-    if (e.type === 'victory' || e.type === 'objective') return true
+    if (e.type === 'victory' || e.type === 'objective' || e.type === 'nightfall') return true
     if (PRIVATE.has(e.type)) return ownIds.has(e.unitId)
     if (e.type === 'revealed') {
       return ownIds.has(e.unitId) || (e.by && ownIds.has(e.by)) || seenEnemyIds.has(e.unitId)
@@ -83,7 +83,7 @@ function visibleEvents(events, { ownIds, seenEnemyIds }) {
 function fromCaptivity(events, { seen, side }) {
   return events.filter(e => {
     if (UNTOLD.has(e.type)) return false
-    if (e.type === 'victory' || e.type === 'objective') return true
+    if (e.type === 'victory' || e.type === 'objective' || e.type === 'nightfall') return true
     if (e.type.startsWith('commander') && e.type !== 'commanderRode') return e.side === side
     const ids = involved(e)
     return ids.length > 0 && ids.every(id => seen.has(id))
@@ -283,6 +283,7 @@ function plainFact(map, event) {
       : event.reason === 'noticed' ? `${event.unitId} was noticed, hidden close by`
       : `${event.unitId} came out of hiding`
     case 'victory': return event.winner === 'draw' ? `the battle ended with neither side the victor (${event.reason})` : `the battle is over: ${capital(event.winner)} won (${event.reason})`
+    case 'nightfall': return NIGHT.ended
     default: return null
   }
 }
@@ -301,7 +302,7 @@ function ownCommandWords(event) {
 
 // How much a commander needs to hear of each kind of event: lower is sooner.
 const WEIGHT = {
-  victory: 0, commanderKilled: 0, commanderTaken: 0, commanderFreed: 0, commanderMoved: 1, destroyed: 1, rout: 1, fled: 1, rallied: 1, pursuit: 2, ambush: 1, surprise: 2, objective: 2,
+  victory: 0, nightfall: 0, commanderKilled: 0, commanderTaken: 0, commanderFreed: 0, commanderMoved: 1, destroyed: 1, rout: 1, fled: 1, rallied: 1, pursuit: 2, ambush: 1, surprise: 2, objective: 2,
   volley: 3, lostThread: 1, reacted: 2, quarryGone: 2, ownCommand: 1, officerYielded: 0, deserted: 1, commanderRode: 1, riderBlocked: 2, riderSent: 6, cutOff: 1, inTouch: 3,
   heartened: 5,
   revealed: 3, exchange: 3, standoff: 3, push: 4, crush: 4, disengage: 4, contact: 4,

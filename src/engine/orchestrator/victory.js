@@ -12,8 +12,10 @@
 //   4. objective control  holding every named objective for an hour of
 //                         battle time (Stage 3; or, if the spec says so, N
 //                         consecutive player turns) wins the field
-//   5. time limit         when set: more objectives held wins, then fewer
-//                         losses
+//   5. night              the end of the day: the battle ends with no winner
+//                         ('night fell'; ruled 2026-11-24)
+//   6. time limit         when set (a testing aid): more objectives held
+//                         wins, then fewer losses
 //
 // Commander loss belongs here too eventually, but the commander entity is
 // explicitly deferred to phase 8 (ruling R6) — flagged, not forgotten.
@@ -156,10 +158,20 @@ function evaluateVictory(ctx) {
     }
   }
 
+  // The end of the day (ruled 2026-11-24: "No the day just ends the
+  // battle, you can choose to fight again the next day"): night ends the
+  // fighting and neither side has won. Who would have had it by the time
+  // limit's rule is kept as `ahead` (a side, or null), for the harness's
+  // own tables only: the game never calls it a win.
+  if (ctx.dayOver) {
+    const by = evaluateVictory({ ...ctx, dayOver: false, timeLimitMinutes: 1, minutesElapsed: Math.max(1, minutesElapsed) })
+    return { decided: true, winner: 'draw', reason: 'night fell', ahead: by.winner === 'draw' ? null : by.winner }
+  }
+
   // Time limit (a testing aid, ruled 2026-10-21): when the clock runs out,
   // the side that lost the larger share of its men loses. Men who fled the
   // field are not casualties. A share exactly equal is a draw.
-  if ((timeLimitMinutes && minutesElapsed >= timeLimitMinutes) || ctx.dayOver) {
+  if (timeLimitMinutes && minutesElapsed >= timeLimitMinutes) {
     // More objectives held decides first (Stage 3 plan F3).
     const heldBy = (side) => holds.filter(h => h.side === side).length
     const byObjectives = sides(world).map(side => ({ side, held: heldBy(side) }))

@@ -58,12 +58,12 @@ const MINUTES_PER_TICK = 10    // locked decision 1
  *   objectiveHoldMinutes: battle time all objectives must be held to win
  *                        (default 60)
  *   objectiveTurnsToWin: if set, consecutive player turns instead
- *   turnLimit:           player turns after which the day is over, decided
- *                        as a time limit is
+ *   turnLimit:           player turns after which night falls (a testing
+ *                        aid): the battle ends with no winner
  *   timeLimitMinutes:    battle time after which the side that lost the
  *                        larger share of its men loses (a testing aid)
- *   dayMinutes:          battle time after which the day is over, decided
- *                        as a time limit is (the app's end of the day)
+ *   dayMinutes:          battle time after which night falls (the app's
+ *                        end of the day): the battle ends with no winner
  *   everyoneAsked:       true for a battle saved before the riders rulings:
  *                        every side is asked at every stop, and a Commander
  *                        is told at once when a unit is cut off (see
@@ -395,9 +395,9 @@ function processPlayerTurn(game) {
     // The end of the day, counted in battle time (the app's battles since
     // the riders rulings).
     if (!game.outcome.decided && game.spec.dayMinutes && game.minutesElapsed >= game.spec.dayMinutes) {
-      game.outcome = evaluateVictory({ ...victoryContext(game), dayOver: true })
+      nightFalls(game)
     }
-    if (game.outcome.decided) { interrupt = 'decided'; break }
+    if (game.outcome.decided) { interrupt = game.outcome.reason === 'night fell' ? 'night' : 'decided'; break }
     // A Commander taken or freed: both sides stop, for both know of it. (One
     // who only got away to another of his units is his own side's secret,
     // and a stop would tell the enemy something had happened.)
@@ -429,11 +429,11 @@ function processPlayerTurn(game) {
   }
 
   clearTable(game)
-  // The end of the day: after spec.turnLimit player turns the battle is
-  // over, decided as a time limit is (the smaller share of men lost).
+  // The end of the day counted in turns (a testing aid): after
+  // spec.turnLimit player turns night falls, as it does at dayMinutes.
   if (!game.outcome.decided && game.spec.turnLimit && game.playerTurn >= game.spec.turnLimit) {
-    game.outcome = evaluateVictory({ ...victoryContext(game), dayOver: true })
-    interrupt = 'decided'
+    nightFalls(game)
+    interrupt = game.outcome.reason === 'night fell' ? 'night' : 'decided'
   }
 
   if (!asking) {
@@ -461,6 +461,15 @@ function processPlayerTurn(game) {
   return game.history.at(-1)
 }
 
+// The end of the day (ruled 2026-11-24: "No the day just ends the battle,
+// you can choose to fight again the next day"): the battle ends with no
+// winner (victory.js, 'night fell'), and the log says so, for both sides
+// see the dark come down ('nightfall', told to everyone).
+function nightFalls(game) {
+  game.outcome = evaluateVictory({ ...victoryContext(game), dayOver: true })
+  if (game.outcome.reason === 'night fell') game.battle.log.emit('nightfall', game.battle.turn, {})
+}
+
 // ── Asked when wanted ──────────────────────────────────
 //
 // Ruled 2026-11-23: "No the game keeps going. This is true for two human
@@ -476,9 +485,11 @@ function processPlayerTurn(game) {
 // orders; the others are not told of it, nor waited for. A side is wanted:
 //   - free with his army: when news worth stopping for reaches him (a fight,
 //     shooting, a rout, a sighting, a rally), or his orders are carried out
-//     (judged by what has reached him); or when, by what he knows, his men
-//     have nothing left to do and COMMAND.QUIET has passed since he was
-//     last asked;
+//     (judged by what has reached him). Not by the clock: a Commander whose
+//     men only hold waits for news (ruled 2026-11-24: "Holding for several
+//     turns would still get interrupts from passing enemy troops"), or for
+//     COMMAND.LONGEST. A rider back with word that he could not get
+//     through calls him back too;
 //   - held: when his captors hear what would stop them (as before), and
 //     every COMMAND.QUIET, for he always has an offer to make;
 //   - with no Commander on the field (the computer): on its own side's
@@ -494,13 +505,16 @@ function wantedNow(game, turnRecord, sightedBy, heard, objectiveChanges) {
   const quiet = (side) => battle.turn - (game.askedAt[side] ?? 0) >= COMMAND.QUIET
   const ofSide = (id, side) => [...battle.world.units, ...battle.fledUnits].some(u => u.id === id && u.side === side)
   const by = {}
-  const order = ['contact', 'fire', 'sighting', 'ready', 'rallied', 'stalled', 'time']
+  const order = ['contact', 'fire', 'sighting', 'ready', 'rallied', 'rider', 'stalled', 'time']
   for (const side of all) {
     const c = battle.commanders?.[side]
     const reasons = []
     if (game.word[side] && c?.status === 'free') {
       reasons.push(...newsFor(game, side, recent, heard))
-      if (quiet(side) && nothingToDo(game, side)) reasons.push('time')
+      // A rider back with word that he could not get through: he has
+      // commands to give (ruled 2026-11-24: "the rider should return with
+      // that news"). Now that the hour does not call him back, it must.
+      if (recent.some(e => e.type === 'riderBlocked' && e.side === side && arrivalOf(game, side, e) === battle.turn)) reasons.push('rider')
     } else if (game.word[side] && c?.status === 'held') {
       reasons.push(...heldNews(game, side, turnRecord, sightedBy, now))
       if (quiet(side)) reasons.push('time')
@@ -520,27 +534,6 @@ function wantedNow(game, turnRecord, sightedBy, heard, objectiveChanges) {
     if (why) by[side] = why
   }
   return Object.keys(by).length > 0 ? by : null
-}
-
-// Does a Commander know of nothing left for his men to do? Judged from the
-// last word of each unit to have reached him, and the orders he has sent
-// that are still on the road: never from how they truly stand.
-function nothingToDo(game, side) {
-  const { battle } = game
-  for (const [id, r] of Object.entries(game.word[side].units)) {
-    if (r.gone || r.broken || r.strength <= 0) continue
-    if (battle.riders?.some(x => x.side === side && x.unitId === id)) return false
-    const order = r.order
-    if (!order) continue
-    if (order.enemy) return false
-    switch (order.action) {
-      case 'hold': continue
-      case 'advance': case 'check': return false
-      case 'hide': case 'ambush': if (!r.hidden) return false; continue
-      default: if (!order.target || !samePosition(order.target, r.position)) return false
-    }
-  }
-  return true
 }
 
 // Objective control is measured once per TICK but victory counts consecutive

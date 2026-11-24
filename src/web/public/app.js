@@ -112,6 +112,7 @@ const WHY = {
   contact: 'blows were struck', sighting: 'the enemy was sighted', time: 'an hour passed', long: 'a long while passed',
   commander: 'a Commander fell into enemy hands, or got out of them',
   stalled: 'all was quiet', ready: 'your orders were carried out', fire: 'there was shooting', rallied: 'a broken unit rallied', objective: 'ground changed hands', decided: 'the battle was decided',
+  rider: 'a rider came back: he could not get through', night: 'night fell',
   surrender: 'a commander yielded'
 }
 const sideName = (side) => side.charAt(0).toUpperCase() + side.slice(1)
@@ -137,6 +138,8 @@ const REASONS = {
 function verdictWords(battle) {
   const o = battle.outcome
   if (!o) return null
+  // Night ended it (words from the server: narrator/words.js, NIGHT).
+  if (o.said) return { title: o.title, reason: o.said.charAt(0).toUpperCase() + o.said.slice(1), night: true }
   if (o.winner === 'draw') {
     const why = { 'both commanders killed': 'Both Commanders were killed', 'mutual collapse': 'Both armies broke', 'mutual ruin': 'Both armies were ruined', 'time ran out: equal losses': 'The day ended with losses even' }
     return { title: 'A draw', reason: why[o.reason] ?? o.reason }
@@ -316,7 +319,7 @@ function lastCommander() { try { return localStorage.getItem(LAST_COMMANDER) } c
 function rememberCommander(token) { try { localStorage.setItem(LAST_COMMANDER, token) } catch { /* fine */ } }
 
 async function muster() {
-  const [maps, commanders, factions] = await Promise.all([api('GET', '/api/maps'), loadCommanders(), api('GET', '/api/factions')])
+  const [maps, commanders, factions, day] = await Promise.all([api('GET', '/api/maps'), loadCommanders(), api('GET', '/api/factions'), api('GET', '/api/day')])
   // The Commander last chosen leads, if his army is home; else the first
   // whose army is not in the field; with none, a new one.
   commanders.splice(0, commanders.length, ...commanders.filter(c => !c.ended))   // the fallen muster no more
@@ -328,7 +331,7 @@ async function muster() {
     <header class="bar"><a href="/battles" data-link>Your battles</a><strong style="font-family: var(--font-display); font-size: 18px">Muster a battle</strong><span></span></header>
     <main class="page">
       <form id="muster" class="page" style="padding: 0">
-        <p class="note">A battle to the end. It is won when the other side yields the field, its army breaks or is destroyed, or its Commander is killed. The day ends after 40 turns; then the side that lost the smaller share of its men has it.</p>
+        <p class="note">A battle to the end. It is won when the other side yields the field, its army breaks or is destroyed, or its Commander is killed. ${esc(day.said)}</p>
         <label class="field">The field
           <select name="map">${maps.map(m => `<option value="${esc(m.id)}">${esc(m.title)}</option>`).join('')}</select>
         </label>
@@ -1338,8 +1341,12 @@ async function tent(token) {
     body.innerHTML = `
       <div class="verdict" style="display: flex; flex-direction: column; gap: 8px">
         <h2>${esc(words.title)}</h2>
-        <p>${esc(words.reason)}, after ${esc(clock(state.view.battle.minutes))}.</p>
+        <p>${esc(words.reason)}${words.night ? '' : `, after ${esc(clock(state.view.battle.minutes))}`}.</p>
       </div>
+      ${v?.night ? (v.night.next
+        ? `<a class="btn btn-main btn-wide" href="/b/${esc(v.night.next)}" data-link>${esc(v.night.again)}</a>`
+        : `<button class="btn btn-main btn-wide" type="button" id="again">${esc(v.night.again)}</button>`)
+        + `<p class="note">${esc(v.night.againNote)}</p>` : '' }
       ${v ? `<table class="losses"><thead><tr><th scope="col">Side</th><th scope="col">Standing</th><th scope="col">Fled</th><th scope="col">Fallen</th></tr></thead><tbody>
         ${Object.entries(v.sides).map(([s, n]) => `<tr><td>${esc(sideName(s))}${s === state.view.battle.side ? ' (you)' : ''}</td><td>${n.standing}</td><td>${n.fled}</td><td>${n.fallen}</td></tr>`).join('')}
       </tbody></table>` : ''}
@@ -1351,6 +1358,17 @@ async function tent(token) {
       <p class="note" id="replay-note">${state.shown ? replayWords(state.shown) : 'The field as the battle ended.'}</p>
       ${v?.company ? '<a class="btn btn-wide" href="/officers" data-link>Your officers</a>' : ''}
       <a class="btn btn-wide" href="/battles" data-link>Your battles</a>`
+    document.getElementById('again')?.addEventListener('click', async (event) => {
+      event.target.disabled = true
+      try {
+        const next = await api('POST', `/api/seat/${token}/again`)
+        saveSeat({ token: next.token, title: next.title, side: state.view.battle.side })
+        go(`/b/${next.token}`)
+      } catch (error) {
+        event.target.disabled = false
+        event.target.insertAdjacentHTML('afterend', `<p class="error">${esc(error.message)}</p>`)
+      }
+    })
     const slider = document.getElementById('replay')
     slider.addEventListener('change', async () => {
       const turn = Number(slider.value)
@@ -1363,7 +1381,7 @@ async function tent(token) {
 
   // What became of you.
   function commanderLine(c) {
-    const words = {
+    let words = {
       free: '',
       freed: 'You were in the enemy\'s hands; your army\'s victory made them give you up.',
       ransomed: c.prices?.length
@@ -1372,6 +1390,8 @@ async function tent(token) {
       released: 'The battle was lost with you still in the enemy\'s hands, and no deal struck. Honor forbids them your life: they let you go, with whatever of your army came through the day.',
       killed: 'You were killed. Everything ends with you: your officers, their names and all they learned. Muster again with a new Commander.',
     }[c.fate]
+    // Night fell on him in their hands (narrator/words.js, NIGHT).
+    if (c.fate === 'released' && state.view.verdict?.night) words = esc(state.view.verdict.night.released)
     return words ? `<p class="${c.fate === 'killed' || c.fate === 'released' ? 'question' : 'note'}">${words}</p>` : ''
   }
 

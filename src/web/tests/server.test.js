@@ -883,7 +883,7 @@ test('two requests at once for one battle run one after the other, never a turn 
   } finally { await app.close() }
 })
 
-test('a battle has an end of day: after its last turn the side that lost the smaller share of its men has it', async () => {
+test('a battle has an end of day: after its last turn night ends it, and neither side has won', async () => {
   const app = await start()
   try {
     // Neither side ever closes: the computer holds its ground for a while, and the day is three turns.
@@ -893,12 +893,14 @@ test('a battle has an end of day: after its last turn the side that lost the sma
     for (let i = 0; i < 3; i++) await app.api('POST', `/api/seat/${seat}/orders`, { text: '' })
     tent = (await app.api('GET', `/api/seat/${seat}`)).body
     assert.equal(tent.battle.status, 'finished')
-    assert.match(tent.battle.outcome.reason, /^time ran out/)
+    assert.deepEqual([tent.battle.outcome.winner, tent.battle.outcome.reason], ['draw', 'night fell'])
+    assert.equal(tent.battle.outcome.ahead, undefined, 'who was ahead is not for the player to read')
+    assert.equal(tent.verdict.night.title, 'Night fell')
     // From the app, the day is counted in battle time (each side is asked
     // only when wanted, so turns are each Commander's own).
     const usual = (await app.api('POST', '/api/battles', { opponent: 'standing', side: 'red', seed: 3 })).body.seats.red
     const line = (await app.api('GET', `/api/seat/${usual}`)).body.battle
-    assert.equal(line.dayMinutes, 600)
+    assert.equal(line.dayMinutes, 720, 'twelve hours (ruled 2026-11-24)')
     assert.equal(line.turnLimit, null)
   } finally { await app.close() }
 })

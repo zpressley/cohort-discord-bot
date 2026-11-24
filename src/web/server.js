@@ -30,6 +30,9 @@
 //                                           only before the first turn runs
 //   POST /api/seat/:token/read   { text }   read orders back, send nothing
 //   POST /api/seat/:token/orders { text }   send orders
+//   POST /api/seat/:token/again             after a battle night ended: the
+//                                           next day's battle -> { token, title }
+//   GET  /api/day                           the length of the day, and its words
 //   POST /api/seat/:token/offer { units }   a Commander held by the enemy
 //                                           offers units (none: the field
 //                                           alone) for his freedom
@@ -142,6 +145,9 @@ function createServer(store) {
         if (req.method === 'GET' && parts[1] === 'maps' && parts.length === 2) {
           return send(res, 200, store.maps())
         }
+        if (req.method === 'GET' && parts[1] === 'day' && parts.length === 2) {
+          return send(res, 200, store.day())
+        }
         if (req.method === 'GET' && parts[1] === 'factions' && parts.length === 2) {
           return send(res, 200, store.factions())
         }
@@ -222,6 +228,11 @@ function createServer(store) {
               offer: body.offer, accept: body.accept === true, refuse: body.refuse === true,
               ...(Array.isArray(body.more) ? { more: body.more.slice(0, 50) } : {})
             }))
+          }
+          // After a battle night ended: the next day's battle, against the
+          // same enemy (made once; each side is given its own seat).
+          if (req.method === 'POST' && parts[3] === 'again' && parts.length === 4) {
+            return send(res, 201, store.again(token))
           }
           if (req.method === 'POST' && parts[3] === 'orders') {
             const body = await readBody(req)

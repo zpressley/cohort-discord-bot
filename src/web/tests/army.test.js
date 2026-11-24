@@ -250,8 +250,9 @@ test('the same faction may fight on both sides, by choice or by lot, and each si
 test('a deathmatch ends when a side yields the field, loses its army or loses its Commander, or at the end of the day; and the app has words for each', async () => {
   const app = await start()
   const ENDS = ['enemy surrendered', 'enemy commander bargained', 'enemy army broken', 'enemy army collapsed', 'enemy commander killed', 'both commanders killed', 'mutual collapse', 'mutual ruin',
-    // The end of the day, at forty turns (ruled 2026-11-23).
-    'time ran out: fewer losses', 'time ran out: equal losses']
+    // The end of the day: night ends it, and neither side has won (ruled
+    // 2026-11-24: "No the day just ends the battle").
+    'night fell']
   try {
     const reasons = new Set()
     for (let seed = 1; seed <= 6; seed++) {
@@ -273,7 +274,8 @@ test('a deathmatch ends when a side yields the field, loses its army or loses it
     for (const r of reasons) assert.ok(ENDS.includes(r), `${r} is one of the ways a battle ends`)
     // The verdict screen says each in the app's own words.
     const page = fs.readFileSync(path.join(__dirname, '../public/app.js'), 'utf8')
-    for (const r of ENDS) assert.ok(page.includes(`'${r}'`), `the verdict has words for "${r}"`)
+    // (Night's words come from the server, narrator/words.js: NIGHT.)
+    for (const r of ENDS.filter(r => r !== 'night fell')) assert.ok(page.includes(`'${r}'`), `the verdict has words for "${r}"`)
     assert.match(page, /'enemy surrendered': \['The enemy yielded the field', 'You yielded the field'\]/)
   } finally { await app.close() }
 })

@@ -582,13 +582,19 @@ const HEART = {
 
 // The end of the day (ruled 2026-11-23: "add a cap to the battle at end of
 // day like 40 turns"): a battle mustered from the app is over after this
-// many player turns, and the side that lost the smaller share of its men
-// has it.
+// many player turns, and (until 2026-11-24) the side that lost the smaller
+// share of its men had it. TURNS is no longer read
+// (the army study keeps its own forty turns).
 // Since the riders rulings (2026-11-23: "No the game keeps going"), each
 // Commander is asked only when wanted, so the day is counted in battle time:
 // forty turns at the fifteen minutes a turn ran on average before
 // (messenger-league.js: 230 battle minutes over 15.1 player turns).
-const DAY = { TURNS: 40, MINUTES: 600 }
+// Twelve hours since 2026-11-24 ("10 hours is fine... might as well make it
+// 12 armies did not fight in the dark"); it was 600. And when it runs out
+// the battle just ends, with no winner (ruled the same day: "No the day
+// just ends the battle, you can choose to fight again the next day"):
+// orchestrator/victory.js, 'night fell'.
+const DAY = { TURNS: 40, MINUTES: 720 }
 
 // A unit's veterancy (veterans/veterancy.js; ruled 2026-11-23: the newest
 // men fall first). The experience the fallen take with them, as a share of
@@ -759,7 +765,7 @@ const COMMAND = {
   // The riders rulings (2026-11-23; docs/DECISIONS.md, "How the riders
   // rulings were built"). Claude's starting values, open to change:
   OVERDUE: 2,          // ten minutes of slack past a rider's ride from where a unit last was, before he notices no word has come ("notice when no word comes back")
-  QUIET: 6,            // ten minutes a Commander whose men have nothing left to do waits before he is asked again (the hour a turn used to run); also a held Commander, and a side with no Commander on the field
+  QUIET: 6,            // ten minutes a held Commander, and a side with no Commander on the field, wait before they are asked again (the hour a turn used to run). Not a free Commander whose men hold: since 2026-11-24 ("Holding for several turns would still get interrupts from passing enemy troops") he waits for news, or LONGEST
   LONGEST: 36          // ten minutes the battle runs at most without asking a Commander anything (six hours): a guard so that a battle cannot run away
 }
 

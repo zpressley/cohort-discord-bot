@@ -11,6 +11,7 @@ const { interpretLines, interpretText } = require('../../interpreter/orders')
 const { lyingInWait } = require('../../interpreter/resolve')
 const { planTurn } = require('../../opponent/planner')
 const { narrateTurn } = require('../../narrator/turnNarrator')
+const { NIGHT } = require('../../narrator/words')
 const { renderMap, renderRoster, renderTurnReport } = require('./render')
 const { isGridRef } = require('../../engine/map/grid')
 
@@ -140,7 +141,9 @@ function createSession(spec, options = {}) {
 
     finalSummary() {
       const lines = []
-      const verdict = game.outcome.winner === 'draw'
+      const verdict = game.outcome.reason === 'night fell'
+        ? NIGHT.ended.charAt(0).toUpperCase() + NIGHT.ended.slice(1)
+        : game.outcome.winner === 'draw'
         ? `Draw — ${game.outcome.reason}`
         : `${(game.outcome.winner ?? 'nobody').toUpperCase()} wins — ${game.outcome.reason}`
       lines.push(verdict)
