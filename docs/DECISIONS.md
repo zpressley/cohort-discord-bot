@@ -4980,3 +4980,192 @@ to every unit (it is how men cross water, not how the computer thinks);
 the other reading keeps it the computer's alone, and a player's own units
 may pace the banks until he names the ford. That the field's forming-up
 places are known to both Commanders (the planner's own reading, kept).
+
+### How taking ground, news of the ground, and rallying were mended (Claude's choices, open to change)
+
+Four loose ends found by measuring and by play, inside Zach's rulings
+(holding the ground alone for an hour wins; orders travel by rider; no
+word comes back from a lost rider; the day is twelve hours; "each
+Commander asked only when he has something to do"; "Retun commander taken
+odds"). None of those changed. Measured against main at 832d94e, the same
+seeds before and after; `first-battle.js` with 200 battles a field (80 was
+too few: "take" on Crownhill read 45% at 80 battles and 51% at 200 on the
+same code).
+
+**1. "Everyone take the ground" lost on two fields. Cause: his men stood
+beside the ground and watched the enemy hold it.** Ashford, Tibet, seed
+14756 (`first-battle.js --play take`): the east's horse reached the Old
+Mill Bridge first (20 minutes); his spearmen and pikemen came up to the
+mill's west end (17, 20), found the tiles they were sent to taken, halted
+and held, three units on one tile, beside the enemy. A stand is not
+looking for a fight, and the horse were holding too, so no blow was
+struck while the horse archers shot into them; the east held the bridge
+alone for the hour and won at 80 minutes, having lost no one. Most of the
+losses on Ashford and Thornwood went the same way (the computer's horse
+on the bridge or on Thorn Knoll first). Not the causes, as it turned out:
+where the line formed (at the bridge, as told), the near bank, or who
+arrives first (within ten minutes on every field, "How the first battle,
+being asked, and forming up were built").
+- **Built** (`battle.js`, `groundFoe`; `tables.GROUND_FIGHT`): a unit sent
+  to the ground to fight for, by a move or a stand there ("take",
+  "defend"), or told to hold while standing on it, fights for it: while an
+  enemy its side can see is on that ground (as near as holds it: the
+  ground's own reach), it goes at him, looking for the fight, whatever its
+  order; with no enemy there and holding, it goes back to its own place on
+  the ground. The order is marked as it is given, before the line forms,
+  so a unit whose place in the line lies just off the ground still counts.
+  Its order is kept; any other order ends it. Not missile troops (they
+  shoot from where they stand, as before) and not a unit rallied with no
+  heart (3, below). The computer's units get the same rule: its planner
+  sends them to their places with the same orders.
+- Tried first: going at men a tile beside the ground too (`BESIDE` 1).
+  "take" won 56, 50, 57, 47% and the planner as player 54, 63, 57, 54%:
+  the planner pulled up too. At `BESIDE` 0 the planner is as before. Tried
+  also: only at an enemy within 3 tiles of the unit; Ashford fell back to
+  43% and Crownhill did not move, so not kept.
+- Where the line forms and where armies start were not touched.
+
+| A new player's first battle, won (200 a field) | before | after |
+|---|---|---|
+| Crownhill: take / advance / planner | 51 / 43 / 53% | 59 / 46 / 53% |
+| Ashford Vale | 32 / 52 / 59% | 47 / 51 / 60% |
+| Thornwood | 28 / 53 / 46% | 53 / 53 / 47% |
+| Raven Ridge | 42 / 40 / 50% | 50 / 41 / 51% |
+| Greywater (Elderby), take / advance (60 battles) | 20 / 42% | 50 / 50% |
+
+"take" on Thornwood now costs him fewer men and the computer more (his
+183 -> 173 a battle, the computer's 144 -> 153). Crownhill's "take" is now
+59%, over the 55% aimed at: there the whole army stands on a broad hill
+and now throws off each enemy unit that steps onto it (of the first 100
+seeds, 26 changed outcome, 18 of them to his win, mostly battles the east
+had won holding the hill alone). Left as it is: the new player who does
+what the screen says on Crownhill wins a little more often than not, and
+Crownhill is the field where "advance" is weakest. "advance" and the
+planner moved within the noise (one to three battles in a hundred).
+Greywater's Elderby, a village on both banks: "take" from 20% to 50%.
+- Guessed: that a hold given to a unit already on the ground means "hold
+  it", so it fights for it too. The other reading keeps a plain hold a
+  plain stand; then the computer's units, which are told to hold once in
+  their places, would not fight for ground they stand on while a player's
+  would. Measured, it moved nothing.
+- Tested: "a unit sent to take the ground to fight for goes at an enemy
+  standing on it, rather than stand beside him and watch him hold it";
+  "a unit sent to stand off the ground, beside an enemy on it, lets him
+  be, as before"; "a unit holding the ground it took does not chase an
+  enemy standing off it"; "a unit told to hold where it stands on the
+  ground fights for it too".
+
+**2. Ground changing hands called every side every time. Built**
+(`orchestrator.js`, `groundCalls`; `game.groundTold`): each side is
+called by the ground
+- the first time it is taken, lost or contested;
+- when the enemy comes to hold it alone, unless what the side was last
+  called about was the enemy holding it;
+- when the side itself takes it alone, having last been called because
+  the enemy held it (he won it back);
+- when a side holding it alone is `GROUND.CLOSE_MINUTES` (30) from taking
+  the field by it, every side, as before (with the hour at 60 this is
+  also the half-hour mark: one mark, not two).
+Not when a fight sways over it: contested, the enemy's again, contested.
+The ground's news is still told, in full, in the next dispatch (the events
+are in the log as before; only whether it stops the battle for him
+changed), and every other kind of news calls him as before. Only battles
+that ask each side when it is wanted (a Commander on the field) changed.
+- Measured (`first-battle.js`, 200 a field), calls for the ground: "take"
+  Crownhill 1,058 -> 606, Ashford 741 -> 440, Thornwood 854 -> 427, Raven
+  Ridge 655 -> 390; "advance" 1,062 -> 560, 740 -> 421, 766 -> 372, 799 ->
+  398. But the times he is asked a battle barely fell (Crownhill "take"
+  12.4 -> 12.2, Thornwood 13.0 -> 12.8, the others by 0.1): when the
+  ground sways there is a fight on it, and the fight calls him at the same
+  stop. Asked an hour of battle, all three changes together: "take" 3.3,
+  4.1, 4.5, 4.6 -> 3.2, 4.7, 4.8, 4.8 (more fighting, shorter battles);
+  "advance" 3.3, 4.5, 5.0, 5.0 -> 3.2, 4.5, 4.9, 5.0. The messenger league
+  (672 battles): the ground was why he was asked 37% of the time -> 19%;
+  11.2 -> 10.9 turns a battle, 4.4 -> 4.3 an hour.
+- No battle was lost by the ground without his being asked while he could
+  still contest it: in every battle lost by the ground of the 2,400 played
+  ("take", "advance", the planner), he was asked after the enemy began
+  the hold that won it and before it won (`first-battle.js` now counts
+  this too: "in the hold that won it: 0").
+- Tested: "the ground changing hands calls every side the first time,
+  then a fight swaying over it does not call them again at every change";
+  "the ground changing hands: the enemy taking it alone calls him, his
+  winning it back calls him, the enemy close to winning by it calls
+  everyone".
+- Guessed: that "matters" is the enemy coming to hold it alone, his
+  winning it back, and the close mark; and that being contested again, or
+  the enemy's again after a contest he was already called about, is not.
+  The other reading also calls him each time the enemy's hour starts
+  afresh; it would bring back most of the calls.
+
+**3. A rally loop. Cause:** a broken unit rallies with the morale it had
+(ruled 2026-11-21: rallying brings back order, not heart), so at or under
+the rout line; a Commander's order to go in sent it straight back, it
+broke at the first blow, rallied once clear, was sent in again. A side's
+standing order already kept such a unit (shaken) back; a Commander's own
+order did not. **Built** (`battle.js`; the event `heldBack`; `words.js`,
+`HELD_BACK`): a unit rallied with no heart left will not go at the enemy.
+Told to advance or attack, it holds where it stands, looks for no fight,
+and keeps the order: once its men take heart (an enemy broken near it, as
+before) it goes in. Its report says so once for each order, in plain
+words: "<unit> rallied with no heart left, and will not go at the enemy:
+they hold where they stand, keeping your order, until a success near them
+puts heart back in them". It can still be moved and fall back, and fights
+if it is struck; it does not fight for ground (1).
+- Measured (the captive league's stand-in, who sends everyone in every
+  turn, 800 battles, `--policy wait`): a unit broken again within twenty
+  minutes of rallying 1,751 times (2.19 a battle) -> 201 (0.25); the worst
+  unit 31 times in one battle (Thornwood, Kush against Berbers, seed
+  2550918) -> 2. Raven Ridge, Kush against Samnium, seed 14880801 no
+  longer looped on main before this (later work changed that battle), so
+  the Thornwood seed stands for it.
+- Tested: "a unit rallied with no heart left will not go at the enemy:
+  told to, it holds where it stands and its report says why"; "... keeps
+  the order, and goes at the enemy once its men take heart"; "... can
+  still be moved, and a steady unit beside it goes in as told".
+- Guessed: the mark is the one the game already has for "no heart" (the
+  rout line, `MORALE.ROUT_THRESHOLD`, as `isShaken` uses), not a new one,
+  and heart comes back only as it did before. The other reading lets a
+  unit go in again after a rest; that would need morale to come back with
+  time, which the ruling of November 21 does not give.
+- A web test changed (`web/tests/night.test.js`, the smallest change): its
+  battle needed a unit of his to run from the field in the day; Mongolia's
+  riders, rallied, no longer go in and break a second time, so it now
+  musters Rome against Carthage, seed 1.
+
+**4. Two smaller ones, left, and what each would need.**
+- *Horse archers keeping out of reach along the edge for ever*
+  (Greywater, Carthage against Parthia, seed 9559233 of the captive
+  league). With the rally rule that battle now ends: Carthage's army
+  collapses at 37 ticks (166 before), its shaken units no longer feeding
+  themselves back in. The running itself is not mended: a missile unit
+  falling back before men it can outmarch (`skirmish.js`, `fallBack`) can
+  still back along the field's edge while there is room. It would need a
+  skirmisher with its back to the edge (no tile further from the enemy)
+  to stand, or a limit on how many times in a row it gives ground with
+  nothing to shoot.
+- *An army filing over one bridge packing onto one tile* ("280 men packed
+  onto one spot"): not touched. Forming up spreads the line at the end of
+  the march, not on the road. It would need the march to queue at a
+  crossing: a bridge tile taking one unit at a time
+  (`movement/occupancy.js`), the rest waiting on the bank behind it.
+
+**The other leagues, before -> after:**
+- Computer against computer, west's share (`ground-league.js --mode
+  mirror --rounds 20`): Crownhill 48 -> 49%, Ashford 50 -> 50%, Thornwood
+  49 -> 49%, Raven Ridge 50 -> 50%. As the app plays (`--mode app --rounds
+  5`, 100 a field): 54, 56, 55, 47% -> 51, 56, 51, 49%.
+- The character league (`--rounds 4`): steady 51, bold 51, cautious 48% ->
+  51, 51, 48%.
+- The messenger league: red won 50 -> 51%.
+- `no-fight.js`, red as the computer, the planner, sending everyone in,
+  giving no orders: came to nothing 0, 0, 0, 0 -> 0, 0, 0, 0.
+- The Commander taken (`captive-league.js --policy wait`): the 1 km fields
+  1 in 17.7 -> 1 in 19.2 (2,000 battles); Greywater 1 in 12.5 -> 1 in 13.3
+  (400). Back to about 1 in 19, as Zach asked, without retuning
+  `tables.COMMANDER`. Guessed why: that league's player sends everyone in
+  every turn, and his own unit, shaken, no longer goes back in with him.
+- The soak: every battle ends; the map's ground decided 145 -> 147 battles,
+  139 -> 140 minutes; Greywater 202 -> 193 minutes; the rest unchanged.
+- `npm run balance`: unchanged, every line.
+- No fingerprint test changed.
