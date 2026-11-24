@@ -238,6 +238,9 @@ const GROUND = {
   rule: (names, minutes, beside = false) => `Hold ${names.length > 1 ? 'all of it' : 'it'} alone for ${clock(minutes)}, with no enemy on it${beside ? ' or beside it' : ''}, and the field is yours, as surely as if the enemy's army broke. Let the enemy hold it as long, and the field is his.`,
   // The dispatch, when it changes hands.
   took: (name, mine) => (mine ? `you took ${name}: hold it alone and the field is yours` : `the enemy took ${name}: take it from him, or the field is his`),
+  // ... in the dispatch that ends the battle, when holding it no longer
+  // decides anything.
+  tookAtTheEnd: (name, mine) => (mine ? `you took ${name}` : `the enemy took ${name}`),
   lost: (name, wasMine) => (wasMine ? `you no longer hold ${name}` : `the enemy no longer holds ${name}`),
   // ... and when it is close to deciding the battle.
   close: (name, mine, minutes) => (mine

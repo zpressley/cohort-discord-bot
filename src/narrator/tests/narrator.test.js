@@ -260,7 +260,7 @@ test('the AI is told to speak to the Commander as "you", and that ground not yet
   const { system } = require('../turnNarrator')
   const text = system()
   assert.match(text, /Speak to the commander as "you"\. What happened to him is "you were taken", never "we were taken"/)
-  assert.match(text, /means the field is not yet won\. Never say the field is won, secured or yours unless a note says the battle is over/)
+  assert.match(text, /means the field is not yet won, and "you took it: hold it alone and the field is yours" means it must still be held\. Never say the field is won, secured or yours unless a note says the battle is over/)
 })
 
 test('the same line twice in a stretch is told once', () => {
@@ -279,4 +279,43 @@ test('the end of a battle is told to each side in its own words, "the field is y
   const told = (side) => report({ map: null, side, ownIds: new Set(), seenEnemyIds: new Set(), events: [event] })
   assert.deepEqual(told('red'), ['The battle is over: the enemy army broke. The field is yours'])
   assert.deepEqual(told('blue'), ['The battle is over: your army broke. The field is the enemy\'s'])
+})
+
+// Second playthrough, November 24: "You took Raven Gap: hold it alone and
+// the field is yours" came after "The battle is over".
+test('once the battle is over, the ground taken in its last stretch is told without "hold it alone and the field is yours"', () => {
+  const took = { type: 'objective', turn: 9, objectiveId: 'ground-1', name: 'Raven Gap', side: 'red', was: null }
+  const close = { type: 'objective', turn: 9, objectiveId: 'ground-1', name: 'Raven Gap', side: 'red', was: 'red', close: 30 }
+  const ended = report({ map, side: 'red', ownIds: new Set(['red_spears']), seenEnemyIds: new Set(), events: [took, close, { type: 'victory', turn: 9, winner: 'red', reason: 'enemy army broken' }] })
+  assert.ok(ended.includes('you took Raven Gap'), ended.join(' | '))
+  assert.ok(!ended.some(l => /field is yours/.test(l) && !/battle is over/i.test(l)), ended.join(' | '))
+  // Decided by the ground, which leaves no event: the caller says so.
+  assert.deepEqual(report({ map, side: 'blue', ownIds: new Set(['blue_swords']), seenEnemyIds: new Set(), events: [took], over: true }), ['the enemy took Raven Gap'])
+  // While the battle goes on, the advice stands.
+  assert.deepEqual(report({ map, side: 'red', ownIds: new Set(['red_spears']), seenEnemyIds: new Set(), events: [took] }), ['you took Raven Gap: hold it alone and the field is yours'])
+})
+
+test('enemy units he cannot tell apart are said once, with how many: "enemy troops (3 units)"', () => {
+  const nameOf = (t) => t.replace(/blue_\w+/g, 'enemy troops').replace(/red_spears/g, 'Spears')
+  const seen = (ids) => ({ map: null, side: 'red', ownIds: new Set(['red_spears']), seenEnemyIds: new Set(ids), nameOf })
+  const pinned = report({ ...seen(['blue_a', 'blue_b', 'blue_c']), events: ['blue_a', 'blue_b', 'blue_c'].map(id => ({ type: 'crush', turn: 2, unitId: id })) })
+  assert.deepEqual(pinned, ['enemy troops (3 units) was pinned with nowhere to give way'])
+  const fell = report({ ...seen(['blue_a', 'blue_b']), events: [{ type: 'gaveGround', turn: 2, unitId: 'red_spears', from: ['blue_a', 'blue_b'], to: at('E7') }] })
+  assert.deepEqual(fell, ['Spears fell back before enemy troops (2 units), keeping out of their reach'])
+})
+
+// Second playthrough, November 24: the AI was given the events alone, not
+// the lines the player reads, and left out the battle's end and what was
+// seen, and said "You were taken" of a Commander who was not.
+test('the AI words the same lines as the plain account, and is told nothing befell the Commander unless a note says so', async () => {
+  const transport = scriptedTransport(() => ({ text: 'The battle is over.' }))
+  const ai = createAiClient({ transport, retries: 0 })
+  const lines = ['The battle is over: you held the ground to fight for. The field is yours', 'Hastati report enemy velites, 100 men, on the road (F6-NE)']
+  await narrateTurn(ai, { map, side: 'red', culture: 'x', ...knowledge, events, plain: lines.join('\n'), facts: lines })
+  const sent = transport.calls[0]
+  assert.match(sent.user, /- The battle is over: you held the ground to fight for/)
+  assert.match(sent.user, /- Hastati report enemy velites/)
+  assert.match(sent.system, /nothing happened to him unless a note says so in those words/)
+  assert.match(sent.system, /A note that says the battle is over comes first, and you open with it/)
+  assert.match(sent.system, /never say who holds or controls a place unless a note says so/)
 })
