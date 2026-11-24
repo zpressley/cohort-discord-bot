@@ -474,3 +474,31 @@ const PERK_WORDS = {
 }
 
 module.exports.PERK_WORDS = PERK_WORDS
+
+// The last dispatch of a battle, to each side in its own words: who won
+// and why, as the verdict says it (the engine's reasons, victory.js, are
+// its own and never shown). `mine`: true for the winner told, false for
+// the loser, null for a draw.
+const BATTLE_OVER = {
+  why: {
+    'enemy army broken': ['the enemy army broke', 'your army broke'],
+    'enemy army collapsed': ['the enemy army was destroyed', 'your army was destroyed'],
+    'enemy surrendered': ['the enemy yielded the field', 'you yielded the field'],
+    'enemy commander bargained': ['the enemy Commander bargained for his freedom and left the field', 'you bargained for your freedom and left the field'],
+    'enemy commander killed': ['the enemy Commander was killed', 'you were killed'],
+    'enemy officers yielded': ['with their Commander in your hands, the enemy\'s officers yielded the field', 'with you in the enemy\'s hands, your senior officer yielded the field'],
+    'objectives held': ['you held the ground to fight for', 'the enemy held the ground to fight for'],
+    'time ran out: held more objectives': ['the day ended with more ground in your hands', 'the day ended with more ground in the enemy\'s hands'],
+    'time ran out: fewer losses': ['the day ended, and the enemy lost more', 'the day ended, and you lost more'],
+    'mutual ruin': 'both armies are spent',
+    'time ran out: equal losses': 'the day ended with the losses even'
+  },
+  line: (reason, mine) => {
+    const why = BATTLE_OVER.why[reason]
+    if (mine === null) return `The battle is over, and neither side has won${typeof why === 'string' ? `: ${why}` : ''}`
+    const said = Array.isArray(why) ? why[mine ? 0 : 1] : null
+    return `The battle is over${said ? `: ${said}` : ''}. ${mine ? 'The field is yours' : 'The field is the enemy\'s'}`
+  }
+}
+
+module.exports.BATTLE_OVER = BATTLE_OVER

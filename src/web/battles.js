@@ -45,6 +45,7 @@ const { gradeOf, DEATH_ODDS, loyaltyBand } = require('../engine/command/officers
 const T = require('../engine/combat/tables')
 const { narrateTurn, report } = require('../narrator/turnNarrator')
 const { orderWords, RIDER, NIGHT, REPORT, GROUND, ENEMY_COMMANDER, FIELD } = require('../narrator/words')
+const { BATTLE_OVER } = require('../narrator/words')
 const { loadScenario, SCENARIOS, mapChoices } = require('../adapters/hotseat/scenarios')
 const { MAPS, groundOf } = require('../data/maps')
 const { FACTIONS, factionChoices } = require('../engine/army/factions')
@@ -120,6 +121,17 @@ function namer(game, side) {
     : known[u.id]?.told && !known[u.id].told.kind && u.id !== holder ? `enemy ${REPORT.troops}` : `enemy ${unitName(u).toLowerCase()}`])
     .sort((a, b) => b[0].length - a[0].length)
   return (text) => names.reduce((out, [id, name]) => out.replace(new RegExp(`\\b${id}\\b`, 'g'), name), String(text))
+}
+
+// A question's choices as the Commander reads them: an enemy by the name his
+// side knows it by ("enemy light horse"), not by the word he typed, and
+// never its id (which would tell its kind).
+function namedChoices(choices, name) {
+  return (choices ?? []).map(c => ({
+    ...c,
+    question: name(c.question),
+    options: (c.options ?? []).map(({ enemy, seen, ...o }) => (enemy ? { ...o, label: `${name(enemy)} ${seen}` } : o))
+  }))
 }
 
 // What a side knows of the enemy now: as reported to its Commander, when he
@@ -471,7 +483,11 @@ function createBattleStore({ dir = null, ai = null, now = () => Date.now() } = {
     const entry = {
       id: crypto.randomBytes(6).toString('hex'),
       scenario,
-      title: faction ? factionTitle(spec, side) : `${MAPS[mapName].title ?? mapName}: ${SCENARIO_TITLES[scenario] ?? scenario}`,
+      // Against a friend, his army is not known until he chooses who leads
+      // (join): until then the battle is "Rome against a friend", not
+      // against the faction the lot put in his seat for now.
+      title: faction ? (solo || spec.nextDay ? factionTitle(spec, side) : `${MAPS[spec.map]?.title ?? spec.map}: ${FACTIONS[sideFaction(spec, side)]?.title ?? sideName(side)} against a friend`)
+        : `${MAPS[mapName].title ?? mapName}: ${SCENARIO_TITLES[scenario] ?? scenario}`,
       createdAt: now(),
       updatedAt: now(),
       seats: { [side]: newToken(), [other]: solo ? null : newToken() },
@@ -817,7 +833,8 @@ function createBattleStore({ dir = null, ai = null, now = () => Date.now() } = {
     spec = led.spec
     entry.game = replayGame({ ...record, spec })
     entry.joining = null
-    if (faction !== mustered) entry.title = factionTitle(spec, Object.keys(spec.sides).find(s => s !== side))
+    // (Until now the title said "against a friend": his army is known now.)
+    if (faction && !night) entry.title = factionTitle(spec, Object.keys(spec.sides).find(s => s !== side))
     if (commander) {
       if (faction && !commander.faction) commanders.setFaction(commander, faction)
       commanders.setCompany(commander, led.company)
@@ -877,7 +894,10 @@ function createBattleStore({ dir = null, ai = null, now = () => Date.now() } = {
   }
   // His own turn: how many times the battle has stopped for him, not for
   // anyone else. Once it is over, everything is told.
-  const turnOf = (game, side) => (game.outcome.decided ? game.playerTurn : game.calls?.[side] ?? game.playerTurn) + 1
+  // This side's own count of turns: the one it is asked for now, or, once
+  // the battle is over, the one it ended in (its last dispatch's), not the
+  // battle's count of stops, which the other side's turns also add to.
+  const turnOf = (game, side) => (game.outcome.decided ? game.calls?.[side] ?? game.playerTurn : (game.calls?.[side] ?? game.playerTurn) + 1)
 
   /** A battle as one line, for "your battles". */
   function summary(token) {
@@ -1151,7 +1171,7 @@ function createBattleStore({ dir = null, ai = null, now = () => Date.now() } = {
       captive: captiveView(game, side, atGame),
       dispatches: [...entry.dispatches[side]].reverse(),
       verdict: game.outcome.decided && !atGame
-        ? { ...tally(game), officers: officerFates(game, side), company: Boolean(entry.commanders?.[side]), commander: commanderEnd(game, side), ...nightOf(entry, side) }
+        ? { ...tally(game), replayTo: game.playerTurn, officers: officerFates(game, side), company: Boolean(entry.commanders?.[side]), commander: commanderEnd(game, side), ...nightOf(entry, side) }
         : null
     }
   }
@@ -1497,7 +1517,7 @@ function createBattleStore({ dir = null, ai = null, now = () => Date.now() } = {
     return {
       understood: read.understood.map(name), questions: read.questions.map(name), notes: (read.notes ?? []).map(name),
       counsel: (read.counsel ?? []).map(name),
-      choices: (read.choices ?? []).map(c => ({ ...c, question: name(c.question) })), source: read.source, surrender: read.surrender
+      choices: namedChoices(read.choices, name), source: read.source, surrender: read.surrender
     }
   }
 
@@ -1526,7 +1546,7 @@ function createBattleStore({ dir = null, ai = null, now = () => Date.now() } = {
     if (read.questions.length > 0 && !(sendClear && read.orders.length > 0)) {
       return {
         status: 'clarify', questions: read.questions.map(name), understood, counsel: (read.counsel ?? []).map(name),
-        choices: (read.choices ?? []).map(c => ({ ...c, question: name(c.question) })),
+        choices: namedChoices(read.choices, name),
         canSendRest: read.orders.length > 0
       }
     }
@@ -1802,6 +1822,13 @@ function createBattleStore({ dir = null, ai = null, now = () => Date.now() } = {
       if (captivity?.captor) {
         lines.unshift(`You are held by ${name(captivity.captor.id)} ${where(captivity.captor.position)}, and hear the reports as they come in to your captors`)
       }
+      // The battle's end, first, to every side: a battle decided by the
+      // ground (or by a bargain) leaves no event of its own in the log, and
+      // the last dispatch said nothing of it. Night has its own line.
+      if (game.outcome.decided && game.outcome.reason !== 'night fell') {
+        const over = BATTLE_OVER.line(game.outcome.reason, game.outcome.winner === 'draw' ? null : game.outcome.winner === side)
+        lines = [over, ...lines.filter(l => !l.startsWith('The battle is over'))]
+      }
       const told = await narrateTurn(ai, { ...turn, plain: lines.join('\n') })
       entry.dispatches[side].push({
         turn: turnEntry.playerTurn,
@@ -1858,4 +1885,4 @@ function createBattleStore({ dir = null, ai = null, now = () => Date.now() } = {
 
 const capitalise = (text) => String(text).charAt(0).toUpperCase() + String(text).slice(1)
 
-module.exports = { createBattleStore, unitName, describeOrder }
+module.exports = { createBattleStore, unitName, describeOrder, namedChoices }

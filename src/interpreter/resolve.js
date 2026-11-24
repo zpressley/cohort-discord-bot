@@ -115,7 +115,10 @@ function resolveEnemy(words, enemies, map) {
       place: ref,
       options: pick.map(e => {
         const square = gridLabel(e.position, { quarter: true })
-        return { label: `${ref} ${seenWhere(e)}`, square, text: `${ref} at ${square}` }
+        // `enemy` and `seen`: so the web app can label each choice by the
+        // enemy's own name (two "horse archers" may be horse archers and
+        // light horse); it takes them off before the browser sees them.
+        return { label: `${ref} ${seenWhere(e)}`, square, text: `${ref} at ${square}`, enemy: e.id, seen: seenWhere(e) }
       })
     }
   }

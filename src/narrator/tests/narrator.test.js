@@ -253,3 +253,28 @@ test('missile troops falling back are told once a turn, in the order\'s own word
   assert.equal(visibleEvents([fell(5, ['blue_swords'], 'E7')], blue).length, 0, 'blue did not see the archers go')
   assert.equal(visibleEvents([fell(5, ['blue_swords'], 'E7')], { ...blue, seenEnemyIds: new Set(['red_archers']) }).length, 1)
 })
+
+test('the AI is told to speak to the Commander as "you", and that ground not yet held long enough has not won the field', () => {
+  const { system } = require('../turnNarrator')
+  const text = system()
+  assert.match(text, /Speak to the commander as "you"\. What happened to him is "you were taken", never "we were taken"/)
+  assert.match(text, /means the field is not yet won\. Never say the field is won, secured or yours unless a note says the battle is over/)
+})
+
+test('the same line twice in a stretch is told once', () => {
+  const pinned = { type: 'crush', unitId: 'blue_velites' }
+  const told = report({ map: null, side: 'red', ownIds: new Set(['red_spears']), seenEnemyIds: new Set(['blue_velites']), events: [{ ...pinned, turn: 1 }, { ...pinned, turn: 2 }] })
+  assert.deepEqual(told, ['blue_velites was pinned with nowhere to give way'])
+})
+
+test('a unit that broke off a fight losing one man is told "1 man", not "1 men"', () => {
+  assert.equal(fact(null, { type: 'disengage', unitId: 'blue_archers', killed: 1 }), 'blue_archers broke off the fight, losing 1 man to the parting blows')
+  assert.equal(fact(null, { type: 'disengage', unitId: 'blue_archers', killed: 4 }), 'blue_archers broke off the fight, losing 4 men to the parting blows')
+})
+
+test('the end of a battle is told to each side in its own words, "the field is yours", never "Red won (enemy army broken)"', () => {
+  const event = { type: 'victory', winner: 'red', reason: 'enemy army broken' }
+  const told = (side) => report({ map: null, side, ownIds: new Set(), seenEnemyIds: new Set(), events: [event] })
+  assert.deepEqual(told('red'), ['The battle is over: the enemy army broke. The field is yours'])
+  assert.deepEqual(told('blue'), ['The battle is over: your army broke. The field is the enemy\'s'])
+})
