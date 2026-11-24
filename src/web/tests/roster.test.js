@@ -298,10 +298,10 @@ test('no officer is moved and no unit named while the army is in the field', asy
     const officer = (await app.api('GET', `/api/commander/${red.token}`)).body.officers[0]
     const moved = await app.api('POST', `/api/commander/${red.token}/officer`, { officer: officer.id, to: 'hastati' })
     assert.equal(moved.status, 409)
-    assert.match(moved.body.error, /army is in the field .*His officers can be moved when the battle is over/)
+    assert.match(moved.body.error, /army is in the field .*Your officers can be moved when the battle is over/)
     const named = await app.api('POST', `/api/commander/${red.token}/name`, { unit: 'praetorian guard', name: 'iron wolves' })
     assert.equal(named.status, 409)
-    assert.match(named.body.error, /His units can be named when the battle is over/)
+    assert.match(named.body.error, /Your units can be named when the battle is over/)
     assert.equal((await app.api('GET', `/api/commander/${red.token}`)).body.officers[0].leads, 'praetorian guard')
   } finally { await app.close() }
 })

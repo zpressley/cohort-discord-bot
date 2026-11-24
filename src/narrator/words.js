@@ -502,3 +502,53 @@ const BATTLE_OVER = {
 }
 
 module.exports.BATTLE_OVER = BATTLE_OVER
+
+// What kind of men a unit is, worked out from its kit, for the Army tab
+// ("levy skirmishers", "elite lancers"): its quality, then its kind. The
+// engine's role (army/builder.js, roleFor) goes by the weapon alone and is
+// for finding units by an order's words; this is what the player reads.
+//   on horse: horse archers (a bow), lancers (the kontos), light horse
+//     (javelins), else cavalry
+//   on foot: archers or crossbowmen (they shoot), slingers, skirmishers
+//     (javelins in hand, or javelins with no more than light armour and a
+//     light shield: velites, peltasts), pikemen (pike, sarissa), spearmen,
+//     heavy infantry (medium armour or more, or a heavy shield), else
+//     infantry
+// A unit is { quality, primaryWeapon, thrown?, armor, shield, mounted }, as
+// the battle has it (army/builder.js, toBattleUnits). Its weapons are known
+// by what KIT.unit calls the men who carry them.
+const KIND = {
+  quality: { levy: 'levy', militia: 'militia', tribal_warriors: 'tribal', professional: 'professional', veteran_mercenary: 'mercenary', elite: 'elite' },
+  lightArmour: ['no_armor', 'light_armor'],
+  lightShield: ['no_shield', 'light_shield']
+}
+function kindWords(unit) {
+  const called = (weapon) => KIT.unit[weapon] ?? ''
+  const first = called(unit.primaryWeapon)
+  const javelins = called(unit.thrown) === 'javelins'
+  const lightArmour = KIND.lightArmour.includes(unit.armor ?? 'no_armor')
+  const light = lightArmour && KIND.lightShield.includes(unit.shield ?? 'no_shield')
+  let kind
+  if (unit.mounted) {
+    kind = first === 'archers' ? 'horse archers' : first === 'lancers' ? 'lancers' : (javelins || first === 'javelins') ? 'light horse' : 'cavalry'
+  } else if (first === 'archers') kind = 'archers'
+  else if (first === 'crossbows') kind = 'crossbowmen'
+  else if (first === 'slingers') kind = 'slingers'
+  else if (first === 'javelins' || first === 'darts' || (javelins && light)) kind = 'skirmishers'
+  else if (first === 'pikes') kind = 'pikemen'
+  else if (first === 'spears' || first === 'long spears' || first === 'lancers') kind = 'spearmen'
+  else if (!lightArmour || unit.shield === 'heavy_shield') kind = 'heavy infantry'
+  else kind = 'infantry'
+  const quality = KIND.quality[unit.quality] ?? String(unit.quality ?? '').replace(/_/g, ' ')
+  return [quality, kind].filter(Boolean).join(' ')
+}
+
+module.exports.kindWords = kindWords
+
+// A battle fought on the next day is one battle (Your battles, a
+// Commander's record, his officers' records): its title, and over how many
+// days it was fought. One that night ended, with no next day fought, in
+// the list of your battles.
+const COUNT_WORDS = { 2: 'two', 3: 'three', 4: 'four', 5: 'five', 6: 'six', 7: 'seven', 8: 'eight', 9: 'nine', 10: 'ten' }
+NIGHT.overDays = (days) => `fought over ${COUNT_WORDS[days] ?? days} days`
+NIGHT.listed = 'Night fell, and neither side had won'

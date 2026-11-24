@@ -4212,3 +4212,99 @@ line).
 - **The AI's instructions** gained two lines: the Commander is "you", and
   ground not yet held an hour has not won the field. Not measured live
   again: the task allowed one AI battle, and it was spent finding this.
+
+### How the app's rough spots were smoothed (Claude's choices, open to change)
+
+From the playthrough of November 24 (`docs/REVIEW-2026-11.md`, D5 to D10
+and D12). Zach asked for the game to be solid and for no small questions;
+each was decided here. No rule changed: the engine, the planner and
+`npm run balance` are untouched.
+
+- **D5. Army changes are kept in the page as they are made**, not warned
+  about. Every change on the army screen (a unit bought, changed,
+  dismissed, let go, even a unit half chosen) is kept in this browser at
+  once; leaving by "Muster", a link or a reload loses none of it, and the
+  screen opens with it ("Your changes from last time are here, not yet
+  kept"). "Keep this army" is still the moment it becomes his army; the
+  muster says plainly when changes wait unkept, and "Undo your changes"
+  drops them. Chosen over a warning before leaving because a warning can be
+  tapped through, and a phone's back gesture or a closed tab gives none;
+  this cannot lose his work. The other reading was a draft on the server:
+  it would follow him to another device, at the cost of a new route and
+  saved state for no gain he asked for. Changes made to an army that has
+  been kept again since (from another tab) are dropped, not merged.
+- **D6. The Commander is "you" wherever the player reads about his own**:
+  Your officers ("Your record", "Your army is ready to muster", "Buy your
+  own army", "You were killed at ..."), the army screen, "Who leads?", the
+  muster's buy line, an officer's record ("given up ... for your
+  freedom"), and the server's refusals while his army is in the field
+  ("Your army is in the field ..."). Left as "he": officers, the other
+  side's Commander, and the refusal when choosing among several of your
+  Commanders one whose army is out, which names him so you know which.
+- **D7. A battle fought on the next day is one battle.** On the record,
+  in the company's count, in each officer's record and in "Your battles"
+  it is one, under its first day's title, "fought over two days", with
+  the last day's verdict. Built in the web app, not the engine: the
+  company is written in each day as before (so the wounded, the fallen
+  and a unit's losses of the first day stand), and when a next day is
+  written in, `oneBattle` (battles.js) takes back what counted it twice:
+  the battle count, each unit's battles toward an officer, an officer's
+  second line in his record and his second day's experience, and what the
+  men banked twice (each unit's total experience is the lesser of before
+  and after the second day: the experience its fallen took with them stays
+  taken). His loyalty moves with each day's outcome, as it did. The day
+  before stays in the browser's list until its next day exists, then the
+  list leaves it out. A battle night ended with no next day reads "Night
+  fell, and neither side had won". Guessed: that the men should bank it
+  once too (the task named only the officers); the other reading is that
+  two days' fighting is two days' experience for the men.
+- **D8. Labels on the map are placed together, last**: yours first, then
+  the enemy in sight, then word by rider, then the enemy last seen; each
+  goes under its cluster, a line or two lower, or above, wherever it lies
+  on the fewest labels already placed and on the ground's own name. The
+  enemy's are worded as the rest of the app words them ("enemy praetorian
+  guard", "3 enemy units", "enemy, last seen 20 min ago"), and the Army
+  tab's list of the enemy says "Enemy legionaries". Each enemy counter
+  also carries a mark of its own, a corner cut in ink, so colour is not
+  the only difference. A tap on your own stack already names them; a tap
+  on the enemy's does not (left: it would need the place hint to list
+  enemies, and the Army tab does).
+- **D9. A unit's kind in words is worked out from its whole kit**
+  (`words.js`, `kindWords`), not its weapon alone. On horse: horse
+  archers, lancers (the kontos), light horse (javelins), else cavalry. On
+  foot: archers, crossbowmen, slingers, skirmishers (javelins in hand, or
+  javelins with no more than light armour and a light shield), pikemen,
+  spearmen, heavy infantry (medium armour or more, or a heavy shield),
+  else infantry. Quality reads as an adjective ("tribal", "mercenary").
+  Checked against every usual army and elite of the twenty factions; the
+  words that changed: Rome's velites (levy heavy infantry to levy
+  skirmishers), Macedon's peltasts (professional spearmen to professional
+  skirmishers), Thrace's spearmen and peltast guard (to skirmishers),
+  every slinger unit (archers to slingers), Han's crossbows
+  (crossbowmen), every pike and sarissa unit (pikemen), every kontos unit
+  (lancers), every bow on horse (horse archers), Numidian horse and the
+  Blue Men (light horse), Germania's framea men (heavy infantry to
+  spearmen), and foot with swords or axes and no more than light armour
+  (Gauls, Iberians, Berber swordsmen, Han swords, Celtic warriors, German
+  axemen, rhomphaia men: heavy infantry to infantry). The engine's `role`
+  (army/builder.js, `roleFor`) is not changed: it is not shown to the
+  player now, and it is what orders find units by ("heavy infantry
+  advance") and what the computer's planner and the order reader use, so
+  changing it would change how battles fall out. The other reading was to
+  change `roleFor` itself, one rule for both; it would need the
+  interpreter's and the planner's owners. Guessed: that Thrace's
+  spear-and-javelin men are skirmishers (they are the Thracian peltasts),
+  though the faction names them "spearmen".
+- **D10. After a turn the map comes back to your army** unless you moved
+  it yourself since the turn began (since the map opened or the last
+  dispatch came in): a scroll the page made itself does not count, one by
+  finger, mouse, wheel, pinch or button does. The other reading of "since
+  the turn began" was "since you sent your orders"; that would undo a look
+  at the enemy taken while writing them. Two buttons at the top left of
+  the map, "Your army" (the whole army in the window, zoomed out if it
+  must be, no further than the whole field) and "You" (the unit you ride
+  with, or where you are held; hidden with no Commander on the field).
+- **D12. A Commander made from a friend's link leads at once**: the
+  making screen marks him for that battle in this browser, and "Who
+  leads?" takes him straight on (also after buying his army first). If
+  that fails (the battle began meanwhile), the choice is shown as before.
