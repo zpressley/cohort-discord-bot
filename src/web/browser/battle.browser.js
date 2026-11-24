@@ -104,6 +104,8 @@ test('alone, on a phone: muster, an order written on the map, turns to a verdict
     await p.waitForSelector('.readback')
     assert.equal(await p.locator('.question').count(), 0, 'every example is understood')
     await p.click('#clear')
+    // The empty box shows orders in his own units' names, not "spears" he has not got.
+    assert.match(await p.getAttribute('#orders', 'placeholder'), /^Sarissa foot 1 to the Crownhill; if the enemy is there, hold\nSarissa foot 2 to [A-J]\d+(-[NS][EW])?, then advance\nPeltasts hold$/)
 
     // The Army tab: Macedon's army, and you ride with its elite unit.
     await p.click('[data-tab="army"]')
@@ -134,6 +136,10 @@ test('alone, on a phone: muster, an order written on the map, turns to a verdict
     await p.click('[data-choice] >> nth=0')
     await p.waitForSelector('.readback')
     assert.doesNotMatch(await p.inputValue('#orders'), /the ford/)
+    // Sending only an order that needs an answer sends nothing, and says so.
+    await p.fill('#orders', 'everyone else hold')
+    await p.click('#send')
+    await p.waitForSelector('text=Nothing was sent: your officers need an answer first')
     await p.fill('#orders', 'everyone advance')
     await p.click('#send')
     await p.waitForSelector('.dispatch')
@@ -275,6 +281,8 @@ test('on a phone: a new Commander buys his army, is told why a pick is refused, 
     // He starts from the usual army; the elite is free and not for sale.
     assert.match(await p.textContent('#budget'), /26 of 30 supply points/)
     assert.match(await p.textContent('.buy-unit.elite'), /Yulin guard[\s\S]*Free[\s\S]*Not for sale/)
+    // Before his first battle the elite's officer is the veteran the making promised, not "no officer yet".
+    assert.match(await p.textContent('.buy-unit.elite'), /Officer: your veteran, who leads them from your first battle/)
     assert.equal(await p.locator('.buy-unit.elite [data-dismiss]').count(), 0)
     while (await p.locator('[data-dismiss]').count()) {
       const n = await p.locator('[data-dismiss]').count()

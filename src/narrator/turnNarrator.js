@@ -16,6 +16,7 @@ const { gridLabel } = require('../engine/map/grid')
 const { RIDER_TAKEN } = require('./words')
 const { BATTLE_OVER } = require('./words')
 const { PLACE } = require('./words')
+const { REPORT } = require('./words')
 
 // Where a tile is, in words: the feature it is part of, or the nearest
 // feature with a name, or open ground near the nearest feature.
@@ -476,7 +477,7 @@ function toTheCommander(event, ownIds) {
 
 // The ground to fight for, told to one side (turn.side) as its own or the
 // enemy's: every side knows at once when it changes hands.
-function toTheSide(event, side) {
+function toTheSide(event, side, over = false) {
   // The battle's end, in the side's own words (not "Red won (enemy army
   // broken)"); night is told by its own line.
   if (event.type === 'victory' && side) {
@@ -484,8 +485,10 @@ function toTheSide(event, side) {
     return BATTLE_OVER.line(event.reason, event.winner === 'draw' ? null : event.winner === side)
   }
   if (event.type !== 'objective' || !side) return null
-  if (event.close) return GROUND.close(event.name, event.side === side, event.close)
-  if (event.side) return GROUND.took(event.name, event.side === side)
+  // Once the battle is over, holding the ground decides nothing: no "hold
+  // it alone and the field is yours" after "the battle is over".
+  if (event.close) return over ? '' : GROUND.close(event.name, event.side === side, event.close)
+  if (event.side) return over ? GROUND.tookAtTheEnd(event.name, event.side === side) : GROUND.took(event.name, event.side === side)
   return event.was ? GROUND.lost(event.name, event.was === side) : null
 }
 
@@ -498,9 +501,12 @@ function report(turn) {
   const fights = digest(told, { map, ownIds, whereIs: turn.whereIs })
   const rest = told.filter(e => !FIGHTING.has(e.type))
   const busy = fights.length > 0 || rest.some(e => weight(e) <= 4)
+  // The battle ended in this stretch (turn.over: decided by the ground or a
+  // bargain, which leave no event of their own).
+  const over = Boolean(turn.over) || told.some(e => e.type === 'victory')
   const others = rest
     .filter(e => !busy || weight(e) < 6)
-    .map(e => ({ weight: weight(e), text: toTheCommander(e, ownIds) ?? toTheSide(e, turn.side) ?? plainFact(map, e, turn.howMany ?? countAll) }))
+    .map(e => ({ weight: weight(e), text: toTheCommander(e, ownIds) ?? toTheSide(e, turn.side, over) ?? plainFact(map, e, turn.howMany ?? countAll) }))
     .filter(f => f.text)
 
   return [...fights, ...others]
@@ -508,9 +514,26 @@ function report(turn) {
     .sort((x, y) => x.weight - y.weight || x.i - y.i)
     // (The same line twice, "Enemy velites was pinned with nowhere to give
     // way" for two ticks, is told once.)
-    .filter((f, i, all) => all.findIndex(g => g.text === f.text) === i)
+    .map(f => ({ ...f, text: troopsTogether(nameOf(f.text)) }))
+    // Lines the same once named, "Enemy troops marched 75 m south-west ..."
+    // for three units he cannot tell apart, are one line saying how many.
+    .reduce((out, f) => {
+      const same = out.find(g => g.text === f.text)
+      if (same) same.n += 1
+      else out.push({ ...f, n: 1 })
+      return out
+    }, [])
     .slice(0, MAX_FACTS)
-    .map(f => nameOf(f.text))
+    .map(f => (f.n > 1 && /^enemy troops\b(?! \()/i.test(f.text) ? f.text.replace(/^(enemy troops)/i, `$1 (${f.n} units)`) : f.text))
+}
+
+// Enemy units he cannot tell apart, named in one list ("was shot at by
+// enemy troops, enemy troops and enemy troops"), are said once with how
+// many: "enemy troops (3 units)".
+function troopsTogether(text) {
+  const one = `enemy ${REPORT.troops}`
+  return text.replace(new RegExp(`\\b([Ee])${one.slice(1)}((?:, ${one})*(?: and ${one}))(?! \\()`, 'g'),
+    (all, e) => `${e}${one.slice(1)} (${all.split(one.slice(1)).length - 1} units)`)
 }
 
 // How an officer of each culture writes. A culture not listed here gets the
@@ -536,13 +559,15 @@ You are given the facts as notes, the most important first. Turn them into a dis
 
 - Keep the order: open with the first note. A note that starts with a unit's name and a colon is the whole story of that unit's fighting. "lost 12 men and killed 20" means that unit lost 12 and its enemies lost 20: keep every number with the unit it belongs to.
 - Write prose, not notes: full sentences in the past tense, no colons after names, no semicolons, no lists, no headings, no greeting or sign-off. Vary the wording; do not copy the notes word for word.
-- One short paragraph: 2 to 4 sentences for a quiet stretch, at most 6 for a hard one.
-- Use only what the notes say. Never add a unit, place, number, cause or outcome, and never guess what the enemy intends. Every number you write must be in the notes.
-- Write unit names exactly as given ("Spears", "enemy horse"). "An unseen enemy" and "enemy troops" stay exactly that: never say what kind they are or how many.
+- One short paragraph: 2 to 4 sentences for a quiet stretch, at most 8 for a full one.
+- Use only what the notes say. Never add a unit, place, number, cause or outcome, never say who holds or controls a place unless a note says so, and never guess what the enemy intends. Every number you write must be in the notes.
+- Write unit names exactly as given ("Spears", "enemy horse"). "An unseen enemy" and "enemy troops" stay exactly that: never say what kind they are, or how many beyond what the note says.
 - The commander gives orders by grid square, so keep the place and the grid square from the notes whenever a note has one, for example "at the ford (D4-SW)". Never work out or invent a square.
 - No advice, no questions, no mention of turns, rules or dice.
-- Speak to the commander as "you". What happened to him is "you were taken", never "we were taken" or "the commander was taken".
-- A note on the ground to fight for says only how things stand now: "hold it 30 min more and the field is yours" means the field is not yet won. Never say the field is won, secured or yours unless a note says the battle is over.
+- Tell every note, with its place and square: what was seen ("report enemy ...") as much as the fighting. You may shorten the rule of the ground to fight for, but keep its name.
+- Speak to the commander as "you". What happened to him is "you were taken", never "we were taken" or "the commander was taken". But nothing happened to him unless a note says so in those words: never say he was taken, killed or wounded otherwise.
+- A note on the ground to fight for says only how things stand now: "hold it 30 min more and the field is yours" means the field is not yet won, and "you took it: hold it alone and the field is yours" means it must still be held. Never say the field is won, secured or yours unless a note says the battle is over.
+- A note that says the battle is over comes first, and you open with it in its own words.
 
 Example notes:
 - Guards: fought enemy axes at North Ford (D4-SW); lost 9 men and killed 21; broke enemy axes, cutting down 5 as they ran, and holds firm
@@ -565,7 +590,11 @@ async function narrateTurn(ai, turn) {
   const nameOf = turn.nameOf ?? ((text) => text)
   // Most important first, and already worked out unit by unit, so a small
   // model retells the news without having to judge or add anything up.
-  const facts = report(turn)
+  // (turn.facts: the plain account's own lines, when the caller has built
+  // them: the ground, whom he faces, what his men saw, word by rider and
+  // the battle's end, which the events alone do not hold. The AI words the
+  // same report the player would otherwise read.)
+  const facts = turn.facts ?? report(turn)
   if (!ai || !ai.configured || facts.length === 0) return { text: plain, source: 'plain' }
 
   const own = nameOf([...ownIds].join(', '))
@@ -575,7 +604,7 @@ async function narrateTurn(ai, turn) {
     ...facts.map(f => `- ${f}`)
   ].join('\n')
   const reply = await ai.complete({
-    purpose: 'narrate-turn', system: system(culture), user, maxTokens: 320, temperature: 0.5,
+    purpose: 'narrate-turn', system: system(culture), user, maxTokens: 420, temperature: 0.5,
     ...(turn.effort ? { effort: turn.effort } : {})
   })
   if (!reply.ok || !reply.text || !reply.text.trim()) return { text: plain, source: 'plain' }

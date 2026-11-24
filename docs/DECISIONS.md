@@ -4980,3 +4980,43 @@ to every unit (it is how men cross water, not how the computer thinks);
 the other reading keeps it the computer's alone, and a player's own units
 may pace the banks until he names the ford. That the field's forming-up
 places are known to both Commanders (the planner's own reading, kept).
+
+### How the second playthrough's fixes were built (Claude's choices, open to change)
+
+From the second playthrough (`docs/REVIEW-2026-11.md`, "Second
+playthrough, November 24", N1 to N8). No ruling changed; nothing in the
+engine, the planner or the interpreter was touched.
+
+- **The AI words the plain account's own lines** (`turnNarrator.js`,
+  `narrateTurn` takes `facts`; `battles.js` passes the dispatch's lines).
+  Before, it was given the events alone and never saw the ground, whom he
+  faced, what was sighted, word by rider or the battle's end, which the
+  plain account adds after. Four lines were added to its instructions:
+  tell every note, sightings too; nothing befell the Commander unless a
+  note says so (the model had copied "you were taken" from the
+  instruction that says how to say it); "you took it: hold it alone"
+  means it must still be held; open with the battle's end. And one for a
+  phrase it made up: never say who holds a place unless a note says so.
+  Up to 8 sentences (6) and 420 tokens (320), for a first dispatch with
+  five sightings. Measured: the same two battles replayed (Ashford seed
+  486254; Thornwood seed 413654 against a friend, the Commander taken):
+  before, one invented capture, one field said to be won 30 min early, the
+  battle's end and the first sightings left out; after, none of these.
+  The benchmark's dispatch check failed once after (it opened with the
+  spears, not the rout); it has failed 1 run in 4 before. Guessed: that a
+  longer dispatch is worth its tokens (about $0.0001 more a turn).
+- **Ground advice ends with the battle** (`report`, `turn.over`;
+  `GROUND.tookAtTheEnd`): "you took Raven Gap", with no "hold it alone",
+  in the dispatch that ends it.
+- **Enemy troops he cannot tell apart are counted once named**:
+  "enemy troops (3 units)", in a list or in lines alike. Lines are now
+  told once after they are named, not before.
+- **The empty orders box shows his own units** in the same three kinds
+  of order the old one showed (to a place on a condition, a step then
+  advance, hold); with no ground, a grid square.
+- **Send with only a question says nothing was sent**, and how on.
+- **The elite before the first battle**: "Officer: your veteran, who
+  leads them from your first battle", as the making screen promised.
+- **A new unit's number fills a gap** where its fellows are numbered from
+  1 ("Horse archers 1, 2, 3"); where the first is unnumbered the next is 2,
+  as before.

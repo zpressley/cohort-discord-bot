@@ -326,3 +326,15 @@ test('a second weapon is one more choice on the army screen, priced, kept with t
     assert.deepEqual(bad.body.errors, ['Legionaries: the sword is a sidearm for men who shoot'])
   } finally { await app.close() }
 })
+
+// Second playthrough, November 24: Sarmatia's "Horse archers 1" changed to
+// riders and back to horse archers came out "Horse archers 4" beside 2 and 3.
+test('a unit changed and changed back takes the first free number among its fellows: "horse archers 1" beside 2 and 3, not 4', () => {
+  const { nextName } = require('../armies')
+  const bow = { weapon: 'self_bow_basic', mounted: true }
+  assert.equal(nextName('sarmatia', bow, ['horse archers 2', 'horse archers 3']), 'horse archers 1')
+  // Where the first of a name is unnumbered, the next is 2, as before.
+  assert.equal(nextName('sarmatia', bow, ['horse archers']), 'horse archers 2')
+  assert.equal(nextName('sarmatia', bow, ['horse archers', 'horse archers 2']), 'horse archers 3')
+  assert.equal(nextName('sarmatia', bow, []), 'horse archers')
+})

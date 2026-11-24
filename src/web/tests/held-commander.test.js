@@ -138,7 +138,7 @@ test('fog of war, held: his map holds only what can be seen from where he is hel
     await app.api('POST', `/api/seat/${seats.blue}/orders`, { text: 'everyone advance' })
     const after = (await app.api('GET', `/api/seat/${seats.red}`)).body
     const dispatch = after.dispatches[0]
-    assert.match(dispatch.lines[0], /^You are held by enemy .+, and hear the reports as they come in to your captors$/)
+    assert.match(dispatch.lines[0], /^You are held by enemy .+ at [A-J]\d{1,2}-(NW|NE|SW|SE), and hear the reports as they come in to your captors$/)
     // What blue was told of the same turn, in blue's own names, is what he read.
     const theirs = (await app.api('GET', `/api/seat/${seats.blue}`)).body.dispatches[0]
     assert.equal(theirs.turn, dispatch.turn)
