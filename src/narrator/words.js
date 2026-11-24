@@ -241,7 +241,9 @@ const GROUND = {
   // ... in the dispatch that ends the battle, when holding it no longer
   // decides anything.
   tookAtTheEnd: (name, mine) => (mine ? `you took ${name}` : `the enemy took ${name}`),
-  lost: (name, wasMine) => (wasMine ? `you no longer hold ${name}` : `the enemy no longer holds ${name}`),
+  // Every side knows at once that it has changed hands, but not who is on
+  // it now: that comes by rider (S12). Only that it is no one's alone.
+  lost: (name, wasMine) => (wasMine ? `your men no longer hold ${name} alone: no word yet of who is on it` : `the enemy no longer holds ${name} alone: no word yet of who is on it`),
   // ... and when it is close to deciding the battle.
   close: (name, mine, minutes) => (mine
     ? `hold ${name} ${clock(minutes)} more and the field is yours`
@@ -658,3 +660,55 @@ const HELD_BACK = {
   line: (unit) => `${unit} rallied with no heart left, and will not go at the enemy: they hold where they stand, keeping your order, until a success near them puts heart back in them`
 }
 module.exports.HELD_BACK = HELD_BACK
+
+// The ground to fight for, told to a Commander in the enemy's hands (S11):
+// he can send no orders, so the lines speak of his army, not of what he
+// should do. Otherwise as GROUND.
+GROUND.held = {
+  took: (name, mine) => (mine ? `your army took ${name}: if it holds it alone, the field is yours` : `the enemy took ${name}: unless your army takes it from him, the field is his`),
+  close: (name, mine, minutes) => (mine
+    ? `your army has held ${name} long: ${clock(minutes)} more and the field is yours`
+    : `the enemy has held ${name} long: unless your army takes it from him within ${clock(minutes)}, the field is his`),
+  status: (name, mine, leftMinutes = null) => (mine === null
+    ? GROUND.status(name, null)
+    : mine ? `Your army holds ${name}, the ground to fight for${leftMinutes === null ? '.' : `: ${clock(leftMinutes)} more and the field is yours.`}`
+      : `The enemy holds ${name}, the ground to fight for${leftMinutes === null ? '.' : `: unless your army takes it within ${clock(leftMinutes)}, the field is his.`}`),
+  tookAtTheEnd: (name) => `your army took ${name}`
+}
+// The ground lost, when he knows already who is on it (S12): an enemy
+// reported there, when it was his (with his own men still there, or not);
+// his own men there, when it was the enemy's.
+GROUND.contested = (name, wasMine, withYours = true) => (wasMine
+  ? (withYours ? `the enemy is on ${name} with your men: you no longer hold it alone` : `you no longer hold ${name}: the enemy is on it`)
+  : `your men are on ${name} with the enemy's: he no longer holds it alone`)
+// The tent, under the map, once the ground has been held and is no one's
+// alone now: both sides may be on it, or neither (the dispatch's "no longer
+// hold it alone").
+GROUND.noOnesAlone = (name) => `The ground to fight for, ${name}, is held by neither side alone.`
+
+// The verdict's table (S9: "Fled 0" in every verdict, when his dispatches
+// told of units that broke and fled, then rallied or fell). For each side:
+// the men standing at the end of the men it went in with, the men fallen,
+// and the units that broke, each with what became of it, in the dispatch's
+// own words (broke, rallied, left the field, destroyed). The enemy's units
+// are those his side saw break.
+const VERDICT = {
+  head: { side: 'Side', standing: 'Standing', fallen: 'Fallen', broke: 'Broke' },
+  standing: (n, of) => `${n} of ${of}`,
+  // How many times a unit broke.
+  times: (n) => (n === 1 ? 'broke' : n === 2 ? 'broke twice' : `broke ${n} times`),
+  // ... and what became of it.
+  fate: {
+    rallied: (broke) => `${broke}, and rallied`,
+    fled: (broke, men) => `${broke}, and left the field${men ? ` with ${men}` : ''}`,
+    destroyed: (broke) => `${broke}, and were destroyed`,
+    fleeing: (broke) => `${broke}, and were still fleeing when the battle ended`,
+    // An enemy unit: no more than that his men saw it break.
+    seen: (broke) => broke
+  },
+  yours: 'Your units that broke',
+  theirs: 'Enemy units your men saw break',
+  // Under the table: what the numbers are.
+  note: 'Broke: units that broke and ran, whether they came back or not; of the enemy, only those your men saw.'
+}
+module.exports.VERDICT = VERDICT

@@ -189,7 +189,7 @@ test('a unit of his that catches an enemy rider tells its Commander the order he
       assert.deepEqual(taken.map(e => [e.side, e.unitId, e.to]), [['red', 'red_hastati', 'blue_slingers']])
       const tent = (await app.api('GET', `/api/seat/${seat}`)).body
       const line = tent.dispatches.flatMap(d => d.lines).find(l => l.includes("took one of the enemy's riders"))
-      assert.match(line ?? '', /^Hastati took one of the enemy's riders .*, carrying an order for enemy slingers: attack C6-/)
+      assert.match(line ?? '', /^Hastati took one of the enemy's riders .*, carrying an order for enemy slingers: attack (?:the Merchant Road \()?C6-/)
       assert.equal(JSON.stringify(tent).includes('blue_slingers'), false, 'the enemy named in his words, never by the engine\'s name')
     })
   } finally { await app.close() }

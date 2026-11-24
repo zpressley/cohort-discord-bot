@@ -43,7 +43,7 @@ test('facts are words: places by name or feature, with the grid square the playe
   assert.equal(placeName(map, at('T2')), 'on the Crownhill')
   assert.equal(placeName(map, at('W6')), 'at the North Ford')
   assert.equal(placeName(map, at('K18')), 'in a clearing')
-  assert.equal(placeName(map, at('F9')), 'on the road')
+  assert.equal(placeName(map, at('F9')), 'on the Merchant Road')
   assert.match(fact(map, events[0]), /^red_spears marched 75 m east, now in open ground .* \(B2-SE\)$/)
 })
 
@@ -62,7 +62,7 @@ test('a turn of several ticks is boiled down: one move per unit, one fight per p
   const told = summarise(raw).map(e => fact(map, e))
   assert.equal(told.length, 2)
   assert.match(told[0], /^red_spears marched 150 m east, .*halted by blue_swords$/)
-  assert.match(told[1], /^blue_swords and red_spears fought for 20 minutes: blue_swords lost 16 men, red_spears lost 19; red_spears is wavering$/)
+  assert.match(told[1], /^blue_swords and red_spears fought for 20 minutes: blue_swords lost 16 men, red_spears lost 19; red_spears are wavering$/)
 })
 
 test('the fighting is told unit by unit: who it fought, the cost, who broke, most important first', () => {
@@ -88,7 +88,7 @@ test('the fighting is told unit by unit: who it fought, the cost, who broke, mos
   const lines = report(turn)
   assert.deepEqual(lines, [
     'red_archers: fought blue_horse in open ground 25 m north-east of the woods (A2-SE); lost 19 men and killed 2, then BROKE and fled from blue_horse, losing 8 more in flight',
-    'red_spears: fought blue_swords in open ground 100 m south-west of the woods (B2-SE); lost 6 men and killed 14; drove blue_swords back; broke blue_swords, cutting down 7 as they ran, and holds firm'
+    'red_spears: fought blue_swords in open ground 100 m south-west of the woods (B2-SE); lost 6 men and killed 14; drove blue_swords back; broke blue_swords, cutting down 7 as they ran, and hold firm'
   ])
 })
 
@@ -179,7 +179,7 @@ test('shooting is told with the fighting: who shot whom, and what it cost', () =
     events: [volley('red_archers', 'blue_swords', 2), volley('red_archers', 'blue_swords', 3), volley('blue_scouts', 'red_spears', 1)]
   })
   assert.ok(told.includes('red_archers: shot at blue_swords, felling 5 men'), told.join(' / '))
-  assert.ok(told.includes('red_spears: was shot at by an unseen enemy, losing 1 man'), told.join(' / '))
+  assert.ok(told.includes('red_spears: were shot at by an unseen enemy, losing 1 man'), told.join(' / '))
 })
 
 test('javelins and pila thrown as the fighting begins are told first, in the kit\'s own words, to both sides', () => {
@@ -203,7 +203,7 @@ test('an officer reacting as ordered, or losing the thread, is told to his own s
   const reacted = { type: 'reacted', turn: 4, unitId: 'red_spears', when: 'sees', kind: 'cavalry', action: 'hold', target: null }
   const lost = { type: 'lostThread', turn: 4, unitId: 'red_archers', officer: 'Marcus', lost: 'steps', did: 'advance' }
   const roll = { type: 'grasp', turn: 1, unitId: 'red_spears', officer: 'Marcus', clauses: 2, kept: 1 }
-  assert.equal(fact(map, reacted), 'red_spears saw the enemy it was warned of (cavalry) and, as ordered, held')
+  assert.equal(fact(map, reacted), 'red_spears saw the enemy they were warned of (cavalry) and, as ordered, held')
   assert.equal(fact(map, lost), 'Marcus of red_archers lost the thread of his orders once the first part was done and advanced on the enemy')
   assert.deepEqual(visibleEvents([reacted, lost, roll], knowledge), [reacted, lost])
   const theirs = { ownIds: new Set(['blue_swords']), seenEnemyIds: new Set(['red_spears', 'red_archers']) }
@@ -234,12 +234,12 @@ test('the ground to fight for is told to each side as its own or the enemy\'s: t
   assert.deepEqual(told('red', ['red_spears']), [
     'the enemy took the Old Mill Bridge: take it from him, or the field is his',
     'the enemy has held the Old Mill Bridge long: unless you take it from him within 30 min, the field is his',
-    'the enemy no longer holds the Old Mill Bridge'
+    'the enemy no longer holds the Old Mill Bridge alone: no word yet of who is on it'
   ])
   assert.deepEqual(told('blue', ['blue_swords']), [
     'you took the Old Mill Bridge: hold it alone and the field is yours',
     'hold the Old Mill Bridge 30 min more and the field is yours',
-    'you no longer hold the Old Mill Bridge'
+    'your men no longer hold the Old Mill Bridge alone: no word yet of who is on it'
   ])
   // Every side hears of it at once, whatever it can see.
   assert.equal(visibleEvents(ground, { ownIds: new Set(), seenEnemyIds: new Set() }).length, 3)
@@ -266,7 +266,7 @@ test('the AI is told to speak to the Commander as "you", and that ground not yet
 test('the same line twice in a stretch is told once', () => {
   const pinned = { type: 'crush', unitId: 'blue_velites' }
   const told = report({ map: null, side: 'red', ownIds: new Set(['red_spears']), seenEnemyIds: new Set(['blue_velites']), events: [{ ...pinned, turn: 1 }, { ...pinned, turn: 2 }] })
-  assert.deepEqual(told, ['blue_velites was pinned with nowhere to give way'])
+  assert.deepEqual(told, ['blue_velites were pinned with nowhere to give way'])
 })
 
 test('a unit that broke off a fight losing one man is told "1 man", not "1 men"', () => {
@@ -299,7 +299,7 @@ test('enemy units he cannot tell apart are said once, with how many: "enemy troo
   const nameOf = (t) => t.replace(/blue_\w+/g, 'enemy troops').replace(/red_spears/g, 'Spears')
   const seen = (ids) => ({ map: null, side: 'red', ownIds: new Set(['red_spears']), seenEnemyIds: new Set(ids), nameOf })
   const pinned = report({ ...seen(['blue_a', 'blue_b', 'blue_c']), events: ['blue_a', 'blue_b', 'blue_c'].map(id => ({ type: 'crush', turn: 2, unitId: id })) })
-  assert.deepEqual(pinned, ['enemy troops (3 units) was pinned with nowhere to give way'])
+  assert.deepEqual(pinned, ['enemy troops (3 units) were pinned with nowhere to give way'])
   const fell = report({ ...seen(['blue_a', 'blue_b']), events: [{ type: 'gaveGround', turn: 2, unitId: 'red_spears', from: ['blue_a', 'blue_b'], to: at('E7') }] })
   assert.deepEqual(fell, ['Spears fell back before enemy troops (2 units), keeping out of their reach'])
 })
@@ -318,4 +318,64 @@ test('the AI words the same lines as the plain account, and is told nothing befe
   assert.match(sent.system, /nothing happened to him unless a note says so in those words/)
   assert.match(sent.system, /A note that says the battle is over comes first, and you open with it/)
   assert.match(sent.system, /never say who holds or controls a place unless a note says so/)
+})
+
+// Second playthrough, November 24 (docs/REVIEW-2026-11.md, S11 to S13).
+test('one place has one name to both sides: a fight on the road beside Brook Ford is at Brook Ford to each', () => {
+  const thornwood = resolveMap('thornwood')
+  // F6-NW: the road at one tile, the ford at the next.
+  assert.equal(thornwood.terrainAt({ x: 20, y: 20 }), 'road')
+  assert.equal(thornwood.terrainAt({ x: 21, y: 20 }), 'ford')
+  assert.equal(placeName(thornwood, { x: 20, y: 20 }), 'at Brook Ford')
+  assert.equal(placeName(thornwood, { x: 21, y: 20 }), 'at Brook Ford')
+})
+
+test('a unit is plural in every line: "were pinned", "arrived and hold it", "1 man"; an unseen enemy alone is one', () => {
+  assert.equal(fact(map, { type: 'crush', unitId: 'Hastati' }), 'Hastati were pinned with nowhere to give way')
+  assert.equal(fact(map, { type: 'arrived', unitId: 'enemy troops', at: at('T2'), then: 'hold' }), 'enemy troops arrived on the Crownhill (E1-NE) and hold it')
+  assert.equal(fact(map, { type: 'destroyed', unitId: 'Levy' }), 'Levy were destroyed')
+  assert.equal(fact(map, { type: 'hidden', unitId: 'Slingers', at: at('T2') }), 'Slingers went into hiding on the Crownhill (E1-NE) and are hidden')
+  assert.equal(fact(map, { type: 'surprise', unitId: 'Velites', by: 'enemy horse' }), 'Velites were caught on the march by enemy horse, unseen until they struck')
+  assert.match(fact(map, { type: 'exchange', rounds: 1, a: { unitId: 'Spears', killed: 1, morale: 40 }, b: { unitId: 'enemy axes', killed: 3, morale: 80 } }), /^Spears and enemy axes fought: Spears lost 1 man, enemy axes lost 3; Spears are wavering$/)
+  assert.equal(fact(map, { type: 'crowding', unitId: 'Axemen', at: at('T2'), men: 300, tier: 'critical' }), 'Axemen\'s ranks were critical: 300 men packed onto one spot on the Crownhill (E1-NE), which blunts their fighting')
+  // The one enemy no one saw is one.
+  assert.equal(fact(map, { type: 'crush', unitId: 'red_x' }, () => false), 'an unseen enemy was pinned with nowhere to give way')
+})
+
+test('ground lost is told as no longer his alone, with no word yet of who is on it: that comes by rider', () => {
+  const lost = { type: 'objective', turn: 7, objectiveId: 'ground-1', name: 'the Crownhill', side: null, was: 'red' }
+  assert.deepEqual(report({ map, side: 'red', ownIds: new Set(['red_spears']), seenEnemyIds: new Set(), events: [lost] }),
+    ['your men no longer hold the Crownhill alone: no word yet of who is on it'])
+})
+
+test('a Commander in the enemy\'s hands is told what his army must do with the ground, never what he should do', () => {
+  const ground = [
+    { type: 'objective', turn: 3, objectiveId: 'ground-1', name: 'the Crownhill', side: 'blue', was: null },
+    { type: 'objective', turn: 6, objectiveId: 'ground-1', name: 'the Crownhill', side: 'blue', was: 'blue', close: 30 }
+  ]
+  const held = report({ map, side: 'red', ownIds: new Set(['blue_swords']), seenEnemyIds: new Set(), events: ground, held: true })
+  assert.deepEqual(held, [
+    'the enemy took the Crownhill: unless your army takes it from him, the field is his',
+    'the enemy has held the Crownhill long: unless your army takes it from him within 30 min, the field is his'
+  ])
+  const ours = report({ map, side: 'blue', ownIds: new Set(['red_spears']), seenEnemyIds: new Set(), events: ground, held: true })
+  assert.deepEqual(ours, [
+    'your army took the Crownhill: if it holds it alone, the field is yours',
+    'your army has held the Crownhill long: 30 min more and the field is yours'
+  ])
+  assert.ok(![...held, ...ours].some(l => /\byou (take|hold)\b|^hold /.test(l)))
+})
+
+test('ground lost when he already knows who is on it says so: the enemy is on it, with his men or without', () => {
+  const lost = { type: 'objective', turn: 7, objectiveId: 'ground-1', name: 'the Crownhill', side: null, was: 'red' }
+  const told = (onGround, side = 'red') => report({ map, side, ownIds: new Set(['red_spears']), seenEnemyIds: new Set(), events: [lost], onGround: () => onGround })
+  assert.deepEqual(told({ enemy: true, own: true }), ['the enemy is on the Crownhill with your men: you no longer hold it alone'])
+  assert.deepEqual(told({ enemy: true, own: false }), ['you no longer hold the Crownhill: the enemy is on it'])
+  assert.deepEqual(told({ enemy: false, own: true }), ['your men no longer hold the Crownhill alone: no word yet of who is on it'])
+  assert.deepEqual(told({ own: true }, 'blue'), ['your men are on the Crownhill with the enemy\'s: he no longer holds it alone'])
+})
+
+test('the AI is told that "no word yet of who is on it" means he does not know who is', () => {
+  const { system } = require('../turnNarrator')
+  assert.match(system(), /"No word yet of who is on it" means he does not know: never say who is on it\./)
 })

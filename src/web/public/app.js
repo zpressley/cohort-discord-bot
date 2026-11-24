@@ -1124,6 +1124,7 @@ async function tent(token) {
           <button class="btn" type="button" id="find-you">You</button>
         </div>
         <div class="map-hint" id="map-hint"></div>
+        <div id="ground-marks"></div>
       </section>
       <aside class="panel" aria-label="Army, orders and dispatches">
         <div class="tabs" role="tablist" id="tabs"></div>
@@ -1146,10 +1147,16 @@ async function tent(token) {
     const left = scroll.scrollLeft
     const top = scroll.scrollTop
     const showing = state.shown ?? state.view
-    scroll.innerHTML = drawMap(onMap(showing), { selectedId: state.picked })
+    // The map is drawn for its zoom, so that its words read at a readable
+    // size (map.js, LABEL_PX); the first time, at the zoom it opens at.
+    if (state.zoom === null) {
+      scroll.innerHTML = drawMap(onMap(showing), { selectedId: state.picked })
+      state.zoom = openingZoom(Number(scroll.querySelector('svg').getAttribute('width')))
+    }
+    scroll.innerHTML = drawMap(onMap(showing), { selectedId: state.picked, zoom: state.zoom })
+    drawnAt = state.zoom
     const svg = scroll.querySelector('svg')
     const W = Number(svg.getAttribute('width'))
-    if (state.zoom === null) state.zoom = Math.max(scroll.clientWidth / W, 15 / TILE)
     svg.style.width = `${Math.round(W * state.zoom)}px`
     svg.style.height = 'auto'
     // (Put back as it was: not a move of his own.)
@@ -1166,6 +1173,78 @@ async function tent(token) {
       onPlace: (x, y) => { state.place = { x, y }; state.flash = null; renderHint() }
     })
     if (keepScroll) { scroll.scrollLeft = left; scroll.scrollTop = top }
+    markGround()
+  }
+
+  // ── Opening the map (docs/REVIEW-2026-11.md, S14) ──
+  // It opens with his army and the ground to fight for both in view when a
+  // zoom no smaller than READABLE (px a tile) shows them; else on his army,
+  // at about 15 px a tile on a phone, with a mark at the map's edge that
+  // points to the ground (markGround) and takes him there.
+  const READABLE = 12
+  const OPEN = 15
+  // The window less what the buttons at its head and the hint at its foot
+  // cover.
+  const CLEAR = 130
+  const usableHeight = () => Math.max(1, scroll.clientHeight - CLEAR)
+  const groundTiles = () => (state.view.objectives ?? []).flatMap(o => o.tiles)
+  // Your army and the ground, as tiles, with a margin.
+  function openingBox() {
+    const own = onMap(state.view).own
+    if (state.view.commander?.heldPosition || !own.length || !groundTiles().length) return null
+    const pts = [...own.map(u => u.position), ...groundTiles()]
+    const xs = pts.map(p => p.x)
+    const ys = pts.map(p => p.y)
+    return { x0: Math.min(...xs) - 2, x1: Math.max(...xs) + 3, y0: Math.min(...ys) - 2, y1: Math.max(...ys) + 3 }
+  }
+  function openingZoom(W) {
+    const usual = Math.max(scroll.clientWidth / W, OPEN / TILE)
+    const box = openingBox()
+    if (!box) return usual
+    const fit = Math.min(scroll.clientWidth / ((box.x1 - box.x0) * TILE), usableHeight() / ((box.y1 - box.y0) * TILE))
+    return fit * TILE >= READABLE ? Math.min(usual, fit) : usual
+  }
+  function openMap() {
+    const box = openingBox()
+    const svg = scroll.querySelector('svg')
+    const scale = svg.clientWidth / Number(svg.getAttribute('width'))
+    if (box && (box.x1 - box.x0) * TILE * scale <= scroll.clientWidth + 1 && (box.y1 - box.y0) * TILE * scale <= usableHeight() + 1) {
+      centreOn([{ position: { x: (box.x0 + box.x1 - 1) / 2, y: (box.y0 + box.y1 - 1) / 2 } }])
+    } else centreOnArmy()
+    markGround()
+  }
+  // A mark at the map's edge for each piece of the ground out of the
+  // window: its name and which way it lies. A tap brings it into view.
+  const ARROWS = ['→', '↘', '↓', '↙', '←', '↖', '↑', '↗']
+  function markGround() {
+    const marks = document.getElementById('ground-marks')
+    const svg = scroll.querySelector('svg')
+    if (!marks || !svg) return
+    const scale = svg.clientWidth / Number(svg.getAttribute('width'))
+    const vw = scroll.clientWidth
+    const vh = scroll.clientHeight
+    marks.innerHTML = (state.view.objectives ?? []).map((o, i) => {
+      const xs = o.tiles.map(t => (26 + t.x * TILE) * scale - scroll.scrollLeft)
+      const ys = o.tiles.map(t => (26 + t.y * TILE) * scale - scroll.scrollTop)
+      const [x0, x1, y0, y1] = [Math.min(...xs), Math.max(...xs) + TILE * scale, Math.min(...ys), Math.max(...ys) + TILE * scale]
+      if (x1 > 0 && x0 < vw && y1 > 0 && y0 < vh) return ''
+      const dx = (x0 + x1) / 2 - vw / 2
+      const dy = (y0 + y1) / 2 - vh / 2
+      const arrow = ARROWS[(Math.round(Math.atan2(dy, dx) / (Math.PI / 4)) + 8) % 8]
+      // Along the edge it lies beyond, clear of the buttons in the corners.
+      // (Clear of "Your army" top left, the tools down the right, the hint
+      // at the foot.)
+      const t = Math.min((vw / 2 - 40) / Math.max(1, Math.abs(dx)), (vh / 2 - 40) / Math.max(1, Math.abs(dy)))
+      const w = (o.name.length + 2) * 8 + 24
+      const left = Math.round(Math.max(10 + w / 2, Math.min(vw - 64 - w / 2, vw / 2 + dx * t)))
+      const top = Math.round(Math.max(80, Math.min(vh - 110, vh / 2 + dy * t)))
+      return `<button class="btn ground-mark" type="button" data-ground="${i}" style="left: ${left}px; top: ${top}px">${esc(arrow)} ${esc(o.name)}</button>`
+    }).join('')
+    marks.querySelectorAll('[data-ground]').forEach(b => b.addEventListener('click', () => {
+      const o = state.view.objectives[Number(b.dataset.ground)]
+      centreOn(o.tiles.map(position => ({ position })))
+      markGround()
+    }))
   }
 
   function centreOnArmy() {
@@ -1190,6 +1269,7 @@ async function tent(token) {
   let moved = false
   let placed = null
   scroll.addEventListener('scroll', () => {
+    markGround()
     if (placed && Math.abs(scroll.scrollLeft - placed.left) < 2 && Math.abs(scroll.scrollTop - placed.top) < 2) return
     placed = null
     moved = true
@@ -1213,6 +1293,7 @@ async function tent(token) {
     if (fit < state.zoom) {
       state.zoom = Math.max(wholeZoom(), fit)
       svg.style.width = `${Math.round(W * state.zoom)}px`
+      relabel()
     }
     centreOn(own)
   })
@@ -1238,6 +1319,21 @@ async function tent(token) {
     svg.style.width = `${Math.round(W * state.zoom)}px`
     scroll.scrollLeft = centreX * svg.clientWidth - px
     scroll.scrollTop = centreY * svg.clientHeight - py
+    relabel()
+  }
+  // The map's words are drawn for a zoom: once he has done zooming (no
+  // finger on the map), it is drawn again for the new one.
+  let drawnAt = null
+  let relabelTimer = null
+  let fingers = 0
+  scroll.addEventListener('pointerdown', () => { fingers++ })
+  for (const end of ['pointerup', 'pointercancel']) scroll.addEventListener(end, () => { fingers = Math.max(0, fingers - 1); relabel() })
+  function relabel() {
+    clearTimeout(relabelTimer)
+    relabelTimer = setTimeout(() => {
+      if (fingers > 0 || drawnAt === null || Math.abs(state.zoom - drawnAt) < 0.01) return
+      renderMap()
+    }, 250)
   }
   document.getElementById('tall').addEventListener('click', (event) => {
     state.tall = !state.tall
@@ -1274,6 +1370,7 @@ async function tent(token) {
       svg.style.width = `${Math.round(W * state.zoom)}px`
       centreOnArmy()
     }
+    relabel()
     event.currentTarget.setAttribute('aria-pressed', String(before !== null))
   })
   // The wheel zooms the map about the pointer, on a desktop.
@@ -1304,7 +1401,13 @@ async function tent(token) {
       document.getElementById('unpick').addEventListener('click', () => { state.picked = null; renderMap(); renderHint() })
     } else if (state.place) {
       const ref = gridRef(state.place.x, state.place.y)
-      hint.innerHTML = `<span><strong>${esc(ref)}</strong> · ${esc(terrainWords(state.view, state.place.x, state.place.y))}</span>` +
+      // Who is there: the names a shared label leaves out ("3 of yours, 2
+      // enemy"), within a tile of where he tapped.
+      const near = (u) => u.position && Math.abs(u.position.x - state.place.x) <= 1 && Math.abs(u.position.y - state.place.y) <= 1
+      const there = [...onMap(state.view).own.filter(near).map(u => u.name),
+        ...(state.view.enemies ?? []).filter(near).map(e => (/^enemy\b/i.test(e.name) ? e.name.charAt(0).toLowerCase() + e.name.slice(1) : `enemy ${String(e.name).toLowerCase()}`) +
+          (e.status === 'visible' ? '' : ' (last seen)'))]
+      hint.innerHTML = `<span><strong>${esc(ref)}</strong> · ${esc(terrainWords(state.view, state.place.x, state.place.y))}${there.length ? ` · ${esc(there.join(', '))}` : ''}</span>` +
         (finished ? '' : `<button class="btn btn-quiet" type="button" id="use-place">Add to orders</button>`)
       document.getElementById('use-place')?.addEventListener('click', () => addText(ref))
     } else {
@@ -1393,7 +1496,7 @@ async function tent(token) {
           ${u.canRide ? `<button class="btn btn-quiet" type="button" data-ride="${esc(u.name)}">Ride with them</button>` : ''}
         </div>`}
       </div>`).join('')
-    const fallen = v.fallen.length ? `<p class="label-caps">Lost</p>${v.fallen.map(f => `<p class="note">${esc(f.name)}: ${f.fled ? 'fled the field' : 'destroyed'}</p>`).join('')}` : ''
+    const fallen = v.fallen.length ? `<p class="label-caps">Lost</p>${v.fallen.map(f => `<p class="note">${esc(f.name)}: ${f.fled ? 'left the field' : 'destroyed'}</p>`).join('')}` : ''
     // The computer's Commander: his name, and what is said of him.
     const them = v.enemyCommander ? `<p class="note"><strong>The enemy's Commander:</strong> ${esc(v.enemyCommander.said)}</p>` : ''
     const seen = v.enemies.length
@@ -1694,6 +1797,23 @@ async function tent(token) {
     document.getElementById('send-rest')?.addEventListener('click', () => sendOrders(true))
   }
 
+  // The verdict's table (words from the server: VERDICT): for each side the
+  // men standing of those who went in, the fallen, and how many units
+  // broke; under it, his units that broke and what became of each, and the
+  // enemy's he saw break. His own side first.
+  function losses(v) {
+    const mine = state.view.battle.side
+    const sides = Object.entries(v.sides).sort(([a], [b]) => (a === mine ? -1 : b === mine ? 1 : 0))
+    const h = v.head ?? { side: 'Side', standing: 'Standing', fallen: 'Fallen', broke: 'Broke' }
+    const list = (title, broke) => (broke?.length
+      ? `<p class="label-caps">${esc(title)}</p>${broke.map(b => `<p class="note">${esc(b.name)}: ${esc(b.said)}</p>`).join('')}` : '')
+    return `<table class="losses"><thead><tr><th scope="col">${esc(h.side)}</th><th scope="col">${esc(h.standing)}</th><th scope="col">${esc(h.fallen)}</th><th scope="col">${esc(h.broke)}</th></tr></thead><tbody>
+        ${sides.map(([s, n]) => `<tr><td>${esc(sideName(s))}${s === mine ? ' (you)' : ''}</td><td>${esc(n.standingSaid ?? n.standing)}</td><td>${n.fallen}</td><td>${n.broke ? n.broke.length : 0}</td></tr>`).join('')}
+      </tbody></table>
+      ${v.note ? `<p class="note">${esc(v.note)}</p>` : ''}
+      ${sides.map(([s, n]) => list(s === mine ? v.yours : v.theirs, n.broke)).join('')}`
+  }
+
   function verdict(body) {
     const words = verdictWords(state.view.battle)
     const v = state.view.verdict
@@ -1711,9 +1831,7 @@ async function tent(token) {
       ${v?.night?.calledOut ? `<p class="note">${esc(v.night.againNote)}</p>` : ''}
       ${v?.night?.tellMe && 'Notification' in window && Notification.permission === 'default'
         ? `<button class="btn btn-quiet btn-wide" type="button" id="tell-me">${esc(v.night.tellMe)}</button>` : ''}
-      ${v ? `<table class="losses"><thead><tr><th scope="col">Side</th><th scope="col">Standing</th><th scope="col">Fled</th><th scope="col">Fallen</th></tr></thead><tbody>
-        ${Object.entries(v.sides).map(([s, n]) => `<tr><td>${esc(sideName(s))}${s === state.view.battle.side ? ' (you)' : ''}</td><td>${n.standing}</td><td>${n.fled}</td><td>${n.fallen}</td></tr>`).join('')}
-      </tbody></table>` : ''}
+      ${v ? losses(v) : ''}
       ${v?.commander ? commanderLine(v.commander) : ''}
       ${v?.officers ? `<p class="label-caps">Your officers</p>${officerLines(v.officers)}` : ''}
       <label class="field" for="replay">Replay the battle, turn by turn
@@ -1837,7 +1955,7 @@ async function tent(token) {
   }
 
   renderAll()
-  centreOnArmy()
+  openMap()
   watch()
 }
 

@@ -1146,3 +1146,75 @@ test('the big map on a phone: after a turn it comes back to your army unless you
     assert.ok(await p.evaluate(() => document.documentElement.scrollWidth <= 390), 'no sideways scroll')
   })
 })
+
+// Second playthrough, November 24 (docs/REVIEW-2026-11.md, S14 and D8).
+test('on a phone, Crownhill opens on your army with a mark at the edge pointing to the Crownhill, and a tap on it brings the hill into view; on a desktop both are in view', { skip }, async () => {
+  await withApp(async ({ base, browser, errors, store }) => {
+    const seat = store.muster({ opponent: 'standing', side: 'red', seed: 5, map: 'crownhill', faction: 'rome', enemyFaction: 'rome' }).seats.red
+    const p = await page(browser, errors, { width: 390, height: 844 })
+    await p.goto(`${base}/b/${seat}`)
+    await p.waitForSelector('#map-scroll svg')
+    const mark = p.locator('.ground-mark')
+    assert.equal(await mark.count(), 1, 'the hill is out of the window: a mark points to it')
+    assert.match(await mark.textContent(), /^↑ the Crownhill$/)
+    const box = await mark.boundingBox()
+    assert.ok(box.height >= 44, 'a finger\'s size')
+    const view = await p.locator('#map-scroll').boundingBox()
+    const army = await p.locator('.counter[opacity="1"]').first().boundingBox()
+    assert.ok(army.y > view.y && army.y < view.y + view.height, 'the army is in the window')
+    await mark.click()
+    assert.equal(await p.locator('.ground-mark').count(), 0, 'the hill is in view: no mark')
+    assert.ok(await p.evaluate(() => document.documentElement.scrollWidth <= 390), 'no sideways scroll')
+
+    const d = await page(browser, errors, { width: 1366, height: 900 })
+    await d.goto(`${base}/b/${seat}`)
+    await d.waitForSelector('#map-scroll svg')
+    assert.equal(await d.locator('.ground-mark').count(), 0, 'on a desktop the hill and the army are both in view')
+    const dview = await d.locator('#map-scroll').boundingBox()
+    const darmy = await d.locator('.counter[opacity="1"]').first().boundingBox()
+    assert.ok(darmy.y > dview.y && darmy.y + darmy.height < dview.y + dview.height, 'the army is in view')
+  })
+})
+
+test('on a phone, at a fight on Greywater, no label is under 11 px or lies on another: units in one fight share one, and a tap names them', { skip }, async () => {
+  await withApp(async ({ base, browser, errors, store }) => {
+    const seat = store.muster({ opponent: 'standing', side: 'red', seed: 7, map: 'greywater', faction: 'rome', enemyFaction: 'macedon' }).seats.red
+    for (let i = 0; i < 12; i++) {
+      await store.submit(seat, i === 0 ? 'everyone advance' : '')
+      const v = store.view(seat)
+      if (i > 2 && v.dispatches[0]?.lines.some(l => /fought/.test(l))) break
+    }
+    const p = await page(browser, errors, { width: 390, height: 844 })
+    await p.goto(`${base}/b/${seat}`)
+    await p.waitForSelector('#map-scroll svg')
+    const labels = await p.evaluate(() => {
+      const svg = document.querySelector('#map-scroll svg')
+      const scale = svg.clientWidth / Number(svg.getAttribute('width'))
+      return [...svg.querySelectorAll('text.unit-name')].map(t => {
+        const b = t.getBoundingClientRect()
+        return { text: t.textContent, px: Number(t.getAttribute('font-size')) * scale, x0: b.left, x1: b.right, y0: b.top, y1: b.bottom }
+      })
+    })
+    assert.ok(labels.length > 0)
+    for (const l of labels) assert.ok(l.px >= 10.9, `"${l.text}" is ${l.px.toFixed(1)} px`)
+    for (let i = 0; i < labels.length; i++) {
+      for (let j = i + 1; j < labels.length; j++) {
+        const [a, b] = [labels[i], labels[j]]
+        const over = Math.max(0, Math.min(a.x1, b.x1) - Math.max(a.x0, b.x0)) * Math.max(0, Math.min(a.y1, b.y1) - Math.max(a.y0, b.y0))
+        assert.equal(over, 0, `"${a.text}" and "${b.text}" do not lie on each other`)
+      }
+    }
+    assert.ok(labels.some(l => /^\d+ of yours, \d+ enemy$/.test(l.text)), `one label for the fight: ${labels.map(l => l.text).join(' | ')}`)
+    // A tap on the enemy's counter, clear of yours, names who is there.
+    const counters = await p.evaluate(() => [...document.querySelectorAll('#map-scroll .counter')].map(c => {
+      const b = c.getBoundingClientRect()
+      return { x: b.left + b.width / 2, y: b.top + b.height / 2, enemy: Boolean(c.querySelector('path[d="M3 -7H10V0Z"]')) }
+    }))
+    const clear = counters.find(c => c.enemy && counters.every(o => o.enemy || Math.hypot(o.x - c.x, o.y - c.y) > 40))
+    if (clear) {
+      await p.mouse.click(clear.x, clear.y)
+      assert.match(await p.textContent('#map-hint'), /enemy /)
+    }
+    await bigShot(p, 'greywater-fight-labels')
+  })
+})

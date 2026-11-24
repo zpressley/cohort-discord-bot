@@ -70,7 +70,7 @@ const SCALE = 1.35
 // strength bar for your own, and (on the top counter of a stack) the name.
 // An enemy whose kind no report has told (unknownKind) is marked "?", not
 // with a kind's mark it might not be.
-function counter(unit, { side, own, selected, ghost, aged = false, commander = false, nameAbove = null, shift = 0 }) {
+function counter(unit, { side, own, selected, ghost, aged = false, commander = false, nameAbove = null, shift = 0, k = 1 }) {
   const kind = kindOf(unit)
   const fill = ghost ? 'none' : `var(--side-${side})`
   const ink = ghost ? 'var(--ghost)' : `var(--side-${side}-on)`
@@ -101,7 +101,7 @@ function counter(unit, { side, own, selected, ghost, aged = false, commander = f
         ${strength}
         ${pennant}${cut}${mark}
       </g>
-      ${nameAbove ? `<text y="-19" text-anchor="middle" font-size="11" font-weight="600" class="unit-name" style="fill: var(--ink); font-family: var(--font-ui)">${esc(nameAbove)}</text>` : ''}
+      ${nameAbove ? `<text y="${-(10 + 9 * k)}" text-anchor="middle" font-size="${(LABEL_PX * k).toFixed(1)}" font-weight="600" class="unit-name" style="fill: var(--ink); font-family: var(--font-ui)">${esc(nameAbove)}</text>` : ''}
     </g>`
 }
 
@@ -149,56 +149,119 @@ const enemyName = (u) => {
 // other where units meet: each goes under its cluster if there is room,
 // else a line lower, two lines lower, or above it, wherever it covers
 // least of the labels already placed. Yours are placed first.
-const LABEL_LINE = 12
-function placeLabels(labels, taken = []) {
-  const placed = [...taken]
-  const overlap = (a, b) => Math.max(0, Math.min(a.x1, b.x1) - Math.max(a.x0, b.x0)) * Math.max(0, Math.min(a.y1, b.y1) - Math.max(a.y0, b.y0))
+//
+// A label is never smaller than LABEL_PX on the screen, whatever the zoom
+// (docs/REVIEW-2026-11.md, S14: 6 px at a fight on Greywater on a phone):
+// the map is drawn for its zoom, and `k` scales its words up when the map
+// is shown smaller than it is drawn.
+const LABEL_PX = 11
+const overlap = (a, b) => Math.max(0, Math.min(a.x1, b.x1) - Math.max(a.x0, b.x0)) * Math.max(0, Math.min(a.y1, b.y1) - Math.max(a.y0, b.y0))
+const labelWidth = (l) => l.text.length * 0.58 * LABEL_PX * l.k + 6 * l.k
+function labelBox(l, dy) {
+  const w = labelWidth(l)
+  return { x0: l.x - w / 2, x1: l.x + w / 2, y0: l.y + dy - 1.2 * LABEL_PX * l.k, y1: l.y + dy + 0.5 * LABEL_PX * l.k }
+}
+// Where each label goes: [{ l, dy, b, cost, hit }], `hit` the label placed
+// before it that it lies on most, if any.
+function layLabels(labels, taken = []) {
+  const placed = taken.map(b => ({ b, l: null }))
   const out = []
   for (const l of [...labels].sort((a, b) => a.rank - b.rank)) {
-    const w = l.text.length * 5.6 + 6
-    const box = (dy) => ({ x0: l.x - w / 2, x1: l.x + w / 2, y0: l.y + dy - 9, y1: l.y + dy + 3 })
+    const line = 1.15 * LABEL_PX * l.k
     let best = null
-    for (const dy of [0, LABEL_LINE, 2 * LABEL_LINE, -l.above]) {
-      const b = box(dy)
-      const cost = placed.reduce((n, p) => n + overlap(b, p), 0)
-      if (!best || cost < best.cost) best = { dy, b, cost }
+    for (const dy of [0, line, 2 * line, -l.above]) {
+      const b = labelBox(l, dy)
+      let cost = 0
+      let hit = null
+      let most = 0
+      for (const p of placed) {
+        const o = overlap(b, p.b)
+        cost += o
+        if (p.l && o > most) { most = o; hit = p.l }
+      }
+      if (!best || cost < best.cost) best = { l, dy, b, cost, hit }
       if (cost === 0) break
     }
-    placed.push(best.b)
-    out.push(`<text x="${l.x}" y="${l.y + best.dy}" text-anchor="middle" font-size="10" class="unit-name" style="fill: var(--ink); font-family: var(--font-ui)">${esc(l.text)}</text>`)
+    placed.push({ b: best.b, l })
+    out.push(best)
   }
-  return out.join('')
+  return out
+}
+function labelText(laid) {
+  return laid.map(({ l, dy }) => `<text x="${l.x}" y="${(l.y + dy).toFixed(1)}" text-anchor="middle" font-size="${(LABEL_PX * l.k).toFixed(1)}" class="unit-name" style="fill: var(--ink); font-family: var(--font-ui)">${esc(l.text)}</text>`).join('')
 }
 
-function drawUnits(list, opts, labels = []) {
+// Every unit's label. Each cluster of one kind (yours, the enemy in sight,
+// yours known by rider, the enemy last seen) has its own; where there is no
+// room for each its own (a fight, on a phone), those whose labels would lie
+// on each other share one: "3 of yours, 2 enemy", or "4 units". Their names
+// show on a tap (the map's hint, app.js).
+function sharedLabels(sets, k, taken) {
+  let groups = sets.flatMap(set => clusters(set.list.map(u => ({ ...u, set }))))
+  const item = (group, i) => {
+    const lowest = group.reduce((a, b) => (b.position.y > a.position.y || (b.position.y === a.position.y && b.position.x > a.position.x) ? b : a))
+    // (Stacked on one tile, the top counter is drawn a little lower.)
+    const below = group.filter(u => u.position.x === lowest.position.x && u.position.y === lowest.position.y && u.set === lowest.set).length - 1
+    return {
+      group: i, text: sharedText(group), x: cx(lowest.position.x) + below * 5, y: cy(lowest.position.y) + below * 5 + 10 + LABEL_PX * k,
+      above: 14 + 1.9 * LABEL_PX * k, rank: Math.min(...group.map(u => u.set.rank)), k
+    }
+  }
+  // Shown small (a phone), labels that would lie on each other where they
+  // hang share one at once: moved a line down they would only be read as
+  // another unit's. Shown at full size, only those that cannot be moved
+  // clear of each other.
+  const tight = k > 1.2
+  const merge = (a, b) => { groups = groups.filter((g, i) => i !== a && i !== b).concat([[...groups[a], ...groups[b]]]) }
+  for (let round = 0; round < 200; round++) {
+    const items = groups.map(item)
+    if (tight) {
+      const boxes = items.map(l => labelBox(l, 0))
+      let pair = null
+      for (let i = 0; i < boxes.length && !pair; i++) for (let j = i + 1; j < boxes.length && !pair; j++) if (overlap(boxes[i], boxes[j]) > 0) pair = [i, j]
+      if (pair) { merge(...pair); continue }
+    }
+    const laid = layLabels(items, taken)
+    const clash = laid.find(x => x.hit)
+    if (!clash) return laid
+    merge(clash.l.group, clash.hit.group)
+  }
+  return layLabels(groups.map(item), taken)
+}
+function sharedText(group) {
+  const set = group[0].set
+  if (group.every(u => u.set === set)) return clusterLabel(group, set.ghost, set.aged, set.mine)
+  const mine = group.filter(u => u.set.mine)
+  const theirs = group.filter(u => !u.set.mine)
+  if (!theirs.length) return `${mine.length} units`
+  if (!mine.length) return `${theirs.length} enemy units`
+  return `${mine.length} of yours, ${theirs.length} enemy`
+}
+
+// The counters (their labels are sharedLabels').
+function drawUnits(list, opts) {
   const byTile = new Map()
   for (const u of list) {
     const key = `${u.position.x},${u.position.y}`
     if (!byTile.has(key)) byTile.set(key, [])
     byTile.get(key).push(u)
   }
-  // The label hangs under the lowest counter of its cluster.
-  const labelAt = new Map()
-  for (const group of clusters(list)) {
-    const lowest = group.reduce((a, b) => (b.position.y > a.position.y || (b.position.y === a.position.y && b.position.x > a.position.x) ? b : a))
-    labelAt.set(`${lowest.position.x},${lowest.position.y}`, clusterLabel(group, opts.ghost, opts.aged, opts.own))
-  }
   const out = []
   for (const group of byTile.values()) {
     group.forEach((u, i) => {
-      const top = i === group.length - 1
       const selected = opts.selectedId === u.id
-      const label = top ? labelAt.get(`${u.position.x},${u.position.y}`) ?? null : null
-      if (label) labels.push({ text: label, x: cx(u.position.x) + i * 5, y: cy(u.position.y) + i * 5 + (opts.own ? 27 : 24), above: opts.own ? 50 : 42, rank: opts.rank ?? 0 })
-      out.push(counter(u, { ...opts, ghost: opts.ghost, commander: opts.commanderId === u.id, selected, nameAbove: selected && !opts.ghost ? u.name : null, shift: i * 5 }))
+      out.push(counter(u, { ...opts, ghost: opts.ghost, commander: opts.commanderId === u.id, selected, nameAbove: selected && !opts.ghost ? u.name : null, shift: i * 5, k: opts.k ?? 1 }))
     })
   }
   return out.join('')
 }
 
 // ── The whole map ──────────────────────────────────────
-export function drawMap(view, { selectedId = null } = {}) {
+export function drawMap(view, { selectedId = null, zoom = 1 } = {}) {
   const { width, height, terrain, landmarks } = view.map
+  // How much bigger than drawn its words are, so that they read at
+  // LABEL_PX on the screen at this zoom.
+  const k = Math.max(1, 1 / zoom)
   const W = width * TILE + MARGIN * 2
   const H = height * TILE + MARGIN * 2
   const side = view.battle.side
@@ -273,7 +336,7 @@ export function drawMap(view, { selectedId = null } = {}) {
   parts.push(`<g text-anchor="middle" font-size="12" style="fill: var(--grid-label); font-family: var(--font-display)" aria-hidden="true">${labels.join('')}</g>`)
 
   // Landmarks, lettered like an old map.
-  parts.push(`<g text-anchor="middle" font-size="11" font-style="italic" style="fill: var(--landmark-ink); font-family: var(--font-display)" aria-hidden="true">${
+  parts.push(`<g text-anchor="middle" font-size="${(LABEL_PX * k).toFixed(1)}" font-style="italic" style="fill: var(--landmark-ink); font-family: var(--font-display)" aria-hidden="true">${
     (landmarks ?? []).filter(l => l.kind !== 'road' && l.kind !== 'river').map(l => `<text x="${cx(l.centre.x)}" y="${cy(l.centre.y) - 12}" class="landmark">${esc(l.name)}</text>`).join('')
   }</g>`)
 
@@ -288,12 +351,12 @@ export function drawMap(view, { selectedId = null } = {}) {
     const w = (Math.max(...xs) - Math.min(...xs) + 1) * TILE + 6
     const h = (Math.max(...ys) - Math.min(...ys) + 1) * TILE + 6
     const held = o.holder ? ` (held by ${o.holder === side ? 'you' : 'the enemy'})` : ''
-    const half = (o.name + held).length * 3.3 + 4
-    groundNames.push({ x0: x0 + w / 2 - half, x1: x0 + w / 2 + half, y0: y0 + h + 3, y1: y0 + h + 16 })
+    const half = ((o.name + held).length * 3.3 + 4) * k
+    groundNames.push({ x0: x0 + w / 2 - half, x1: x0 + w / 2 + half, y0: y0 + h + 3, y1: y0 + h + 3 + 13 * k })
     // A faint wash over the ground itself, so it reads at a phone's zoom.
     for (const t of o.tiles) parts.push(`<rect aria-hidden="true" x="${MARGIN + t.x * TILE}" y="${MARGIN + t.y * TILE}" width="${TILE}" height="${TILE}" style="fill: var(--objective)" fill-opacity="0.18"/>`)
     parts.push(`<g aria-hidden="true"><rect x="${x0}" y="${y0}" width="${w}" height="${h}" rx="6" fill="none" style="stroke: var(--objective)" stroke-width="2.5" stroke-dasharray="6 4"/>
-      <text x="${x0 + w / 2}" y="${y0 + h + 13}" text-anchor="middle" font-size="11" font-weight="600" style="fill: var(--objective); font-family: var(--font-display)">${esc(o.name + held)}</text></g>`)
+      <text x="${x0 + w / 2}" y="${(y0 + h + 3 + 10 * k).toFixed(1)}" text-anchor="middle" font-size="${(LABEL_PX * k).toFixed(1)}" font-weight="600" style="fill: var(--objective); font-family: var(--font-display)">${esc(o.name + held)}</text></g>`)
   }
 
   // Orders in force: dashed arrows from each unit to where it is going.
@@ -320,13 +383,20 @@ export function drawMap(view, { selectedId = null } = {}) {
   // Units: enemies as known, then yours on top: those known by rider faded,
   // where word last put them, then those about you as they are.
   const enemies = view.enemies ?? []
-  const names = []
-  parts.push(drawUnits(enemies.filter(e => e.status !== 'visible'), { side: enemySide, own: false, ghost: true, rank: 3 }, names))
-  parts.push(drawUnits(enemies.filter(e => e.status === 'visible'), { side: enemySide, own: false, ghost: false, rank: 1 }, names))
   const aged = (u) => u.word && !u.word.live
-  parts.push(drawUnits(view.own.filter(aged), { side, own: true, ghost: false, aged: true, selectedId, commanderId, rank: 2 }, names))
-  parts.push(drawUnits(view.own.filter(u => !aged(u)), { side, own: true, ghost: false, selectedId, commanderId, rank: 0 }, names))
-  parts.push(placeLabels(names, groundNames))
+  const sets = [
+    { list: view.own.filter(u => !aged(u)), mine: true, rank: 0 },
+    { list: enemies.filter(e => e.status === 'visible'), mine: false, rank: 1 },
+    { list: view.own.filter(aged), mine: true, aged: true, rank: 2 },
+    { list: enemies.filter(e => e.status !== 'visible'), mine: false, ghost: true, rank: 3 }
+  ]
+  parts.push(drawUnits(sets[3].list, { side: enemySide, own: false, ghost: true, k }))
+  parts.push(drawUnits(sets[1].list, { side: enemySide, own: false, ghost: false, k }))
+  parts.push(drawUnits(sets[2].list, { side, own: true, ghost: false, aged: true, selectedId, commanderId, k }))
+  parts.push(drawUnits(sets[0].list, { side, own: true, ghost: false, selectedId, commanderId, k }))
+  // Labels: yours first, then the enemy in sight, those known by rider and
+  // the enemy last seen; sharing one where they must.
+  parts.push(labelText(sharedLabels(sets, k, groundNames)))
 
   const seen = (view.enemies ?? []).filter(e => e.status === 'visible').length
   const label = `Map of ${view.map.name}. Your ${view.own.length} units are shown; ${seen} enemy units in sight` +
