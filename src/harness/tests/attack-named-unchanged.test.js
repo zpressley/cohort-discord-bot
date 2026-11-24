@@ -17,6 +17,12 @@
 // 7dd10867, 987939aa, aeded69a, b2a4ce2b, df860211, ade1ebaa, 29c7796a (the
 // skirmish proposal, part 6, not taken, had made them e2b2495b, 9d3ccd07,
 // 8b775320, ec175c50, 4edc2f02, 6e08eb2f, 29c7796a).
+//
+// Retaken when armies were made to come to grips (docs/DECISIONS.md, "How
+// armies were made to come to grips"): a side that knows nothing of the
+// enemy now looks for him where he would hold before it searches. The
+// computer's battles were d99dbaa6, 9d3ccd07, 7ceeb2cc, a9616de5 (the
+// meeting battle has no planner, and is as it was).
 
 const { test } = require('node:test')
 const assert = require('node:assert/strict')
@@ -35,10 +41,10 @@ function fingerprint(text) {
 }
 
 const BEFORE = {
-  'crownhill 1': 'd99dbaa6',
+  'crownhill 1': '21bfd107',
   'crownhill 2': '9d3ccd07',
-  'thornwood 1': '7ceeb2cc',
-  'thornwood 2': 'a9616de5',
+  'thornwood 1': '398af68c',
+  'thornwood 2': '1305e5a5',
   'meeting 1': 'df860211',
   'meeting 2': 'ade1ebaa',
   'meeting 3': '29c7796a'

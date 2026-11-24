@@ -30,6 +30,14 @@
 // down either side of the ford; not the perks' doing (it happens without
 // them, Mongolia against Tibet on ashford, seed 77), and in the app the
 // day ends such a battle.
+//
+// Retaken when armies were made to come to grips (docs/DECISIONS.md, "How
+// armies were made to come to grips"): a unit going in across a ford steps
+// into it, a side that knows nothing of the enemy looks for him at the
+// map's ground and then where he would hold, and an army of horse forms its
+// line of horse. The ashford battles now meet at the Old Mill Bridge and are
+// over in 13 and 23 turns. The battles were 889c9e1e 18, 27381837 24,
+// 9de62f89 150, 6d782516 150.
 
 const { test } = require('node:test')
 const assert = require('node:assert/strict')
@@ -47,10 +55,10 @@ function fingerprint(text) {
 }
 
 const BEFORE = {
-  'crownhill 1': '889c9e1e 18',
-  'crownhill 2': '27381837 24',
-  'ashford 1': '9de62f89 150',
-  'ashford 2': '6d782516 150'
+  'crownhill 1': '61e100aa 25',
+  'crownhill 2': '824d0cc9 27',
+  'ashford 1': '15f2219b 13',
+  'ashford 2': '4fa3b601 23'
 }
 
 test('a battle with no Commander on the field runs exactly as before riders, event for event', () => {
