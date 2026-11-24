@@ -20,7 +20,9 @@
 //                                the map's own ground in a day of twelve hours,
 //                                and again with the computer led by a bold and
 //                                by a cautious Commander; and a short
-//                                section on the big fields (2 km)
+//                                section on the big fields (2 km); and
+//                                battles that must come to grips
+//                                (harness/no-fight.js)
 //   npm run soak -- --seeds 50
 
 const { createSession } = require('../adapters/hotseat/session')
@@ -257,6 +259,25 @@ for (const field of bigFields) for (const name of Object.keys(SCENARIOS)) {
   })
 }
 
+// Every battle comes to grips (harness/no-fight.js): two armies led by the
+// computer, and the computer against a player who gives no orders, on
+// every map, with the map's ground to fight for and without, under each of
+// the computer's three characters, usual and bought armies (a fifth of the
+// study's battles). None may come to nothing: end by night or the turn
+// limit with neither side having lost a tenth of its men.
+const noFight = require('./no-fight')
+const grips = { games: 0, nothing: [], night: 0, quiet: 0 }
+for (const redPlays of ['computer', 'idle']) for (const none of [false, true]) {
+  const all = noFight.battles({ maps: mapChoices().map(m => m.id), rounds: 1, redPlays })
+  for (const b of all.filter((_, i) => i % 5 === 0)) {
+    const r = noFight.play({ ...b, redPlays, none })
+    grips.games++
+    if (r.night) grips.night++
+    if (r.quiet >= noFight.QUIET_MINUTES) grips.quiet++
+    if (r.nothing) grips.nothing.push(`${b.map} ${b.red}${b.bought ? ` (${b.kind})` : ''} v ${b.blue} led by a ${b.character} Commander, red ${redPlays === 'idle' ? 'a commander who gives no orders' : `the computer (${b.redCharacter})`}, ${none ? 'no ground' : 'the ground'}, seed ${b.seed}`)
+  }
+}
+
 let decided = 0
 let meetingTurns = 0
 for (let seed = 1; seed <= 50; seed++) {
@@ -284,7 +305,9 @@ for (const stuck of ground.stuck.slice(0, 10)) console.log(`  stuck: ${stuck}`)
 console.log(`the big fields (${bigFields.join(', ')}): ${big.finished} of ${big.games} finished, ${big.byGround} decided by the ground, ` +
   `${big.night} ended by night, ${Math.round(big.minutes / Math.max(1, big.finished))} battle minutes on average; hotseat ${bigHotseat.finished} of ${bigHotseat.games}`)
 for (const stuck of [...big.stuck, ...bigHotseat.stuck].slice(0, 10)) console.log(`  stuck: ${stuck}`)
+console.log(`coming to grips: ${grips.games - grips.nothing.length} of ${grips.games} came to a fight or a verdict; ${grips.night} ended by night, ${grips.quiet} with two hours or more in which nothing happened`)
+for (const nothing of grips.nothing.slice(0, 10)) console.log(`  came to nothing: ${nothing}`)
 console.log(`meeting battle: a verdict in ${decided} of 50, ` +
   `${(meetingTurns / Math.max(1, decided)).toFixed(1)} battle turns on average`)
 
-if (result.stuck.length > 0 || thinking.stuck.length > 0 || armies.stuck.length > 0 || characters.stuck.length > 0 || bought.stuck.length > 0 || ground.stuck.length > 0 || big.stuck.length > 0 || bigHotseat.stuck.length > 0 || decided < 50 || result.unread > 0) process.exitCode = 1
+if (result.stuck.length > 0 || thinking.stuck.length > 0 || armies.stuck.length > 0 || characters.stuck.length > 0 || bought.stuck.length > 0 || ground.stuck.length > 0 || big.stuck.length > 0 || bigHotseat.stuck.length > 0 || grips.nothing.length > 0 || decided < 50 || result.unread > 0) process.exitCode = 1

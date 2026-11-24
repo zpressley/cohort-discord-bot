@@ -35,6 +35,9 @@ const { canSkirmish } = require('../engine/battle/skirmish')
 const { createRng } = require('../engine/rng')
 const { positionKey } = require('../engine/map/labels')
 const { arrivalOf } = require('../engine/orchestrator/word')
+const { objectiveArea } = require('../engine/orchestrator/victory')
+const { findPath } = require('../engine/movement/pathfinding')
+const { groundOf } = require('../data/maps')
 
 const TUNING = {
   // How near (tiles) an enemy in sight must be for the line to go in.
@@ -60,7 +63,23 @@ const TUNING = {
   // is taken as where the enemy is going (forewarned, below): an hour, the
   // longest most orders take to carry out. Claude's guess, not measured
   // apart (docs/DECISIONS.md, "How the enemy catching a rider was built").
-  FOREWARNED: 60
+  FOREWARNED: 60,
+  // Coming to grips (docs/DECISIONS.md, "How armies were made to come to
+  // grips"; measured with harness/no-fight.js). With no enemy known, a side
+  // goes first to the map's ground worth fighting for, if it lies between
+  // the armies, and waits there MEET_WAIT minutes (times its Commander's
+  // nerve, CHARACTERS) for the enemy to come; then to the good ground the
+  // enemy would hold; then it searches. A place is reached when one of its
+  // units stands within MEET_REACH tiles of it. Two armies that each
+  // searched the other's side of the field marched past each other out of
+  // sight (ashford, Persia against Sparta, seed 111: no blow struck in
+  // twelve hours). Half an hour: Claude's guess. Tried: waiting until any
+  // holding enemy's patience must have run out (up to three hours and
+  // more); against a player who never came out, the computer then sat
+  // there, and 37 of 1,140 such battles ended in night with no blow.
+  MEET_REACH: 3,
+  MEET_WAIT: 30
+  // (CROSSING_NEAR, 3, moved to the engine: tables.CROSSING.NEAR.)
 }
 
 // ── The computer's Commander: his character ─────────────
@@ -89,7 +108,10 @@ const CHARACTERS = {
     horseAt: 'archers',
     // Whether the horse are kept back off the line's flank, as a reserve,
     // until the line is fighting.
-    horseInReserve: false
+    horseInReserve: false,
+    // How long he waits where the enemy should come before he goes to find
+    // him, as a share of TUNING.MEET_WAIT.
+    nerve: 1
   },
   // Throws his horse at whatever he sees, goes in from further off, and
   // fights on with men near breaking. His battles are the shortest.
@@ -98,7 +120,8 @@ const CHARACTERS = {
     pullOut: 20,         // fights on (alone: 46% against steady)
     prey: 14,
     horseAt: 'any',      // (alone: 47%, and his battles 20 minutes shorter)
-    horseInReserve: false
+    horseInReserve: false,
+    nerve: 0.5           // goes to find the enemy sooner
   },
   // Keeps his horse back until his line is fighting, lets the enemy come
   // closer before going in, and pulls men out of the fight early. His
@@ -109,7 +132,8 @@ const CHARACTERS = {
     pullOut: 40,         // pulls out early (alone, 45: 53% against steady; with the rest, 45 made him 54% against the field)
     prey: 0,             // his horse do not go hunting...
     horseAt: 'archers',
-    horseInReserve: true // ...but wait (with prey 0, alone: 46%; a battle in twelve ends at night)
+    horseInReserve: true, // ...but wait (with prey 0, alone: 46%; a battle in twelve ends at night)
+    nerve: 1.5           // and waits longer for the enemy to come
   }
 }
 // (Where a side waits on good ground, and for how long, is left to the
@@ -168,6 +192,12 @@ function planTurn(game, side) {
   // against an enemy who simply came on, the side that kept its best unit
   // back lost more often than the side that put it in the line.)
   const line = mine.filter(u => !archers.includes(u) && !horse.includes(u))
+  // An army with no foot to form a line forms its line of what it has:
+  // horse, else missile troops. (An army all of horse put them off the
+  // flank of a line that was not there, beside the ground it meant to hold
+  // and never on it: ravenridge, Mongolia against a player who gave no
+  // orders, seed 181, night with no blow struck.)
+  const front = line.length > 0 ? line : horse.length > 0 ? horse : archers
 
   // ── Hold, or go and find him ────────────────────────
   const strong = strongpoint(game, side, forward, across)
@@ -184,6 +214,8 @@ function planTurn(game, side) {
 
   // ── Where the line stands ───────────────────────────
   let anchor
+  // Waiting where the enemy should come (meetingPlace, below).
+  let waiting = false
   if (holding) {
     anchor = strong.anchor
   } else {
@@ -200,14 +232,19 @@ function planTurn(game, side) {
       const gap = dot({ x: target.x - here.x, y: target.y - here.y }, forward)
       anchor = closeBy ? here : add(target, forward, -Math.min(TUNING.FORM_UP, Math.max(0, gap)))
     } else {
-      // No one knows where he is: the engine's "advance" goes and looks.
-      anchor = null
+      // No one knows where he is: go where he should come, and wait there
+      // a while (meetingPlace); then the engine's "advance" goes and looks.
+      const meet = lookFor(game, side, forward, across, ch)
+      anchor = meet?.anchor ?? null
+      waiting = Boolean(meet?.wait)
     }
   }
 
   const orders = []
   const give = (unit, order) => orders.push({ unitRef: unit.id, ...order })
-  const slots = anchor ? formation(map, anchor, forward, across, { line, archers, horse }, temper.flank) : new Map()
+  const slots = anchor ? formation(map, anchor, forward, across, {
+    line: front, archers: front === archers ? [] : archers, horse: front === horse ? [] : horse
+  }, temper.flank) : new Map()
   const toSlot = (unit, holdThere) => {
     const slot = slots.get(unit.id)
     if (!slot) return give(unit, { action: 'advance' })
@@ -240,10 +277,18 @@ function planTurn(game, side) {
   const formed = anchor !== null && mine.every(u => {
     const slot = slots.get(u.id)
     // (Units out of it, spent or shaken, stay where they are and are not
-    // waited for.)
-    return !slot || fighting.has(u.id) || spent(u) || battle.isShaken(u) || tileDistance(u.position, slot) <= 1
+    // waited for. Nor is a unit already past its place towards the enemy:
+    // a line that had gone in was called back to form up again short of
+    // him, went in, and was called back, for ever, while horse archers
+    // kept out of its reach at the field's edge: crownhill, Sarmatia
+    // against Macedon, seed 3643740 of the captive league.)
+    return !slot || fighting.has(u.id) || spent(u) || battle.isShaken(u) || tileDistance(u.position, slot) <= 1 ||
+      dot({ x: u.position.x - slot.x, y: u.position.y - slot.y }, forward) > 0
   })
-  const attacking = !holding && (closeBy || !anchor || formed)
+  const attacking = !holding && !waiting && (closeBy || !anchor || formed)
+  // Going in: pressing the enemy (with one near across a crossing, the
+  // engine steps into it first: engine/battle/crossing.js).
+  const goIn = (unit) => give(unit, { action: 'advance' })
 
   for (const unit of mine) {
     if (pulledOut.has(unit.id)) continue
@@ -277,25 +322,99 @@ function planTurn(game, side) {
       // there is.)
       const inReserve = ch.horseInReserve && line.some(fit) && !lineFighting(line, fighting)
       if (prey && prey.d <= ch.prey && !fighting.has(unit.id)) give(unit, { action: 'attack', target: { ...prey.e.position } })
-      else if ((attacking && !inReserve) || (holding && lineFighting(line, fighting))) give(unit, { action: 'advance' })
-      else toSlot(unit, holding)
+      else if ((attacking && !inReserve) || (holding && lineFighting(line, fighting))) goIn(unit)
+      else toSlot(unit, holding || waiting)
       continue
     }
-    if (attacking) { give(unit, { action: 'advance' }); continue }
+    if (attacking) { goIn(unit); continue }
     // Holding good ground: the line stands, the archers shoot from behind
     // it (they do that unasked), and a unit attacked fights where it is.
     // A holding line whose enemy has come within reach of one of its units
     // does not sit and watch that unit fight alone.
     if (holding && line.includes(unit) && !fighting.has(unit.id) && lineFighting(line, fighting)) {
       const foe = nearestSeen(unit.position)
-      if (foe && foe.d <= 3) { give(unit, { action: 'advance' }); continue }
+      if (foe && foe.d <= 3) { goIn(unit); continue }
     }
-    toSlot(unit, holding)
+    toSlot(unit, holding || waiting)
   }
   return orders
 }
 
 const lineFighting = (line, fighting) => line.some(u => fighting.has(u.id))
+
+// ── Coming to grips ─────────────────────────────────────
+// Where a side that knows nothing of the enemy goes to look for him, before
+// the engine's search (which looks over the field nearest first, and let two
+// armies each searching the other's side pass by out of sight). In turn:
+//   1. the map's ground worth fighting for (src/data/maps, ground), which
+//      both sides know and the enemy's way likeliest crosses, if it lies
+//      between the armies (meetingPlace); it waits there a while;
+//   2. the good ground the enemy would hold if he held (theirGround): the
+//      crossing or hill this planner would choose from his side of the
+//      field, opposite our own.
+// A place is looked at once one of the side's units has stood within
+// TUNING.MEET_REACH tiles of it (read from its units' moves in the log, so
+// the planner stays a pure function of the game). { anchor, wait }, or
+// null when both have been looked at: the engine's "advance" searches.
+function lookFor(game, side, forward, across, ch) {
+  const meet = meetingPlace(game, side, forward, across, ch)
+  if (meet) return meet
+  const theirs = theirGround(game, side, forward, across)
+  if (!theirs || arrivedAt(game, side, theirs) !== null) return null
+  return { anchor: theirs, wait: false }
+}
+
+// The turn a unit of this side first stood within TUNING.MEET_REACH tiles
+// of a place (0 if one formed up there), or null.
+function arrivedAt(game, side, place) {
+  const battle = game.battle
+  const there = (p) => tileDistance(p, place) <= TUNING.MEET_REACH
+  if (game.spec.units.some(u => u.side === side && there(toXY(u.position)))) return 0
+  const ids = new Set([...battle.world.units, ...battle.fledUnits].filter(u => u.side === side).map(u => u.id))
+  return battle.log.ofType('move').find(e => ids.has(e.unitId) && there(e.to))?.turn ?? null
+}
+
+// The map's ground worth fighting for, held from dry ground on this side of
+// it, if it lies between the armies (not more than TUNING.ASIDE tiles to a
+// side of where this one formed up: the Crownhill, at the north edge of its
+// field, drew armies away from each other, and a player who stood his
+// ground was not found until night). { anchor, wait }: march there (wait
+// false); once there, wait TUNING.MEET_WAIT minutes (times the Commander's
+// nerve) for the enemy to come. Null after that, or with no such ground.
+function meetingPlace(game, side, forward, across, ch) {
+  const battle = game.battle
+  const map = battle.map
+  let tiles = []
+  try { tiles = groundOf(map.name).flatMap(o => objectiveArea(map, o).tiles) } catch { tiles = [] }
+  if (tiles.length === 0) return null
+  let anchor = centroid(tiles)
+  for (let back = 1; back <= 3 && NOT_HERE.includes(map.terrainAt(anchor)); back++) anchor = add(centroid(tiles), forward, -back)
+  anchor = standable(map, anchor, new Set()) ?? anchor
+  const started = centroid(game.spec.units.filter(u => u.side === side).map(u => toXY(u.position)))
+  if (Math.abs(dot({ x: anchor.x - started.x, y: anchor.y - started.y }, across)) > TUNING.ASIDE) return null
+  const arrived = arrivedAt(game, side, anchor)
+  if (arrived === null) return { anchor, wait: false }
+  return game.minutesElapsed < arrived * 10 + TUNING.MEET_WAIT * (ch.nerve ?? 1) ? { anchor, wait: true } : null
+}
+
+// The good ground the enemy would hold: strongpoint() from his side of the
+// field, where an army forms up opposite this one (the field's forming-up
+// place for his edge, else this side's start mirrored across the middle of
+// the field). Map and forming-up places are known to both
+// Commanders; where he truly stands is not read. Null if there is none.
+function theirGround(game, side, forward, across) {
+  const map = game.battle.map
+  const started = centroid(game.spec.units.filter(u => u.side === side).map(u => toXY(u.position)))
+  // The field's own forming-up place for his edge, where it has one (they
+  // need not mirror each other: Crownhill's east army forms up further
+  // south, so both are as long marching to the hill); else the mirror.
+  const edge = Object.entries(game.spec.sides ?? {}).find(([s]) => s !== side)?.[1]?.homeEdge
+  const mirrored = map.deploy?.[edge] ? { ...map.deploy[edge] } : forward.x !== 0
+    ? { x: map.width - 1 - started.x, y: started.y }
+    : { x: started.x, y: map.height - 1 - started.y }
+  const theirs = strongpoint(game, side, { x: -forward.x, y: -forward.y }, across, mirrored)
+  return theirs?.anchor ?? null
+}
 
 // ── An enemy rider caught ───────────────────────────────
 // The places named in the orders of enemy riders this side caught in the
@@ -340,11 +459,11 @@ function temperament(game, side) {
 // An objective, if the battle has any (they win it). Otherwise a crossing
 // or a hill ahead of where the army formed up: near enough to reach first,
 // and not far off to a side.
-function strongpoint(game, side, forward, across) {
+function strongpoint(game, side, forward, across, from = null) {
   const map = game.battle.map
-  const started = centroid(game.spec.units.filter(u => u.side === side).map(u => toXY(u.position)))
+  const started = from ?? centroid(game.spec.units.filter(u => u.side === side).map(u => toXY(u.position)))
 
-  if (game.objectives?.length) {
+  if (!from && game.objectives?.length) {
     const tiles = game.objectives.flatMap(o => o.tiles ?? (o.coord ? [o.coord] : []))
     if (tiles.length > 0) {
       // Ground a line cannot form on (a bridge, a ford) is held from its
@@ -421,4 +540,4 @@ function standable(map, wanted, taken) {
   return null
 }
 
-module.exports = { planTurn, temperament, strongpoint, formation, characterOf, forewarned, TUNING, CHARACTERS, CHARACTER_NAMES }
+module.exports = { planTurn, temperament, strongpoint, formation, characterOf, forewarned, lookFor, meetingPlace, theirGround, TUNING, CHARACTERS, CHARACTER_NAMES }

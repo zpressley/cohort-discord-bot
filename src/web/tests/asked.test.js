@@ -37,7 +37,7 @@ async function twoCommanders(app, store) {
   for (let seed = 5; seed <= 40; seed++) {
     const red = (await app.api('POST', '/api/commanders', { faction: 'rome' })).body.token
     const blue = (await app.api('POST', '/api/commanders', { faction: 'han' })).body.token
-    const seats = (await app.api('POST', '/api/battles', { opponent: 'friend', side: 'red', seed, commander: red })).body.seats
+    const seats = (await app.api('POST', '/api/battles', { opponent: 'friend', side: 'red', seed, commander: red, objectives: [] })).body.seats
     await app.api('POST', `/api/seat/${seats.blue}/join`, { commander: blue })
     const game = store.seatOf(seats.red).entry.game
     await app.api('POST', `/api/seat/${seats.red}/orders`, { text: 'everyone advance' })

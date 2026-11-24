@@ -184,8 +184,15 @@ module.exports = {
   terrain: TERRAIN,
   // Where each side's army forms up when asked to deploy (the web app): the
   // open ground either side of the river, south of the Merchant Road, with
-  // Miller's Crossing between them.
-  deploy: { west: { x: 11, y: 23 }, east: { x: 27, y: 23 } },
+  // Miller's Crossing between them. The east army forms on the road south,
+  // at (30, 29) (it was (27, 23)), so that both are as long marching to the
+  // Crownhill: the west must cross the one bridge and the woods, the east
+  // has the road north to the ford. Each side's first unit on the hill
+  // after 104 and 107 minutes, half its army after 140 and 146 (every
+  // faction; it was 106 and 86, 191 and 163, and the east held the hill
+  // first in 185 battles of 200). docs/DECISIONS.md, "How the first
+  // battle, being asked, and forming up were built".
+  deploy: { west: { x: 11, y: 23 }, east: { x: 30, y: 29 } },
   // The ground to fight for (engine/orchestrator/victory.js, objectiveArea):
   // the hill commanding the north, held from on it. (Miller's Crossing, the
   // ford between the two armies, was tried first: the east army reaches it
