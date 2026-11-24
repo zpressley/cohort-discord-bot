@@ -21,20 +21,26 @@ function firstOn(map, side, faction) {
   const spec = { ...all, standingOrders: {}, units: all.units.filter(u => u.side === side) }
   const state = createBattleState(spec, { seed: 1 })
   const area = objectiveArea(state.map, groundOf(map)[0])
-  const centre = { x: 19, y: 1 }
+  // Every unit sent to the tile of the ground nearest its middle.
+  const tiles = area.tiles.filter(t => state.map.passable(t))
+  const mid = tiles.reduce((a, t) => ({ x: a.x + t.x / tiles.length, y: a.y + t.y / tiles.length }), { x: 0, y: 0 })
+  const centre = [...tiles].sort((a, b) => Math.hypot(a.x - mid.x, a.y - mid.y) - Math.hypot(b.x - mid.x, b.y - mid.y))[0]
+  const reach = area.reach ?? 0
   for (let t = 1; t <= 40; t++) {
     stepTurn(state, t === 1 ? { [side]: spec.units.map(u => ({ unitRef: u.id, action: 'move', target: centre })) } : {})
-    if (state.world.units.some(u => area.tiles.some(a => a.x === u.position.x && a.y === u.position.y))) return t * 10
+    if (state.world.units.some(u => area.tiles.some(a => Math.abs(a.x - u.position.x) <= reach && Math.abs(a.y - u.position.y) <= reach))) return t * 10
   }
   return Infinity
 }
 
-test('on Crownhill the two armies are as long marching to the Crownhill: on average over every faction, within ten minutes of each other', () => {
+test('on every 1 km field the two armies are as long marching to the ground to fight for: on average over every faction, within ten minutes of each other', () => {
   const factions = Object.keys(FACTIONS)
-  const mean = (side) => factions.reduce((n, f) => n + firstOn('crownhill', side, f), 0) / factions.length
-  const west = mean('red')
-  const east = mean('blue')
-  assert.ok(Math.abs(west - east) <= 10, `west ${west} min, east ${east} min`)
+  for (const map of ['crownhill', 'ashford', 'thornwood', 'ravenridge']) {
+    const mean = (side) => factions.reduce((n, f) => n + firstOn(map, side, f), 0) / factions.length
+    const west = mean('red')
+    const east = mean('blue')
+    assert.ok(Math.abs(west - east) <= 10, `${map}: west ${west} min, east ${east} min`)
+  }
 })
 
 test('a new player who orders "everyone advance" on Crownhill and nothing more gets a real battle: blows struck, and some won', async () => {
