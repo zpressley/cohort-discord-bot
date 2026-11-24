@@ -11,7 +11,7 @@
 const { featuresAt, detectFeatures } = require('../engine/map/features')
 const { distance } = require('../engine/map/labels')
 const { compassWord, TILE_METRES } = require('../engine/map/places')
-const { orderWords, moraleWords, ORDER, RIDER, NIGHT, GROUND, SKIRMISH_WORDS } = require('./words')
+const { orderWords, moraleWords, ORDER, RIDER, NIGHT, GROUND, SKIRMISH_WORDS, THROWN_WORDS } = require('./words')
 const { gridLabel } = require('../engine/map/grid')
 
 // Where a tile is, in words: the feature it is part of, or the nearest
@@ -255,6 +255,7 @@ function plainFact(map, event, howMany = countAll) {
       (event.did === 'advance' ? ' and advanced on the enemy' : event.did === 'hold' ? ' and held where he stood' : ' and carried on as he was')
     case 'quarryGone': return `${event.on}, whom ${event.unitId} were sent to attack, are beaten or gone; ${event.unitId} ${ORDER.advance.did} instead`
     case 'volley': return `${event.by} shot at ${event.unitId}` + (event.killed ? `, felling ${men(event.killed)}` : ', to little effect')
+    case 'thrown': return `${event.by} ${THROWN_WORDS.threw(event.weapon, event.unitId)}` + (event.killed ? `, felling ${men(event.killed)}` : ', to little effect')
     case 'rout': return `${event.unitId} broke and fled from ${event.by}`
     case 'pursuit': return `${event.by} cut down ${event.killed} of the fleeing ${event.unitId}` + (event.trapped ? ', who were cornered' : '')
     case 'commanderTaken': return `the Commander riding with ${event.unitId} was taken by ${event.by}`
@@ -320,7 +321,7 @@ function ownCommandWords(event) {
 // How much a commander needs to hear of each kind of event: lower is sooner.
 const WEIGHT = {
   victory: 0, nightfall: 0, commanderKilled: 0, commanderTaken: 0, commanderFreed: 0, commanderMoved: 1, destroyed: 1, rout: 1, fled: 1, rallied: 1, pursuit: 2, ambush: 1, surprise: 2, objective: 2,
-  volley: 3, lostThread: 1, reacted: 2, quarryGone: 2, ownCommand: 1, officerYielded: 0, deserted: 1, commanderRode: 1, riderBlocked: 2, riderSent: 6, cutOff: 1, inTouch: 3,
+  volley: 3, thrown: 3, lostThread: 1, reacted: 2, quarryGone: 2, ownCommand: 1, officerYielded: 0, deserted: 1, commanderRode: 1, riderBlocked: 2, riderSent: 6, cutOff: 1, inTouch: 3,
   heartened: 5,
   revealed: 3, exchange: 3, standoff: 3, push: 4, crush: 4, disengage: 4, gaveGround: 4, contact: 4,
   hidden: 5, hideFailed: 5, checked: 5, ambushHeld: 5, crowding: 6, arrived: 6, halted: 6, move: 7
@@ -331,7 +332,7 @@ const MAX_FACTS = 14
 
 // The kinds of event that together tell how a unit's fighting went. They are
 // reported per unit (digest, below), not one by one.
-const FIGHTING = new Set(['contact', 'exchange', 'rout', 'pursuit', 'push', 'destroyed', 'fled', 'volley'])
+const FIGHTING = new Set(['contact', 'exchange', 'rout', 'pursuit', 'push', 'destroyed', 'fled', 'volley', 'thrown'])
 
 /**
  * How the fighting went for each of the side's own units, one line a unit:
@@ -349,7 +350,7 @@ function digest(events, { map, ownIds, whereIs = () => null }) {
   const units = new Map()
   const of = (id) => {
     if (!units.has(id)) {
-      units.set(id, { id, foes: [], lost: 0, killed: 0, morale: null, broke: null, lostInFlight: 0, left: null, destroyed: false, brokeEnemies: [], cutDown: 0, drove: [], drivenBy: [], met: [], shotAt: [], felled: 0, shotBy: [], lostToFire: 0 })
+      units.set(id, { id, foes: [], lost: 0, killed: 0, morale: null, broke: null, lostInFlight: 0, left: null, destroyed: false, brokeEnemies: [], cutDown: 0, drove: [], drivenBy: [], met: [], shotAt: [], felled: 0, shotBy: [], lostToFire: 0, threw: null, threwAt: [], felledThrown: 0, thrownBy: null, thrownFrom: [], lostToThrown: 0 })
     }
     return units.get(id)
   }
@@ -368,6 +369,9 @@ function digest(events, { map, ownIds, whereIs = () => null }) {
     } else if (e.type === 'volley') {
       if (ownIds.has(e.by)) { const u = of(e.by); add(u.shotAt, e.unitId); u.felled += e.killed }
       if (ownIds.has(e.unitId)) { const u = of(e.unitId); add(u.shotBy, e.by); u.lostToFire += e.killed }
+    } else if (e.type === 'thrown') {
+      if (ownIds.has(e.by)) { const u = of(e.by); u.threw = e.weapon; add(u.threwAt, e.unitId); u.felledThrown += e.killed }
+      if (ownIds.has(e.unitId)) { const u = of(e.unitId); u.thrownBy = e.weapon; add(u.thrownFrom, e.by); u.lostToThrown += e.killed }
     } else if (e.type === 'contact') {
       for (const [mine, theirs] of [[e.aId, e.bId], [e.bId, e.aId]]) if (ownIds.has(mine)) add(of(mine).met, theirs)
     } else if (e.type === 'rout') {
@@ -392,6 +396,9 @@ function digest(events, { map, ownIds, whereIs = () => null }) {
     const parts = []
     const where = whereIs(u.id)
     const foes = u.foes.length ? u.foes : u.met
+    // Javelins and pila are thrown as the fighting begins: told first.
+    if (u.threw) parts.push(THROWN_WORDS.threw(u.threw, list(u.threwAt)) + (u.felledThrown ? `, felling ${men(u.felledThrown)}` : ', to little effect'))
+    if (u.thrownBy) parts.push(THROWN_WORDS.met(u.thrownBy, list(u.thrownFrom)) + (u.lostToThrown ? `, losing ${men(u.lostToThrown)}` : ', without loss'))
     if (foes.length) {
       parts.push(`${u.foes.length ? 'fought' : 'met'} ${list(foes)}${where ? ` ${whereAt(map, where)}` : ''}`)
     }

@@ -205,7 +205,7 @@ test('the enemy\'s faction, when none is chosen, is another faction, the same fo
   assert.equal(drawn.size, keys.length - 1, 'each of the others comes up')
 })
 
-test('Kush\'s Golden Bows carry a sword for the melee, and no other unit carries a second weapon', () => {
+test('Kush\'s Golden Bows carry a sword for the melee, the only sword carried beside a bow in either army', () => {
   // Ruled 2026-11-24: "They don't hit hard from range? They can have a sword".
   const spec = fieldFactions(loadScenario('meeting-battle', { map: 'ashford', deploy: true }), { red: 'kush', blue: 'rome' })
   const bows = spec.units.find(u => u.id === 'red_golden_bows')
@@ -216,13 +216,26 @@ test('Kush\'s Golden Bows carry a sword for the melee, and no other unit carries
   assert.equal(game.battle.world.units.find(u => u.id === 'red_golden_bows').sidearm, 'sword_standard', 'and take it into battle')
 })
 
-test('an elite\'s sidearm must be a hand weapon its culture may field', () => {
-  const was = FACTIONS.kush.elite.sidearm
+test('an elite\'s second weapon must be one its culture may field, by the builder\'s rules', () => {
+  const was = FACTIONS.kush.elite.second
   try {
-    FACTIONS.kush.elite.sidearm = 'roman_gladius'
+    FACTIONS.kush.elite.second = 'roman_gladius'
     assert.equal(buildFaction('kush').ok, false, 'not a Roman sword')
-    FACTIONS.kush.elite.sidearm = 'sling'
+    FACTIONS.kush.elite.second = 'sling'
     assert.equal(buildFaction('kush').ok, false, 'not a second missile weapon')
-  } finally { FACTIONS.kush.elite.sidearm = was }
+    FACTIONS.kush.elite.second = 'light_javelin'
+    assert.equal(buildFaction('kush').ok, false, 'not javelins beside a bow')
+  } finally { FACTIONS.kush.elite.second = was }
   assert.equal(buildFaction('kush').ok, true)
+})
+
+test('the elites the doc gives javelins throw them, and close with a sword', () => {
+  const spec = fieldFactions(loadScenario('meeting-battle', { map: 'ashford', deploy: true }), { red: 'thrace', blue: 'berbers' })
+  const guard = spec.units.find(u => u.id === 'red_peltast_guard')
+  const blue = spec.units.find(u => u.id === 'blue_blue_men')
+  assert.deepEqual([guard.primaryWeapon, guard.thrown], ['sword_standard', 'javelin_heavy'])
+  assert.deepEqual([blue.primaryWeapon, blue.thrown, blue.mounted], ['sword_standard', 'javelin_heavy', true])
+  const game = require('../../orchestrator').createGame({ ...spec, standingOrders: {} }, { seed: 1 })
+  const T = require('../../combat/tables')
+  assert.equal(game.battle.world.units.find(u => u.id === 'red_peltast_guard').throws, T.THROWN.THROWS, 'with their throws')
 })

@@ -283,8 +283,41 @@ test('a deathmatch ends when a side yields the field, loses its army or loses it
   } finally { await app.close() }
 })
 
-test('the army screen names the Golden Bows\' sword in their kit', () => {
+test('the army screen names an elite\'s second weapon in its kit: the Golden Bows\' sword, the Praetorians\' pila', () => {
   const { appraise } = require('../armies')
   assert.equal(appraise('kush').elite.words, 'elite, war bow and sword, light armour, no shield, on foot')
-  assert.equal(appraise('rome').elite.words, 'elite, gladius, heavy armour, heavy shield, on foot')
+  assert.equal(appraise('rome').elite.words, 'elite, gladius and pila, heavy armour, heavy shield, on foot')
+  assert.equal(appraise('carthage').elite.words, 'elite, fine spear, heavy armour, heavy shield, on foot')
+})
+
+test('a second weapon is one more choice on the army screen, priced, kept with the army, and named in its kit', async () => {
+  const app = await start()
+  try {
+    const made = (await app.api('POST', '/api/commanders', { faction: 'rome' })).body
+    const draft = { quality: 'professional', weapon: 'roman_gladius', armor: 'medium_armor', shield: 'heavy_shield' }
+    const seen = (await app.api('POST', '/api/factions/rome/appraise', { units: [], draft })).body
+    const second = (value) => seen.draft.options.second.find(o => o.value === value)
+    assert.deepEqual([second('').words, second('').cost, second('').refused], ['none', 0, null])
+    assert.deepEqual([second('roman_pilum').words, second('roman_pilum').cost, second('roman_pilum').kind, second('roman_pilum').refused], ['pila', 2, 'thrown', null])
+    assert.equal(second('sword_standard').kind, 'sidearm')
+    assert.equal(second('sword_standard').refused, 'The sword is a sidearm for men who shoot')
+    assert.ok(!seen.draft.options.weapon.some(o => ['light_javelin', 'roman_pilum', 'daggers'].includes(o.value)), 'what is carried beside another weapon is not offered as the first')
+    assert.ok(!seen.draft.options.second.some(o => o.value === 'daggers'), 'nor the knife every missile unit has')
+
+    const withPila = (await app.api('POST', '/api/factions/rome/appraise', { units: [], draft: { ...draft, second: 'roman_pilum' } })).body.draft
+    assert.equal(withPila.cost, 15)
+    assert.equal(withPila.words, 'professionals, gladius and pila, medium armour, heavy shield, on foot')
+    // A weapon that does not take it: the screen is told, and puts it down.
+    const sling = { ...draft, weapon: 'sling', armor: 'light_armor', shield: 'no_shield', second: 'roman_pilum' }
+    assert.equal((await app.api('POST', '/api/factions/rome/appraise', { units: [], draft: sling })).body.draft.secondRefused, true)
+    assert.equal(withPila.secondRefused, false)
+
+    const units = [{ name: 'legionaries', ...draft, second: 'roman_pilum' }, { name: 'slingers', quality: 'levy', weapon: 'sling', second: 'sword_standard' }]
+    const kept = await app.api('POST', `/api/commander/${made.token}/army`, { units })
+    assert.equal(kept.status, 200, JSON.stringify(kept.body))
+    assert.deepEqual(kept.body.army.units.map(u => u.second), ['roman_pilum', 'sword_standard'])
+    const bad = await app.api('POST', `/api/commander/${made.token}/army`, { units: [{ name: 'legionaries', ...draft, second: 'sword_standard' }] })
+    assert.equal(bad.status, 400)
+    assert.deepEqual(bad.body.errors, ['Legionaries: the sword is a sidearm for men who shoot'])
+  } finally { await app.close() }
 })

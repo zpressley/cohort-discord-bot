@@ -1635,7 +1635,7 @@ function createBattleStore({ dir = null, ai = null, now = () => Date.now() } = {
       for (const f of captive.fates.filter(x => captive.prices.includes(x.unitId))) {
         const spec = game.spec.units.find(u => u.id === f.unitId)
         const own = roster.find(u => u.name === f.unit)
-        const kit = own ?? { quality: spec.raisedAs ?? spec.quality, weapon: spec.primaryWeapon, armor: spec.armor, shield: spec.shield, mounted: Boolean(spec.mounted) }
+        const kit = own ?? { quality: spec.raisedAs ?? spec.quality, weapon: spec.primaryWeapon, second: spec.sidearm ?? spec.thrown, armor: spec.armor, shield: spec.shield, mounted: Boolean(spec.mounted) }
         const { state, officer } = handOver(captive.commander.company, { id: entry.id, title: entry.title, result: captive.result }, f)
         out.push({
           to: captor.side,

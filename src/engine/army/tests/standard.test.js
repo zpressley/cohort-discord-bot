@@ -129,3 +129,25 @@ test('changing the army keeps a kept unit\'s officer and count, drops a dismisse
   assert.equal(again.units.find(u => u.kind === 'spears').officer.name, 'Marcus')
   assert.equal(again.company.officers.length, 2, 'no officer is made by changing the army')
 })
+
+test('an army saved before there were second weapons reads, checks and fields as it was, with no second weapon', () => {
+  const saved = [{ name: 'legionaries', quality: 'professional', weapon: 'roman_gladius', armor: 'medium_armor', shield: 'heavy_shield', mounted: false }]
+  const checked = checkStandard('rome', saved)
+  assert.ok(checked.ok, checked.errors.join('; '))
+  assert.deepEqual(checked.units, saved)
+  const [legion] = standardUnits('rome', saved, 'red')
+  assert.ok(!('thrown' in legion) && !('sidearm' in legion))
+})
+
+test('a bought second weapon is kept with the army and goes into battle', () => {
+  const units = [
+    { name: 'legionaries', quality: 'professional', weapon: 'roman_gladius', second: 'roman_pilum', armor: 'medium_armor', shield: 'heavy_shield' },
+    { name: 'slingers', quality: 'levy', weapon: 'sling', second: 'sword_standard' }
+  ]
+  const checked = checkStandard('rome', units)
+  assert.ok(checked.ok, checked.errors.join('; '))
+  assert.deepEqual(checked.units.map(u => u.second), ['roman_pilum', 'sword_standard'])
+  const fielded = standardUnits('rome', units, 'red')
+  assert.equal(fielded.find(u => u.id === 'red_legionaries').thrown, 'roman_pilum')
+  assert.equal(fielded.find(u => u.id === 'red_slingers').sidearm, 'sword_standard')
+})

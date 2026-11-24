@@ -11,6 +11,12 @@
 //
 //   node src/harness/army-study/search.js                       200 armies a faction, 4 workers
 //   node src/harness/army-study/search.js --per 100 --workers 4 --out file.json
+//   node src/harness/army-study/search.js --per 30 --seconds none
+//
+// `--seconds` (docs/design/army-balance.md, part 8): which kits are drawn.
+// `any` (the default): every kit the builder sells, with a second weapon
+// or without. `none`: no second weapons (the draw before part 8, army for
+// army). `all`: a kit that may carry a second weapon always carries one.
 //
 // Every battle has its own seed (lib.seedFor). The draw of armies is seeded
 // too, so a run is repeatable.
@@ -19,7 +25,7 @@ const { fork } = require('child_process')
 const fs = require('fs')
 const L = require('./lib')
 const { createRng } = require('../../engine/rng')
-const { buildUnit, PURCHASABLE } = require('../../engine/army/builder')
+const { buildUnit, secondKind, PURCHASABLE } = require('../../engine/army/builder')
 const D = require('../../engine/army/data')
 const { FACTIONS } = require('../../data/factions')
 
@@ -28,14 +34,21 @@ const arg = (name, dflt) => { const i = process.argv.indexOf(name); return i > -
 const ARMOURS = ['no_armor', 'light_armor', 'medium_armor', 'heavy_armor']
 const SHIELDS = ['no_shield', 'light_shield', 'medium_shield', 'heavy_shield']
 
-/** Every kit the builder allows this faction. */
+const SECONDS = arg('--seconds', 'any')
+const SECOND_WEAPONS = Object.keys(D.WEAPONS).filter(w => secondKind(w))
+
+/** Every kit the builder allows this faction (with a second weapon, as `--seconds` says). */
 function kitsOf(faction) {
   const culture = FACTIONS[faction].culture
   const out = []
   for (const quality of PURCHASABLE) for (const weapon of Object.keys(D.WEAPONS)) for (const armor of ARMOURS) for (const shield of SHIELDS) for (const mounted of [false, true]) {
     const kit = { quality, weapon, armor, shield, mounted }
     const r = buildUnit(kit, culture)
-    if (r.ok) out.push({ kit, cost: r.cost })
+    if (!r.ok) continue
+    const withSecond = SECONDS === 'none' ? [] : SECOND_WEAPONS.map(second => ({ kit: { quality, weapon, second, armor, shield, mounted }, r: buildUnit({ ...kit, second }, culture) }))
+      .filter(x => x.r.ok).map(x => ({ kit: x.kit, cost: x.r.cost }))
+    if (SECONDS !== 'all' || withSecond.length === 0) out.push({ kit, cost: r.cost })
+    out.push(...withSecond)
   }
   return out
 }
@@ -100,7 +113,7 @@ function inWorkers(armies, { seeds, policy = 'planner', workers }) {
 const describe = (a) => {
   const groups = new Map()
   for (const u of a.units) {
-    const k = [u.quality.replace('veteran_mercenary', 'veteran').replace('tribal_warriors', 'tribal'), u.weapon, u.armor.replace('_armor', ''), u.shield.replace('_shield', ' shield'), u.mounted ? 'horse' : 'foot'].join(' ')
+    const k = [u.quality.replace('veteran_mercenary', 'veteran').replace('tribal_warriors', 'tribal'), u.weapon + (u.second ? `&${u.second}` : ''), u.armor.replace('_armor', ''), u.shield.replace('_shield', ' shield'), u.mounted ? 'horse' : 'foot'].join(' ')
     groups.set(k, (groups.get(k) ?? 0) + 1)
   }
   return [...groups].map(([k, n]) => `${n}x ${k}`).join(' + ')
@@ -179,6 +192,8 @@ async function main() {
   const hasMissile = screened.filter(a => a.units.some(shoots))
   const missileShare = (a) => a.units.filter(shoots).length / a.units.length
   console.log(`\nArmies with no missile troops: ${p(mean(screened.filter(a => !a.units.some(shoots))))} mean win (${screened.length - hasMissile.length}); with some: ${p(mean(hasMissile))} (${hasMissile.length}); over half missile: ${p(mean(screened.filter(a => missileShare(a) > 0.5)))} (${screened.filter(a => missileShare(a) > 0.5).length}).`)
+  const seconds = screened.filter(a => a.units.some(u => u.second))
+  console.log(`Armies with a second weapon: ${p(mean(seconds))} mean win (${seconds.length}); every unit that may carry one carrying one: ${p(mean(seconds.filter(a => a.units.every(u => u.second || !SECOND_WEAPONS.some(w => buildUnit({ ...u, second: w }, FACTIONS[a.faction].culture).ok)))))}; without: ${p(mean(screened.filter(a => !a.units.some(u => u.second))))} (${screened.length - seconds.length}). Missile units with a sword: ${p(mean(screened.filter(a => a.units.some(u => u.second && secondKind(u.second) === 'sidearm'))))} mean win (${screened.filter(a => a.units.some(u => u.second && secondKind(u.second) === 'sidearm')).length}); with javelins: ${p(mean(screened.filter(a => a.units.some(u => u.second && secondKind(u.second) === 'thrown'))))} (${screened.filter(a => a.units.some(u => u.second && secondKind(u.second) === 'thrown')).length}).`)
   console.log(`Mono armies ${p(mean(screened.filter(a => a.kind === 'mono')))}, mixes ${p(mean(screened.filter(a => a.kind === 'mix')))}. Over 70%: ${screened.filter(a => a.rate > 0.7).length} of ${screened.length}; under 20%: ${screened.filter(a => a.rate < 0.2).length}.`)
   console.log(`\nIn ${Math.round((Date.now() - t0) / 1000)} s.`)
   if (out) fs.writeFileSync(out, JSON.stringify({ screened, confirm, charge, rr }, null, 1))

@@ -6,8 +6,8 @@
 // the losses and what they do to morale (resolve.js, volley).
 //
 // A missile unit is one whose weapon reaches MISSILES.MIN_RANGE_M or more:
-// bows, slings, crossbows. Javelins, darts and throwing axes are thrown in
-// the charge, and stay inside the melee tables.
+// bows, slings, crossbows. Javelins, darts and throwing axes are a second
+// weapon, thrown once as a unit comes to blows (thrownVolley).
 
 const T = require('./tables')
 const R = require('./ratings')
@@ -53,4 +53,22 @@ function volley(shooter, target, { distance, targetTerrain = 'plains', moved = f
   return felled
 }
 
-module.exports = { missileRange, missileRangeMetres, volley, TILE_METRES }
+/**
+ * Men felled by a unit's thrown weapon (`thrown`: javelins, pila), loosed
+ * once as it comes to blows (tables.THROWN): a volley as `volley` reckons
+ * one, at close range, with the thrown weapon, times THROWN.CLOSE. 0 for a
+ * unit with nothing left to throw.
+ */
+function thrownVolley(thrower, target, { targetTerrain = 'plains' } = {}) {
+  const weapon = T.WEAPONS[thrower.thrown]
+  if (!weapon || !((thrower.throws ?? 0) > 0) || thrower.strength <= 0) return 0
+  const M = T.MISSILES
+  let felled = thrower.strength * M.RATE * T.THROWN.CLOSE *
+    (weapon.damage / M.NORMAL_DAMAGE) *
+    ((weapon.effectiveness[R.armorClass(target)] ?? 50) / 100) *
+    (M.SHIELD[target.shield] ?? 1)
+  if (targetTerrain === 'forest') felled *= M.IN_WOODS
+  return felled
+}
+
+module.exports = { missileRange, missileRangeMetres, volley, thrownVolley, TILE_METRES }

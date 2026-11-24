@@ -767,6 +767,8 @@ function stepTurn(state, sideOrders = {}, { sameTurn = false } = {}) {
     }
     if (surprises.length > 0) engagement.surprisedBy = surprises
   }
+  // The fights begun this tick, for the throw at contact (below).
+  const newContacts = engagements.filter(e => !state.previousEngagementKeys.has(`${e.aId}|${e.bId}`))
   state.previousEngagementKeys = new Set(engagements.map(e => `${e.aId}|${e.bId}`))
 
   // Units beaten this turn (broken or destroyed), for those who take heart
@@ -826,6 +828,42 @@ function stepTurn(state, sideOrders = {}, { sameTurn = false } = {}) {
     } else if (hit.broke && !broken.has(target.id)) {
       broken.add(target.id)
       log.emit('rout', turn, { unitId: target.id, by: shooter.id })
+      beaten.push(target.id)
+    }
+  }
+
+  // ── The throw at contact ────────────────────────
+  // A unit that carries a thrown weapon beside its hand weapon (javelins,
+  // pila: docs/design/army-balance.md, part 8), and has throws left, looses
+  // one volley of it as it comes to blows: whether it closed or was closed
+  // on, and whether or not it moved, for the throw is part of the charge,
+  // not shooting on the move. One throw a tick, at the first enemy it came
+  // to blows with (by name). Both sides throw at once, then fight.
+  const throwers = new Map()
+  for (const e of newContacts) {
+    for (const [by, at] of [[e.aId, e.bId], [e.bId, e.aId]]) {
+      const unit = getUnit(world, by)
+      if (!unit?.thrown || !(unit.throws > 0) || broken.has(by) || broken.has(at)) continue
+      if (!throwers.has(by) || at.localeCompare(throwers.get(by)) < 0) throwers.set(by, at)
+    }
+  }
+  const thrown = [...throwers].sort(([x], [y]) => x.localeCompare(y)).map(([by, at]) => {
+    const thrower = getUnit(world, by)
+    const target = getUnit(world, at)
+    return { thrower, target, felled: ranged.thrownVolley(thrower, target, { targetTerrain: map.terrainAt(target.position) }) }
+  })
+  for (const { thrower, target, felled } of thrown) {
+    thrower.throws -= 1
+    if (target.strength <= 0) continue
+    const hit = resolver.volley(target, felled, turn)
+    const [applied] = applyCasualties(world, [{ unitId: target.id, killed: hit.killed }])
+    log.emit('thrown', turn, { unitId: target.id, by: thrower.id, weapon: thrower.thrown, killed: hit.killed, remaining: target.strength })
+    if (applied?.destroyed) {
+      log.emit('destroyed', turn, { unitId: target.id })
+      beaten.push(target.id)
+    } else if (hit.broke && !broken.has(target.id)) {
+      broken.add(target.id)
+      log.emit('rout', turn, { unitId: target.id, by: thrower.id })
       beaten.push(target.id)
     }
   }

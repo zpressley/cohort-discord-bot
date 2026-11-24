@@ -9,6 +9,7 @@
 // ("D4"); it is translated here, once, as the unit enters the world.
 
 const { toPosition, distance } = require('./map/labels')
+const { THROWN } = require('./combat/tables')
 
 // A harness unit. Field names match phase 1's createUnit() where they overlap
 // so movementEngine.executeMove() can consume one unchanged.
@@ -49,6 +50,10 @@ function createUnit(spec) {
     // A missile unit's own hand weapon, where it has one (combat/ratings.js,
     // handWeapon: Kush's Golden Bows' sword). Carried only when set.
     ...(spec.sidearm ? { sidearm: spec.sidearm } : {}),
+    // Its thrown weapon, where it carries one beside its hand weapon, and the
+    // throws it has left (battle/battle.js, the throw at contact; part 8 of
+    // docs/design/army-balance.md). Carried only when set.
+    ...(spec.thrown ? { thrown: spec.thrown, throws: spec.throws ?? THROWN.THROWS } : {}),
     // The officer who carries the Commander's orders to this unit
     // (command/officers.js): { name, experience, personality }. A unit
     // without one carries any order whole.

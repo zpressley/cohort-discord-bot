@@ -18,12 +18,12 @@
 //
 // Nothing here is trusted from the browser: every list is checked again.
 
-const { buildUnit, buildArmy, PURCHASABLE } = require('../engine/army/builder')
+const { buildUnit, buildArmy, secondKind, PURCHASABLE } = require('../engine/army/builder')
 const D = require('../engine/army/data')
 const { tables: T } = require('../engine/combat')
 const { FACTIONS } = require('../data/factions')
 const { checkStandard, usualArmy, kitOf, baseOf } = require('../engine/army/standard')
-const { KIT } = require('../narrator/words')
+const { KIT, THROWN_WORDS } = require('../narrator/words')
 
 const cultureOf = (key) => FACTIONS[key]?.culture
 const budgetOf = (key) => D.SP_BUDGETS[cultureOf(key)] ?? D.DEFAULT_SP_BUDGET
@@ -64,11 +64,11 @@ function nameFits(key, kit, name) {
 
 const cap = (s) => s.charAt(0).toUpperCase() + s.slice(1)
 
-/** A unit's kit in words: "militia, spear, light armour, medium shield, on foot". */
+/** A unit's kit in words: "militia, spear, light armour, medium shield, on foot"; a second weapon after the first ("gladius and pila"). */
 function kitWords(kit) {
   const k = kitOf(kit)
   const weapon = (w) => KIT.weapon[w] ?? w
-  return [KIT.quality[kit.quality] ?? kit.quality, weapon(k.weapon) + (kit.sidearm ? ` and ${weapon(kit.sidearm)}` : ''), KIT.armor[k.armor] ?? k.armor,
+  return [KIT.quality[kit.quality] ?? kit.quality, weapon(k.weapon) + (k.second ? ` and ${weapon(k.second)}` : ''), KIT.armor[k.armor] ?? k.armor,
     KIT.shield[k.shield] ?? k.shield, KIT.mounted[String(k.mounted)]].join(', ')
 }
 
@@ -183,6 +183,10 @@ function appraise(key, { units = [], draft = null, at = null, reserved = [] } = 
   }
   const option = (field, value, cost, words) => ({ value, cost, words, refused: refusal({ ...kit, [field]: value }) })
   const legal = Object.entries(D.WEAPONS).filter(([, w]) => w.cultures === 'all' || w.cultures.includes(culture))
+  // A weapon only ever carried beside another (a sidearm, javelins) is
+  // offered as the second weapon, not the first (docs/design/army-balance.md,
+  // part 8). The swords are both.
+  const alone = (w) => !(D.WEAPONS[w].stacking === 'secondary' || secondKind(w) === 'thrown')
   const unit = buildUnit(kit, culture)
   out.draft = {
     ...kit,
@@ -191,11 +195,18 @@ function appraise(key, { units = [], draft = null, at = null, reserved = [] } = 
     men: unit.unit?.size ?? null,
     words: kitWords(kit),
     refused: judge(kit),
+    // Whether its second weapon is one it may not carry (with the weapon
+    // just chosen, say): the screen puts it down.
+    secondRefused: Boolean(kit.second && unit.errors.some(e => e.startsWith(`${kit.second} `))),
     spentWith: spentBy(others) + (unit.ok ? unit.cost : 0),
     options: {
       quality: PURCHASABLE.map(q => option('quality', q, T.QUALITY_TIERS[q].cost, KIT.quality[q])),
       mounted: [option('mounted', false, 0, KIT.mounted.false), option('mounted', true, mountCost(key), KIT.mounted.true)],
-      weapon: legal.map(([w, data]) => ({ ...option('weapon', w, data.sp, KIT.weapon[w] ?? w), shoots: shoots(w) })),
+      weapon: legal.filter(([w]) => alone(w)).map(([w, data]) => ({ ...option('weapon', w, data.sp, KIT.weapon[w] ?? w), shoots: shoots(w) })),
+      // One more weapon, or none: javelins and the like to throw as they
+      // close (kind 'thrown'), or a sword for men who shoot ('sidearm').
+      second: [{ ...option('second', '', 0, THROWN_WORDS.none), kind: null },
+        ...legal.filter(([w]) => secondKind(w)).map(([w, data]) => ({ ...option('second', w, data.sp, KIT.weapon[w] ?? w), kind: secondKind(w) }))],
       armor: Object.keys(D.ARMOR_SP).map(a => option('armor', a, D.ARMOR_SP[a], KIT.armor[a])),
       shield: Object.keys(D.SHIELD_SP).map(s => option('shield', s, D.SHIELD_SP[s], KIT.shield[s]))
     }

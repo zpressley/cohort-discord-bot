@@ -651,6 +651,7 @@ const STEPS = [
   ['quality', 'The men'],
   ['mounted', 'On foot or on horse'],
   ['weapon', 'Their weapon'],
+  ['second', 'A second weapon'],
   ['armor', 'Armour'],
   ['shield', 'Shield']
 ]
@@ -869,11 +870,20 @@ async function armyScreen(token) {
     const d = s.draft
     const spent = d.spentWith
     const option = (field, o) => {
-      const on = String(state.draft[field]) === String(o.value)
+      const on = String(state.draft[field] ?? '') === String(o.value)
       return `<button class="opt" type="button" data-field="${field}" data-value="${esc(String(o.value))}" aria-pressed="${on}"${o.refused && !on ? ' aria-disabled="true"' : ''}>${esc(cap(o.words))}<span>${o.cost ? `+${o.cost}` : 'free'}</span></button>`
     }
     const step = ([field, title]) => {
       const options = d.options[field]
+      // A second weapon: none, javelins and the like to throw as they close,
+      // or a sword for men who shoot. Only the kind their weapon takes.
+      if (field === 'second') {
+        const shoots = d.options.weapon.find(o => o.value === d.weapon)?.shoots
+        const kind = shoots ? 'sidearm' : 'thrown'
+        const fit = options.filter(o => o.kind === kind)
+        if (fit.length === 0) return ''
+        return `<section class="step"><h3>${title}: ${shoots ? 'a sword, to fight hand to hand' : 'to throw as they close'}</h3><div class="options">${[options[0], ...fit].map(o => option(field, o)).join('')}</div></section>`
+      }
       if (field !== 'weapon') return `<section class="step"><h3>${title}</h3><div class="options">${options.map(o => option(field, o)).join('')}</div></section>`
       const close = options.filter(o => !o.shoots)
       const far = options.filter(o => o.shoots)
@@ -907,7 +917,13 @@ async function armyScreen(token) {
       }
       state.refused = null
       state.draft[field] = field === 'mounted' ? o.value === true : o.value
+      if (field === 'second' && !o.value) delete state.draft.second
       await appraise()
+      // A second weapon the new choice does not allow is put down.
+      if (field !== 'second' && state.draft.second && state.seen.draft.secondRefused) {
+        delete state.draft.second
+        await appraise()
+      }
       const y = window.scrollY
       render()
       window.scrollTo(0, y)
@@ -917,7 +933,7 @@ async function armyScreen(token) {
     document.getElementById('draft-cancel').addEventListener('click', leave)
     document.getElementById('take').addEventListener('click', async () => {
       // A unit he named keeps its name (the server holds which those are).
-      const unit = { name: d.name, quality: d.quality, weapon: d.weapon, armor: d.armor, shield: d.shield, mounted: d.mounted, ...(state.draft.named ? { named: true } : {}) }
+      const unit = { name: d.name, quality: d.quality, weapon: d.weapon, ...(d.second ? { second: d.second } : {}), armor: d.armor, shield: d.shield, mounted: d.mounted, ...(state.draft.named ? { named: true } : {}) }
       if (state.at === null) state.units.push(unit)
       else state.units[state.at] = unit
       state.note = state.at === null ? `The ${d.name} join your army.` : `The ${d.name} are changed.`

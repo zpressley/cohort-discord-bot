@@ -79,6 +79,17 @@ const TRIBAL_CULTURES = [
 //   armorMax           Recommendation A (docs/design/army-balance.md): the heaviest
 //                      armour its men may wear (missile troops are light
 //                      troops; crossbowmen may wear medium)
+//   sidearm            second weapons (docs/design/army-balance.md, part 8):
+//                      a sword a missile unit may carry beside its bow or
+//                      sling, to fight hand to hand with. The knife every
+//                      missile unit has already (tables.MISSILES.SIDEARM) is
+//                      not sold, so daggers, the pugio and the sickle are not
+//                      sidearms here: they would buy nothing.
+//
+// A second weapon is one of two kinds (army/builder.js, secondKind): a
+// thrown weapon (stacking stackable_ranged, reach under MISSILES.MIN_RANGE_M:
+// javelins, pila, plumbatae, throwing axes) beside a one-handed hand weapon,
+// or a `sidearm` beside a missile weapon. It costs its own `sp`.
 //
 // Recommendation A's prices: sling 1 -> 2 (it outshot every bow at any price),
 // sling_professional 2 -> 3, han_chinese_crossbow 2 -> 3 (it pierces armour
@@ -96,13 +107,13 @@ const WEAPONS = {
   spear_professional: { sp: 2, stacking: 'primary', cavalryCompatible: false, cultures: 'all' },
   battle_axe: { sp: 2, stacking: 'primary', cavalryCompatible: false, cultures: 'all' },
   mace: { sp: 2, stacking: 'primary', cultures: 'all' },
-  sword_standard: { sp: 2, stacking: 'primary', cultures: 'all' },
+  sword_standard: { sp: 2, stacking: 'primary', sidearm: true, cultures: 'all' },
   // The twenty cultures doc arms the Samnites' elite with "short swords (gladii)".
-  roman_gladius: { sp: 2, stacking: 'primary', cavalryCompatible: false, cultures: ['Roman Republic', 'Samnite Federation'] },
-  greek_xiphos: { sp: 2, stacking: 'primary', cavalryCompatible: false, cultures: ['Spartan City-State', 'Macedonian Kingdoms'] },
-  chinese_dao: { sp: 2, stacking: 'primary', cultures: ['Han Dynasty'] },
-  celtic_longsword: { sp: 2, stacking: 'primary', cultures: ['Celtic Tribes'] },
-  persian_akinakes: { sp: 2, stacking: 'secondary', cultures: ['Achaemenid Persian', 'Parthian Empire'] },
+  roman_gladius: { sp: 2, stacking: 'primary', sidearm: true, cavalryCompatible: false, cultures: ['Roman Republic', 'Samnite Federation'] },
+  greek_xiphos: { sp: 2, stacking: 'primary', sidearm: true, cavalryCompatible: false, cultures: ['Spartan City-State', 'Macedonian Kingdoms'] },
+  chinese_dao: { sp: 2, stacking: 'primary', sidearm: true, cultures: ['Han Dynasty'] },
+  celtic_longsword: { sp: 2, stacking: 'primary', sidearm: true, cultures: ['Celtic Tribes'] },
+  persian_akinakes: { sp: 2, stacking: 'secondary', sidearm: true, cultures: ['Achaemenid Persian', 'Parthian Empire'] },
 
   two_handed_spear: { sp: 3, stacking: 'two_handed', minQuality: 'professional', shieldRestriction: 'no_shield', cavalryCompatible: false, cultures: 'all' },
   heavy_mace: { sp: 3, stacking: 'two_handed', minQuality: 'professional', shieldRestriction: 'no_shield', cavalryCompatible: false, cultures: 'all' },
