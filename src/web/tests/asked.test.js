@@ -40,7 +40,9 @@ async function twoCommanders(app, store) {
     const seats = (await app.api('POST', '/api/battles', { opponent: 'friend', side: 'red', seed, commander: red, objectives: [] })).body.seats
     await app.api('POST', `/api/seat/${seats.blue}/join`, { commander: blue })
     const game = store.seatOf(seats.red).entry.game
-    await app.api('POST', `/api/seat/${seats.red}/orders`, { text: 'everyone advance' })
+    // (Sent 300 m east since columns, November 24: told to advance, every
+    // stop in seeds 5 to 150 called both.)
+    await app.api('POST', `/api/seat/${seats.red}/orders`, { text: 'everyone go east 300 m' })
     await app.api('POST', `/api/seat/${seats.blue}/orders`, { text: 'everyone hold' })
     for (let t = 0; t < 30 && !game.outcome.decided; t++) {
       const wanted = waitingOn(game)

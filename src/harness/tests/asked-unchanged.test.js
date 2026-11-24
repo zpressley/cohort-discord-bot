@@ -60,6 +60,13 @@
 // unit). Alone, the planner's change had made them 1ec586ea 25,
 // 2570d8ea 26, b73254c7 12, 7ea53132 23 (everyone asked) and 61e100aa 25,
 // 824d0cc9 27, 15f2219b 13, 4fa3b601 23 (no Commander).
+//
+// Retaken when armies marched in column, a ford took one unit at a time,
+// broken units ran round the enemy and skirmishers stood with their backs
+// to the edge (docs/DECISIONS.md, "How columns, wavering under fire and
+// flight were mended"). The battles were 48be1b7d 26, 630cf9be 32,
+// b73254c7 12, c80e8547 23 (everyone asked) and b01c713a 25, 39ecf1e5 26,
+// 15f2219b 13, 842dd7c2 23 (no Commander).
 
 const { test } = require('node:test')
 const assert = require('node:assert/strict')
@@ -98,18 +105,18 @@ function play(extra, { commander }) {
 
 test('a battle saved before the riders rulings (marked everyoneAsked) plays back exactly as it was played, event for event', () => {
   assert.deepEqual(play({ everyoneAsked: true }, { commander: true }), {
-    'crownhill 1': '48be1b7d 26',
-    'crownhill 2': '630cf9be 32',
-    'ashford 1': 'b73254c7 12',
-    'ashford 2': 'c80e8547 23'
+    'crownhill 1': '215377e2 16',
+    'crownhill 2': '32628ef1 18',
+    'ashford 1': 'e31d6dc4 16',
+    'ashford 2': '4a6dc1e6 15'
   })
 })
 
 test('a battle with no Commander on the field runs exactly as before the riders rulings, event for event', () => {
   assert.deepEqual(play({}, { commander: false }), {
-    'crownhill 1': 'b01c713a 25',
-    'crownhill 2': '39ecf1e5 26',
-    'ashford 1': '15f2219b 13',
-    'ashford 2': '842dd7c2 23'
+    'crownhill 1': 'f15578bb 16',
+    'crownhill 2': '3749bac6 18',
+    'ashford 1': '43ea0117 17',
+    'ashford 2': 'e9f21cee 16'
   })
 })
