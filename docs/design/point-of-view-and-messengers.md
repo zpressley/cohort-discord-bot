@@ -158,6 +158,16 @@ Where the build stands:
 
 All three steps are built. Not built: everything under "What comes after".
 
+- **Reports that say more as an officer rises, and never say anything
+  wrong** (ruled November 23) are built (`engine/orchestrator/reports.js`;
+  see `docs/DECISIONS.md`, "How reports that grow with the officer were
+  built"). A unit with no officer reports that there is an enemy and where
+  ("enemy troops", "?" on the map); a green officer adds what kind; a
+  seasoned one roughly how many; a veteran exactly how many; a legendary
+  one how they are holding up. Each report is the officer's of the unit
+  that saw them, fixed when made and carried by rider; he keeps the
+  fullest true thing he has been told, each fact as old as its report.
+
 - **Zach's answers of November 23 are built** (see `docs/DECISIONS.md`,
   "How the riders rulings were built"): the immediate range stays at 6
   tiles; a unit cut off is no longer told (`cutOff` and `inTouch` are only
@@ -174,11 +184,6 @@ All three steps are built. Not built: everything under "What comes after".
 
 ## What comes after, not in this build
 
-- **Reports that say more as an officer rises, and never say anything
-  wrong** (ruled November 23). A unit with no officer reports that there
-  is an enemy and where; a green officer adds what kind; a seasoned one
-  roughly how many; a veteran exactly how many; a legend how they are
-  holding up. Every level's report is true as far as it goes.
 - Officers who act on their Commander's intent when out of contact
   (veterans and above). The level-30 officer as a "second" near whom
   orders arrive at once was ruled out as too powerful.

@@ -212,4 +212,64 @@ const NIGHT = {
   released: 'Night fell with you still in the enemy\'s hands, and no deal struck. Honor forbids them your life: they let you go, with whatever of your army came through the day.'
 }
 
-module.exports = { orderWords, moraleWords, ORDER, OWN_EDGE, HOLD_THERE, KIT, RIDE_WITH, LOYALTY_WORDS, VALUES_WORDS, VETERANCY_WORDS, RIDER, NIGHT }
+// A unit's wind in a word, as its share of what it can spend: fresh, tiring
+// or spent (fresh above 60%, as combat counts a unit at full wind:
+// tables.STAMINA.FULL_ABOVE; spent at a quarter or under).
+function windWords(stamina, pool) {
+  const share = pool ? stamina / pool : stamina / 100
+  if (share > 0.6) return 'fresh'
+  if (share > 0.25) return 'tiring'
+  return 'spent'
+}
+
+// What a report of the enemy holds (engine/orchestrator/reports.js; ruled
+// 2026-11-23: "additional details as progression happens but never
+// incorrect details"). An enemy unit whose kind no report has told is
+// "enemy troops". "Roughly how many" is told in bands (tables.REPORTS.ABOUT,
+// one phrase each, in the same order): the true number is always inside
+// the band named, so the words are never wrong.
+const REPORT = {
+  troops: 'troops',
+  about: ['a handful of men', 'a few dozen men', 'several dozen men', 'about a hundred men', 'well over a hundred men', 'a few hundred men', 'many hundreds of men'],
+  // Who made the best report he has had of them, for the enemy list.
+  by: {
+    none: 'a unit of yours with no officer',
+    green: 'a green officer',
+    seasoned: 'a seasoned officer',
+    veteran: 'a veteran officer',
+    legendary: 'a legendary officer'
+  },
+  // The dispatch's line for an enemy first reported to him: "Velites
+  // report enemy troops at Miller's Crossing (F6-NE)". `by` is the unit that
+  // saw them (null: heard in the enemy's camp).
+  sighted: (by, enemy, men, where) => `${by ? `${by} report` : 'You learned of'} ${enemy}${men ? `, ${men},` : ''} ${where}`,
+  // How many, as told: an exact count, a band, or nothing.
+  men(count) {
+    if (!count) return null
+    return count.exact ? (count.strength === 1 ? '1 man' : `${count.strength} men`) : REPORT.about[count.band]
+  },
+  // How they are holding up (a legendary officer's report).
+  holding(state) {
+    if (!state) return null
+    return state.broken ? 'broken and fleeing' : `${moraleWords(state.morale)}, ${windWords(state.stamina, state.staminaPool)}`
+  },
+  /**
+   * One enemy unit as he knows it, for the enemy list: where and when, then
+   * what the reports held, each with its age when older than the sighting;
+   * and, when a report could tell no more, plainly that more is not known.
+   * @param {Object} e  { status, minutesAgo, kindKnown, count, countAgo, state, stateAgo, grade }
+   */
+  line(e) {
+    const ago = (m) => (m > 0 ? ` (${clock(m)} ago)` : '')
+    const parts = [e.status === 'visible' ? 'in sight' : `last seen ${RIDER.age(e.minutesAgo)}`]
+    const men = REPORT.men(e.count)
+    if (men) parts.push(men + (e.countAgo > e.minutesAgo ? ago(e.countAgo) : ''))
+    const holding = REPORT.holding(e.state)
+    if (holding) parts.push(holding + (e.stateAgo > e.minutesAgo ? ago(e.stateAgo) : ''))
+    const unknown = [!e.kindKnown && 'what kind', !men && 'how many'].filter(Boolean)
+    if (unknown.length) parts.push(`${unknown.join(' and ')} not known: reported by ${REPORT.by[e.grade] ?? REPORT.by.none}`)
+    return parts.join('; ')
+  }
+}
+
+module.exports = { orderWords, moraleWords, ORDER, OWN_EDGE, HOLD_THERE, KIT, RIDE_WITH, LOYALTY_WORDS, VALUES_WORDS, VETERANCY_WORDS, RIDER, NIGHT, REPORT, windWords }

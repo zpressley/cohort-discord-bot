@@ -2709,3 +2709,125 @@ turns; the rest unchanged). The balance table is unchanged.
    carry over too?
 4. The terminal game's four-hour clock still names a winner on losses. Is
    it a day too?
+
+### How reports that grow with the officer were built (Claude's choices, open to change)
+
+Built from the ruling of November 23 ("I would say additional details as
+progression happens but never incorrect details"; "Rulings, November 23,
+2026 (officer perks)" above), to the ladder recorded in
+`docs/design/point-of-view-and-messengers.md`. The code:
+`engine/orchestrator/reports.js` (what one report holds, and how reports
+join), `word.js` and `fogOfWar.js` (each enemy's `told`), the numbers in
+`tables.REPORTS`, the words in `narrator/words.js` (`REPORT`, `windWords`),
+and `web/battles.js` (`enemyView`, `namer`, `enemyForOrders`,
+`menAsTold`). It changes what is told, never what happens: the planner,
+the riders' paths and every engine rule still read the side's full
+ledger; the fingerprint tests (`*-unchanged.test.js`) are unchanged, and
+the balance harness does not touch any of it.
+
+**The ladder** (`REPORTS.TELLS`), by the officer of the unit that saw them:
+
+| | where | kind | how many | holding up |
+|---|---|---|---|---|
+| no officer | yes | | | |
+| green | yes | yes | | |
+| seasoned | yes | yes | roughly | |
+| veteran | yes | yes | exactly | |
+| legendary | yes | yes | exactly | heart, wind, broken |
+
+**The same sighting at each level** (seed 7, Rome against Parthia, the
+Velites first to see the Parthian light horse, 60 men; the enemy list, then
+the dispatch's line):
+- no officer: "Enemy troops at F7-NE: in sight; what kind and how many not
+  known: reported by a unit of yours with no officer". "Velites report
+  enemy troops in open ground 25 m south-east of the woods (F7-NE)". The
+  map marks them "?".
+- green: "Light horse at F7-NE: in sight; how many not known: reported by
+  a green officer". "Velites report enemy light horse in open ground ...".
+- seasoned: "Light horse at F7-NE: in sight; several dozen men".
+  "Velites report enemy light horse, several dozen men, in open ground ...".
+- veteran: "Light horse at F7-NE: in sight; 60 men".
+- legendary: "Light horse at F7-NE: in sight; 60 men; firm, fresh".
+
+**Choices:**
+- **Whose report.** The officer of the unit that saw them, not the best in
+  the army. Several of his units seeing the same enemy in the same ten
+  minutes each send a report, so he has the best of them.
+- **Fixed when made, carried by rider.** A report is made when the unit
+  sends its word and reaches him with it (word.js), as reports already
+  did. A side with no Commander on the field (a friend who leads none, a
+  battle saved before riders) knows at once, as before, but by the same
+  ladder (`fogOfWar.js`).
+- **How reports join** (`join`): he keeps the fullest true thing he has
+  been told, each fact as old as the report it came in. Where they are:
+  the newest report. Their kind: once told, kept (it does not change).
+  How many, and how they hold up: the newest report that told it; of two
+  the same age, the exact over the rough. The enemy list gives a fact's
+  age when it is older than the sighting ("about a hundred men (40 min
+  ago)"). The other reading: an old exact count kept over a newer rough
+  one. I took the newer, as truer of now.
+- **His own eyes** count as at least a veteran's report
+  (`REPORTS.OWN_EYES`). A guess: the design says nothing. The other
+  reading: his own unit's officer, as any unit's. A new Commander rides
+  with his veteran, so the two agree there.
+- **A battle with no officers at all** (the soak, the terminal game)
+  tells what it told before, kind and exact numbers: a veteran's report
+  (`REPORTS.NO_OFFICERS`).
+- **"Roughly how many"**: seven bands (`REPORTS.ABOUT`), one phrase each
+  in `REPORT.about`: a handful (1 to 19), a few dozen (20 to 49), several
+  dozen (50 to 79), about a hundred (80 to 129), well over a hundred (130
+  to 199), a few hundred (200 to 399), many hundreds (400 and more). Set
+  for the factions' units of 40 to 100 men. No gaps, no overlaps: the test
+  checks every number from 1 to 5,000 falls in exactly one band.
+- **"How they are holding up"**: heart in the morale words (firm,
+  wavering, at breaking point); wind in three new words, fresh (over 60%,
+  where combat counts a unit at full wind), tiring, spent (a quarter or
+  under) (`windWords`); or "broken and fleeing".
+- **Kind** is the faction's name for the unit ("light horse", "levy
+  spears"), as green and above told it before. The other reading: the
+  role alone ("horse", "spearmen"). The name says a little more (a guard
+  unit's name says it is the guard).
+- **Names.** An enemy whose kind he has not been told is "enemy troops"
+  everywhere: the map's label, the enemy list, the dispatch, the read-back
+  and its questions. Its own id would say its kind ("blue_slingers"), so
+  the browser gets a stand-in made from the battle's seed
+  (`enemyHandle`); the captor's list of units to ask for uses it too.
+- **The plain account.** Enemy numbers in it ("rallied with 60 men",
+  "left the field with 40 men") are told as his reports allow: exact,
+  roughly, or not at all (`menAsTold`). Men his own units killed are
+  their own count and still told. New: a line for each enemy first
+  reported to him, by whom and where, with what the report held
+  ("Velites report enemy troops ... (F7-NE)"); several he cannot tell
+  apart in one line ("enemy troops (2 units)").
+- **The dispatch (AI).** It is given the same lines as the plain account,
+  so it holds no more. One sentence added to its instructions: "enemy
+  troops" stay exactly that, and it never says what kind they are or how
+  many. Not benchmarked live.
+- **Orders.** He may order an attack on enemy troops by that name ("attack
+  the enemy troops"), by grid square ("... at F7-NE"), or by the ground
+  they are on ("attack the enemy in the woods", "the enemy at Miller's
+  Crossing"): the nearest he has seen to that place. A kind he has not
+  been told cannot be named: "attack the light horse" is asked back.
+- **Not graded:** what a Commander in the enemy's hands sees from where he
+  is held (its own ruling: where, and about how many), the unit holding
+  him (he sees them), the verdict, and "both close to breaking" when two
+  units stand off (it is his own unit's state as much as theirs).
+- **Replay** shows the enemy as his side's reports told it, turn by turn.
+
+**Measured.** A new Commander's first battle (one veteran with the elite,
+no officer elsewhere): his first word of the enemy is almost always from a
+unit with no officer, so it says "enemy troops" and where, and nothing
+more, until they come within sight of his own guard (a veteran's report). Screenshots at 390 px were taken of the enemy list and the map
+for a thin and a full report. The thin report reads plainly and the "?"
+on the map says at a glance that more is unknown; it does not look broken.
+What it costs: he cannot tell foot from horse until his guard sees them,
+and "attack the horse" is asked back.
+
+**For Zach:**
+1. A new Commander's units have no officer, so his first reports say only
+   "enemy troops" and where. Should every unit, officer or not, at least
+   tell foot from horse? (The smallest softening, one line in
+   `REPORTS.TELLS`.)
+2. Should a unit that has fought them for an hour still not know what
+   they are? (As built, a fight tells him nothing more than the sighting
+   did, but the men killed on each side.)

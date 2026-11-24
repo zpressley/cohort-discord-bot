@@ -29,6 +29,14 @@
 //             the report of a unit that saw it
 //   since     the battle turn from which his own riders bring him news (he
 //             was freed then; while held he hears his captors instead)
+//   enemies[id].first  the first report of it to reach him: { turn it
+//             reached him, sent, by: the unit that made it }
+//   enemies[id].told  what the reports of it that have reached him hold, by
+//             the officer of each unit that made one (reports.js; ruled
+//             2026-11-23: "additional details as progression happens but
+//             never incorrect details"). The rest of an entry is for the
+//             engine's own use (where a rider will not ride) and is never
+//             shown him as such.
 // and, since the riders rulings of 2026-11-23 (not in a battle saved before
 // them, spec.everyoneAsked):
 //   units[id].overdue  no word of it for longer than he should have had
@@ -47,7 +55,8 @@
 
 const { canSee } = require('../map/sight')
 const { riders, orderDelays } = require('../command/messengers')
-const { COMMAND } = require('../combat/tables')
+const { COMMAND, REPORTS } = require('../combat/tables')
+const { reportGrade, reportOf: toldOf, join, fuller, conditionOf } = require('./reports')
 
 const copy = (x) => (x === undefined || x === null ? null : JSON.parse(JSON.stringify(x)))
 
@@ -68,6 +77,14 @@ function reportOf(battle, unit) {
   }
 }
 
+// The grade of the reports a unit of his sends. What he sees from his own
+// unit is at least REPORTS.OWN_EYES (a guess: the design says nothing).
+function gradeOfReports(battle, side, unit) {
+  const c = battle.commanders?.[side]
+  const own = c?.status === 'free' && c.unitId === unit.id
+  return own ? fuller(reportGrade(unit), REPORTS.OWN_EYES) : reportGrade(unit)
+}
+
 // An enemy as the one who saw it could tell.
 const sighting = (enemy, turn) => ({
   position: { ...enemy.position },
@@ -86,7 +103,13 @@ function createWord(game, side) {
     word.units[unit.id] = { ...reportOf(battle, unit), heard: 0, live: true, cutOff: false, gone: null }
   }
   // What his side saw of the enemy as it formed up.
-  for (const [id, e] of Object.entries(game.intel[side]?.known ?? {})) word.enemies[id] = { ...copy(e) }
+  // Each as told by the best officer of his who could see it then.
+  for (const [id, e] of Object.entries(game.intel[side]?.known ?? {})) {
+    const enemy = battle.world.units.find(u => u.id === id)
+    const seers = battle.world.units.filter(u => u.side === side && enemy && canSee(battle.map, u, enemy, battle.hidden.has(id) ? { seenWithin: battle.hidden.get(id).seenWithin } : {}))
+    const grade = seers.reduce((g, u) => fuller(g, gradeOfReports(battle, side, u)), null) ?? 'none'
+    word.enemies[id] = { ...copy(e), told: enemy ? toldOf(enemy, grade, e.seenOnTurn, () => conditionOf(battle, enemy)) : { grade: 'none', on: e.seenOnTurn }, first: { turn: 0, sent: e.seenOnTurn, by: seers[0]?.id ?? null } }
+  }
   return word
 }
 
@@ -154,7 +177,7 @@ function updateWord(game, side) {
     word.road.push({
       unitId: unit.id, sent: turn, arrives, live: ticks === 0,
       report: { ...reportOf(battle, unit), gone },
-      sees: sees.map(e => ({ id: e.id, ...sighting(e, turn) }))
+      sees: sees.map(e => ({ id: e.id, ...sighting(e, turn), told: toldOf(e, gradeOfReports(battle, side, unit), turn, () => conditionOf(battle, e)) }))
     })
   }
 
@@ -170,10 +193,13 @@ function updateWord(game, side) {
         if (known?.overdue) (word.back ??= []).push({ unitId: r.unitId, turn })
         word.units[r.unitId] = { ...r.report, heard: r.sent, live: r.live && r.sent === turn, cutOff: known?.cutOff ?? false, ...(toldCutOff ? {} : { overdue: false }) }
       }
-      for (const { id, ...seen } of r.sees) {
-        if ((word.enemies[id]?.seenOnTurn ?? -1) > seen.seenOnTurn) continue
+      for (const { id, told, ...seen } of r.sees) {
+        const was = word.enemies[id]
+        // An older report than the newest he has of it still tells him
+        // what it holds, as old as it is (reports.js, join).
+        if ((was?.seenOnTurn ?? -1) > seen.seenOnTurn) { was.told = join(was.told, told); continue }
         const now = r.live && seen.seenOnTurn === turn
-        word.enemies[id] = { status: now ? 'visible' : 'ghost', ...seen }
+        word.enemies[id] = { status: now ? 'visible' : 'ghost', ...seen, told: join(was?.told, told), first: was?.first ?? { turn, sent: seen.seenOnTurn, by: r.unitId } }
       }
     }
     // A sighting is an enemy he had no word of, or one come into his own
@@ -220,7 +246,10 @@ function wordFromCaptivity(game, side) {
   word.since = battle.turn
   for (const enemy of battle.world.units.filter(u => u.side !== side && u.strength > 0)) {
     if (word.enemies[enemy.id]?.status === 'visible') continue
-    word.enemies[enemy.id] = { status: 'ghost', ...sighting(enemy, battle.turn) }
+    // Heard in their camp: where each stood, no more (a guess), with
+    // whatever his own reports had told him of it before.
+    const told = join(word.enemies[enemy.id]?.told, { grade: 'none', on: battle.turn })
+    word.enemies[enemy.id] = { status: 'ghost', ...sighting(enemy, battle.turn), told, first: word.enemies[enemy.id]?.first ?? { turn: battle.turn, sent: battle.turn, by: null } }
   }
 }
 
