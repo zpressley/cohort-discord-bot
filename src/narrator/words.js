@@ -658,3 +658,12 @@ const HELD_BACK = {
   line: (unit) => `${unit} rallied with no heart left, and will not go at the enemy: they hold where they stand, keeping your order, until a success near them puts heart back in them`
 }
 module.exports.HELD_BACK = HELD_BACK
+
+// ── Reading orders made safe (docs/REVIEW-2026-11.md, S1) ──
+// A line too long or too tangled to read at all: said plainly, with orders
+// that are read, never "something went wrong".
+ORDERS_READ.tangled = (examples) => `I could not follow that: it is too long or too tangled for your officers to carry. Give it as shorter orders, one to a line. Orders read like: ${examples.join(' · ')}`
+// "Attack the enemy on the hill" when he has seen no enemy there (the
+// ground just lost, and no word yet of who took it): his men go to the
+// place and fight whoever they find, and the read-back says so.
+ORDERS_READ.whoever = 'and fight whoever they find there: you have seen no enemy on it'

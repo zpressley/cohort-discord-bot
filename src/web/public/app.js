@@ -1459,7 +1459,9 @@ async function tent(token) {
       `${a.name} go north 200 m`,
       // One unit keeping by another as it moves.
       ...(own.length > 2 ? [`${own[2].name} stay with ${a.name}`] : []),
-      'everyone else hold',
+      // "Everyone else" is every unit the other orders leave out, so it is
+      // shown with one: tapped alone it would be a question.
+      `${a.name} advance, everyone else hold`,
       // On a big field, the second line as one: a short order for many units.
       ...(own.some(u => u.secondLine) ? ['second line hold'] : [])
     ]
