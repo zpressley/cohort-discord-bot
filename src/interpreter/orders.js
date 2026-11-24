@@ -23,6 +23,22 @@ const { resolveIntents, resolveUnitsWide } = require('./resolve')
 const { detectFeatures } = require('../engine/map/features')
 const { readWithAi } = require('./aiReader')
 
+// ── Never a hang, never a crash ────────────────────────
+//
+// Whatever is typed, the reader answers: orders, a question, or a plain
+// "I could not follow that" (`tangled`; words.js, ORDERS_READ.tangled).
+// The grammar is bounded (grammar.js, MAX_DEPTH and MAX_LINE); this is the
+// net under it, so a slip in a rule costs the player one line, not the turn.
+const TANGLED = (line) => ({ kind: 'ask', unread: String(line ?? '').replace(/\s+/g, ' ').trim().slice(0, 120), tangled: true })
+function readLine(line, options) {
+  try { return parseLine(line, options) } catch { return TANGLED(line) }
+}
+const EMPTY_READ = { orders: [], questions: [], notes: [], choices: [], surrender: false, understood: [], counsel: [] }
+function cannotFollow(text, context) {
+  const asked = resolveIntents([TANGLED(text)], context)
+  return { ...EMPTY_READ, questions: asked.questions, source: 'grammar' }
+}
+
 // A line that begins "if ..." or "then ..." goes on from the line before
 // it: "spears to the ford; if their horse is there, hold" is one order,
 // however it was broken up.
@@ -40,7 +56,7 @@ function grammarIntents(lines, context = null) {
   const options = context ? readOptions(context) : {}
   const pieces = context ? joinContinued(lines).flatMap(line => splitLine(line, context, options)) : joinContinued(lines)
   for (const line of pieces) {
-    const parsed = parseLine(line, options)
+    const parsed = readLine(line, options)
     if (parsed.kind === 'done') break
     if (parsed.kind !== 'empty') intents.push(parsed)
   }
@@ -48,7 +64,11 @@ function grammarIntents(lines, context = null) {
 }
 
 function interpretLines(lines, context) {
-  return { ...resolveIntents(grammarIntents(lines, context), context), source: 'grammar' }
+  try {
+    return { ...resolveIntents(grammarIntents(lines, context), context), source: 'grammar' }
+  } catch {
+    return cannotFollow([].concat(lines).join(' '), context)
+  }
 }
 
 // ── Several orders on one line (docs/REVIEW-2026-11.md, D4) ─────
@@ -74,6 +94,9 @@ const WHO_START = /^(?:every(?:one|body)(?:\s+else)?|all(?:\s+units|\s+others|\s
 // Does this piece begin with one of his units, or the rest of them?
 function startsWithUnit(piece, units) {
   if (WHO_START.test(piece)) return true
+  // "hide the archers in the woods", "keep the horse back": the verb first.
+  const moved = piece.match(/^(?:hide|keep|send|have|tell|get|bring|pull|order)\s+(.+)$/i)
+  if (moved && moved[1] !== piece && startsWithUnit(moved[1].replace(/^(?:the|our|my)\s+/i, ''), units)) return true
   const words = piece.split(/\s+/)
   for (let k = Math.min(4, words.length - 1); k >= 1; k--) {
     if (resolveUnitsWide(words.slice(0, k).join(' '), units).units.length > 0) return true
@@ -83,7 +106,9 @@ function startsWithUnit(piece, units) {
 
 // Is this piece one whole order, its units known?
 function wholeOrder(piece, context, options) {
-  const parsed = parseLine(piece, options)
+  const parsed = readLine(piece, options)
+  // "ride with the velites": the Commander's own order, whole.
+  if (parsed.kind === 'ride') return true
   if (parsed.kind !== 'order') return false
   if (parsed.deep) return true
   if (!grammarReadsWhole(piece, parsed)) return false
@@ -95,27 +120,45 @@ function wholeOrder(piece, context, options) {
   return read.questions.length === 0 || read.choices.length > 0
 }
 
-function splitLine(line, context, options) {
+// A line is cut only while it is short enough to read (grammar.js,
+// MAX_LINE), and each piece is weighed once (`seen`), so a long line of
+// many names is read in bounded time.
+const MAX_SPLIT = 600
+
+function splitLine(line, context, options, seen = new Map()) {
   const text = String(line).trim()
-  if (!text || wholeOrder(text, context, options)) return [text]
+  const whole = (piece) => {
+    if (!seen.has(piece)) seen.set(piece, wholeOrder(piece, context, options))
+    return seen.get(piece)
+  }
+  if (!text || text.length > MAX_SPLIT) return [text]
+  try {
+    return cutLine(text, context, options, seen, whole)
+  } catch {
+    return [text]
+  }
+}
+
+function cutLine(text, context, options, seen, whole) {
+  if (whole(text)) return [text]
   const units = context.units ?? []
   // Cut at a comma, "and", a full stop, or between two words, wherever the
   // rest begins with a unit; the first cut that leaves every piece an order.
   const cuts = []
-  const re = /\s*(?:[,.]\s*(?:and\s+)?|\s+and\s+(?:then\s+)?|\s+)/g
+  const re = /\s*(?:[,.]\s*(?:and\s+)?|\s+(?:and|while|whilst)\s+(?:then\s+)?|\s+)/g
   let m
   while ((m = re.exec(text))) {
     if (m[0].length === 0) { re.lastIndex++; continue }
-    cuts.push({ at: m.index, after: m.index + m[0].length, hard: /[,.]|\band\b/.test(m[0]) })
+    cuts.push({ at: m.index, after: m.index + m[0].length, hard: /[,.]|\b(?:and|while|whilst)\b/.test(m[0]) })
   }
   for (const pass of [true, false]) {
     for (const cut of cuts.filter(c => c.hard === pass)) {
       const left = text.slice(0, cut.at).trim()
       const right = text.slice(cut.after).trim()
       if (!left || !right || !startsWithUnit(right, units)) continue
-      if (!wholeOrder(left, context, options)) continue
-      const rest = splitLine(right, context, options)
-      if (rest.every(piece => wholeOrder(piece, context, options))) return [left, ...rest]
+      if (!whole(left)) continue
+      const rest = splitLine(right, context, options, seen)
+      if (rest.every(whole)) return [left, ...rest]
     }
   }
   return [text]
@@ -139,13 +182,23 @@ function grammarReadsWhole(line, parsed) {
   const who = String(parsed.unitRef ?? '').toLowerCase()
   // Unit names are short and hold no place words: "spears to the bridge and
   // archers" is half an order swallowed into a name.
-  if (who.split(/\s+/).length > 6 || /\b(?:to|in|at|on|into|from|by|toward|towards|near)\b/.test(who)) return false
+  // Nor words that join orders or name the enemy: "while the archers",
+  // "their cavalry while the spears" are pieces cut in the wrong place.
+  if (who.split(/\s+/).length > 6 || /\b(?:to|in|at|on|into|from|by|toward|towards|near|while|whilst|if|then|unless|when|but|their|enemy|enemy's)\b/.test(who)) return false
   if (who && who !== 'everyone' && rest.includes(who)) rest = rest.replace(who, ' ')
   rest = rest.replace(SAFE_PHRASES, ' ').replace(/\b(?:seek|search|find) and (?:destroy|attack|kill)\b/g, ' ')
   return !COMPOUND.test(rest)
 }
 
 async function interpretText(text, context, { ai } = {}) {
+  try {
+    return await readText(text, context, ai)
+  } catch {
+    return cannotFollow(text, context)
+  }
+}
+
+async function readText(text, context, ai) {
   const options = readOptions(context)
   const lines = joinContinued(String(text).split(/\n|;/).map(l => l.trim()).filter(Boolean))
     .flatMap(line => splitLine(line, context, options))
@@ -158,7 +211,7 @@ async function interpretText(text, context, { ai } = {}) {
   const kept = []
   const hard = []
   for (const line of lines) {
-    const parsed = parseLine(line, options)
+    const parsed = readLine(line, options)
     if (parsed.kind === 'done') break
     if (parsed.kind === 'empty') continue
     if (grammarReadsWhole(line, parsed)) {
@@ -198,7 +251,7 @@ function namedLines(lines, context, options) {
   const ids = new Set()
   const OTHERS_REF = /^(?:every(?:one|body)|all|all units|the army|army)$|\belse$|^(?:the\s+)?(?:rest|others)\b|\b(?:except|but)\b/i
   for (const line of lines) {
-    const parsed = parseLine(line, options)
+    const parsed = readLine(line, options)
     if (parsed.kind !== 'order' || OTHERS_REF.test(parsed.unitRef ?? '')) continue
     for (const u of resolveUnitsWide(parsed.unitRef, units).units) ids.add(u.id)
   }

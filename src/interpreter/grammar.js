@@ -108,8 +108,13 @@ const GO_DIRECTION = new RegExp(`^(?:(.+?)\\s+)?(?:go|move|march|head|shift|step
 const FALL_DIRECTION = new RegExp(`^(?:(.+?)\\s+)?(?:withdraw|fall back|retreat|pull back)\\s+(?:(\\d{1,4})\\s*(?:m|metres?|meters?|paces|yards?)\\s+)?(?:to the\\s+|due\\s+)?${COMPASS_WORDS}$`, 'i')
 
 // The Commander riding over to another of his units.
-const RIDE = /^(?:i(?:'ll| will| shall)?|you|the commander|commander)\s+(?:ride|rides|go|goes|join|joins|move|moves|switch|switches)\s+(?:over\s+)?(?:with|to)\s+(.+)$/i
-const RIDE_SHORT = /^(?:(?:the\s+)?commander\s+(?:to|with)|ride with|join)\s+(.+)$/i
+const RIDE = /^(?:i(?:'ll| will| shall)?|you|the commander|commander)\s+(?:ride|rides|go|goes|join|joins|move|moves|switch|switches)\s+(?:over\s+)?(?:with|to)\s+([^,;]+)$/i
+// (Up to a comma: "ride with the velites, velites advance" is two orders.)
+const RIDE_SHORT = /^(?:(?:the\s+)?commander\s+(?:to|with)|ride with|join)\s+([^,;]+)$/i
+
+// "We yield", "it is over. We surrender": giving up, said whole. Only these:
+// a line that also gives an order is not a surrender.
+const SURRENDER = /^(?:(?:it is|it's|this is) over|enough|all is lost|we are beaten|we're beaten|we have lost|we lost|ok|fine)?[.!,;]?\s*(?:we|i)\s+(?:surrender|yield|give up|give in)(?:\s+now)?$/i
 
 /**
  * @returns one of
@@ -119,12 +124,17 @@ const RIDE_SHORT = /^(?:(?:the\s+)?commander\s+(?:to|with)|ride with|join)\s+(.+
  *   { kind: 'ask', question }   the line could not be read
  */
 function parseLine(line, options = {}) {
+  // However it is written, a line is read in a bounded number of steps: a
+  // line too long, or an order nested deeper than any officer could carry,
+  // is a plain "I could not follow that", never a hang or a crash.
+  const depth = options.depth ?? 0
+  if (depth > MAX_DEPTH || clean(line).length > MAX_LINE) return { kind: 'ask', unread: clean(line).slice(0, 120), tangled: true }
   let text = tidy(clean(line).replace(/[.!?]+$/, ''), options)
   if (!text) return { kind: 'empty' }
 
   const lower = text.toLowerCase()
   if (lower === 'done' || lower === 'end' || lower === 'end turn') return { kind: 'done' }
-  if (lower === 'surrender' || lower === 'yield') return { kind: 'surrender' }
+  if (lower === 'surrender' || lower === 'yield' || SURRENDER.test(text)) return { kind: 'surrender' }
   // The Commander himself: "I ride with the horse", "commander to the
   // companions". He rides over to another of his units.
   const ride = text.match(RIDE) ?? text.match(RIDE_SHORT)
@@ -144,8 +154,12 @@ function parseLine(line, options = {}) {
 
   // An order with depth: steps ("..., then ...") or a condition ("if ...").
   if (DEEP.test(text)) {
-    const deep = readDeep(text, extra)
+    const deep = readDeep(text, extra, depth)
     if (deep) return deep
+    // A condition it could not take apart is not read as a plain order with
+    // the condition swallowed into a place ("archers hold your ground. If
+    // anyone attacks you, ..." is not a march): left for the AI, or asked.
+    if (/\bif\b/i.test(text)) return { kind: 'ask', unread: clean(line), question: `I don't follow "${clean(line)}".` }
   }
 
   const stage3 = readStage3(text, extra)
@@ -168,6 +182,11 @@ function parseLine(line, options = {}) {
 // piece cannot be read, the whole line is left for the AI.
 
 const DEEP = /\b(?:then|if|after that)\b/i
+// How deep a line may nest before it is too tangled to read (a piece of a
+// deep order is read as a line of its own, one level down), and how long a
+// line may be. No order a player gives comes near either.
+const MAX_DEPTH = 4
+const MAX_LINE = 600
 const STEP_SPLIT = /\s*(?:[,;.]\s*|\s+)(?:and\s+)?(?:then|after that|afterwards)[,]?\s+(?:on\s+(?=to\b))?/i
 const HOLD_PIECE = /^(?:hold(?: it| there| the position| fast)?|dig in|stand(?: fast)?|defend it|make a stand|stay(?: there)?)$/i
 const IF_SPLIT = /\s*[,;.]?\s*\b(?:but\s+|and\s+)?if\s+/i
@@ -195,7 +214,7 @@ function readCondition(words) {
 
 // One piece of a deep order, read as a plain line. A piece that names no
 // one ("on to the bridge", "fall back") is for the unit the line began with.
-function readPiece(piece, who) {
+function readPiece(piece, who, depth = 0) {
   let text = clean(piece).replace(/^(?:then\s+)?(?:they\s+|he\s+|you\s+)?(?:should\s+|must\s+|can\s+)?/i, '')
   if (!text) return null
   // "..., then D6", "then the bridge": a bare place is a march there.
@@ -205,11 +224,14 @@ function readPiece(piece, who) {
   // Read with the unit's name put back in front. A piece that names some
   // other unit is not a step of this order, and comes out with the wrong
   // name, which the caller refuses.
-  const forThem = parseLine(who === 'everyone' ? text : `${who} ${text}`)
+  const forThem = parseLine(who === 'everyone' ? text : `${who} ${text}`, { depth: depth + 1 })
   return forThem.kind === 'order' && !forThem.steps && !forThem.when ? forThem : null
 }
 
-function readDeep(text, extra) {
+// "the horse" and "horse" are one unit's name.
+const sameUnit = (a, b) => clean(a).replace(/^(?:the|our|my)\s+/i, '').toLowerCase() === clean(b).replace(/^(?:the|our|my)\s+/i, '').toLowerCase()
+
+function readDeep(text, extra, depth = 0) {
   // The condition, if there is one, follows the order: "..., if X, Y".
   let main = text
   let when = null
@@ -233,14 +255,18 @@ function readDeep(text, extra) {
   // "..., then dig in": the step before it ends by holding.
   let lastHolds = false
   if (pieces.length > 1 && HOLD_PIECE.test(pieces.at(-1))) { pieces.pop(); lastHolds = true }
+  // No step and no condition after all ("spears hold if", "then" alone):
+  // nothing deep to read, and reading the first piece would be reading the
+  // whole line again.
+  if (!when && pieces.length < 2 && !lastHolds) return null
 
-  const first = parseLine(pieces[0])
+  const first = parseLine(pieces[0], { depth: depth + 1 })
   if (first.kind !== 'order' || first.steps || first.when) return null
   const who = first.unitRef
   const steps = []
   for (const piece of pieces.slice(1)) {
-    const step = readPiece(piece, who)
-    if (!step || step.unitRef !== who) return null
+    const step = readPiece(piece, who, depth)
+    if (!step || !sameUnit(step.unitRef, who)) return null
     steps.push(step)
   }
   if (lastHolds) {
@@ -254,8 +280,8 @@ function readDeep(text, extra) {
   const out = { ...first, ...extra, deep: true }
   if (steps.length > 0) out.steps = steps
   if (when) {
-    const then = readPiece(when.words, who)
-    if (!then || then.unitRef !== who) return null
+    const then = readPiece(when.words, who, depth)
+    if (!then || !sameUnit(then.unitRef, who)) return null
     out.when = { ...when.condition, do: then }
   }
   return out
@@ -555,7 +581,7 @@ function tidy(text, options = {}) {
   // velites to the woods", "send the legionaries to C5": the order itself.
   const asked = out.match(/^(?:i\s+want|i'd\s+like|i\s+would\s+like|tell|order|command|instruct|get|send)\s+(.+?)\s+to\s+(.+)$/i)
   if (asked && !/\b(?:to|towards?)\b/i.test(asked[1])) out = VERB_START.test(asked[2]) && !/^to\b/i.test(asked[2]) ? `${asked[1]} ${asked[2]}` : `${asked[1]} to ${asked[2]}`
-  const have = out.match(/^(?:have|make|let|get)\s+(?!(?:a|an|one|two|three|the first)\s+(?:\w+\s+)?pass\b)(.+?)\s+((?:advance|attack|charge|hold|stand|stay|fall back|withdraw|retreat|march|move|go|hide|shoot|defend|guard|take|search)\b.*)$/i)
+  const have = out.match(/^(?:have|make|let|get)\s+(?!(?:a|an|one|two|three|the first)\s+(?:\w+\s+)?pass\b)(.+?)\s+((?:advance|attack|charge|hold|stand|stay|fall back|withdraw|retreat|march|move|go|hide|shoot|loose|fire|defend|guard|take|search)\b.*)$/i)
   if (have) out = `${have[1]} ${have[2]}`
   out = out
     .replace(/^send\s+(?:in\s+)?(.+?)\s+(?:in|forward)$/i, '$1 advance')
@@ -570,6 +596,19 @@ function tidy(text, options = {}) {
     // "square C5", "grid C5": the square.
     .replace(/\b(?:grid\s+square|square|grid)\s+([a-z]{1,2}\d{1,2}(?:-[ns][ew])?)\b/ig, '$1')
     .replace(/\b([a-z]{1,2}\d{1,2}(?:-[ns][ew])?)\s+square\b/ig, '$1')
+    // "pull the legionaries back", "bring the horse back": they fall back.
+    // (Said of a unit already named, "legionaries pull the legionaries
+    // back", as a piece of a deep order is read: the name once.)
+    .replace(/^(?:(.+?)\s+)?(?:pull|bring|draw|get|move)\s+(?:the\s+|our\s+|my\s+)?(.+?)\s+back$/i, (all, who, them) =>
+      !who || who.replace(/^(?:the|our|my)\s+/i, '').toLowerCase() === them.toLowerCase() ? `${them} pull back` : all)
+    // "get back to the bridge", "go back to C5": fall back there.
+    .replace(/\b(?:get|go|run|head|come|move|ride) back (?=to\b|towards?\b)/i, 'fall back ')
+    // "hide the archers in the woods", "keep the horse back": the unit
+    // first, as every other order has it.
+    .replace(/^hide\s+(?!(?:in|into|inside|among|behind|at|on|by|near|from|there|here|yourselves|themselves)\b)((?:the\s+|our\s+|my\s+)?\S+(?:\s+\S+)?)\s+((?:in|into|inside|among|behind)\s+.+)$/i, '$1 hide $2')
+    .replace(/^keep\s+(?!(?:back|going|at it|behind|with|up|close|by|beside|next|to|in)\b)((?:the\s+|our\s+|my\s+)?\S+(?:\s+\S+)?)\s+back$/i, '$1 stay back')
+    // A word left hanging at the end, "hold then", "advance and": dropped.
+    .replace(/(?:\s*,)?\s+(?:and|then|if|but|unless|so)$/i, '')
     // "2 squares north": 200 m.
     .replace(/\b(\d{1,2}|a|an|one|two|three|four|five|six|seven|eight|nine|ten)\s+squares?\b/ig, (_, n) => `${(COUNT[n.toLowerCase()] ?? Number(n)) * SQUARE_METRES} m`)
   return clean(out)
