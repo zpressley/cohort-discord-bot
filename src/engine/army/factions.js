@@ -15,6 +15,7 @@ const { deployArmies } = require('../map/deploy')
 const { missileRange } = require('../combat/ranged')
 const { createRng } = require('../rng')
 const { FACTIONS } = require('../../data/factions')
+const { withPerks } = require('./perks')
 
 const FORWARD = { west: { x: 1, y: 0 }, east: { x: -1, y: 0 }, north: { x: 0, y: 1 }, south: { x: 0, y: -1 } }
 
@@ -89,7 +90,8 @@ function factionUnits(key, side, homeEdge = side === 'red' ? 'west' : 'east') {
       faction: key
     }
   })
-  return formUp(units, homeEdge)
+  // Its people's perks (army/perks.js).
+  return formUp(withPerks(key, units), homeEdge)
 }
 
 // The formation, around 0,0.

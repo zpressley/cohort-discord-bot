@@ -31,6 +31,7 @@ const {
 } = require('../world')
 const { detectEngagements, applyCasualties } = require('../runner')
 const { createCombatResolver, tables: T, ranged } = require('../combat')
+const perks = require('../combat/perks')
 const { findPath } = require('../movement/pathfinding')
 const { resolveMap } = require('../map/map')
 const { toPosition, samePosition, positionKey } = require('../map/labels')
@@ -759,7 +760,8 @@ function stepTurn(state, sideOrders = {}, { sameTurn = false } = {}) {
     const roll = random()
     const drill = T.DISENGAGE.DRILL[unit.quality] ?? T.DISENGAGE.DRILL.tribal_warriors
     const orderly = move.careful ? T.DISENGAGE.ORDERLY : 1
-    const weight = roll * drill * orderly
+    // (Sarmatia's feigned retreat lightens it: combat/perks.js.)
+    const weight = roll * drill * orderly * perks.disengageWeight(unit)
     const killed = Math.min(unit.strength,
       Math.round(unit.strength * T.DISENGAGE.CASUALTY_FRACTION * weight * Math.min(standing.length, 2)))
     const morale = Math.round(T.DISENGAGE.MORALE * weight * 10) / 10
@@ -927,7 +929,7 @@ function stepTurn(state, sideOrders = {}, { sameTurn = false } = {}) {
       shooter, target: target.unit, distance: target.distance,
       felled: ranged.volley(shooter, target.unit, {
         distance: target.distance, targetTerrain: map.terrainAt(target.unit.position), moved, inMelee: inMelee.has(target.unit.id)
-      })
+      }) * ranged.alongside(shooter, livingUnits(world))
     })
   }
   const volleys = []

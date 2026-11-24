@@ -25,6 +25,7 @@
 const T = require('./tables')
 const R = require('./ratings')
 const D = require('./damage')
+const P = require('./perks')
 const { getUnit } = require('../world')
 const { samePosition } = require('../map/labels')
 const { crowdingByUnit } = require('../movement/occupancy')
@@ -198,13 +199,16 @@ function createCombatResolver(options = {}) {
         const surprised = roundsInContact === 0 ? (engagement.surprisedBy ?? []) : []
         const aSurprises = surprised.includes(a.id)
         const bSurprises = surprised.includes(b.id)
+        // (The Celts' fury shakes harder: combat/perks.js.)
         if (aSurprises && !bState.routed) {
-          bState.morale = Math.max(0, bState.morale - T.SURPRISE.MORALE)
-          bState.moraleDamageTaken += T.SURPRISE.MORALE
+          const shock = T.SURPRISE.MORALE * P.surpriseWeight(a)
+          bState.morale = Math.max(0, bState.morale - shock)
+          bState.moraleDamageTaken += shock
         }
         if (bSurprises && !aState.routed) {
-          aState.morale = Math.max(0, aState.morale - T.SURPRISE.MORALE)
-          aState.moraleDamageTaken += T.SURPRISE.MORALE
+          const shock = T.SURPRISE.MORALE * P.surpriseWeight(b)
+          aState.morale = Math.max(0, aState.morale - shock)
+          aState.moraleDamageTaken += shock
         }
 
         // A routed unit is out of the fight. Pursuit casualties and flight
@@ -296,8 +300,10 @@ function createCombatResolver(options = {}) {
         //
         // [notebook] The floor comes first: no rout check may succeed before
         // ROUT_FLOOR_ROUND, so even a levy gets its one or two rounds.
-        const aBroken = aState.morale <= T.MORALE.ROUT_THRESHOLD
-        const bBroken = bState.morale <= T.MORALE.ROUT_THRESHOLD
+        // (Men whose people fight on break lower: combat/perks.js, routLine.
+        // MORALE.ROUT_THRESHOLD for everyone else.)
+        const aBroken = aState.morale <= P.routLine(a)
+        const bBroken = bState.morale <= P.routLine(b)
         const floorPassed = turn >= T.MORALE.ROUT_FLOOR_ROUND
 
         if (floorPassed && aBroken && bBroken) {
@@ -376,7 +382,7 @@ function createCombatResolver(options = {}) {
     const loss = D.moraleDamage(target, { killed: felled }).total * T.MISSILES.SHOCK
     state.morale = Math.max(0, state.morale - loss)
     state.moraleDamageTaken += loss
-    const broke = !state.routed && state.morale <= T.MORALE.ROUT_THRESHOLD
+    const broke = !state.routed && state.morale <= P.routLine(target)
     if (broke) {
       state.routed = true
       state.routedOnTurn = turn
@@ -503,8 +509,9 @@ function rout(state, unit, victor, turn, events, routed) {
 // round, which made the seeded RNG decorative.
 // docs/design/army-balance.md, part 4 (taken 2026-11-23): the share of the men a
 // blow would fell that a veteran unit loses (1 for a unit with none).
+// Persia's surgeons save a share more (combat/perks.js; 0 for most).
 function survives(unit) {
-  return 1 - (R.veteranEdge(unit).survive ?? 0)
+  return 1 - (R.veteranEdge(unit).survive ?? 0) - P.saved(unit)
 }
 
 function takeCasualties(state, raw, available) {

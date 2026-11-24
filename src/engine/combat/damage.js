@@ -234,7 +234,9 @@ function pairContext(ownCtx, enemy, enemyCtx) {
   return {
     ...ownCtx,
     enemyBraced: ownCtx.enemyBraced ?? R.isAntiCavalry(enemy),
-    enemyTerrain: ownCtx.enemyTerrain ?? enemyCtx.terrain ?? 'plains'
+    enemyTerrain: ownCtx.enemyTerrain ?? enemyCtx.terrain ?? 'plains',
+    // Who it fights, for its people's perks and his (combat/perks.js).
+    enemy: ownCtx.enemy ?? enemy
   }
 }
 

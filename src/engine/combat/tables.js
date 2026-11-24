@@ -1048,3 +1048,149 @@ const RIDER_TAKEN = {
   HORSE: { REACH: 2, CHANCE: 0.25 }
 }
 module.exports.RIDER_TAKEN = RIDER_TAKEN
+
+// ── Each people's perks ────────────────────────────────
+//
+// docs/design/army-balance.md, part 9: the "Cultural Perks" of the owner's
+// doc (docs/Context/final_20_cultures_complete.txt), as far as the game can
+// carry them. Which faction has which is src/data/factions.js (`perks`);
+// whom in its army a perk is for is `who` here (army/perks.js gives each of
+// the faction's own units the keys of its perks at the muster); what each
+// does is combat/perks.js. Kept modest: a perk is felt, and does not decide
+// a battle. Measured in the usual armies' league (army-study/usual.js); the
+// rounds are in part 9.
+//
+//   who        'all' (the default), 'elite', 'levy_militia', 'militia',
+//              'missile', 'horse', 'horse_archers', 'bought' (not the elite)
+//   morale     added to morale resistance (a quality tier's morale point is
+//              0.38, MORALE.RESISTANCE_PER_POINT)
+//   veterancy  the unit fights at this veterancy at the least (VETERANCY:
+//              green 4, seasoned 8, veteran 13)
+//   breakAt    the morale at or under which it breaks, in place of
+//              MORALE.ROUT_THRESHOLD (25); eliteBreakAt the elite's own
+//   ground     terrain on which it gains `attack` and `defense` (added to
+//              the ratings, as TERRAIN_MODIFIERS are)
+//   dugIn      defence, when it held its ground to receive the enemy
+//   smaller    attack, when it has fewer men than the enemy it fights
+//   flanking   attack, when that enemy is fighting another unit as well
+//   armor      the share of the enemy's armour its blows leave him
+//   survive    of the men a blow would fell, the share saved
+//   braced     the share of a charge's spike that lives through braced
+//              spears, in place of CHARGE.BRACED_MULTIPLIER
+//   onTheMove  a volley shot on the move, in place of MISSILES.ON_THE_MOVE
+//   partner    a missile unit with a friend of this kind within `within`
+//              tiles shoots `volley` times as hard
+//   woods      terrain it crosses at `cost` (open ground is 1)
+//   slowIn     terrain it crosses at `slow` times the map's cost
+//   drain      a weight on the wind it spends fighting (STAMINA)
+//   disengage  a weight on the parting blow as it leaves a fight
+//   surprise   a weight on the shock of its surprise (SURPRISE.MORALE)
+//   men        bought units raised at this many times their men (army/perks.js)
+//   price      bought units of `quality` cost this share of their price,
+//              rounded (army/builder.js)
+// A perk with no number is true of the game already (the doc's crossbows,
+// rhomphaia and merchant wealth), and is listed so the screen can say so.
+
+const PERKS = {
+  // Rome. Doc: "Professional discipline - all troops start with higher
+  // morale and coordination". Rome's usual army was already at the top of
+  // the league (64%), so the gentlest: at half a tier's morale point (0.19)
+  // Rome won 73% (part 9, round 4); at 0.05, 65%; with none, 62%. At 0.02,
+  // a little steadier, and inside the band.
+  discipline: { morale: 0.02 },
+  // Macedon. Doc: "Veterans of war - all Silver Shields start with
+  // 10-battle veteran status". Veterancy 10 is seasoned.
+  old_soldiers: { who: 'elite', veterancy: 10 },
+  // Sparta. Doc: "Fight to the last man - effective until 50% casualties".
+  // Read as men who break later: "effective until 50% casualties" taken
+  // literally (no break at all until half are down) won Sparta 97% of the
+  // league (part 9, round 1).
+  last_man: { breakAt: 15 },
+  // Sparta. Doc: "Superior perioeci militia - non-citizen troops fight
+  // better than normal militia": its levy and militia fight as seasoned men.
+  perioeci: { who: 'levy_militia', veterancy: 8 },
+  // Carthage. Doc: "Merchant wealth - +2 bonus SP" (32): the budget, army/data.js.
+  merchant_wealth: {},
+  // Kush. Doc: "Archer-cavalry coordination - bonus effectiveness when
+  // within 1 tile of each other": its bowmen and slingers, a quarter more.
+  bow_and_horse: { who: 'missile', partner: 'horse', within: 1, volley: 1.25 },
+  // Kush. Doc: "Desert mastery - movement bonus + heat resistance in
+  // arid/hot environments". There is no desert or heat in the game: the
+  // nearest honest thing is wind, men who tire more slowly in a fight.
+  sun_hardened: { drain: 0.75 },
+  // The Berbers. Doc: "Tribal confederation tactics - small unit
+  // effectiveness bonuses": half a point of attack against a bigger unit
+  // (high ground gives half a point).
+  small_bands: { smaller: 0.5 },
+  // Sarmatia. Doc: "Master of feigned retreat": its horse break off a fight
+  // as if it were planned, the parting blow at half its weight.
+  feigned_retreat: { who: 'horse', disengage: 0.5 },
+  // Han (doc: "Han farming techniques - 1 block = 20% larger units") and
+  // Mongolia (doc: "all other units 20% larger").
+  larger_units: { who: 'bought', men: 1.2 },
+  // Han. Doc: "Advanced technology - can deploy crossbows": crossbows are
+  // Han's alone in the builder already.
+  crossbows: {},
+  // Maurya. Doc: "Wootz steel mastery - ignores 10% of enemy armor".
+  wootz: { armor: 0.9 },
+  // Silla. Doc: "Mountain warfare mastery - defensive and attack bonuses in
+  // hills and mountains": on a hill, half a point of each, on top of the
+  // high ground.
+  mountain_warfare: { ground: ['hill'], attack: 0.5, defense: 0.5 },
+  // Persia. Doc: "Superior support staff - bonus effectiveness for ...
+  // medical": of the men a blow would fell, one in twenty lives (a green
+  // veteran's `survive`).
+  surgeons: { survive: 0.05 },
+  // Parthia. Doc: "Heavy cavalry plains mastery - greater chance to break
+  // defensive lines, attack bonus on plains": half a point on open ground,
+  // and half the charge's spike lives through a braced spear wall
+  // (CHARGE.BRACED_MULTIPLIER, 0.15 for other horse).
+  plains_horse: { who: 'horse', ground: ['plains'], attack: 0.5, braced: 0.5 },
+  // Parthia (doc: "Parthian shot perfection - horse archers can fire while
+  // retreating at full effectiveness") and Mongolia (doc: "Horse archery
+  // perfection - full accuracy while moving at maximum speed").
+  parthian_shot: { who: 'horse_archers', onTheMove: 1 },
+  // Germania (doc: "Forest warfare mastery - higher mobility through woods")
+  // and the Celts (doc: "Woodland mobility - no movement penalties in rough
+  // and wooded terrain"): woods at the cost of open ground.
+  woodland: { woods: ['forest'], cost: 1 },
+  // Thrace. Doc: "Mountain/hill defensive mastery - reduced damage in
+  // elevated or fortified positions": on a hill, a point of defence.
+  hill_defence: { ground: ['hill'], defense: 1 },
+  // Thrace. Doc: "Rhomphaia equipment unlock": the rhomphaia is Thracian
+  // alone in the builder already, for any of its troops.
+  rhomphaia: {},
+  // Samnium. Doc: "Mountainous and wooded guerrilla warfare - attack and
+  // stealth bonuses in hills, mountains, and forests".
+  guerrilla: { ground: ['hill', 'forest'], attack: 0.5 },
+  // Samnium. Doc: "Samnite bravery - all units break at 30%, Sacred Spring
+  // Warriors break at 40% (vs normal 15%)": men who break later, the
+  // Sacred Spring Warriors later still. At 20 and 15 Samnium won 60%; at
+  // 22 and 20, 55% (part 9, rounds 4 and 5).
+  samnite_bravery: { breakAt: 22, eliteBreakAt: 20 },
+  // Tibet. Doc: "Militia martial culture - militia units fight as veterans
+  // with defensive bonuses": its militia fight as seasoned men.
+  militia_veterans: { who: 'militia', veterancy: 8 },
+  // Tibet. Doc: "All mercenaries cost 25% less": veteran mercenaries 9 -> 7.
+  cheap_mercenaries: { quality: 'veteran_mercenary', price: 0.75 },
+  // The Celts. Doc: "Berserker fury - ambushes and raids produce fear
+  // effects": their surprise shakes half as much again.
+  berserker: { surprise: 1.5 },
+  // Bactria. Doc: "Noble cavalry - cavalry gets bonus attack ... when
+  // attacking enemy flanks": half a point on an enemy fighting another.
+  noble_cavalry: { who: 'horse', flanking: 0.5 },
+  // Yayoi. Doc: "Archer-spear mastery - bonuses when deploying mixed
+  // archery and spear formations": as Kush's archers with horse.
+  bow_and_spear: { who: 'missile', partner: 'spear', within: 1, volley: 1.25 },
+  // Yayoi. Doc: "Rapid fortification - build defensive positions faster,
+  // gain combat bonuses when fighting behind fortifications". No
+  // fortifications in the game: men who stood their ground to receive the
+  // enemy (prepared, TERRAIN_MODIFIERS.prepared_defense) dig in, half a
+  // point more defence.
+  rapid_fortification: { dugIn: 0.5 },
+  // The Berbers' restriction. Doc: "Forest/swamp mobility penalties -
+  // reduced movement in dense terrain": woods and marsh half as dear again.
+  dense_ground: { slowIn: ['forest', 'marsh'], slow: 1.5 }
+}
+
+module.exports.PERKS = PERKS

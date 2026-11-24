@@ -21,6 +21,11 @@ import { drawMap, attachGestures, gridRef, terrainWords, TILE } from './map.js'
 
 const app = document.getElementById('app')
 const esc = (s) => String(s ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]))
+// A people's perks, a line each, as the server words them (words.js,
+// PERK_WORDS): "Woodsmen: your men cross woods as easily as open ground."
+const perkList = (perks) => (perks?.length
+  ? `<ul class="perks">${perks.map(p => `<li${p.drawback ? ' class="drawback"' : ''}><strong>${esc(p.name)}:</strong> ${esc(p.said)}</li>`).join('')}</ul>`
+  : '')
 
 // ── This browser's battles ─────────────────────────────
 const SEATS_KEY = 'cohort.seats'
@@ -370,6 +375,7 @@ async function makeCommander() {
           <select name="faction">${factions.map(f => `<option value="${esc(f.id)}"${f.id === firstFaction ? ' selected' : ''}>${esc(f.title)}</option>`).join('')}</select>
         </label>
         <p class="note" id="faction-note"></p>
+        <div id="faction-perks"></div>
         <label class="field">${esc(asked.asked.nameAsked)}
           <input type="text" name="name" value="${esc(asked.name)}" maxlength="24" autocomplete="off" autocapitalize="words" spellcheck="false">
         </label>
@@ -390,6 +396,7 @@ async function makeCommander() {
     document.getElementById('holds-note').textContent = holds.said
     const f = factions.find(x => x.id === factionBox.value)
     document.getElementById('faction-note').textContent = f ? `${f.fights} Your elite unit, the ${cap(f.elite)}, comes free: your veteran officer leads them, and you ride with them.` : ''
+    document.getElementById('faction-perks').innerHTML = perkList(f?.perks)
     const name = nameBox.value.trim().replace(/\s+/g, ' ') || asked.name
     document.getElementById('name-note').textContent = `${asked.asked.nameSaid} After your first battle you are known as ${name} ${asked.titles[state.holds][state.kind]}.`
   }
@@ -493,6 +500,7 @@ async function muster() {
           <select name="faction">${factions.map(factionOption).join('')}</select>
         </label>
         <p class="note" id="faction-note"></p>
+        <div id="faction-perks"></div>
         <div class="buy-unit" id="army-line"></div>
         <label class="field" id="enemy-field">The enemy
           <select name="enemyFaction"><option value="">Any faction, by lot</option>${factions.map(factionOption).join('')}</select>
@@ -547,6 +555,7 @@ async function muster() {
     document.getElementById('faction-note').textContent = f
       ? `${own ? `As ${chosen.name}, you fight for ${f.title}. ` : ''}${f.fights} Your elite unit, the ${f.elite.charAt(0).toUpperCase() + f.elite.slice(1)}, comes free: your veteran officer leads them, and you ride with them.`
       : ''
+    document.getElementById('faction-perks').innerHTML = perkList(f?.perks)
     // His army: the one he bought, or his faction's usual one; and of all
     // he owns, who marches (as last time, unless he changes it here).
     const army = chosen?.faction ? chosen.army : null
@@ -766,6 +775,7 @@ async function armyScreen(token) {
       <main class="page" id="army-screen">
         <h1>${esc(commander.name)}'s army</h1>
         ${budget(s.spent, s.budget)}
+        ${perkList(s.perks)}
         ${inField ? `<p class="question">His army is in the field (${esc(commander.battle.title)}). It can be changed when the battle is over.</p>` : ''}
         <div class="buy-unit elite">
           <header><h3>${esc(cap(eliteName() ?? s.elite.name))}</h3><span class="cost">Free</span></header>

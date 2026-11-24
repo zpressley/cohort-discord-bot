@@ -51,7 +51,7 @@ const { FACTIONS, factionChoices } = require('../engine/army/factions')
 const { fieldArmies, anyFaction, usualArmy, kitOf, baseOf } = require('../engine/army/standard')
 const { withSecondLine, linesOf } = require('../engine/army/secondLine')
 const { armyChanged, handOver, takeIn, moveOfficer, renameUnit } = require('../engine/command/company')
-const { checkArmy, appraise, unitNoun } = require('./armies')
+const { checkArmy, appraise, unitNoun, perkLines } = require('./armies')
 const { rosterOf, marchingOf, checkMarching, fieldingOf, benchedOf, plainName, nameRefusal, renamed, without, addToRoster } = require('./roster')
 const { PARLEY } = T
 
@@ -588,8 +588,10 @@ function createBattleStore({ dir = null, ai = null, now = () => Date.now() } = {
       }
       const field = fieldingOf(commander, marching ?? whoMarches(commander))
       // Kept armies are checked when kept; checked again in case the rules
-      // under them have changed since.
-      const checked = field.units?.length ? checkArmy(faction, field.units) : null
+      // under them have changed since. Not his people's restrictions: those
+      // hold when an army is bought, and an army bought before keeps its
+      // units (docs/design/army-balance.md, part 9).
+      const checked = field.units?.length ? checkArmy(faction, field.units, { restrictions: false }) : null
       if (checked && !checked.ok) {
         throw Object.assign(new Error(`${commander.name}'s army no longer passes muster: ${checked.errors.join('; ')}. Change it, or take the usual army.`), { status: 409 })
       }
@@ -1845,7 +1847,8 @@ function createBattleStore({ dir = null, ai = null, now = () => Date.now() } = {
       const lines = linesOf(m.id) > 1 ? FIELD.lines : ''
       return { ...m, ground: names, said: [said, lines].filter(Boolean).join(' '), ...(m.km > 1 ? { size: FIELD.size(m.km) } : {}) }
     }),
-    factions: () => factionChoices(),
+    // Each with its people's perks, a line each (armies.js, perkLines).
+    factions: () => factionChoices().map(f => ({ ...f, perks: perkLines(f.id) })),
     setArmy,
     transfer,
     nameUnit,

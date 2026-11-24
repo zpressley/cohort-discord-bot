@@ -29,13 +29,17 @@ async function start(store = createBattleStore({})) {
 }
 
 // A battle between two players in which red's Commander is taken in the
-// fighting, not by hand, so that the saved battle holds it: Macedon on
+// fighting, not by hand, so that the saved battle holds it: Persia on
 // red, seed 708, both sides sending everyone in; he is taken with the battle
-// still on, and is held a turn later (found by search; 646 until Rome
-// carried pila, docs/design/army-balance.md part 8).
+// still on, and is held a turn later (found by search). It was Macedon,
+// seed 708, until each people had its perks (docs/design/army-balance.md
+// part 9): with the Silver Shields seasoned, Macedon's Commander was taken
+// only with his army all but gone, and none of some thousands of seeds
+// searched left a battle on a turn later. Seed 646 until Rome carried
+// pila (part 8).
 async function takenInBattle(app) {
-  const red = (await app.api('POST', '/api/commanders', { faction: 'macedon' })).body
-  const seats = (await app.api('POST', '/api/battles', { opponent: 'friend', side: 'red', seed: 708, commander: red.token, faction: 'macedon' })).body.seats
+  const red = (await app.api('POST', '/api/commanders', { faction: 'persia' })).body
+  const seats = (await app.api('POST', '/api/battles', { opponent: 'friend', side: 'red', seed: 708, commander: red.token, faction: 'persia' })).body.seats
   // Blue brings a Commander of Rome, so that both armies are fixed and the
   // battle is the same one whatever faction the lot would have given him.
   const blue = (await app.api('POST', '/api/commanders', { faction: 'rome' })).body

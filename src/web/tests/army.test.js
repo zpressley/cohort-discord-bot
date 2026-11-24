@@ -33,10 +33,13 @@ async function start(store = createBattleStore({})) {
   return { server, api, close: () => new Promise(resolve => server.close(resolve)) }
 }
 
+// Half of it heavy foot, the elite counted, as Rome must be (docs/design/
+// army-balance.md, part 9: before, a second unit of slingers, and the
+// legionaries professionals).
 const ROMAN = [
-  { name: 'legionaries', quality: 'professional', weapon: 'roman_gladius', armor: 'medium_armor', shield: 'heavy_shield' },
+  { name: 'legionaries', quality: 'militia', weapon: 'roman_gladius', armor: 'medium_armor', shield: 'heavy_shield' },
   { name: 'slingers', quality: 'levy', weapon: 'sling' },
-  { name: 'slingers 2', quality: 'levy', weapon: 'sling' },
+  { name: 'hastati', quality: 'levy', weapon: 'roman_gladius', armor: 'medium_armor' },
   { name: 'riders', quality: 'levy', weapon: 'sword_standard', mounted: true }
 ]
 
@@ -62,7 +65,8 @@ test('an army with kit its culture may not field is refused with the builder\'s 
     assert.equal(refused.status, 400)
     assert.deepEqual(refused.body.errors, [
       'Pikes: the sarissa is not forged by Roman Republic',
-      'Archers: Roman Republic cannot field Tribal Warriors — the loyalty bond is tribal identity'
+      'Archers: Roman Republic cannot field Tribal Warriors — the loyalty bond is tribal identity',
+      'Rome fights with heavy foot: at least half of the army must be foot with hand weapons in medium or heavy armour (it has 1 of 3, the elite counted)'
     ])
     // The army screen hears the same reasons before anything is sent.
     const seen = (await app.api('POST', '/api/factions/rome/appraise', { units: [], draft: { quality: 'levy', weapon: 'spear_basic' } })).body
@@ -202,8 +206,9 @@ test('a unit kept keeps its officer, a dismissed unit\'s battles are lost, a new
     // dismissing the legionaries frees Marcus to lead the best unit with none.
     const after = (await app.api('GET', `/api/commander/${made.token}`)).body
     const before = after.officers.length
-    await app.api('POST', `/api/commander/${made.token}/army`, { units: [ROMAN[3]] })
-    const again = (await app.api('POST', `/api/commander/${made.token}/army`, { units: [ROMAN[1], ROMAN[3]] })).body
+    // (The hastati come back with them: Rome keeps half its army heavy foot.)
+    await app.api('POST', `/api/commander/${made.token}/army`, { units: [ROMAN[2], ROMAN[3]] })
+    const again = (await app.api('POST', `/api/commander/${made.token}/army`, { units: [ROMAN[1], ROMAN[2], ROMAN[3]] })).body
     assert.deepEqual(again.unled.find(u => u.kind === 'slingers'), undefined, 'the slingers\' battles went with them')
     assert.equal(again.officers.length, before, 'no officer is made by changing the army')
     const next = (await app.api('POST', '/api/battles', { opponent: 'standing', side: 'red', commander: made.token, seed: 6 })).body.seats.red
@@ -222,7 +227,7 @@ test('the friend who joins brings his own Commander\'s bought army', async () =>
     const { seats } = (await app.api('POST', '/api/battles', { opponent: 'friend', side: 'red', commander: red.token, seed: 5 })).body
     assert.equal((await app.api('POST', `/api/seat/${seats.blue}/join`, { commander: blue.token })).status, 200)
     const tent = (await app.api('GET', `/api/seat/${seats.blue}`)).body
-    assert.deepEqual(tent.own.map(u => u.name), ['Legionaries', 'Slingers', 'Slingers 2', 'Riders', 'Praetorian guard'])
+    assert.deepEqual(tent.own.map(u => u.name), ['Legionaries', 'Slingers', 'Hastati', 'Riders', 'Praetorian guard'])
     assert.equal(tent.battle.title, 'Crownhill: Rome against Rome')
     const reds = (await app.api('GET', `/api/seat/${seats.red}`)).body.own.map(u => u.name)
     assert.deepEqual(reds, ['Legionaries', 'Hastati', 'Velites', 'Praetorian guard'], 'the mustering side brings the usual army')

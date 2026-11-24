@@ -18,12 +18,13 @@
 //
 // Nothing here is trusted from the browser: every list is checked again.
 
-const { buildUnit, buildArmy, secondKind, secondPrice, PURCHASABLE } = require('../engine/army/builder')
+const { buildUnit, buildArmy, secondKind, secondPrice, qualityCost, PURCHASABLE } = require('../engine/army/builder')
 const D = require('../engine/army/data')
 const { tables: T } = require('../engine/combat')
 const { FACTIONS } = require('../data/factions')
 const { checkStandard, usualArmy, kitOf, baseOf } = require('../engine/army/standard')
-const { KIT, THROWN_WORDS } = require('../narrator/words')
+const { checkRestrictions } = require('../engine/army/restrictions')
+const { KIT, THROWN_WORDS, PERK_WORDS } = require('../narrator/words')
 
 const cultureOf = (key) => FACTIONS[key]?.culture
 const budgetOf = (key) => D.SP_BUDGETS[cultureOf(key)] ?? D.DEFAULT_SP_BUDGET
@@ -64,6 +65,12 @@ function nameFits(key, kit, name) {
 
 const cap = (s) => s.charAt(0).toUpperCase() + s.slice(1)
 
+/** His people's perks, a line each (docs/design/army-balance.md, part 9): { name, said, drawback }. */
+function perkLines(key) {
+  const listed = FACTIONS[key]?.perks
+  return (Array.isArray(listed) ? listed : []).filter(k => PERK_WORDS[k]).map(k => ({ ...PERK_WORDS[k] }))
+}
+
 /** A unit's kit in words: "militia, spear, light armour, medium shield, on foot"; a second weapon after the first ("gladius and pila"). */
 function kitWords(kit) {
   const k = kitOf(kit)
@@ -97,15 +104,19 @@ const clean = (units) => (Array.isArray(units) ? units.slice(0, 40) : []).map(u 
 }))
 
 /**
- * Check an army a player sends, as the server keeps it.
+ * Check an army a player sends, as the server keeps it. `restrictions`:
+ * false leaves out his people's restrictions (an army already kept).
  *
  * @returns {{ ok, errors, units, usedSP, budget }} errors in plain words
  */
-function checkArmy(key, units) {
+function checkArmy(key, units, { restrictions = true } = {}) {
   const list = clean(units)
   const names = list.map(u => u.name)
   const checked = checkStandard(key, list)
   const errors = checked.errors.map(e => plain(e, names))
+  // His people's restrictions, on an army he buys (docs/design/army-balance.md,
+  // part 9): not on one he bought before, which keeps its units.
+  if (restrictions) errors.push(...checkRestrictions(key, list).map(e => plain(e)))
   list.forEach((u, i) => {
     if (u.name && !u.named && !checked.errors.some(e => e.startsWith(`unit ${i + 1}: `) && /name|called/.test(e)) && !nameFits(key, u, u.name)) {
       errors.push(`${cap(u.name)}: that is not a name for ${unitNoun(u)}`)
@@ -143,6 +154,7 @@ function appraise(key, { units = [], draft = null, at = null, reserved = [] } = 
   const elite = faction.elite
   const out = {
     faction: key, title: faction.title, budget,
+    perks: perkLines(key),
     spent: spentBy(list),
     elite: { name: elite.name, words: kitWords({ ...elite, quality: 'elite' }) },
     units: priced,
@@ -167,6 +179,8 @@ function appraise(key, { units = [], draft = null, at = null, reserved = [] } = 
   const judge = (candidate) => {
     const unit = buildUnit(candidate, culture)
     if (!unit.ok) return plain(unit.errors[0])
+    const breaks = checkRestrictions(key, [...others, candidate], { kinds: ['unit', 'cap'] })[0]
+    if (breaks) return plain(breaks)
     const over = overBy(candidate)
     return over ? plain(over) : null
   }
@@ -175,9 +189,16 @@ function appraise(key, { units = [], draft = null, at = null, reserved = [] } = 
   // stands in the way is the draft's own reason, shown with it.)
   const already = new Set(buildUnit(kit, culture).errors)
   const wasOver = overBy(kit)
+  // His people's restrictions a choice would break, of those a unit or a
+  // count can break (no foot, at most one unit of horse); not those of the
+  // army as a whole (half of it heavy foot), said of the army instead.
+  const bound = (candidate) => checkRestrictions(key, [...others, candidate], { kinds: ['unit', 'cap'] })
+  const alreadyBound = new Set(bound(kit))
   const refusal = (candidate) => {
     const fresh = buildUnit(candidate, culture).errors.find(e => !already.has(e))
     if (fresh) return plain(fresh)
+    const breaks = bound(candidate).find(e => !alreadyBound.has(e))
+    if (breaks) return plain(breaks)
     const over = overBy(candidate)
     return over && !wasOver && buildUnit(candidate, culture).ok ? plain(over) : null
   }
@@ -207,7 +228,7 @@ function appraise(key, { units = [], draft = null, at = null, reserved = [] } = 
     secondRefused: Boolean(kit.second && unit.errors.some(e => e.startsWith(`${kit.second} `))),
     spentWith: spentBy(others) + (unit.ok ? unit.cost : 0),
     options: {
-      quality: PURCHASABLE.map(q => option('quality', q, T.QUALITY_TIERS[q].cost, KIT.quality[q])),
+      quality: PURCHASABLE.map(q => option('quality', q, qualityCost(q, culture), KIT.quality[q])),
       mounted: [option('mounted', false, 0, KIT.mounted.false), option('mounted', true, mountCost(key), KIT.mounted.true)],
       weapon: legal.filter(([w]) => alone(w)).map(([w, data]) => ({ ...option('weapon', w, data.sp, KIT.weapon[w] ?? w), shoots: shoots(w) })),
       // One more weapon, or none: javelins and the like to throw as they
@@ -221,4 +242,4 @@ function appraise(key, { units = [], draft = null, at = null, reserved = [] } = 
   return out
 }
 
-module.exports = { appraise, checkArmy, unitNoun, namesFor, nextName, nameFits, kitWords, plain, usualArmy, budgetOf, taken }
+module.exports = { appraise, checkArmy, perkLines, unitNoun, namesFor, nextName, nameFits, kitWords, plain, usualArmy, budgetOf, taken }

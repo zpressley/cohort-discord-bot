@@ -26,6 +26,16 @@
 // battles were fdb72ba5 22, 5c62ed49 30, ad618256 34, 56ca8eee 36
 // (everyone asked) and 1fb30748 22, abc6d6db 30, 76c134c8 29, 7d98462c 31
 // (no Commander).
+//
+// Retaken for each people's perks (docs/design/army-balance.md part 9):
+// Rome's men a little steadier, Han's bought units a fifth larger. The
+// battles were be183ca2 18, 3b976fdc 25, d5b50bd6 25, e79ea81f 29
+// (everyone asked) and a0fe2488 18, e70e50fe 25, 31e8e9f4 26, 6583ef4f 34
+// (no Commander). On ashford with no Commander both now run to the 150-turn
+// guard: the two armies march up and down either side of the ford and
+// never cross. That is not the perks' doing (the same happens without
+// them, Mongolia against Tibet on ashford, seed 77); in the app the day
+// ends such a battle.
 
 const { test } = require('node:test')
 const assert = require('node:assert/strict')
@@ -64,18 +74,18 @@ function play(extra, { commander }) {
 
 test('a battle saved before the riders rulings (marked everyoneAsked) plays back exactly as it was played, event for event', () => {
   assert.deepEqual(play({ everyoneAsked: true }, { commander: true }), {
-    'crownhill 1': 'be183ca2 18',
-    'crownhill 2': '3b976fdc 25',
-    'ashford 1': 'd5b50bd6 25',
-    'ashford 2': 'e79ea81f 29'
+    'crownhill 1': 'ae680b96 18',
+    'crownhill 2': '6261aa5e 26',
+    'ashford 1': 'c401099d 33',
+    'ashford 2': '556641ef 31'
   })
 })
 
 test('a battle with no Commander on the field runs exactly as before the riders rulings, event for event', () => {
   assert.deepEqual(play({}, { commander: false }), {
-    'crownhill 1': 'a0fe2488 18',
-    'crownhill 2': 'e70e50fe 25',
-    'ashford 1': '31e8e9f4 26',
-    'ashford 2': '6583ef4f 34'
+    'crownhill 1': '889c9e1e 18',
+    'crownhill 2': '27381837 24',
+    'ashford 1': '9de62f89 150',
+    'ashford 2': '6d782516 150'
   })
 })

@@ -8,8 +8,17 @@
 // The twenty factions and their elite units are the owner's doc,
 // docs/Context/final_20_cultures_complete.txt (ruled 2026-11-23: "I have a
 // doc for factions and elite units for 20 factions"). Its perks and
-// restrictions are not built; docs/DECISIONS.md, "How the twenty factions
-// were built", says which the builder already enforces.
+// restrictions are built as far as the game can carry them
+// (docs/design/army-balance.md, part 9, has the table of all of them; the
+// adaptation perks are not built):
+//   perks         keys of tables.PERKS (engine/combat/tables.js), the
+//                 numbers and whom in the army each is for. Given to the
+//                 faction's own units at the muster (engine/army/perks.js),
+//                 acted on in battle (engine/combat/perks.js), told on the
+//                 screens in words.js, PERK_WORDS.
+//   restrictions  rules on the army a player buys (engine/army/
+//                 restrictions.js): checked when an army is bought, not on
+//                 one bought before. Every usual army keeps to its own.
 //
 // A faction is one of the builder's cultures. It brings:
 //   elite   its unique unit, free with every army (ruled 2026-11-23: "The
@@ -28,9 +37,8 @@
 //           "sarissa foot 2"), and the name alone orders both.
 //
 // One default army per faction: the computer's army, and a ready-made
-// choice for a player. They keep to the doc's restrictions where the
-// builder does not (no foot for the Sarmatians, one horse unit at most for
-// the Yayoi), and were set by playing every pairing with the computer on
+// choice for a player. They keep to their faction's restrictions (the test
+// "every faction's usual army keeps to its own restrictions"), and were set by playing every pairing with the computer on
 // both sides (src/harness/faction-league.js). Not every army spends its
 // whole budget. To add a faction, add an entry here; the test "every
 // faction's default army is legal under the builder" checks it.
@@ -40,6 +48,8 @@ const FACTIONS = {
     culture: 'Roman Republic',
     title: 'Rome',
     fights: 'Heavy foot behind big shields, with light javelin men ahead of them.',
+    perks: ['discipline'],
+    restrictions: [{ rule: 'heavyFoot', atLeast: 0.5 }],
     // Doc: lorica segmentata, gladius, scutum; and the legion's pila.
     elite: {
       name: 'praetorian guard', size: 80,
@@ -58,6 +68,8 @@ const FACTIONS = {
     culture: 'Macedonian Kingdoms',
     title: 'Macedon',
     fights: 'The pike phalanx holds; the Silver Shields stand at its heart.',
+    perks: ['old_soldiers'],
+    restrictions: [{ rule: 'noQuality', qualities: ['levy', 'militia'] }],
     // Doc: "sarissa OR standard spears + bronze armor + silver shields". A
     // shield and a sarissa cannot be carried together here, so they take
     // the spear and keep their shields; they cannot change to pikes.
@@ -76,6 +88,8 @@ const FACTIONS = {
     culture: 'Spartan City-State',
     title: 'Sparta',
     fights: 'Few, and the best spearmen alive; their neighbours fill the line.',
+    perks: ['last_man', 'perioeci'],
+    restrictions: [{ rule: 'noQuality', qualities: ['veteran_mercenary'] }],
     // Doc: hoplon, dory, bronze cuirass. Forty men.
     elite: {
       name: 'lacedaimonian guards', size: 40,
@@ -92,6 +106,8 @@ const FACTIONS = {
     culture: 'Carthaginian Empire',
     title: 'Carthage',
     fights: 'Hired men from across the sea, and a citizen guard to hold them.',
+    perks: ['merchant_wealth'],
+    restrictions: [{ rule: 'mostOfQuality', qualities: ['professional', 'veteran_mercenary'], most: 2 }],
     // Doc: "mixed, best available from across the empire", a hundred men.
     // Stood in as heavy spearmen (the Sacred Band of the histories). The war
     // elephants the doc gives Carthage are not in the game.
@@ -111,6 +127,8 @@ const FACTIONS = {
     culture: 'Kingdom of Kush',
     title: 'Kush',
     fights: 'Archers with great bows, and spearmen to keep the enemy off them.',
+    perks: ['sun_hardened', 'bow_and_horse'],
+    restrictions: [{ rule: 'noArmor', armors: ['heavy_armor'] }],
     // Doc: six-foot Nubian bows, leather armour. A sword for the melee
     // (ruled 2026-11-24: "They can have a sword"): Kush has no sword of its
     // own in the builder, so the standard sword (the straight iron sword of
@@ -132,6 +150,7 @@ const FACTIONS = {
     culture: 'Berber Confederations',
     title: 'Berbers',
     fights: 'Desert horsemen with javelins, and the tribes on foot behind them.',
+    perks: ['small_bands', 'dense_ground'],
     // Doc: desert horses, light spears, leather armour. A spear cannot be
     // used from horseback here, so they throw the heavy javelin, and close
     // with the sword.
@@ -151,6 +170,8 @@ const FACTIONS = {
     culture: 'Sarmatian Confederations',
     title: 'Sarmatia',
     fights: 'All on horse: riders who shoot, and armoured lords who charge.',
+    perks: ['feigned_retreat'],
+    restrictions: [{ rule: 'noFoot' }],
     // Doc: scale armour, composite bows, kontos lances, armoured horses. One
     // weapon each here: they charge with the lance and carry no bow.
     elite: {
@@ -168,6 +189,7 @@ const FACTIONS = {
     culture: 'Han Dynasty',
     title: 'Han',
     fights: 'Crossbows that pierce armour, with a guard of swordsmen.',
+    perks: ['crossbows', 'larger_units'],
     // Doc: jian and dao swords, iron lamellar, "mixed cavalry/infantry", a
     // hundred men; no shield. One unit here, so they fight on foot.
     elite: {
@@ -185,6 +207,8 @@ const FACTIONS = {
     culture: 'Mauryan Empire',
     title: 'Maurya',
     fights: 'Every arm together: bowmen, spearmen, horse, and the royal elephants.',
+    perks: ['wootz'],
+    restrictions: [{ rule: 'kinds', atLeast: 3 }],
     // Doc: sixty elephant masters and six war elephants, wootz steel, cotton
     // armour. There are no elephants in the game: they stand in as heavily
     // armoured foot with maces, slow and crushing. (As horse, they rode
@@ -205,6 +229,7 @@ const FACTIONS = {
     culture: 'Silla Kingdom',
     title: 'Silla',
     fights: 'A small army, led by well-born young men armoured in iron.',
+    perks: ['mountain_warfare'],
     // Doc: curved swords, advanced iron armour, composite bows. One weapon
     // here: the sword.
     elite: {
@@ -222,6 +247,7 @@ const FACTIONS = {
     culture: 'Achaemenid Persian',
     title: 'Persia',
     fights: 'Archers and slingers behind a wall of wicker shields, the Immortals at the centre.',
+    perks: ['surgeons'],
     // Doc: spears, wicker shields, scale armour, akinakes, a hundred men.
     elite: {
       name: 'immortals', size: 100,
@@ -239,6 +265,8 @@ const FACTIONS = {
     culture: 'Parthian Empire',
     title: 'Parthia',
     fights: 'Horse archers who never close, lancers who do, and levies to hold the ground.',
+    perks: ['plains_horse', 'parthian_shot'],
+    restrictions: [{ rule: 'levySp', atLeast: 10 }, { rule: 'horse', atLeast: 0.5 }],
     // Doc: forty cataphracts with the kontos and forty horse archers. One
     // unit here: the cataphracts.
     elite: {
@@ -257,6 +285,7 @@ const FACTIONS = {
     culture: 'Germanic Tribes',
     title: 'Germania',
     fights: 'Warbands of spearmen out of the forest, and the chief\'s sworn men.',
+    perks: ['woodland'],
     // Doc: framea spears, pattern-welded swords, round shields. The builder's
     // framea takes both hands, so the shields are left behind.
     elite: {
@@ -275,6 +304,8 @@ const FACTIONS = {
     culture: 'Thracian Odrysians',
     title: 'Thrace',
     fights: 'Light men from the mountains: javelins, and the dreaded long blade.',
+    perks: ['hill_defence', 'rhomphaia'],
+    restrictions: [{ rule: 'noQuality', qualities: ['veteran_mercenary'] }, { rule: 'lightKit' }],
     // Doc: pelte shields, javelins, curved swords. Sixty men. They throw the
     // heavy javelin and close with the sword (the standard sword stands in
     // for the curved one).
@@ -294,6 +325,7 @@ const FACTIONS = {
     culture: 'Samnite Federation',
     title: 'Samnium',
     fights: 'Mountain swordsmen with big shields, who hate Rome.',
+    perks: ['guerrilla', 'samnite_bravery'],
     // Doc: gladii, javelins, scuta. The heavy javelin: the Samnites' was
     // the pilum's forebear.
     elite: {
@@ -311,6 +343,7 @@ const FACTIONS = {
     culture: 'Tibetan Kingdoms',
     title: 'Tibet',
     fights: 'Long spears from the roof of the world, and a militia that defends its home.',
+    perks: ['militia_veterans', 'cheap_mercenaries'],
     // Doc: long spears, yak-hide armour.
     elite: {
       name: 'snow lion guard', size: 80,
@@ -327,6 +360,8 @@ const FACTIONS = {
     culture: 'Pre-Genghis Mongolia',
     title: 'Mongolia',
     fights: 'Every man on a horse: bowmen who never close, and riders who do.',
+    perks: ['parthian_shot'],
+    restrictions: [{ rule: 'noFoot' }],
     // Doc: composite bows, layered armour, a hundred men. The builder's
     // composite bows belong to the Greeks and Parthians: the professional
     // bow stands in.
@@ -346,6 +381,8 @@ const FACTIONS = {
     culture: 'Celtic Tribes',
     title: 'Celts',
     fights: 'Champions with long swords who charge first and ask after.',
+    perks: ['woodland', 'berserker'],
+    restrictions: [{ rule: 'noTrainedShooters' }],
     // Doc: pattern-welded longswords, lime-washed shields, light mail.
     elite: {
       name: 'fianna', size: 80,
@@ -364,6 +401,8 @@ const FACTIONS = {
     culture: 'Bactrian Greeks',
     title: 'Bactria',
     fights: 'Greek pikes and Iranian horse in one army.',
+    perks: ['noble_cavalry'],
+    restrictions: [{ rule: 'heavyFoot', atMost: 0.3 }],
     // Doc: "mixed: Greek phalanx gear, Iranian cavalry armour, Indian
     // weapons". Stood in as armoured pikemen.
     elite: {
@@ -382,6 +421,8 @@ const FACTIONS = {
     culture: 'Yayoi Period Japan',
     title: 'Yayoi',
     fights: 'Clan spearmen and archers, on foot, as islanders fight.',
+    perks: ['bow_and_spear', 'rapid_fortification'],
+    restrictions: [{ rule: 'mostHorse', most: 1 }, { rule: 'noArmor', armors: ['heavy_armor'] }],
     // Doc: bronze and iron spears, composite bows, wooden shields. One
     // weapon here: the spear.
     elite: {
