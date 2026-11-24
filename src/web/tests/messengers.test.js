@@ -133,3 +133,64 @@ test('the computer\'s orders go out by rider from its best unit, and a saved bat
     assert.deepEqual(again.battle.log.all(), game.battle.log.all())
   } finally { await app.close() }
 })
+
+// ── The enemy catching a rider ─────────────────────────
+// (engine/command/messengers.js, ridersTaken; tables.RIDER_TAKEN.) A rider
+// is put on the road by hand beside the enemy, and the roll made sure, so
+// that the test does not wait on the dice.
+const { RIDER_TAKEN } = require('../../engine/combat/tables')
+async function sure(fn) {
+  const was = [RIDER_TAKEN.FOOT.CHANCE, RIDER_TAKEN.HORSE.CHANCE]
+  RIDER_TAKEN.FOOT.CHANCE = 1
+  RIDER_TAKEN.HORSE.CHANCE = 1
+  try { return await fn() } finally { [RIDER_TAKEN.FOOT.CHANCE, RIDER_TAKEN.HORSE.CHANCE] = was }
+}
+// A road down one column of the field, a tile at a time, from row `from`.
+const column = (x, from, n) => Array.from({ length: n }, (_, i) => ({ x, y: from + i, c: i }))
+
+test('fog of war, a rider caught: the Commander who sent him is told nothing, and believes his order on the road until it should have arrived', async () => {
+  const store = createBattleStore({})
+  const app = await start(store)
+  try {
+    await sure(async () => {
+      const seat = await solo(app)
+      const game = store.seatOf(seat).entry.game
+      const { battle } = game
+      // A rider of his to the hastati, riding past the enemy's cataphracts
+      // (27, 24) two tiles off, and due long after.
+      battle.riders = [{ side: 'red', unitId: 'red_hastati', order: { unitId: 'red_hastati', action: 'move', target: { x: 20, y: 2 } }, sent: battle.turn, arrives: battle.turn + 30, path: column(25, 14, 13) }]
+      await app.api('POST', `/api/seat/${seat}/orders`, { text: 'legionaries hold' })
+      const taken = battle.log.all().filter(e => e.type === 'riderTaken')
+      assert.deepEqual(taken.map(e => [e.from, e.to]), [['red', 'red_hastati']], 'the enemy took him')
+      assert.notDeepEqual(battle.orderBook.get('red_hastati')?.target, { x: 20, y: 2 }, 'his order never arrived')
+      const tent = (await app.api('GET', `/api/seat/${seat}`)).body
+      const text = JSON.stringify(tent)
+      for (const word of ['riderTaken', 'lostRiders', "enemy's riders", 'taken', '"path"']) {
+        assert.equal(text.includes(word), false, `no "${word}" in the answer`)
+      }
+      if (battle.turn < 31) assert.ok(tent.own.find(u => u.id === 'red_hastati').rider, 'as far as he knows, the rider is still on his way')
+    })
+  } finally { await app.close() }
+})
+
+test('a unit of his that catches an enemy rider tells its Commander the order he carried, in the game\'s own words', async () => {
+  const store = createBattleStore({})
+  const app = await start(store)
+  try {
+    await sure(async () => {
+      const seat = await solo(app)
+      const game = store.seatOf(seat).entry.game
+      const { battle } = game
+      // The enemy's rider to its slingers, riding past his hastati (11, 21)
+      // a tile off: they are beside him, so word of it comes at once.
+      battle.riders = [{ side: 'blue', unitId: 'blue_slingers', order: { unitId: 'blue_slingers', fromPost: true, action: 'attack', target: { x: 11, y: 21 } }, sent: battle.turn, arrives: battle.turn + 3, path: column(12, 12, 13) }]
+      await app.api('POST', `/api/seat/${seat}/orders`, { text: 'everyone hold' })
+      const taken = battle.log.all().filter(e => e.type === 'riderTaken')
+      assert.deepEqual(taken.map(e => [e.side, e.unitId, e.to]), [['red', 'red_hastati', 'blue_slingers']])
+      const tent = (await app.api('GET', `/api/seat/${seat}`)).body
+      const line = tent.dispatches.flatMap(d => d.lines).find(l => l.includes("took one of the enemy's riders"))
+      assert.match(line ?? '', /^Hastati took one of the enemy's riders .*, carrying an order for enemy slingers: attack C6-/)
+      assert.equal(JSON.stringify(tent).includes('blue_slingers'), false, 'the enemy named in his words, never by the engine\'s name')
+    })
+  } finally { await app.close() }
+})

@@ -34,7 +34,7 @@
 // tile index so it is the same every time) gives every unit's delay at
 // once; on a 40 by 40 field it is a few thousand steps.
 
-const { COMMAND, QUALITY_ORDER } = require('../combat/tables')
+const { COMMAND, QUALITY_ORDER, RIDER_TAKEN } = require('../combat/tables')
 
 const tilesApart = (a, b) => Math.max(Math.abs(a.x - b.x), Math.abs(a.y - b.y))
 
@@ -54,11 +54,13 @@ function stepCosts(map) {
 /**
  * What a rider's ride costs from one tile to every tile of the field.
  *
- * @param {Object} o  { map, world, broken: Set, hidden: Map, side, from }
+ * @param {Object} o  { map, world, broken: Set, hidden: Map, side, from,
+ *   via }; via, if given (an Int32Array the field's size), is filled with
+ *   the tile each tile is reached from on the cheapest way, for the path
  * @returns {Float64Array} cost per tile (index y * width + x); Infinity
  *   where no rider can get through
  */
-function riderCosts({ map, world, broken = new Set(), hidden = new Map(), side, from }) {
+function riderCosts({ map, world, broken = new Set(), hidden = new Map(), side, from, via = null }) {
   const { width, height } = map
   const size = width * height
   const cost = new Float64Array(size).fill(Infinity)
@@ -129,7 +131,7 @@ function riderCosts({ map, world, broken = new Set(), hidden = new Map(), side, 
     for (const j of next) {
       if (j < 0 || done[j] || step[j] === Infinity) continue
       const nc = c + step[j]
-      if (nc < cost[j]) { cost[j] = nc; push(Math.round(nc * 2) * size + j) }
+      if (nc < cost[j]) { cost[j] = nc; if (via) via[j] = i; push(Math.round(nc * 2) * size + j) }
     }
   }
   return cost
@@ -183,13 +185,90 @@ function riders(state, side) {
   if (state.spec?.messengers === false) return null
   const post = commandPost(state, side)
   if (!post) return null
-  const costs = riderCosts({ map: state.map, world: state.world, broken: state.broken, hidden: state.hidden, side, from: post.position })
+  const { width } = state.map
+  const via = new Int32Array(width * state.map.height).fill(-1)
+  const costs = riderCosts({ map: state.map, world: state.world, broken: state.broken, hidden: state.hidden, side, from: post.position, via })
   const ticks = (unit) => {
     if (tilesApart(unit.position, post.position) <= COMMAND.IMMEDIATE) return 0
-    const c = costs[unit.position.y * state.map.width + unit.position.x]
+    const c = costs[unit.position.y * width + unit.position.x]
     return c === Infinity ? Infinity : Math.max(1, Math.ceil(c / COMMAND.RIDER_PACE - 1e-9))
   }
-  return { post, ticks }
+  // The way he rides to a unit: each tile with what the ride has cost by
+  // it, from the command post to the unit. Null when he cannot get there.
+  const path = (unit) => {
+    let i = unit.position.y * width + unit.position.x
+    if (costs[i] === Infinity) return null
+    const out = []
+    while (i >= 0) {
+      out.push({ x: i % width, y: Math.floor(i / width), c: costs[i] })
+      i = via[i]
+    }
+    return out.reverse()
+  }
+  return { post, ticks, path }
+}
+
+// ── The enemy catching a rider ─────────────────────────
+// docs/design/point-of-view-and-messengers.md, "What comes after": "The
+// enemy catching a rider and reading the order." Claude's build, open to
+// change (docs/DECISIONS.md, "How the enemy catching a rider was built";
+// the numbers are tables.RIDER_TAKEN).
+//
+// A rider keeps clear of the enemy he knows of as he sets out, but the
+// enemy moves while he rides. As each ten minutes opens, the stretch of road
+// he rode in the last ten minutes (not the tile he set out from, nor the
+// unit he rides to) is looked over: an enemy unit on the field and not
+// running, hidden or not, that came within its reach of any tile of it may
+// catch him, on one roll of a stream of the battle's own. Horse reach
+// further and catch more often than foot. Of several, the likeliest tries.
+
+/** The tiles a rider rode over in the ten minutes before `turn`. */
+function rodeOver(rider, turn) {
+  const path = rider.path
+  if (!path || path.length < 3) return []
+  const pace = COMMAND.RIDER_PACE
+  const from = (turn - 1 - rider.sent) * pace
+  const to = (turn - rider.sent) * pace
+  // Not where he set out, and not the unit he rides to.
+  return path.slice(1, -1).filter(t => t.c > from && t.c <= to)
+}
+
+/**
+ * Who of the enemy might catch this rider on the stretch he rode last:
+ * { unit, chance, at } (the tile nearest it), or null.
+ */
+function catcherOf(state, rider, turn) {
+  const road = rodeOver(rider, turn)
+  if (road.length === 0) return null
+  let best = null
+  for (const u of state.world.units) {
+    if (u.side === rider.side || u.strength <= 0 || state.broken.has(u.id)) continue
+    const how = u.mounted ? RIDER_TAKEN.HORSE : RIDER_TAKEN.FOOT
+    let at = null
+    for (const t of road) {
+      const d = tilesApart(t, u.position)
+      if (d <= how.REACH && (!at || d < at.d)) at = { d, x: t.x, y: t.y }
+    }
+    if (!at) continue
+    const better = !best || how.CHANCE > best.chance || (how.CHANCE === best.chance && (at.d < best.d || (at.d === best.d && u.id < best.unit.id)))
+    if (better) best = { unit: u, chance: how.CHANCE, d: at.d, at: { x: at.x, y: at.y } }
+  }
+  return best
+}
+
+/**
+ * Riders of this side on the road whom the enemy catches as this ten
+ * minutes opens: [{ rider, by: unit, at }]. Rolls only where an enemy came
+ * near enough, on the stream given.
+ */
+function ridersTaken(state, side, turn, random) {
+  const out = []
+  for (const r of state.riders ?? []) {
+    if (r.side !== side || !r.path || turn <= r.sent) continue
+    const c = catcherOf(state, r, turn)
+    if (c && random() < c.chance) out.push({ rider: r, by: c.unit, at: c.at })
+  }
+  return out
 }
 
 /**
@@ -226,4 +305,4 @@ function orderDelays(state, side, unitIds, { from = null, word = null } = {}) {
   return out
 }
 
-module.exports = { riderCosts, commandPost, byRider, byCommandPost, riders, orderDelays, tilesApart }
+module.exports = { riderCosts, commandPost, byRider, byCommandPost, riders, orderDelays, tilesApart, rodeOver, catcherOf, ridersTaken }

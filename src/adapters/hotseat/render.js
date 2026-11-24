@@ -233,6 +233,7 @@ function wordEvent(event) {
     case 'riderBlocked': return `No rider can get through to ${event.unitId}`
     case 'cutOff': return `${event.unitId} is CUT OFF: no rider can get through`
     case 'inTouch': return `Riders get through to ${event.unitId} again`
+    case 'riderTaken': return `${event.unitId} CATCHES AN ENEMY RIDER at ${where(event.at)}: his order for ${event.to} was ${event.order.action}${event.order.target ? ` ${where(event.order.target)}` : event.order.enemy ? ` ${event.order.enemy}` : ''}`
     case 'grasp': return null
     case 'rallied': return `${event.unitId} RALLIES at ${where(event.at)} with ${event.strength} men`
     case 'heartened': return `${event.unitId} takes heart as ${event.by} breaks`

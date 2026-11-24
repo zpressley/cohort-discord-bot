@@ -1030,3 +1030,21 @@ module.exports = {
   HIGH_GROUND_TERRAIN,
   CROSSING_TERRAIN
 }
+
+// The enemy catching a rider and reading the order he carries (docs/design/
+// point-of-view-and-messengers.md, "What comes after"; command/
+// messengers.js, ridersTaken). Claude's starting values, open to change
+// (docs/DECISIONS.md, "How the enemy catching a rider was built"). As each
+// ten minutes opens, an enemy unit within REACH tiles (the eight-way count)
+// of the road a rider rode in the last ten minutes catches him on one roll
+// of CHANCE. A rider keeps a tile clear of the enemy he knew of as he set
+// out, so foot must have come at least a tile toward his road. Horse reach
+// twice as far as foot (a formed unit of horse covers 5 tiles in ten
+// minutes, foot 2 to 3) and ride him down more often: a man on foot catches
+// a galloping rider only if he rides right by. Set for an event a player
+// meets now and then, not every battle (measured: see DECISIONS).
+const RIDER_TAKEN = {
+  FOOT: { REACH: 1, CHANCE: 0.1 },
+  HORSE: { REACH: 2, CHANCE: 0.25 }
+}
+module.exports.RIDER_TAKEN = RIDER_TAKEN

@@ -3767,3 +3767,113 @@ roster prices in `roster.test.js` (the hastati 11 to 9 SP). `npm run
 balance` is unchanged (no duel archetype carries a second weapon). The
 Commander's odds (`captive-league.js --battles 2000 --policy wait`): taken
 in 1 battle in 19.0, as on main (18.9).
+
+### How the enemy catching a rider was built (Claude's choices, open to change)
+
+From the messengers design's "What comes after": "The enemy catching a
+rider and reading the order." Zach asked for what is on the roadmap and has
+not ruled on the details; everything below is my choice. The code:
+`engine/command/messengers.js` (`riders` now gives each rider's path;
+`rodeOver`, `catcherOf`, `ridersTaken`), `engine/battle/battle.js` (the roll
+as each ten minutes opens, `state.riderRandom`, `state.lostRiders`, the
+`riderTaken` event), `engine/orchestrator/word.js` (`arrivalOf`) and
+`orchestrator.js` (the stop, `ordersCarriedOut`), `narrator/turnNarrator.js`
+and `words.js` (`RIDER_TAKEN`), `opponent/planner.js` (`forewarned`),
+`web/battles.js` (`onTheRoad`) and `public/app.js` (the stop's words). The
+numbers are `tables.RIDER_TAKEN`.
+
+**The rule.** A rider sets out by the path he always took (the cheapest
+way, a tile clear of every enemy he could see). The enemy moves while he
+rides. As each ten minutes opens, the stretch of that path he rode in the
+last ten minutes is looked over (not the tile he set out from, nor the unit
+he rides to: there he is among his own). An enemy unit on the field and not
+running, within its reach of any tile of it, may catch him on one roll:
+- foot: within 1 tile (the eight-way count), 1 in 10;
+- horse: within 2 tiles, 1 in 4.
+Of several, the likeliest tries (horse first, then the nearest). A hidden
+enemy can catch him too: he did not know to ride round it. One roll per
+rider per ten minutes, on a stream of its own seeded from the battle's seed
+(`riderRandom`), drawn on only when an enemy is near: a battle where none
+comes near falls out exactly as before (tested). A battle with no
+Commander on the field and no orders from a command post has no riders, and
+is unchanged.
+
+**What follows.**
+- His order never arrives. The side that sent him is told nothing, ever,
+  in keeping with "Yes but no word returns" (November 23) and "Notice when
+  no word comes back": his Army tab still shows the rider on the road until
+  he should have arrived (`state.lostRiders`, read by `onTheRoad`); after
+  that the unit simply goes on as it was, and he notices it did not do what
+  he asked. His side's stops are judged as if the rider were still riding,
+  so the battle stopping tells him nothing either. Guessed: the other
+  reading of the rider rulings is that a rider who does not come back is
+  itself news after a while ("your rider to the hastati has not come
+  back"); I took no word at all, as with any unit he hears nothing from.
+- The side that caught him reads the order (`riderTaken`, its own side
+  only). Its Commander hears of it with the next report of the unit that
+  took him, at the rider's pace like any news; it stops the battle for him
+  when it reaches him ("your men caught an enemy rider"). What he is told
+  is the order in the game's own words, for which unit, and where:
+  "Savaran took one of the enemy's riders in open ground 125 m south-east
+  of North Ford (G3-NW), carrying an order for enemy spears: march to The
+  Crownhill (E1-SE) and hold it" (a real battle: seed 25, Parthia against
+  Kush). Never the other player's typed words, and no AI. He learns the
+  unit's name and the order, nothing of where that unit is: the enemy's
+  ledger is not touched.
+- A Commander held by the enemy hears what his captors hear (ruled), so he
+  may hear that they caught one of his own riders. Left so.
+
+**The computer.** Its orders do travel by rider (from its best unit, as
+built in step 3, marked `byCommandPost`), so the player catches them the
+same way. When it catches one, the planner takes the place the order names
+as where the enemy is going, for an hour (`TUNING.FOREWARNED`, 60): it is
+added to the places it last saw the enemy, which it uses only when no enemy
+is in sight and it is not holding good ground. An order with no place in
+it (hold, advance on the enemy, attack a named unit) gives it nothing.
+Guessed: the simplest fair use; it never learns more than the order said,
+and only once word would have reached a Commander of its side (it has none,
+so at once, as all its knowledge is). I did not measure this apart: it
+changes few battles (below).
+
+**Reports going back.** Not caught: orders only. News by rider is not a
+rider with a path in the engine but a time each report arrives
+(`word.road`), so catching it would mean a second build of the roll on
+another shape, not nearly free. Recorded for later.
+
+**On the map.** No mark where the rider was taken: the map drawing is
+being reworked by another agent in parallel, and the dispatch line gives
+the square. Screenshots of the dispatch at 390 px and desktop are in the
+hand-back.
+
+**Measured** (`node src/harness/messenger-league.js --battles 400`, which
+now counts riders caught; `--no-catch` sets the chances to nothing on the
+same seeds). Red is the player with his Commander on the field, blue the
+computer, both sending orders by rider. Before is integration-16 (`--root`).
+
+| | before | after |
+|---|---|---|
+| Planner: red won | 57% (229) | 57% (228) |
+| Everyone in: red won | 46% (183) | 46% (182) |
+| Planner on word, the map's ground, night, mixed characters: red won | 50% (198) | 50% (199) |
+
+- How often (planner): a rider caught in 22% of battles (88 of 400); the
+  player caught one of the computer's in 11% (45). Of all riders, 1 in 20 of red's (100 of 2068) and 1 in
+  40 of blue's (61 of 2392); 93 of the 161 by horse. Sending everyone in:
+  17% of battles, red caught one in 9%. Planner on word with the ground:
+  20%, red caught one in 6%. In 30 real battles through the app (a rough
+  player: everyone advance every third turn), the player's men caught one
+  in 2.
+- First tried: foot 1 tile at 1 in 4, horse 2 tiles at 1 in 2: a rider
+  caught in 32% of battles, 1 in 10 of red's riders. Halved to the values
+  above, for an event met now and then.
+- The Commander's odds (`captive-league.js --battles 2000 --policy wait`):
+  taken 1 in 19.0, as before (19.0). `npm run balance`: unchanged, every
+  table.
+
+**Guessed at**, besides the above: the reaches and chances (no source but
+the rate aimed for: a formed unit of horse covers 5 tiles in ten minutes,
+foot 2 to 3, a lone rider 10); that a rider can be caught near the unit he
+rides to when the enemy is fighting it (he rides into that fight, as the
+path rule lets him); that a unit in a fight can still catch him; that the
+stretch looked over is the whole ten minutes' ride, with the enemy where
+it stands at the end of it, not tick by tick.

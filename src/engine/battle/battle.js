@@ -41,7 +41,7 @@ const { createEventLog } = require('./events')
 const { normalizeOrder, planUnit, nextStep, isSeeking, NEAR_TILES } = require('./orders')
 const { grasp, losingTheThread, ownCommand, wouldYield, loyaltyOf } = require('../command/officers')
 const { createCommanders, stepCommanders, canRide } = require('../command/commander')
-const { byRider, riders } = require('../command/messengers')
+const { byRider, riders, ridersTaken } = require('../command/messengers')
 const { actsAlone, initiative } = require('../command/initiative')
 const { canSee, visionRange } = require('../map/sight')
 const { coverFor } = require('./hiding')
@@ -75,6 +75,10 @@ function createBattleState(spec, options = {}) {
     // own, so that a Commander's fate never changes how the fighting goes.
     commanders: createCommanders(spec),
     commanderRandom: createRng((Math.imul(seed, 1597334677) + 211) >>> 0),
+    // A stream of its own for the enemy catching a rider (command/
+    // messengers.js, ridersTaken), drawn on only when an enemy comes near
+    // one: a battle where none does falls out as before.
+    riderRandom: createRng((Math.imul(seed, 3266489917) + 307) >>> 0),
     mustered: new Map(spec.units.map(u => [u.id, u.strength])),
     // Units given an order in the player turn now running, and those shot
     // at in the tick before this one.
@@ -553,6 +557,20 @@ function stepTurn(state, sideOrders = {}, { sameTurn = false } = {}) {
       // (command/messengers.js). Those on the road arrive first, in the
       // order given; a unit broken or gone by then never gets its order.
       state.riders = state.riders ?? []
+      // The enemy may have caught a rider on the road (messengers.js,
+      // ridersTaken). His order never arrives, and the side that took him
+      // reads it. His own side is not told: no word comes back. Kept in
+      // state.lostRiders, so that his Commander still believes the order on
+      // the road until it should have arrived (web/battles.js, onTheRoad).
+      for (const { rider, by, at } of ridersTaken(state, side, turn, state.riderRandom)) {
+        state.riders = state.riders.filter(r => r !== rider)
+        ;(state.lostRiders ??= []).push(rider)
+        const { fromPost, unitId, unitRef, ...order } = rider.order
+        log.emit('riderTaken', turn, {
+          side: by.side, unitId: by.id, from: side, to: rider.unitId, at: { ...at },
+          order: normalizeOrder({ unitId: rider.unitId, ...order })
+        })
+      }
       const due = state.riders.filter(r => r.side === side && r.arrives <= turn)
       state.riders = state.riders.filter(r => !due.includes(r))
       for (const r of due) if (effective.some(u => u.id === r.unitId)) give(r.order)
@@ -568,7 +586,7 @@ function stepTurn(state, sideOrders = {}, { sameTurn = false } = {}) {
         const behind = Math.max(0, ...state.riders.filter(r => r.unitId === order.unitId).map(r => r.arrives))
         const arrives = Math.max(turn + ticks, behind)
         if (arrives <= turn) { give(order); continue }
-        state.riders.push({ side, unitId: order.unitId, order, sent: turn, arrives })
+        state.riders.push({ side, unitId: order.unitId, order, sent: turn, arrives, path: road.path(unit) })
         log.emit('riderSent', turn, { side, unitId: order.unitId, minutes: (arrives - turn) * 10 })
       }
     }
