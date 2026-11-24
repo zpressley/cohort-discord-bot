@@ -11,6 +11,8 @@
 //   spears to the clearing and hold         defend (go there, then hold)
 //   archers defend the ford                 defend
 //   horse dig in at the clearing            defend
+//   spears take the Old Mill Bridge         defend (also occupy, or hold
+//   hold the bridge                         a place)
 //   archers hold        / hold              hold (bare "hold" = everyone)
 //   archers go north / horse move 200 m east   move, by compass from where
 //                                              the unit stands
@@ -50,7 +52,7 @@ const THEN_HOLD = /\s*(?:,|\band\b|\bthen\b)\s*(?:then\s+)?(?:hold(?: it| there|
 // The unit words are optional: "fall back to K8" or "stop at the clearing"
 // with no one named means everyone.
 const VERBS = [
-  { action: 'defend', pattern: /^(?:(.+?)\s+)?(?:dig in at|dig in on|set up (?:a )?defensive positions? (?:at|on|in)|defend|hold at|hold on|make a stand at)\s+(.+)$/i },
+  { action: 'defend', pattern: /^(?:(.+?)\s+)?(?:dig in at|dig in on|set up (?:a )?defensive positions? (?:at|on|in)|defend|hold at|hold on|make a stand at|take|occupy|hold)\s+(.+)$/i },
   { action: 'withdraw', pattern: /^(?:(.+?)\s+)?(?:withdraw|fall back|retreat|pull back)(?:\s+(?:to|towards|toward)\s+(.+))?$/i },
   { action: 'move', pattern: /^(?:(.+?)\s+)?(?:stop at|halt at|march to|march on|move to|go to|head for|make for|approach|towards|toward|to)\s+(.+)$/i }
 ]

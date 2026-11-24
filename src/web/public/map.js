@@ -250,7 +250,9 @@ export function drawMap(view, { selectedId = null } = {}) {
     const w = (Math.max(...xs) - Math.min(...xs) + 1) * TILE + 6
     const h = (Math.max(...ys) - Math.min(...ys) + 1) * TILE + 6
     const held = o.holder ? ` (held by ${o.holder === side ? 'you' : 'the enemy'})` : ''
-    parts.push(`<g aria-hidden="true"><rect x="${x0}" y="${y0}" width="${w}" height="${h}" rx="6" fill="none" style="stroke: var(--objective)" stroke-width="2" stroke-dasharray="6 4"/>
+    // A faint wash over the ground itself, so it reads at a phone's zoom.
+    for (const t of o.tiles) parts.push(`<rect aria-hidden="true" x="${MARGIN + t.x * TILE}" y="${MARGIN + t.y * TILE}" width="${TILE}" height="${TILE}" style="fill: var(--objective)" fill-opacity="0.18"/>`)
+    parts.push(`<g aria-hidden="true"><rect x="${x0}" y="${y0}" width="${w}" height="${h}" rx="6" fill="none" style="stroke: var(--objective)" stroke-width="2.5" stroke-dasharray="6 4"/>
       <text x="${x0 + w / 2}" y="${y0 + h + 13}" text-anchor="middle" font-size="11" font-weight="600" style="fill: var(--objective); font-family: var(--font-display)">${esc(o.name + held)}</text></g>`)
   }
 

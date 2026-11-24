@@ -31,7 +31,7 @@ const TILE_METRES = 25
 // "high ground" is read before "ground" could be.
 const KIND_WORDS = [
   ['high ground', ['hill']], ['heights', ['hill']], ['ridge', ['hill']], ['ridges', ['hill']],
-  ['hills', ['hill']], ['hill', ['hill']], ['rise', ['hill']], ['crest', ['hill']],
+  ['hills', ['hill']], ['hill', ['hill']], ['rise', ['hill']], ['crest', ['hill']], ['knoll', ['hill']],
   ['woods', ['woods']], ['wood', ['woods']], ['forest', ['woods']], ['trees', ['woods']],
   ['treeline', ['woods']], ['tree line', ['woods']],
   ['marshes', ['marsh']], ['marsh', ['marsh']], ['swamp', ['marsh']], ['bog', ['marsh']], ['fen', ['marsh']],
@@ -270,7 +270,10 @@ function byName(map, from, name) {
   const wanted = normalise(name).replace(/^the /, '')
   const feature = detectFeatures(map).find(f => f.name && normalise(f.name).replace(/^the /, '') === wanted)
   if (!feature) return { none: `I know no place called "${name}"` }
-  const position = pointIn(map, feature, from, null)
+  // A pass is a place on a road ("Raven Gap"), not the road: go to it, not
+  // to the nearest stretch of the road it names.
+  const pass = feature.kind === 'road' && map.landmarks().find(l => l.landmark === feature.name && (l.tags ?? []).includes('pass'))
+  const position = pass ? { ...pass.position } : pointIn(map, feature, from, null)
   return { feature, position, description: describe(feature, from, null, position) }
 }
 

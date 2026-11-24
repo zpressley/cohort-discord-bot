@@ -89,6 +89,11 @@ const CELLS = {
   }
 }
 
+// The Old Mill Bridge as ground to hold: the bridge and the open ground of
+// the mill at its west end.
+const OLD_MILL = []
+for (let y = 19; y <= 21; y++) for (let x = 18; x <= 20; x++) if (!['river', 'hill', 'forest'].includes(map.get(x, y))) OLD_MILL.push({ x, y })
+
 module.exports = {
   name: 'ashford',
   title: 'Ashford Vale',
@@ -97,5 +102,12 @@ module.exports = {
   cells: CELLS,
   terrain: map.terrain(),
   // Where each side's army forms up when a scenario is fought here.
-  deploy: { west: { x: 8, y: 25 }, east: { x: 32, y: 25 } }
+  deploy: { west: { x: 8, y: 25 }, east: { x: 32, y: 25 } },
+  // The ground to fight for (engine/orchestrator/victory.js, objectiveArea):
+  // the bridge mid-field and the mill at its west end, held from on them.
+  // (The bridge alone, held from either end, was tried first: the east army
+  // reaches it first, the west's way lying through the woods, and won 82
+  // battles in 100. docs/DECISIONS.md, "How each map's ground to fight for
+  // was built".)
+  ground: [{ name: 'the Old Mill Bridge', tiles: OLD_MILL }]
 }

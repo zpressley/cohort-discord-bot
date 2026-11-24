@@ -29,7 +29,8 @@ const { detectFeatures } = require('../map/features')
 
 const COLLAPSE_FRACTION = 0.20   // [old docs] army destruction threshold
 const OBJECTIVE_TURNS_TO_WIN = 3 // [old docs] consecutive turns of control
-const OBJECTIVE_HOLD_MINUTES = 60 // Stage 3 plan F3: an hour of battle time
+// Stage 3 plan F3: an hour of battle time (combat/tables.js, GROUND).
+const OBJECTIVE_HOLD_MINUTES = require('../combat/tables').GROUND.HOLD_MINUTES
 
 /**
  * An objective as the spec gives it, made into ground: { id, name, tiles,
@@ -38,9 +39,12 @@ const OBJECTIVE_HOLD_MINUTES = 60 // Stage 3 plan F3: an hour of battle time
  *   square   a grid square or quarter ("C7", "C7-NE"); held from inside it
  *   feature  a named feature of the map ("Harrow Bridge"); held from on it
  *   tiles    a list of tiles; held from on them
+ * `reach` (tiles), if given, is how near the ground a unit holds it from:
+ * 1 for a crossing, which is held from on it or at either end (a map's
+ * own ground, src/data/maps).
  */
 function objectiveArea(map, objective) {
-  const base = { id: objective.id, name: objective.name ?? objective.id }
+  const base = { id: objective.id, name: objective.name ?? objective.id, ...(Number.isInteger(objective.reach) ? { reach: objective.reach } : {}) }
   if (objective.coord !== undefined) {
     const coord = toPosition(objective.coord)
     return { ...base, coord, tiles: [coord], single: true }
@@ -73,7 +77,7 @@ function objectiveArea(map, objective) {
 // is nobody's.
 function objectiveController(world, broken, objective) {
   const tiles = objective.tiles ?? [objective.coord]
-  const reach = objective.single === false ? 0 : 1
+  const reach = objective.reach ?? (objective.single === false ? 0 : 1)
   const keys = new Set(tiles.map(positionKey))
   const near = reach === 0
     ? (unit) => keys.has(positionKey(unit.position))

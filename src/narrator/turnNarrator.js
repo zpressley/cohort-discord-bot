@@ -11,7 +11,7 @@
 const { featuresAt, detectFeatures } = require('../engine/map/features')
 const { distance } = require('../engine/map/labels')
 const { compassWord, TILE_METRES } = require('../engine/map/places')
-const { orderWords, moraleWords, ORDER, RIDER, NIGHT } = require('./words')
+const { orderWords, moraleWords, ORDER, RIDER, NIGHT, GROUND } = require('./words')
 const { gridLabel } = require('../engine/map/grid')
 
 // Where a tile is, in words: the feature it is part of, or the nearest
@@ -267,7 +267,8 @@ function plainFact(map, event, howMany = countAll) {
     case 'crowding': return event.tier === 'organized'
       ? `${event.unitId} had room to fight again`
       : `${possessive(event.unitId)} ranks were ${event.tier}: ${event.men} men packed onto one spot ${whereAt(map, event.at)}, which blunts their fighting`
-    case 'objective': return event.side
+    case 'objective': return event.close ? `${capital(event.side)} is ${event.close} minutes from taking the field by holding ${event.name}`
+      : event.side
       ? `${capital(event.side)} took ${event.name}`
       : `${event.name} was no longer held${event.was ? ` by ${capital(event.was)}` : ''}`
     case 'disengage': return `${event.unitId} broke off the fight` +
@@ -440,6 +441,15 @@ function toTheCommander(event, ownIds) {
   }
 }
 
+// The ground to fight for, told to one side (turn.side) as its own or the
+// enemy's: every side knows at once when it changes hands.
+function toTheSide(event, side) {
+  if (event.type !== 'objective' || !side) return null
+  if (event.close) return GROUND.close(event.name, event.side === side, event.close)
+  if (event.side) return GROUND.took(event.name, event.side === side)
+  return event.was ? GROUND.lost(event.name, event.was === side) : null
+}
+
 function report(turn) {
   const { map, ownIds, seenEnemyIds, events } = turn
   const nameOf = turn.nameOf ?? ((text) => text)
@@ -451,7 +461,7 @@ function report(turn) {
   const busy = fights.length > 0 || rest.some(e => weight(e) <= 4)
   const others = rest
     .filter(e => !busy || weight(e) < 6)
-    .map(e => ({ weight: weight(e), text: toTheCommander(e, ownIds) ?? plainFact(map, e, turn.howMany ?? countAll) }))
+    .map(e => ({ weight: weight(e), text: toTheCommander(e, ownIds) ?? toTheSide(e, turn.side) ?? plainFact(map, e, turn.howMany ?? countAll) }))
     .filter(f => f.text)
 
   return [...fights, ...others]

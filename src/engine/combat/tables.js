@@ -596,6 +596,20 @@ const HEART = {
 // orchestrator/victory.js, 'night fell'.
 const DAY = { TURNS: 40, MINUTES: 720 }
 
+// The ground to fight for (each map's own: src/data/maps, `ground`;
+// orchestrator/victory.js). A side that holds all of it alone, with no
+// enemy standing on it, for HOLD_MINUTES of battle has taken the field and
+// wins, as breaking the enemy army does. An hour is the Stage 3 plan's (F3)
+// number, kept: in the ground league (harness/ground-league.js; docs/
+// DECISIONS.md, "How each map's ground to fight for was built") the ground
+// decided 29% of 1,600 battles between equal armies, the side that held it
+// first won 57% of them, not all, so an enemy has time to come and take
+// it back; and a player who will not come out loses 95 battles in 100.
+// CLOSE_MINUTES before that, every side is told the ground is close to
+// deciding the battle, and the battle stops for them: half the hour, so
+// that the side about to lose it has time to answer.
+const GROUND = { HOLD_MINUTES: 60, CLOSE_MINUTES: 30 }
+
 // A unit's veterancy (veterans/veterancy.js; ruled 2026-11-23: the newest
 // men fall first). The experience the fallen take with them, as a share of
 // the unit's average: at 1 they die evenly; at 0.5 the men who fall have on
@@ -927,6 +941,7 @@ module.exports = {
   COMMANDER,
   TRAINING,
   DAY,
+  GROUND,
   VETERANCY,
   PARLEY,
   LOYALTY,

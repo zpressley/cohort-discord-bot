@@ -16,7 +16,8 @@
 //                                and the computer's side against three kinds
 //                                of commander on every map, and every
 //                                faction's army on every map, each against
-//                                a different enemy
+//                                a different enemy, and again fighting for
+//                                the map's own ground in a day of twelve hours
 //   npm run soak -- --seeds 50
 
 const { createSession } = require('../adapters/hotseat/session')
@@ -145,6 +146,36 @@ for (const field of fields) for (const [i, key] of Object.keys(FACTIONS).entries
   }
 }
 
+// The app's battles fight for each map's own ground (src/data/maps,
+// `ground`) in a day of twelve hours: every faction's army on every map, as
+// above, red played by the three kinds of commander. Every one must end; and
+// how many the ground decided, and how long they ran, are told.
+const { groundOf } = require('../data/maps')
+const T = require('../engine/combat/tables')
+const { waitingOn } = require('../engine/orchestrator')
+const ground = { games: 0, finished: 0, minutes: 0, byGround: 0, night: 0, stuck: [] }
+fields.forEach((field, m) => factionKeys.forEach((red, i) => {
+  for (const [foe, orders] of Object.entries(FOES)) {
+    const blue = factionKeys[(i + 3 + m * 5) % factionKeys.length]
+    const seed = 1 + i + factionKeys.length * m
+    const spec = fieldFactions(loadScenario('meeting-battle', { map: field, deploy: true }), { red, blue })
+    const mine = spec.units.filter(u => u.side === 'red')
+    const game = createGame({ ...spec, standingOrders: {}, dayMinutes: T.DAY.MINUTES, objectives: groundOf(field), commanders: { red: { unitId: mine[leadUnit(mine)].id } } }, { seed })
+    let turns = 0
+    while (!game.outcome.decided && turns < 4 * MAX_PLAYER_TURNS) {
+      if (waitingOn(game).includes('red')) submitOrders(game, 'red', orders(game))
+      if (!game.outcome.decided && waitingOn(game).includes('blue')) submitOrders(game, 'blue', byCommandPost(planTurn(game, 'blue')))
+      turns++
+    }
+    ground.games++
+    if (!game.outcome.decided) { ground.stuck.push(`${field} ${red} v ${blue}, red a commander who ${foe}, seed ${seed}`); continue }
+    ground.finished++
+    ground.minutes += game.minutesElapsed
+    if (game.outcome.reason === 'objectives held') ground.byGround++
+    if (game.outcome.reason === 'night fell') ground.night++
+  }
+}))
+
 let decided = 0
 let meetingTurns = 0
 for (let seed = 1; seed <= 50; seed++) {
@@ -164,7 +195,10 @@ console.log(`faction armies: ${armies.finished} of ${armies.games} finished, ` +
 for (const stuck of armies.stuck.slice(0, 10)) console.log(`  stuck: ${stuck}`)
 console.log(`bought armies: ${bought.finished} of ${bought.games} finished`)
 for (const stuck of bought.stuck.slice(0, 10)) console.log(`  stuck: ${stuck}`)
+console.log(`the map's ground: ${ground.finished} of ${ground.games} finished, ${ground.byGround} decided by the ground, ` +
+  `${ground.night} ended by night, ${Math.round(ground.minutes / Math.max(1, ground.finished))} battle minutes on average`)
+for (const stuck of ground.stuck.slice(0, 10)) console.log(`  stuck: ${stuck}`)
 console.log(`meeting battle: a verdict in ${decided} of 50, ` +
   `${(meetingTurns / Math.max(1, decided)).toFixed(1)} battle turns on average`)
 
-if (result.stuck.length > 0 || thinking.stuck.length > 0 || armies.stuck.length > 0 || bought.stuck.length > 0 || decided < 50 || result.unread > 0) process.exitCode = 1
+if (result.stuck.length > 0 || thinking.stuck.length > 0 || armies.stuck.length > 0 || bought.stuck.length > 0 || ground.stuck.length > 0 || decided < 50 || result.unread > 0) process.exitCode = 1

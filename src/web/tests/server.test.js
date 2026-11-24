@@ -99,6 +99,9 @@ test('fog of war is held on the server: a side never receives an enemy it has no
     assert.deepEqual(raw.enemies, [], 'nothing seen yet')
     assert.equal(JSON.stringify(raw).includes('blue_'), false, 'not a single enemy id anywhere in the answer')
     assert.equal(JSON.stringify(raw).includes('veterancy'), false, 'no unit\'s veterancy (src/web/tests/veterans.test.js has more)')
+    // The ground to fight for: where it is, who holds it (every side knows at
+    // once), and its words; nothing of who stands on it.
+    assert.deepEqual(raw.objectives.map(o => Object.keys(o).sort()), [['holder', 'id', 'name', 'said', 'tiles']])
   } finally { await app.close() }
 })
 
@@ -253,7 +256,9 @@ test('one unclear order does not throw away the others: the clear ones can be se
 test('archers shoot: the order is read, the Army tab says how far, and the dispatch tells it', async () => {
   const app = await start()
   try {
-    const token = (await app.api('POST', '/api/battles', { opponent: 'standing', side: 'red', seed: 1 })).body.seats.red
+    // (No ground to fight for: the seed was chosen for its volley before the
+    // maps had their own.)
+    const token = (await app.api('POST', '/api/battles', { opponent: 'standing', side: 'red', seed: 1, objectives: [] })).body.seats.red
     const read = (await app.api('POST', `/api/seat/${token}/read`, { text: 'archers shoot the horse\nspears shoot' })).body
     assert.match(read.understood[0], /^Archers: hold, and shoot at any enemy they can see within 200 m, cavalry first$/)
     assert.match(read.questions[0], /^Spears cannot shoot/)
@@ -321,7 +326,9 @@ test('a Commander starts with one officer, his veteran; the other units earn the
     assert.deepEqual((await app.api('GET', `/api/commander/${commander}`)).body,
       { name: made.name, faction: null, factionTitle: null, ended: null, battles: 0, officers: [], unled: [], units: [], earnedAt: 4, fallen: [], battle: null })
 
-    const first = (await app.api('POST', '/api/battles', { opponent: 'standing', side: 'red', seed: 3, commander })).body.seats.red
+    // (No ground to fight for: the seed was chosen for its deeds before the
+    // maps had their own.)
+    const first = (await app.api('POST', '/api/battles', { opponent: 'standing', side: 'red', seed: 3, commander, objectives: [] })).body.seats.red
     const mustered = (await app.api('GET', `/api/commander/${commander}`)).body
     const tent = (await app.api('GET', `/api/seat/${first}`)).body
     assert.deepEqual(mustered.officers.map(o => [o.leads, o.grade, typeof o.name]), [['spears', 'veteran', 'string']], 'one officer, with the best unit')

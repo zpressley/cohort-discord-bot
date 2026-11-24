@@ -9,4 +9,10 @@ const ravenridge = require('./ravenridge')
 
 const MAPS = { crownhill, ashford, thornwood, ravenridge }
 
-module.exports = { MAPS }
+// A map's own ground to fight for, as a battle spec's objectives
+// (engine/orchestrator/victory.js, objectiveArea). None for a map without.
+function groundOf(name) {
+  return (MAPS[name]?.ground ?? []).map((ground, i) => ({ id: `ground-${i + 1}`, ...ground, ...(ground.tiles ? { tiles: ground.tiles.map(t => ({ ...t })) } : {}) }))
+}
+
+module.exports = { MAPS, groundOf }

@@ -54,6 +54,11 @@ yields the field, loses its army, or loses its Commander. Against the
 computer you choose its faction or let the lot choose (your own among
 them); against a friend you do not: his Commander brings his own army.
 
+Every field has its own ground to fight for (`src/data/maps`, `ground`):
+the muster names it under the field chosen, the tent marks it on the map
+and says under the top bar who holds it, the first dispatch tells it, and
+the verdict says so when holding it alone for an hour decided the battle.
+
 ```
 armies.js      buying an army: each choice priced and judged, the
                builder's reasons in plain words, the names units are given

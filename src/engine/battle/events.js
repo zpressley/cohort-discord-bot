@@ -102,7 +102,9 @@
 //   objective  objectiveId, name, side, was
 //              control of an objective changed hands: side holds it now
 //              (null: nobody, or contested); was held it before. Emitted by
-//              the orchestrator, which owns objectives
+//              the orchestrator, which owns objectives. With `close` (minutes
+//              left) it has not changed hands: side, holding all the
+//              ground, is that close to taking the field by it
 //   victory    winner, reason
 //              the battle ended
 

@@ -76,8 +76,34 @@ test('holding every objective for an hour of battle time wins', () => {
   assert.equal(game.outcome.reason, 'objectives held')
   assert.equal(game.minutesElapsed, 70, 'taken at the first tick, held a full hour after')
 
-  const taken = game.battle.log.ofType('objective')
+  const taken = game.battle.log.ofType('objective').filter(e => !e.close)
   assert.deepEqual(taken.map(e => [e.objectiveId, e.side, e.was]), [['field', 'red', null]])
+})
+
+test('half an hour before holding the ground decides the battle, every side is told, and the battle stops for them', () => {
+  const game = createGame(gameSpec({
+    units: [unit({ id: 'holder', position: 'J24' }), unit({ id: 'far', side: 'blue', position: 'AA35' })],
+    objectives: [{ id: 'field', square: 'C6', name: 'the field' }]
+  }))
+  playTurns(game, 3)
+  assert.equal(game.battle.log.ofType('objective').filter(e => e.close).length, 0, 'held twenty minutes: not yet')
+  playTurns(game, 1)
+  const close = game.battle.log.ofType('objective').filter(e => e.close)
+  assert.deepEqual(close.map(e => [e.side, e.name, e.close]), [['red', 'the field', 30]], 'held thirty minutes: thirty to go')
+  assert.equal(game.history.at(-1).interrupt, 'objective')
+  playTurns(game, 2)
+  assert.equal(game.battle.log.ofType('objective').filter(e => e.close).length, 1, 'told once a hold')
+})
+
+test('ground given a reach is held from that near it: a crossing from on it or at either end', () => {
+  const ford = objectiveArea(map, { id: 'ford', feature: "Miller's Crossing", reach: 1 })
+  assert.equal(ford.reach, 1)
+  const holders = (units) => objectiveController(createWorld({ units }), new Set(), ford)
+  assert.equal(holders([unit({ position: { x: 19, y: 20 } })]), 'red', 'at the west end')
+  assert.equal(holders([unit({ position: { x: 18, y: 20 } })]), null, 'a tile short is not at it')
+  assert.equal(holders([unit({ position: { x: 19, y: 20 } }), unit({ id: 'b', side: 'blue', position: { x: 22, y: 21 } })]), null, 'one at each end: contested')
+  const onIt = objectiveArea(map, { id: 'ford', feature: "Miller's Crossing" })
+  assert.equal(objectiveController(createWorld({ units: [unit({ position: { x: 19, y: 20 } })] }), new Set(), onIt), null, 'with no reach, only on it')
 })
 
 test('holding one objective of two wins nothing', () => {
