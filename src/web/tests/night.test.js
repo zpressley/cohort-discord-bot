@@ -165,11 +165,11 @@ test('the next day, men who ran come back to the standards in the night; the dea
     // against Carthage since a unit rallied with no heart holds rather than
     // go in again: Mongolia's riders no longer broke a second time and ran;
     // "How taking ground, news of the ground, and rallying were mended".
-    // Thornwood seed 2, not Ashford seed 1, since broken units run round the
+    // Thornwood seed 27, not Ashford seed 1, since broken units run round the
     // enemy and rally more often than they leave the field: on Ashford none
     // of seeds 1 to 200 had a unit of his run off it in the day. "How
     // columns, wavering under fire and flight were mended".)
-    const made = (await app.api('POST', '/api/battles', { opponent: 'standing', side: 'red', seed: 2, map: 'thornwood', faction: 'rome', enemyFaction: 'carthage', turnLimit: 10 })).body
+    const made = (await app.api('POST', '/api/battles', { opponent: 'standing', side: 'red', seed: 27, map: 'thornwood', faction: 'rome', enemyFaction: 'carthage', turnLimit: 10 })).body
     const game = await untilNight(app, store, made.seats, 'everyone advance on the enemy')
     assert.equal(game.outcome.reason, 'night fell')
     const ran = game.battle.fledUnits.filter(u => u.side === 'red' && u.strength > 0)

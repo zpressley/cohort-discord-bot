@@ -67,6 +67,18 @@ test('two units of one side marching opposite ways along one road pass each othe
   assert.deepEqual(at(state, 'west'), { x: 1, y: 4 })
 })
 
+test('a unit whose road through a wood is held by a friend standing on it, with no way round, goes on through him rather than wait for ever', () => {
+  const state = createBattleState({
+    name: 'through', map: WOOD, sides: { red: { homeEdge: 'west' }, blue: { homeEdge: 'east' } },
+    units: [unit({ id: 'holding', position: { x: 10, y: 4 } }), unit({ id: 'going', position: { x: 6, y: 4 } }),
+      unit({ id: 'far', side: 'blue', position: { x: 29, y: 0 } })]
+  }, { seed: 1 })
+  stepTurn(state, { red: [{ unitRef: 'holding', action: 'hold' }, { unitRef: 'going', target: { x: 18, y: 4 } }] })
+  for (let t = 0; t < 6; t++) stepTurn(state, {})
+  assert.deepEqual(at(state, 'going'), { x: 18, y: 4 })
+  assert.deepEqual(at(state, 'holding'), { x: 10, y: 4 })
+})
+
 // A brook down column 10, crossed by one ford on row 4.
 const brook = []
 for (let y = 0; y < 9; y++) if (y !== 4) brook.push([10, y])

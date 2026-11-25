@@ -63,8 +63,8 @@ function fingerprint(text) {
 const BEFORE = {
   'crownhill 1': '5378c566',
   'crownhill 2': '72acd97d',
-  'thornwood 1': '12b2e567',
-  'thornwood 2': '7b83f962',
+  'thornwood 1': '27ac8e10',
+  'thornwood 2': '4d0abf5a',
   'meeting 1': 'b3d6f42f',
   'meeting 2': 'cfde19ad',
   'meeting 3': 'aa331d26'

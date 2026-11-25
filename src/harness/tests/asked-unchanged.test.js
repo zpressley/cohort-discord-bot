@@ -108,8 +108,8 @@ test('a battle saved before the riders rulings (marked everyoneAsked) plays back
   assert.deepEqual(play({ everyoneAsked: true }, { commander: true }), {
     'crownhill 1': '215377e2 16',
     'crownhill 2': '32628ef1 18',
-    'ashford 1': 'a74cc9c8 16',
-    'ashford 2': 'a7d367ba 15'
+    'ashford 1': '3bdcf14e 13',
+    'ashford 2': '25a80714 16'
   })
 })
 
@@ -117,7 +117,7 @@ test('a battle with no Commander on the field runs exactly as before the riders 
   assert.deepEqual(play({}, { commander: false }), {
     'crownhill 1': 'f15578bb 16',
     'crownhill 2': '3749bac6 18',
-    'ashford 1': '31e04a3 17',
-    'ashford 2': '5af5b192 16'
+    'ashford 1': 'ccfaaf84 14',
+    'ashford 2': '7e232cf6 17'
   })
 })

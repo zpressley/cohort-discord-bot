@@ -87,8 +87,10 @@ function resolveSimultaneousMovement(world, orders, map, options = {}) {
   //   'enter'  the place it was sent, or beside an enemy it is going at
   //            (it joins the fight there), and not a ford or bridge;
   //   'wait'   the men there are moving on this tick (it follows them in
-  //            column), or it can neither go round nor clear the tile: it
-  //            waits behind them, keeping its order;
+  //            column), or, when it can neither go round nor clear the
+  //            tile, they are in a fight or still on their way: it waits
+  //            behind them, keeping its order (men only standing there it
+  //            goes in among, 'enter');
   //   'round'  a way round them that costs at most MARCH.ROUND more
   //            (looked for once a tick): its steps are changed;
   //   'pass'   through them, clearing the tile in the same ten minutes.
@@ -143,7 +145,14 @@ function resolveSimultaneousMovement(world, orders, map, options = {}) {
       !(plan.seeking && enemyBeside(next, unit)) &&
       (occupancy.get(positionKey(beyond)) ?? []).every(u => u.side === unit.side && onTheMove(u, plan))
     if (clears) return 'pass'
-    return wait(friends[0], friends.some(f => engaged.has(f.id)))
+    // Men in a fight there, or on their way and halted for these ten
+    // minutes: it waits its turn behind them. Men only standing there, with
+    // no way round: it goes in among them, as friends always could (a unit
+    // holding on a road through a wood would else stop its own army for
+    // good: Thornwood, the soak's meeting battle, seed 4).
+    const goingOn = (f) => { const p = plans.get(f.id); return Boolean(p) && p.stepIndex < p.steps.length }
+    if (friends.some(f => engaged.has(f.id) || (goingOn(f) && !waitsOnMe(f)))) return wait(friends[0], true)
+    return 'enter'
   }
 
   // ── Plan ────────────────────────────────────────────

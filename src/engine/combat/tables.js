@@ -725,6 +725,7 @@ const COMMANDER = {
   DEATH_THRESHOLD: 0.25, // he can be killed only at or under this share (ruled 2026-11-23); above it he is taken
   CHANCE: 0.04,        // each tick it is struck while under the threshold
   OVERRUN: 0.3,        // the tick it is destroyed around him
+  CAUGHT: 0.06,        // a tick it is caught running (pursued), whatever its strength: since broken units run round the enemy they are seldom overrun; at 0.06 he is taken 1 battle in 21.3 (it fell to 1 in 45.5 without; "How columns, wavering under fire and flight were mended")
   KILLED_SHARE: 0.12   // of those who fall, killed; the rest are taken
 }
 
@@ -1260,7 +1261,8 @@ module.exports.GROUND_FIGHT = {
 // a battle a unit on the march does not step onto a tile a unit of its own
 // side stands on: it waits while that unit moves on (a column), goes round
 // it if the way round costs at most ROUND movement more, passes through if
-// it can clear the tile in the same ten minutes, and else waits behind it.
+// it can clear the tile in the same ten minutes, else waits behind men in a
+// fight or on their way, and goes in among men only standing there.
 // It still goes onto a friend's tile that is the very place it was sent,
 // or beside an enemy it is going at (joining a fight); never onto a
 // crossing (CROSSINGS) a friend holds: a ford or bridge passes one unit at

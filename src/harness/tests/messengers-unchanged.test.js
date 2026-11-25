@@ -76,8 +76,8 @@ function fingerprint(text) {
 const BEFORE = {
   'crownhill 1': 'f15578bb 16',
   'crownhill 2': '3749bac6 18',
-  'ashford 1': '31e04a3 17',
-  'ashford 2': '5af5b192 16'
+  'ashford 1': 'ccfaaf84 14',
+  'ashford 2': '7e232cf6 17'
 }
 
 test('a battle with no Commander on the field runs exactly as before riders, event for event', () => {

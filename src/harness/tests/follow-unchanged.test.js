@@ -35,7 +35,7 @@ const BATTLES = [
 ]
 
 const BEFORE = {
-  'thornwood macedon parthia 3': '582e94f9 27',
+  'thornwood macedon parthia 3': '56f41436 25',
   'ravenridge thrace sarmatia 4': '150f188e 16',
   'greywater rome germania 5': 'bfaa5b8d 20'
 }
