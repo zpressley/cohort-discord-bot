@@ -301,7 +301,22 @@ function planTurn(game, side) {
     return !slot || fighting.has(u.id) || spent(u) || battle.isShaken(u) || tileDistance(u.position, slot) <= 1 ||
       dot({ x: u.position.x - slot.x, y: u.position.y - slot.y }, forward) > 0
   })
-  const attacking = !holding && !waiting && (closeBy || !anchor || formed)
+  // Shared out among several grounds, with a part of it outnumbered by the
+  // enemy it sees close by: the whole army goes in, at the nearest enemy it
+  // sees, and shares itself out again once none is near. (Split two ways,
+  // it was beaten in detail by a player who only sent everyone forward: on
+  // Crownhill's fords "everyone advance" won 33 battles in 40 against it.
+  // Going in together whenever any enemy came near, it gave up the fords:
+  // two computer armies took the field by them in 2 battles of 60.)
+  const outnumbered = (unit) => {
+    const near = inSight.filter(e => tileDistance(e.position, unit.position) <= ch.engage)
+    if (near.length === 0) return false
+    const friends = mine.filter(u => near.some(e => tileDistance(e.position, u.position) <= ch.engage))
+    const men = (units) => units.reduce((n, u) => n + Math.max(0, u.strength ?? u.unit?.strength ?? 0), 0)
+    return men(near) > men(friends)
+  }
+  const together = Boolean(split) && mine.some(outnumbered)
+  const attacking = together || (!holding && !waiting && (closeBy || !anchor || formed))
   // Going in: pressing the enemy (with one near across a crossing, the
   // engine steps into it first: engine/battle/crossing.js).
   const goIn = (unit) => give(unit, { action: 'advance' })

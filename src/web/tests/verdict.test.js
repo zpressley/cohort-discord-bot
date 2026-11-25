@@ -65,12 +65,13 @@ test('fog of war, the verdict: the enemy\'s units that broke are only those his 
 // with no word of who was on it, while the line under the map said it was
 // held by no one.
 test('ground he held and lost is "held by neither side alone" under the map, and his dispatch says who he knows is on it', async () => {
-  // Raven Ridge, seed 1, Rome against Rome, a battle for ground: he takes
+  // Raven Ridge, seed 3 (1 until ties of who steps first were a seeded
+  // draw, November 25), Rome against Rome, a battle for ground: he takes
   // the gap, and the enemy, reported on it, comes up beside his men. (It
   // was Crownhill, seed 5, and the hill, until Crownhill's ground became
   // its three fords on November 25.)
   const store = createBattleStore({})
-  const token = (await store.muster({ opponent: 'standing', side: 'red', seed: 1, map: 'ravenridge', faction: 'rome', enemyFaction: 'rome', kind: 'ground' })).seats.red
+  const token = (await store.muster({ opponent: 'standing', side: 'red', seed: 3, map: 'ravenridge', faction: 'rome', enemyFaction: 'rome', kind: 'ground' })).seats.red
   let tent = store.view(token)
   assert.equal(tent.objectives[0].said, 'The ground to fight for, Raven Gap, is held by no one.')
   let lost = null

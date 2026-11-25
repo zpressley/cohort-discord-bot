@@ -1302,3 +1302,11 @@ module.exports.FLIGHT = {
 // Under a half is beaten; over it, still in the fight. Zach's lean was a
 // half too.
 module.exports.PITCHED = { STAND_SHARE: 0.5 }
+
+// Advancing in a pitched battle with no enemy known (battle/battle.js,
+// marchOn; round two of the kinds of battle, docs/DECISIONS.md): the army
+// marches on where the enemy formed up, as a body, each unit keeping its
+// place in the line; the march is over when the army's middle is within
+// THERE tiles of the place (three), and the search begins as before.
+// Claude's value, measured with harness/first-battle.js.
+module.exports.ADVANCE = { THERE: 3 }

@@ -28,4 +28,20 @@ function createRng(seed) {
   return random
 }
 
-module.exports = { createRng }
+// A tie broken by a seeded draw of its own (docs/DECISIONS.md, "How the
+// kinds of battle were built", round two): a number in [0, 1) from the
+// battle's seed and what is being ordered (the turn, a unit's id), the same
+// every time it is asked, and drawing nothing from any stream. Ordering by
+// it instead of by name puts neither side first more often than the other:
+// ordered by name, "blue_" came before "red_" in every tie, every turn.
+function tieBreak(...parts) {
+  let h = 0x811c9dc5
+  const text = parts.join('|')
+  for (let i = 0; i < text.length; i++) { h ^= text.charCodeAt(i); h = Math.imul(h, 0x01000193) >>> 0 }
+  // (Mixed once more, so that ids differing in their last letter spread.)
+  h = Math.imul(h ^ (h >>> 16), 0x85ebca6b) >>> 0
+  h = Math.imul(h ^ (h >>> 13), 0xc2b2ae35) >>> 0
+  return ((h ^ (h >>> 16)) >>> 0) / 4294967296
+}
+
+module.exports = { createRng, tieBreak }

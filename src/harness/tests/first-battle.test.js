@@ -36,7 +36,7 @@ function firstOn(map, side, faction, ground = groundOf(map)[0]) {
 // With several pieces of ground and some of them to hold (Crownhill's two
 // of three fords, ruled 2026-11-25): as long marching to as many as must
 // be held, each side's nearest (the first to the nearest, and the first
-// to the second nearest: measured, west 18 and 37 minutes, east 17 and 44,
+// to the second nearest: measured, west 18 and 37 minutes, east 10 and 44,
 // from where they form up for it since (Crownhill's deployFor); with the
 // east army where it forms up for a pitched battle, its second took 60).
 test('on every 1 km field the two armies are as long marching to the ground to fight for: on average over every faction, within ten minutes of each other', () => {

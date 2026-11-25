@@ -1263,7 +1263,8 @@ test('on a phone: the muster offers the pitched battle first and the battle for 
     assert.equal(await p.textContent('#ground-line'), 'You hold none of the fords: hold two of the three fords alone for 1 h and the field is yours.')
     const svg = await p.locator('#map-scroll svg').innerHTML()
     for (const ford of ['the North Ford', 'Miller\'s Crossing', 'the South Ford']) assert.ok(svg.includes(ford.replace("'", '&#39;')) || svg.includes(ford), `${ford} is marked on the map`)
-    assert.equal(await p.textContent('[data-example] >> nth=0'), 'everyone take the fords')
+    assert.equal(await p.textContent('[data-example] >> nth=0'), 'everyone advance')
+    assert.equal(await p.textContent('[data-example] >> nth=1'), 'everyone take the fords')
     await shot(p, 'tent-fords')
     // The whole field, so the three fords are in view together.
     await p.click('#whole')

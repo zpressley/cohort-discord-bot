@@ -201,17 +201,17 @@ module.exports = {
   deploy: { west: { x: 11, y: 23 }, east: { x: 30, y: 24 } },
   // Where they form up for a battle for the three fords, two to hold
   // (November 25; engine/map/deploy.js, through the scenario's `kind`): the
-  // east army at (28, 17), north and a little west. Marching alone, every
-  // faction, each side's first unit on its nearest ford after 18 and 17
+  // east army at (27, 18), north and a little west. Marching alone, every
+  // faction, each side's first unit on its nearest ford after 18 and 10
   // minutes, on its second nearest after 37 and 44; from (30, 24) the
   // east's second, the North Ford, took 60, and the west reached two fords
   // 22 minutes sooner. From here the computer against itself gives the west
-  // 50% of the battles for the fords (80 battles). (The same place gave the
-  // pitched battle 51% too, where (30, 24) gives 48 to 68%; it is kept for
-  // the pitched battle all the same, for the other fields' pitched battles
-  // lean west as much and were left as they are: docs/DECISIONS.md, "How
-  // the kinds of battle were built".)
-  deployFor: { ground: { west: { x: 11, y: 23 }, east: { x: 28, y: 17 } } },
+  // 49% of the battles for the fords (120 battles); 53% at (27, 17), 47% at
+  // (28, 18) (60 and 120 battles). It was (28, 17) until ties of who
+  // steps first were made a seeded draw (round two), when that place gave
+  // the west 59%. (The pitched battle keeps (30, 24): 53%.)
+  // docs/DECISIONS.md, "How the kinds of battle were built".
+  deployFor: { ground: { west: { x: 11, y: 23 }, east: { x: 27, y: 18 } } },
   // The ground to fight for (engine/orchestrator/victory.js, objectiveArea):
   // the three fords, each held from on it or at either end; hold two of
   // them (ruled 2026-11-25: "Crown hill was actually meant to be 3 fords

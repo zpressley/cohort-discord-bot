@@ -174,9 +174,9 @@ test('a saved battle replays with its kind and its grounds', async () => {
   } finally { fs.rmSync(dir, { recursive: true, force: true }) }
 })
 
-test('the first turn\'s example orders fit the kind: "everyone take the fords" on the fords, no ground to take in a pitched battle', () => {
+test('the first turn\'s example orders fit the kind: on the fords "everyone advance" first and "everyone take the fords" second, no ground to take in a pitched battle', () => {
   const page = fs.readFileSync(path.join(__dirname, '../public/app.js'), 'utf8')
-  assert.match(page, /v\.groundHold \? \[`everyone take the \$\{v\.groundHold\.called\}`\]/)
+  assert.match(page, /'everyone advance',\n\s+\.\.\.\(v\.groundHold \? \[`everyone take the \$\{v\.groundHold\.called\}`\] : \[\]\)/)
   // A pitched battle sends no ground (objectives []), so no "take" order.
   assert.match(page, /\(v\.objectives \?\? \[\]\)\.slice\(0, 1\)\.map\(o => `everyone take \$\{o\.name\}`\)/)
 })

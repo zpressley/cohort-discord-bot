@@ -31,10 +31,13 @@ function tierName(unit) {
   return TIERS[initiativeTier(unit)]
 }
 
-// Sort a roster into movement order: tier, then unit id.
-function inInitiativeOrder(units) {
+// Sort a roster into movement order: tier, then unit id; or, given `key`
+// (a battle's seeded tie-break, rng.js tieBreak), tier, then the key, so
+// that within a tier neither side moves first more often than the other.
+function inInitiativeOrder(units, key = null) {
+  const k = key ? new Map(units.map(u => [u.id, key(u)])) : null
   return [...units].sort((a, b) =>
-    initiativeTier(a) - initiativeTier(b) || a.id.localeCompare(b.id))
+    initiativeTier(a) - initiativeTier(b) || (k ? k.get(a.id) - k.get(b.id) : 0) || a.id.localeCompare(b.id))
 }
 
 module.exports = { initiativeTier, tierName, inInitiativeOrder, TIERS }

@@ -1575,9 +1575,13 @@ async function tent(token) {
     const examples = [
       // The field's ground to fight for, first: a player who only advances
       // on an enemy he cannot see watches the computer take it.
-      // (Several to hold: all of them, shared out; none in a pitched battle.)
-      ...(v.groundHold ? [`everyone take the ${v.groundHold.called}`] : (v.objectives ?? []).slice(0, 1).map(o => `everyone take ${o.name}`)),
+      // (None in a pitched battle. With several to hold, the army sent
+      // forward first: on Crownhill's fords "everyone advance", alone, won
+      // 26 battles in 40 against the computer, "everyone take the fords" 8;
+      // docs/DECISIONS.md, "How the kinds of battle were built", round two.)
+      ...(v.groundHold ? [] : (v.objectives ?? []).slice(0, 1).map(o => `everyone take ${o.name}`)),
       'everyone advance',
+      ...(v.groundHold ? [`everyone take the ${v.groundHold.called}`] : []),
       `${a.name} to ${east(a, 4)}`,
       `${b.name} defend ${east(b, 2)}`,
       // By the compass, and every unit the other orders leave out.

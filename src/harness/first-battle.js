@@ -13,6 +13,7 @@
 //                    battle, on his first turn: "everyone take <the field's
 //                    ground>" ("everyone take the fords" on Crownhill); in a
 //                    pitched battle, with no ground, "everyone advance"
+//   --play order     the words of --order on his first turn, nothing after
 //   --play hold      "everyone hold" on his first turn, nothing after (to
 //                    count how often a Commander whose men hold is asked)
 //   --play planner   he plans as the computer does (opponent/planner.js),
@@ -37,6 +38,8 @@ const { FACTIONS } = require('../engine/army/factions')
 const { groundOf, MAPS } = require('../data/maps')
 
 const MAX_TURNS = 300
+// --play order --order "<words>": that order on his first turn, nothing after.
+const ORDER = arg('--order', 'everyone advance')
 
 function menOf(game, side) {
   return [...game.battle.world.units, ...game.battle.fledUnits].filter(u => u.side === side).reduce((n, u) => n + Math.max(0, u.strength), 0)
@@ -53,7 +56,7 @@ async function play({ map, faction, seed, how, kind = 'ground' }) {
   const ground = groundOf(map).map(g => g.name)[0]
   const several = MAPS[map]?.hold?.called
   const take = kind === 'pitched' ? 'everyone advance' : several ? `everyone take the ${several}` : `everyone take the ${ground.replace(/^the /i, '')}`
-  const first = how === 'advance' ? 'everyone advance' : how === 'hold' ? 'everyone hold' : take
+  const first = how === 'advance' ? 'everyone advance' : how === 'hold' ? 'everyone hold' : how === 'order' ? ORDER : take
   let turns = 0
   for (; turns < MAX_TURNS && !game.outcome.decided; turns++) {
     if (how === 'planner') {

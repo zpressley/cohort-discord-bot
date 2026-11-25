@@ -25,7 +25,7 @@
 // (spec, seed) — the phase 4 exit criterion "replayable from seed" holds by
 // construction and is pinned by a test.
 
-const { createRng } = require('../rng')
+const { createRng, tieBreak } = require('../rng')
 const {
   createWorld, cloneWorld, getUnit, livingUnits, unitsOnSide, sides, tileDistance
 } = require('../world')
@@ -314,6 +314,12 @@ function stepTurn(state, sideOrders = {}, { sameTurn = false } = {}) {
     // where there is some (the playthrough of November 24, D1). Not a
     // side's standing order to advance: that still goes looking.
     if (toGround && state.ground?.length > 0) return { id: 'the ground to fight for', position: groundFor(unit) }
+    // Told to advance in a pitched battle (no ground to fight for), with no
+    // enemy known: on to where the enemy formed up, as a body (marchOn).
+    if (toGround && spec.kind === 'pitched' && !(state.ground?.length > 0)) {
+      const on = marchOn(unit)
+      if (on) return { id: 'where the enemy formed up', position: on }
+    }
     // No one knows where the enemy is: go and look. First straight ahead to
     // their side of the field; then the ground no one has yet looked over,
     // nearest first.
@@ -321,6 +327,37 @@ function stepTurn(state, sideOrders = {}, { sameTurn = false } = {}) {
     // (so open country from a distance, and a wood only from beside it).
     // When the whole field has been looked over, begin again.
     return { id: 'the ground not yet searched', position: whereToLook(unit) }
+  }
+  // A pitched battle, told to advance with no enemy known (round two of the
+  // kinds of battle, November 25): each unit makes for where the enemy's
+  // army formed up (the field's forming-up place for his edge, which both
+  // Commanders know), keeping its place in its own army as it stands (its
+  // offset from the army's middle): the army goes as a body, its line kept.
+  // Before, each unit went straight ahead along its own row to the far
+  // edge, and the army fanned out. Null once the army's middle is within
+  // T.ADVANCE.THERE tiles of the place, or with none: then it searches, as
+  // before. (Tried and dropped: a unit more than two tiles ahead of the
+  // middle waiting for the rest, on the march and closing on an enemy.
+  // More battles ran to night, and no more were won.)
+  const marchOn = (unit) => {
+    const theirEdge = Object.entries(spec.sides ?? {}).find(([side]) => side !== unit.side)?.[1]?.homeEdge ?? null
+    const spot = (spec.deploy ?? map.deploy ?? {})[theirEdge]
+    if (!spot) return null
+    const army = unitsOnSide(world, unit.side).filter(u => u.strength > 0 && !broken.has(u.id))
+    if (army.length === 0) return null
+    const mid = { x: army.reduce((n, u) => n + u.position.x, 0) / army.length, y: army.reduce((n, u) => n + u.position.y, 0) / army.length }
+    if (Math.abs(mid.x - spot.x) + Math.abs(mid.y - spot.y) <= T.ADVANCE.THERE) return null
+    const want = { x: Math.round(spot.x + unit.position.x - mid.x), y: Math.round(spot.y + unit.position.y - mid.y) }
+    for (let r = 0; r <= 6; r++) {
+      for (let dy = -r; dy <= r; dy++) {
+        for (let dx = -r; dx <= r; dx++) {
+          if (Math.max(Math.abs(dx), Math.abs(dy)) !== r) continue
+          const p = { x: want.x + dx, y: want.y + dy }
+          if (map.inBounds(p) && map.passable(p) && !['river', 'marsh'].includes(map.terrainAt(p))) return p
+        }
+      }
+    }
+    return null
   }
   // Where a unit told to attack one enemy (by its id) makes for: the enemy
   // itself while its side can see it; else where its side last saw it; null
@@ -943,7 +980,10 @@ function stepTurn(state, sideOrders = {}, { sameTurn = false } = {}) {
     engaged: new Set(engagedAtStart.keys()), glue: T.DISENGAGE.MOVE_COST,
     // Units on the march keep a tile apart: in column, round or waiting
     // (tables.MARCH).
-    keepApart: true
+    keepApart: true,
+    // Who steps first within a speed tier: a seeded draw each turn, not the
+    // units' names (rng.js, tieBreak).
+    tieKey: (u) => tieBreak(state.seed, turn, u.id)
   })
 
   // A sprung ambush is spent: the unit presses the attack on the nearest
@@ -1160,6 +1200,9 @@ function stepTurn(state, sideOrders = {}, { sameTurn = false } = {}) {
   }
   const volleys = []
   state.shotLastTurn = new Set(loosed.map(l => l.target.id))
+  // (They land in a seeded order, not by name: one may break a unit before
+  // the next volley falls on it. rng.js, tieBreak.)
+  loosed.sort((x, y) => tieBreak(state.seed, turn, 'volley', x.shooter.id) - tieBreak(state.seed, turn, 'volley', y.shooter.id))
   for (const { shooter, target, distance, felled } of loosed) {
     if (target.strength <= 0) continue
     const hit = resolver.volley(target, felled, turn)
@@ -1197,7 +1240,7 @@ function stepTurn(state, sideOrders = {}, { sameTurn = false } = {}) {
       if (!throwers.has(by) || at.localeCompare(throwers.get(by)) < 0) throwers.set(by, at)
     }
   }
-  const thrown = [...throwers].sort(([x], [y]) => x.localeCompare(y)).map(([by, at]) => {
+  const thrown = [...throwers].sort(([x], [y]) => tieBreak(state.seed, turn, 'throw', x) - tieBreak(state.seed, turn, 'throw', y)).map(([by, at]) => {
     const thrower = getUnit(world, by)
     const target = getUnit(world, at)
     return { thrower, target, felled: ranged.thrownVolley(thrower, target, { targetTerrain: map.terrainAt(target.position) }) }
@@ -1221,7 +1264,7 @@ function stepTurn(state, sideOrders = {}, { sameTurn = false } = {}) {
   // ── Combat (phase 2) ────────────────────────────
   let casualties = []
   if (engagements.length > 0) {
-    const combat = resolver({ engagements, world, random, turn })
+    const combat = resolver({ engagements, world, random, turn, tieKey: (e, round) => tieBreak(state.seed, turn, round, e.aId, e.bId) })
     casualties = applyCasualties(world, combat.casualties)
 
     // The resolver's own rout events are not copied: the battle emits one
