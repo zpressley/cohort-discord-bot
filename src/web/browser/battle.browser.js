@@ -825,7 +825,11 @@ test('on a phone: a new Commander is made on one screen, two questions and a nam
     await p.waitForSelector('.commander')
     assert.match(await p.textContent('.commander'), /Commander Aurelian the Patient of Rome/)
     assert.match(await p.textContent('main'), /The Wall, for survival\./)
-    assert.match(await p.textContent('.officer'), /cautious[\s\S]*looks to his men/)
+    // His veteran, cautious and looking to his men: unless the battle he
+    // yielded cost him that officer, who is then named among the lost (the
+    // seed is drawn at the muster; measured, 4 musters in 200).
+    if (await p.locator('.officer').count()) assert.match(await p.textContent('.officer'), /cautious[\s\S]*looks to his men/)
+    else assert.match(await p.textContent('main'), /Lost[\s\S]*who led the/, 'no officer left: the veteran is named among the lost')
     await shot('officers')
     await p.click('text=Your record')
     await p.waitForSelector('#commander-page')
