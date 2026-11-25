@@ -107,11 +107,22 @@ module.exports = {
   // gave the west 70%; here 51% (400 battles). docs/DECISIONS.md, "How
   // columns, wavering under fire and flight were mended".
   deploy: { west: { x: 8, y: 25 }, east: { x: 33, y: 25 } },
+  // For a pitched battle, the east army three tiles north, at (33, 22).
+  // From (33, 25) the computer against itself gave the west 69%: the west
+  // held the Old Mill Bridge in the middle of the field and the east the
+  // ford by the southern marsh, and the battle came to the bridge. From
+  // here both hold the bridge's own ends: 50, 55 and 45% at (33, 21), (33,
+  // 22) and (33, 23) (60 battles each). docs/DECISIONS.md, as above.
+  deployFor: { pitched: { west: { x: 8, y: 25 }, east: { x: 33, y: 22 } } },
   // The ground to fight for (engine/orchestrator/victory.js, objectiveArea):
   // the bridge mid-field and the mill at its west end, held from on them.
   // (The bridge alone, held from either end, was tried first: the east army
   // reaches it first, the west's way lying through the woods, and won 82
   // battles in 100. docs/DECISIONS.md, "How each map's ground to fight for
   // was built".)
-  ground: [{ name: 'the Old Mill Bridge', tiles: OLD_MILL }]
+  ground: [{ name: 'the Old Mill Bridge', tiles: OLD_MILL }],
+  // The kinds of battle fought here, the first offered first at the muster
+  // (docs/DECISIONS.md, "How the kinds of battle were built"): the bridge is
+  // a choke point, made for a battle for ground.
+  kinds: ['pitched', 'ground']
 }

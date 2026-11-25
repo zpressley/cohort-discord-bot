@@ -17,6 +17,9 @@
 //
 //   node src/harness/captive-league.js --battles 2000 --policy offer
 //   node src/harness/captive-league.js --root /path/to/an/older/src ...   (wait only)
+//   --kind k        a kind of battle (src/data/maps, kindSpec): 'ground' or
+//                   'pitched', with no day, as the league's battles always
+//                   were; none, the battle as before the kinds (no ground)
 //   --character c   the computer's Commander: bold, steady, cautious, or mix
 //                   (drawn from each battle's seed, as the app's muster)
 
@@ -38,6 +41,9 @@ try { ({ captorAnswer } = need('opponent/captor')) } catch { /* an older build h
 // character (opponent/planner.js, CHARACTERS); mix: drawn from each
 // battle's seed, as at the app's muster. None: steady, the planner as it was.
 const CHARACTER = arg('--character', null)
+const KIND = arg('--kind', null)
+let kindSpec = null
+try { ({ kindSpec } = need('data/maps')) } catch { /* an older build has none */ }
 const { withCommander } = require('../opponent/commander')
 let withSecondLine = null
 try { ({ withSecondLine } = need('engine/army/secondLine')) } catch { /* a build before the big map */ }
@@ -46,7 +52,8 @@ const MAX_PLAYER_TURNS = 150
 function play(red, blue, { map, seed, policy }) {
   // Officers as a new Commander has them: a veteran with the elite, no one
   // on the rest; the enemy's drawn from the seed, as at the muster.
-  let spec = fieldFactions(loadScenario('meeting-battle', { map, deploy: true }), { red, blue })
+  let spec = fieldFactions(loadScenario('meeting-battle', { map, deploy: true, ...(KIND ? { kind: KIND } : {}) }), { red, blue })
+  if (KIND && kindSpec) spec = { ...spec, ...kindSpec(map, KIND) }
   // A field of more than one line (the big map): each army's second line.
   if (withSecondLine) spec = withSecondLine(spec, { red, blue })
   spec = { ...spec, units: assignOfficers(spec.units, seed) }

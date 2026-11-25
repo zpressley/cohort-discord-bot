@@ -199,10 +199,38 @@ module.exports = {
   // from here 53%. docs/DECISIONS.md, "How columns, wavering under fire and
   // flight were mended".
   deploy: { west: { x: 11, y: 23 }, east: { x: 30, y: 24 } },
+  // Where they form up for a battle for the three fords, two to hold
+  // (November 25; engine/map/deploy.js, through the scenario's `kind`): the
+  // east army at (27, 18), north and a little west. Marching alone, every
+  // faction, each side's first unit on its nearest ford after 18 and 10
+  // minutes, on its second nearest after 37 and 44; from (30, 24) the
+  // east's second, the North Ford, took 60, and the west reached two fords
+  // 22 minutes sooner. From here the computer against itself gives the west
+  // 49% of the battles for the fords (120 battles); 53% at (27, 17), 47% at
+  // (28, 18) (60 and 120 battles). It was (28, 17) until ties of who
+  // steps first were made a seeded draw (round two), when that place gave
+  // the west 59%. (The pitched battle keeps (30, 24): 53%.)
+  // docs/DECISIONS.md, "How the kinds of battle were built".
+  deployFor: { ground: { west: { x: 11, y: 23 }, east: { x: 27, y: 18 } } },
   // The ground to fight for (engine/orchestrator/victory.js, objectiveArea):
-  // the hill commanding the north, held from on it. (Miller's Crossing, the
-  // ford between the two armies, was tried first: the east army reaches it
-  // first and won 88 battles in 100. docs/DECISIONS.md, "How each map's
-  // ground to fight for was built".)
-  ground: [{ feature: 'The Crownhill', name: 'the Crownhill' }]
+  // the three fords, each held from on it or at either end; hold two of
+  // them (ruled 2026-11-25: "Crown hill was actually meant to be 3 fords
+  // and controlling 2 fords wins the game"). Harrow Bridge stays a
+  // crossing and is not ground to fight for; the hill is no longer it.
+  // (The hill was, from November 24: before it, Miller's Crossing alone was
+  // tried, and the east army reached it first and won 88 battles in 100.
+  // docs/DECISIONS.md, "How each map's ground to fight for was built" and
+  // "How the kinds of battle were built".)
+  ground: [
+    { feature: 'North Ford', name: 'the North Ford', reach: 1 },
+    { feature: "Miller's Crossing", name: "Miller's Crossing", reach: 1 },
+    { feature: 'South Ford', name: 'the South Ford', reach: 1 }
+  ],
+  // How many of them a side must hold, each alone, for the hour; and what
+  // they are, all together ("two of the three fords").
+  hold: { needed: 2, called: 'fords' },
+  // The kinds of battle fought here, the first offered first at the muster
+  // (docs/DECISIONS.md, "How the kinds of battle were built": the pitched
+  // battle first everywhere, a guess; swap the two to offer the ground first).
+  kinds: ['pitched', 'ground']
 }

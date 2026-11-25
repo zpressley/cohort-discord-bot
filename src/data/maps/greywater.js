@@ -172,7 +172,16 @@ module.exports = {
   // Elderby, out of sight of each other (docs/DECISIONS.md, "How the big map
   // was built").
   deploy: { west: { x: 14, y: 41 }, east: { x: 65, y: 38 } },
+  // For the battle for Elderby, the east army a tile nearer, at (64, 38):
+  // from (65, 38) the computer against itself gave the west 58% (80
+  // battles) and 64% (60); from here 44%, and 44, 55 and 50% a tile north,
+  // south and further west (60 each). docs/DECISIONS.md, "How the kinds of
+  // battle were built", round two.
+  deployFor: { ground: { west: { x: 14, y: 41 }, east: { x: 64, y: 38 } } },
   ground: [{ name: 'Elderby', tiles: ELDERBY }],
+  // The kinds of battle fought here, the first offered first at the muster
+  // (docs/DECISIONS.md, "How the kinds of battle were built").
+  kinds: ['pitched', 'ground'],
   // Each army is called out in two lines here: its own, and its faction's
   // usual army again, raised for the day (src/engine/army/secondLine.js).
   // About eight units a side, where a 1 km field has four or five.

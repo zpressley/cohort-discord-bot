@@ -215,7 +215,8 @@ const REASONS = {
   'enemy commander bargained': ['The enemy Commander bargained for his freedom and left the field', 'You bargained for your freedom and left the field'],
   'objectives held': ['You held the field', 'The enemy held the field'],
   'time ran out: fewer losses': ['The day ended, and the enemy lost more', 'The day ended, and you lost more'],
-  'time ran out: held more objectives': ['The day ended with more ground in your hands', 'The day ended with more ground in the enemy\'s hands']
+  'time ran out: held more objectives': ['The day ended with more ground in your hands', 'The day ended with more ground in the enemy\'s hands'],
+  'field held at nightfall': ['Night fell with your army standing and the enemy\'s beaten', 'Night fell with the enemy\'s army standing and yours beaten']
 }
 function verdictWords(battle) {
   const o = battle.outcome
@@ -309,7 +310,7 @@ async function battles() {
     const over = l.status === 'finished' && l.overDays
     return `<a class="battle-link${l.status === 'your-orders' ? ' mine' : ''}" href="/b/${esc(l.token)}" data-link>
       <strong>${esc(over ? l.firstTitle : l.title)}</strong>
-      <span>${esc(sideName(l.side))}, ${opponent}${over ? `, ${esc(l.overDays)}` : ''}</span>
+      <span>${l.kindTitle ? `${esc(l.kindTitle)}, ` : ''}${esc(sideName(l.side))}, ${opponent}${over ? `, ${esc(l.overDays)}` : ''}</span>
       <span>${esc(verdict ? (l.outcome?.listed ?? `${verdict.title}: ${verdict.reason}`) : when)}</span>
       ${l.calledOut ? `<span class="called-out">${esc(l.calledOut)}</span>` : ''}
     </a>`
@@ -571,10 +572,14 @@ async function muster() {
     <header class="bar"><a href="/battles" data-link>Your battles</a><strong style="font-family: var(--font-display); font-size: 18px">Muster a battle</strong><span></span></header>
     <main class="page">
       <form id="muster" class="page" style="padding: 0">
-        <p class="note">A battle to the end. It is won when the other side yields the field, its army breaks or is destroyed, or its Commander is killed; or by holding the field's ground to fight for. ${esc(day.said)}</p>
+        <p class="note">A battle to the end. It is won when the other side yields the field, its army breaks or is destroyed, or its Commander is killed; in a battle for ground, by holding the field's ground to fight for. ${esc(day.said)}</p>
         <label class="field">The field
           <select name="map">${maps.map(m => `<option value="${esc(m.id)}">${esc(m.title)}${m.size ? ` (${esc(m.size)})` : ''}</option>`).join('')}</select>
         </label>
+        <fieldset id="kind-field">
+          <legend>The kind of battle</legend>
+          <div id="kind-choices"></div>
+        </fieldset>
         <p class="note ground-note" id="ground-note"></p>
         <fieldset>
           <legend>Your opponent</legend>
@@ -687,7 +692,22 @@ async function muster() {
   }
   // Each field's own ground to fight for, under the field chosen.
   const pickMap = document.querySelector('select[name="map"]')
-  const showGround = () => { document.getElementById('ground-note').textContent = maps.find(m => m.id === pickMap.value)?.said ?? '' }
+  // The kinds of battle fought on the field chosen (ruled 2026-11-25), the
+  // one offered first chosen, each with how it is won; the one he chose
+  // kept when he changes field, if the new one offers it.
+  let kindChosen = null
+  const showGround = () => {
+    const m = maps.find(x => x.id === pickMap.value)
+    const kinds = m?.kinds ?? []
+    if (!kinds.some(k => k.id === kindChosen)) kindChosen = kinds[0]?.id ?? null
+    document.getElementById('kind-field').hidden = kinds.length === 0
+    document.getElementById('kind-choices').innerHTML = kinds.map(k => `<label class="choice kind-choice"><input type="radio" name="kind" value="${esc(k.id)}"${k.id === kindChosen ? ' checked' : ''}> <span><strong>${esc(k.title)}</strong><br><span class="note">${esc(k.said)}</span></span></label>`).join('')
+    document.querySelectorAll('input[name="kind"]').forEach(r => r.addEventListener('change', () => { kindChosen = r.value }))
+    // A big field's two lines, under the choice.
+    const note = document.getElementById('ground-note')
+    note.textContent = kinds.length ? (m.lines ?? '') : m?.said ?? ''
+    note.hidden = !note.textContent
+  }
   pickMap.addEventListener('change', showGround)
   showGround()
   // A new Commander is made on his own screen, and comes back here.
@@ -710,6 +730,7 @@ async function muster() {
       rememberCommander(commander)
       const result = await api('POST', '/api/battles', {
         map: form.get('map'), opponent, side, commander, faction,
+        ...(form.get('kind') ? { kind: form.get('kind') } : {}),
         enemyFaction: opponent === 'friend' ? null : form.get('enemyFaction') || null,
         // Who marches, as chosen here (the server judges the budget).
         ...(chosen?.roster && marching.has(chosen.token) ? { marching: marching.get(chosen.token) } : {})
@@ -1627,8 +1648,13 @@ async function tent(token) {
     const examples = [
       // The field's ground to fight for, first: a player who only advances
       // on an enemy he cannot see watches the computer take it.
-      ...(v.objectives ?? []).slice(0, 1).map(o => `everyone take ${o.name}`),
+      // (None in a pitched battle. With several to hold, the army sent
+      // forward first: on Crownhill's fords "everyone advance", alone, won
+      // 26 battles in 40 against the computer, "everyone take the fords" 8;
+      // docs/DECISIONS.md, "How the kinds of battle were built", round two.)
+      ...(v.groundHold ? [] : (v.objectives ?? []).slice(0, 1).map(o => `everyone take ${o.name}`)),
       'everyone advance',
+      ...(v.groundHold ? [`everyone take the ${v.groundHold.called}`] : []),
       `${a.name} to ${east(a, 4)}`,
       `${b.name} defend ${east(b, 2)}`,
       // By the compass, and every unit the other orders leave out.
@@ -1976,7 +2002,9 @@ async function tent(token) {
   // The ground to fight for, and who holds it (every side knows at once).
   function renderGround() {
     const line = document.getElementById('ground-line')
-    const said = (state.view.objectives ?? []).map(o => o.said).filter(Boolean)
+    // (One line for the whole battle where the server gives one: a pitched
+    // battle's rule, or several grounds and some of them to hold.)
+    const said = state.view.groundLine ? [state.view.groundLine] : (state.view.objectives ?? []).map(o => o.said).filter(Boolean)
     line.hidden = said.length === 0
     line.textContent = said.join(' ')
   }

@@ -1289,3 +1289,31 @@ module.exports.FLIGHT = {
   BESIDE_ENEMY: 2,
   AWAY: 8
 }
+
+// The kinds of battle (ruled 2026-11-25; docs/DECISIONS.md, "How the kinds
+// of battle were built"). A pitched battle has no ground to fight for: at
+// nightfall a side still standing with STAND_SHARE of the men it began the
+// day with (in units on the field, not broken), when the other is not, has
+// held the field and won; both, or neither, is a tie. A half, measured:
+// as the app plays them (harness/first-battle.js and the soak's battles),
+// the side that breaks has a third to two fifths of its men in its ranks
+// when it does (median 0.33 to 0.40), the winner about 0.70; battles that
+// ran to nightfall with both armies still in being stood at 0.50 to 0.77.
+// Under a half is beaten; over it, still in the fight. Zach's lean was a
+// half too.
+module.exports.PITCHED = { STAND_SHARE: 0.5 }
+
+// Advancing in a pitched battle with no enemy known (battle/battle.js,
+// marchOn; round two of the kinds of battle, docs/DECISIONS.md): the army
+// marches on where the enemy formed up, as a body, each unit keeping its
+// place in the line; the march is over when the army's middle is within
+// THERE tiles of the place (three), and the search begins as before.
+// Claude's value, measured with harness/first-battle.js.
+module.exports.ADVANCE = { THERE: 3 }
+
+// A searching unit that has got no nearer the place it set out to look at in
+// STUCK turns running gives the place up and looks elsewhere
+// (battle/battle.js; round two of the kinds of battle, docs/DECISIONS.md).
+// Three: half an hour of trying. Claude's value; the soak found a unit that
+// walked round a friend and back for five days.
+module.exports.SEARCH = { STUCK: 3 }

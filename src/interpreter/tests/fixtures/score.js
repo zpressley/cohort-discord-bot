@@ -30,7 +30,7 @@ const ARMIES = ['rome', 'macedon', 'parthia']
 // been seen where it stands, its own edge of the field, and the ground to
 // fight for.
 function contextFor(store, map, army) {
-  const seat = store.muster({ map, opponent: 'standing', side: 'red', faction: army, enemyFaction: 'han', seed: 11 }).seats.red
+  const seat = store.muster({ map, opponent: 'standing', side: 'red', faction: army, enemyFaction: 'han', seed: 11, kind: 'ground' }).seats.red
   const game = store.seatOf(seat).entry.game
   const units = game.battle.world.units
   return {

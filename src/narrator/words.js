@@ -761,3 +761,89 @@ const DISCORD = {
   friend: 'a friend'
 }
 module.exports.DISCORD = DISCORD
+
+// ── The kinds of battle (ruled 2026-11-25) ──
+// Chosen at the muster (src/data/maps, kindsOf), saved in the battle's
+// spec (`kind`), named in the tent, the verdict and "your battles".
+//   pitched  no ground to fight for: army against army. Won as any battle
+//            is (the enemy yields, his army breaks or is destroyed, his
+//            Commander is killed); at nightfall the army still standing
+//            with `share` of the men it began the day with, when the
+//            other's is not, has held the field (tables.PITCHED)
+//   ground   the field's ground to fight for (GROUND, and GROUND.some for
+//            several, some of them to hold)
+// (A third kind, camps, is to come.)
+const NUMBER_WORDS = { 1: 'one', 2: 'two', 3: 'three', 4: 'four', 5: 'five', 6: 'six', 7: 'seven', 8: 'eight', 9: 'nine', 10: 'ten' }
+const shareWords = (share) => (share === 0.5 ? 'half' : `${Math.round(share * 100)}% of`)
+const KINDS = {
+  pitched: {
+    title: 'A pitched battle',
+    name: 'pitched battle',
+    // The muster's line under the choice; the tent's line under the map.
+    said: (share) => `No ground to fight for: army against army. Break the enemy, or make him yield the field. If night falls first, an army still standing with ${shareWords(share)} the men it began the day with, when the other's is not, holds the field and wins; both, or neither, and it is a tie.`,
+    tent: (share) => `A pitched battle: no ground to fight for. Break the enemy, or make him yield the field. At nightfall, an army still standing with ${shareWords(share)} the men it began the day with, when the other's is not, holds the field.`,
+    // The verdict, when night decided it, or did not.
+    held: (mine, share) => (mine
+      ? `Night fell with your army still standing, ${shareWords(share)} its men or more in the ranks, and the enemy's beaten: you held the field`
+      : `Night fell with the enemy's army still standing, and yours down to fewer than ${shareWords(share)} the men it began the day with: the field is his`),
+    tie: (share) => `night fell with both armies still standing, each with ${shareWords(share)} its men or more: neither side has won`,
+    neither: (share) => `night fell with both armies down to fewer than ${shareWords(share)} the men they began the day with: neither side has won`
+  },
+  ground: {
+    title: 'A battle for ground',
+    name: 'battle for ground'
+  },
+  // A field whose one piece of ground is a rise to hold (Thornwood).
+  kingOfTheHill: 'King of the hill.'
+}
+module.exports.KINDS = KINDS
+
+// Several pieces of ground, some of them to hold (ruled 2026-11-25:
+// "controlling 2 fords wins the game"). `needed` of `count`, called
+// together `called` ("fords"); `holding`: how many the side named holds.
+const numberWord = (n) => NUMBER_WORDS[n] ?? String(n)
+GROUND.some = {
+  // The muster and the first dispatch, after GROUND.toFightFor.
+  rule: (needed, count, called, minutes) => `Hold ${numberWord(needed)} of the ${numberWord(count)} ${called} alone for ${clock(minutes)}, with no enemy on them or beside them, and the field is yours: the time runs while you hold as many. Let the enemy hold as many as long, and the field is his.`,
+  // The dispatch, when one changes hands.
+  took: (name, mine, holding, needed, count, called) => (mine
+    ? `you took ${name}, and hold ${numberWord(holding)} of the ${numberWord(count)} ${called}${holding >= needed ? ': hold them alone and the field is yours' : `: hold ${numberWord(needed)} and the field is yours`}`
+    : `the enemy took ${name}, and holds ${numberWord(holding)} of the ${numberWord(count)} ${called}${holding >= needed ? ': take one from him, or the field is his' : ''}`),
+  // ... close to deciding the battle: `names` those the holder holds.
+  close: (names, mine, minutes) => (mine
+    ? `hold ${both(names)} ${clock(minutes)} more and the field is yours`
+    : `the enemy has held ${both(names)} long: unless you take one from him within ${clock(minutes)}, the field is his`),
+  // The tent, under the map: who holds which, and the rule. `onClock`:
+  // true when the side told holds as many, false when the enemy does,
+  // null when neither; `left`, the time left to him.
+  status: ({ mine, theirs, needed, count, called, minutes, onClock = null, left = null, held = false }) => {
+    const you = held ? 'Your army holds' : 'You hold'
+    const said = [
+      mine.length ? `${you} ${both(mine)}` : `${you} none of the ${called}`,
+      theirs.length ? `the enemy holds ${both(theirs)}` : ''
+    ].filter(Boolean).join('; ')
+    const rule = `hold ${numberWord(needed)} of the ${numberWord(count)} ${called} alone for ${clock(minutes)} and the field is yours`
+    const clockLine = onClock === null ? '' : onClock ? ` ${clock(left)} more and it is.` : ` The enemy holds as many: take one from him within ${clock(left)}, or the field is his.`
+    return `${said}: ${rule}.${clockLine}`
+  },
+  // The verdict.
+  won: (names, mine, minutes, needed, count, called) => (mine
+    ? `You held ${both(names)}, ${numberWord(needed)} of the ${numberWord(count)} ${called}, alone for ${clock(minutes)}, and the field is yours`
+    : `The enemy held ${both(names)}, ${numberWord(needed)} of the ${numberWord(count)} ${called}, alone for ${clock(minutes)}, and the field is his`),
+  // A Commander in the enemy's hands (S11): of his army.
+  held: {
+    took: (name, mine, holding, needed, count, called) => (mine
+      ? `your army took ${name}, and holds ${numberWord(holding)} of the ${numberWord(count)} ${called}${holding >= needed ? ': if it holds them alone, the field is yours' : ''}`
+      : `the enemy took ${name}, and holds ${numberWord(holding)} of the ${numberWord(count)} ${called}${holding >= needed ? ': unless your army takes one from him, the field is his' : ''}`),
+    close: (names, mine, minutes) => (mine
+      ? `your army has held ${both(names)} long: ${clock(minutes)} more and the field is yours`
+      : `the enemy has held ${both(names)} long: unless your army takes one from him within ${clock(minutes)}, the field is his`)
+  },
+  // "The ford" on a field with three: which one? `options` the names.
+  which: (word, names) => `There are ${numberWord(names.length)} ${word}s to fight for on this field: ${both(names)}. Which do you mean?`,
+  // "Take the fords": shared out, each unit to one, and the read-back.
+  shared: (pairs) => pairs.join('; ')
+}
+
+// The battle's end in the dispatch, when night decided a pitched battle.
+BATTLE_OVER.why['field held at nightfall'] = ['night fell with your army still standing and the enemy\'s beaten', 'night fell with the enemy\'s army still standing and yours beaten']

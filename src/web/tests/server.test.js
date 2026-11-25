@@ -48,7 +48,8 @@ test('muster alone: one seat, the tent opens on your orders', async () => {
 test('read back, then send: alone, the turn runs at once and a dispatch arrives', async () => {
   const app = await start()
   try {
-    const token = (await app.api('POST', '/api/battles', { opponent: 'standing', side: 'red' })).body.seats.red
+    // (A battle for Crownhill's three fords: "the ford" asks which.)
+    const token = (await app.api('POST', '/api/battles', { opponent: 'standing', side: 'red', kind: 'ground' })).body.seats.red
     const read = (await app.api('POST', `/api/seat/${token}/read`, { text: 'spears to the ridge to the west' })).body
     assert.equal(read.questions.length, 0)
     assert.match(read.understood[0], /^Spears: march to Shepherd's Ridge/)
@@ -94,14 +95,16 @@ test('two players by link: the turn waits for both, and orders can change until 
 test('fog of war is held on the server: a side never receives an enemy it has not seen', async () => {
   const app = await start()
   try {
-    const seats = (await app.api('POST', '/api/battles', { opponent: 'friend', side: 'red', seed: 5 })).body.seats
+    const seats = (await app.api('POST', '/api/battles', { opponent: 'friend', side: 'red', seed: 5, kind: 'ground' })).body.seats
     const raw = (await app.api('GET', `/api/seat/${seats.red}`)).body
     assert.deepEqual(raw.enemies, [], 'nothing seen yet')
     assert.equal(JSON.stringify(raw).includes('blue_'), false, 'not a single enemy id anywhere in the answer')
     assert.equal(JSON.stringify(raw).includes('veterancy'), false, 'no unit\'s veterancy (src/web/tests/veterans.test.js has more)')
     // The ground to fight for: where it is, who holds it (every side knows at
     // once), and its words; nothing of who stands on it.
-    assert.deepEqual(raw.objectives.map(o => Object.keys(o).sort()), [['holder', 'id', 'name', 'said', 'tiles']])
+    // (Crownhill's three fords: each the same.)
+    assert.deepEqual(raw.objectives.map(o => Object.keys(o).sort()), raw.objectives.map(() => ['holder', 'id', 'name', 'said', 'tiles']))
+    assert.equal(raw.objectives.length, 3)
     // A friend's side has no computer's Commander to tell of.
     assert.equal(raw.enemyCommander, null)
     // Against the computer: its Commander's name and what is said of him,
@@ -203,7 +206,7 @@ test('a battle can be mustered on any map', async () => {
 test('a question comes with choices; a finished battle tells what became of your captains', async () => {
   const app = await start()
   try {
-    const token = (await app.api('POST', '/api/battles', { opponent: 'standing', side: 'red', seed: 3 })).body.seats.red
+    const token = (await app.api('POST', '/api/battles', { opponent: 'standing', side: 'red', seed: 3, kind: 'ground' })).body.seats.red
     const asked = (await app.api('POST', `/api/seat/${token}/orders`, { text: 'spears to the ford' })).body
     assert.equal(asked.status, 'clarify')
     assert.equal(asked.choices[0].place, 'the ford')
@@ -249,7 +252,7 @@ test('your units hold until ordered; only the computer\'s side advances of its o
 test('one unclear order does not throw away the others: the clear ones can be sent', async () => {
   const app = await start()
   try {
-    const token = (await app.api('POST', '/api/battles', { opponent: 'standing', side: 'red', seed: 3 })).body.seats.red
+    const token = (await app.api('POST', '/api/battles', { opponent: 'standing', side: 'red', seed: 3, kind: 'ground' })).body.seats.red
     const text = 'spears to the ford\nswords to the ridge to the west'
     const asked = (await app.api('POST', `/api/seat/${token}/orders`, { text })).body
     assert.equal(asked.status, 'clarify')
@@ -258,7 +261,7 @@ test('one unclear order does not throw away the others: the clear ones can be se
 
     const sent = (await app.api('POST', `/api/seat/${token}/orders`, { text, sendClear: true })).body
     assert.equal(sent.status, 'turn-ran')
-    assert.match(sent.notes[0], /^Not sent: Which ford/)
+    assert.match(sent.notes[0], /^Not sent: There are three fords to fight for on this field/)
     const tent = (await app.api('GET', `/api/seat/${token}`)).body
     assert.match(tent.own.find(u => u.name === 'Swords').order, /^marching to/)
     assert.equal(tent.own.find(u => u.name === 'Spears').order, 'holding (no orders yet)')
@@ -546,7 +549,7 @@ test('held when the battle is lost with no deal: honor lets him go, alive, with 
     const run = async (strip) => {
       const made = (await app.api('POST', '/api/commanders')).body
       const commander = made.token
-      const seat = (await app.api('POST', '/api/battles', { opponent: 'standing', side: 'red', seed: 3, commander })).body.seats.red
+      const seat = (await app.api('POST', '/api/battles', { opponent: 'standing', side: 'red', seed: 3, commander, kind: 'ground' })).body.seats.red
       const game = store.seatOf(seat).entry.game
       Object.assign(game.battle.commanders.red, { status: 'held', heldBy: 'blue_swords' })
       for (const u of game.battle.world.units) {

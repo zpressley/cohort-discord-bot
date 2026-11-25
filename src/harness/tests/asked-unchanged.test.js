@@ -70,6 +70,15 @@
 // wavering under fire and flight were mended"). The battles were 48be1b7d 26, 630cf9be 32,
 // b73254c7 12, c80e8547 23 (everyone asked) and b01c713a 25, 39ecf1e5 26,
 // 15f2219b 13, 842dd7c2 23 (no Commander).
+//
+// Retaken when ties of who steps first, which fight is taken first and
+// which volley lands first were made a seeded draw of their own instead of
+// the units' names, so that a side called "red" is no longer ahead of one
+// called "blue" (docs/DECISIONS.md, "How the kinds of battle were built",
+// round two). They were 3bdcf14e 13 (ashford 1), 25a80714 16 (ashford 2),
+// 988f2b16 17 (crownhill 1), 4a3dd2e5 19 (crownhill 2), ccfaaf84 14
+// (ashford 1), 7e232cf6 17 (ashford 2), e9cfed6f 17 (crownhill 1),
+// 86491ec2 19 (crownhill 2).
 
 const { test } = require('node:test')
 const assert = require('node:assert/strict')
@@ -108,18 +117,18 @@ function play(extra, { commander }) {
 
 test('a battle saved before the riders rulings (marked everyoneAsked) plays back exactly as it was played, event for event', () => {
   assert.deepEqual(play({ everyoneAsked: true }, { commander: true }), {
-    'crownhill 1': '988f2b16 17',
-    'crownhill 2': '4a3dd2e5 19',
-    'ashford 1': '3bdcf14e 13',
-    'ashford 2': '25a80714 16'
+    'crownhill 1': '489f46c2 22',
+    'crownhill 2': '7f9c450e 32',
+    'ashford 1': 'be804a7d 12',
+    'ashford 2': '50d4109e 15'
   })
 })
 
 test('a battle with no Commander on the field runs exactly as before the riders rulings, event for event', () => {
   assert.deepEqual(play({}, { commander: false }), {
-    'crownhill 1': 'e9cfed6f 17',
-    'crownhill 2': '86491ec2 19',
-    'ashford 1': 'ccfaaf84 14',
-    'ashford 2': '7e232cf6 17'
+    'crownhill 1': 'f4b9ff0f 22',
+    'crownhill 2': '8ae0423b 22',
+    'ashford 1': '5ec857e2 13',
+    'ashford 2': '61de1d55 16'
   })
 })
