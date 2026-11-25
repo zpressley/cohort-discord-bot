@@ -93,5 +93,11 @@ module.exports = {
   // the bald rise in the heart of the wood, held from on it or beside it
   // (the brook cuts its eastern foot: held from on it alone, the west army
   // won 63 battles in 100).
-  ground: [{ feature: 'Thorn Knoll', name: 'Thorn Knoll', reach: 1 }]
+  ground: [{ feature: 'Thorn Knoll', name: 'Thorn Knoll', reach: 1 }],
+  // The kinds of battle fought here, the first offered first at the muster
+  // (docs/DECISIONS.md, "How the kinds of battle were built"). The knoll is
+  // the king of the hill (ruled 2026-11-25: "need a king of the hill style
+  // one"): one rise in the heart of the wood, and its muster line says so.
+  kinds: ['pitched', 'ground'],
+  kingOfTheHill: true
 }

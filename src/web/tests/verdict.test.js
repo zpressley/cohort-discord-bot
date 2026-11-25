@@ -13,7 +13,7 @@ const { createBattleStore } = require('../battles')
 
 async function finished(seed) {
   const store = createBattleStore({})
-  const token = (await store.muster({ opponent: 'standing', side: 'red', seed })).seats.red
+  const token = (await store.muster({ opponent: 'standing', side: 'red', seed, kind: 'ground' })).seats.red
   let tent
   for (let i = 0; i < 40; i++) {
     await store.submit(token, i === 0 ? 'everyone advance' : '')
@@ -65,19 +65,21 @@ test('fog of war, the verdict: the enemy\'s units that broke are only those his 
 // with no word of who was on it, while the line under the map said it was
 // held by no one.
 test('ground he held and lost is "held by neither side alone" under the map, and his dispatch says who he knows is on it', async () => {
-  // Crownhill, seed 5, Rome against Rome: he takes the hill; at 2 h 10 the
-  // enemy's hastati, reported on it, come up beside his own.
+  // Raven Ridge, seed 1, Rome against Rome, a battle for ground: he takes
+  // the gap, and the enemy, reported on it, comes up beside his men. (It
+  // was Crownhill, seed 5, and the hill, until Crownhill's ground became
+  // its three fords on November 25.)
   const store = createBattleStore({})
-  const token = (await store.muster({ opponent: 'standing', side: 'red', seed: 5, map: 'crownhill', faction: 'rome', enemyFaction: 'rome' })).seats.red
+  const token = (await store.muster({ opponent: 'standing', side: 'red', seed: 1, map: 'ravenridge', faction: 'rome', enemyFaction: 'rome', kind: 'ground' })).seats.red
   let tent = store.view(token)
-  assert.equal(tent.objectives[0].said, 'The ground to fight for, the Crownhill, is held by no one.')
+  assert.equal(tent.objectives[0].said, 'The ground to fight for, Raven Gap, is held by no one.')
   let lost = null
   for (let turn = 0; turn < 10 && !lost; turn++) {
-    await store.submit(token, turn === 0 ? 'everyone take the Crownhill' : '')
+    await store.submit(token, turn === 0 ? 'everyone take Raven Gap' : '')
     tent = store.view(token)
     lost = tent.dispatches[0].lines.find(l => /no longer hold/.test(l))
   }
-  assert.equal(lost, 'The enemy is on the Crownhill with your men: you no longer hold it alone')
+  assert.equal(lost, 'The enemy is on Raven Gap with your men: you no longer hold it alone')
   assert.equal(tent.objectives[0].holder, null)
-  assert.equal(tent.objectives[0].said, 'The ground to fight for, the Crownhill, is held by neither side alone.')
+  assert.equal(tent.objectives[0].said, 'The ground to fight for, Raven Gap, is held by neither side alone.')
 })

@@ -93,10 +93,10 @@ test('alone, on a phone: muster, an order written on the map, turns to a verdict
 
     // The first turn's card: its examples are put in the box, and the game reads them.
     const examples = await p.locator('[data-example]').count()
-    assert.equal(examples, 7)
-    // The first is the field's ground to fight for: "everyone advance" alone
-    // lets the computer take it.
-    assert.equal(await p.textContent('[data-example] >> nth=0'), 'everyone take the Crownhill')
+    assert.equal(examples, 6)
+    // The muster offers the pitched battle first (ruled 2026-11-25): no
+    // ground to fight for, so no "take" among them; the first is to advance.
+    assert.equal(await p.textContent('[data-example] >> nth=0'), 'everyone advance')
     for (let i = 0; i < examples; i++) {
       await p.click(`[data-example] >> nth=${i}`)
     }
@@ -105,7 +105,7 @@ test('alone, on a phone: muster, an order written on the map, turns to a verdict
     assert.equal(await p.locator('.question').count(), 0, 'every example is understood')
     await p.click('#clear')
     // The empty box shows orders in his own units' names, not "spears" he has not got.
-    assert.match(await p.getAttribute('#orders', 'placeholder'), /^Sarissa foot 1 to the Crownhill; if the enemy is there, hold\nSarissa foot 2 to [A-J]\d+(-[NS][EW])?, then advance\nPeltasts hold$/)
+    assert.match(await p.getAttribute('#orders', 'placeholder'), /^Sarissa foot 1 to [A-J]\d+(-[NS][EW])?, then hold\nSarissa foot 2 to [A-J]\d+(-[NS][EW])?, then advance\nPeltasts hold$/)
 
     // The Army tab: Macedon's army, and you ride with its elite unit.
     await p.click('[data-tab="army"]')
@@ -639,7 +639,9 @@ test('on a phone: night ends the battle with no winner, and the main button figh
     if (process.env.SHOT) await p.screenshot({ path: process.env.SHOT.replace('.png', '-muster-day.png') })
 
     const commander = (await post('/api/commanders', { faction: 'rome' })).token
-    const seat = (await post('/api/battles', { opponent: 'standing', side: 'red', seed: 3, commander, enemyFaction: 'han', turnLimit: 2 })).seats.red
+    // (A battle for ground: night ends it with no winner, whatever the men
+    // left. A pitched battle's night: the kinds of battle test, below.)
+    const seat = (await post('/api/battles', { opponent: 'standing', side: 'red', seed: 3, commander, enemyFaction: 'han', turnLimit: 2, kind: 'ground' })).seats.red
     const game = store.seatOf(seat).entry.game
     for (let i = 0; i < 10 && !game.outcome.decided; i++) await post(`/api/seat/${seat}/orders`, { text: 'everyone hold' })
     assert.equal(game.outcome.reason, 'night fell')
@@ -735,14 +737,16 @@ test('on a phone: the muster names the field\'s ground to fight for; the tent ma
     const p = await page(browser, errors, { width: 390, height: 844 })
     const shot = (name) => process.env.SHOT ? p.screenshot({ path: process.env.SHOT.replace('.png', `-${name}.png`), fullPage: true }) : null
     await toMuster(p, base)
-    assert.match(await p.textContent('#ground-note'), /^The ground to fight for: the Crownhill\. Hold it alone for 1 h/)
+    // (Under the battle for ground, the second kind offered: ruled
+    // 2026-11-25. Crownhill's ground is its three fords since.)
+    assert.match(await p.textContent('.kind-choice >> nth=1'), /The ground to fight for: the North Ford, Miller's Crossing and the South Ford\. Hold two of the three fords alone for 1 h/)
     await p.selectOption('select[name="map"]', 'ashford')
-    assert.match(await p.textContent('#ground-note'), /^The ground to fight for: the Old Mill Bridge\./)
+    assert.match(await p.textContent('.kind-choice >> nth=1'), /The ground to fight for: the Old Mill Bridge\./)
     await shot('ground-muster')
 
     // A battle he will not come out of (its seed chosen, so the computer
     // takes the bridge before night): he holds, and loses the field by it.
-    const seat = store.muster({ opponent: 'standing', side: 'red', seed: 5, map: 'ashford', faction: 'rome', enemyFaction: 'rome' }).seats.red
+    const seat = store.muster({ opponent: 'standing', side: 'red', seed: 5, map: 'ashford', faction: 'rome', enemyFaction: 'rome', kind: 'ground' }).seats.red
     await p.goto(base + `/b/${seat}`)
     await p.waitForSelector('#map-scroll svg')
     assert.equal(await p.textContent('#ground-line'), 'The ground to fight for, the Old Mill Bridge, is held by no one.')
@@ -1154,28 +1158,30 @@ test('the big map on a phone: after a turn it comes back to your army unless you
 })
 
 // Second playthrough, November 24 (docs/REVIEW-2026-11.md, S14 and D8).
-test('on a phone, Crownhill opens on your army with a mark at the edge pointing to the Crownhill, and a tap on it brings the hill into view; on a desktop both are in view', { skip }, async () => {
+// (The Crownhill was its ground until November 25; its three fords since,
+// and the North Ford lies off the window to the north.)
+test('on a phone, Crownhill opens on your army with a mark at the edge pointing to the North Ford, and a tap on it brings the ford into view; on a desktop both are in view', { skip }, async () => {
   await withApp(async ({ base, browser, errors, store }) => {
-    const seat = store.muster({ opponent: 'standing', side: 'red', seed: 5, map: 'crownhill', faction: 'rome', enemyFaction: 'rome' }).seats.red
+    const seat = store.muster({ opponent: 'standing', side: 'red', seed: 5, map: 'crownhill', faction: 'rome', enemyFaction: 'rome', kind: 'ground' }).seats.red
     const p = await page(browser, errors, { width: 390, height: 844 })
     await p.goto(`${base}/b/${seat}`)
     await p.waitForSelector('#map-scroll svg')
-    const mark = p.locator('.ground-mark')
-    assert.equal(await mark.count(), 1, 'the hill is out of the window: a mark points to it')
-    assert.match(await mark.textContent(), /^↑ the Crownhill$/)
+    const mark = p.locator('.ground-mark', { hasText: 'the North Ford' })
+    assert.equal(await mark.count(), 1, 'the North Ford is out of the window: a mark points to it')
+    assert.match(await mark.textContent(), /^↑ the North Ford$/)
     const box = await mark.boundingBox()
     assert.ok(box.height >= 44, 'a finger\'s size')
     const view = await p.locator('#map-scroll').boundingBox()
     const army = await p.locator('.counter[opacity="1"]').first().boundingBox()
     assert.ok(army.y > view.y && army.y < view.y + view.height, 'the army is in the window')
     await mark.click()
-    assert.equal(await p.locator('.ground-mark').count(), 0, 'the hill is in view: no mark')
+    assert.equal(await p.locator('.ground-mark', { hasText: 'the North Ford' }).count(), 0, 'the ford is in view: no mark')
     assert.ok(await p.evaluate(() => document.documentElement.scrollWidth <= 390), 'no sideways scroll')
 
     const d = await page(browser, errors, { width: 1366, height: 900 })
     await d.goto(`${base}/b/${seat}`)
     await d.waitForSelector('#map-scroll svg')
-    assert.equal(await d.locator('.ground-mark').count(), 0, 'on a desktop the hill and the army are both in view')
+    assert.equal(await d.locator('.ground-mark').count(), 0, 'on a desktop the fords and the army are all in view')
     const dview = await d.locator('#map-scroll').boundingBox()
     const darmy = await d.locator('.counter[opacity="1"]').first().boundingBox()
     assert.ok(darmy.y > dview.y && darmy.y + darmy.height < dview.y + dview.height, 'the army is in view')
@@ -1222,5 +1228,57 @@ test('on a phone, at a fight on Greywater, no label is under 11 px or lies on an
       assert.match(await p.textContent('#map-hint'), /enemy /)
     }
     await bigShot(p, 'greywater-fight-labels')
+  })
+})
+
+// The kinds of battle (ruled 2026-11-25). KINDS_SHOTS: a folder for its
+// screenshots.
+test('on a phone: the muster offers the pitched battle first and the battle for ground second, each with how it is won; each kind\'s tent says how it is won, and Crownhill\'s three fords are on the map', { skip }, async () => {
+  await withApp(async ({ base, browser, errors }) => {
+    const shot = (p, name) => process.env.KINDS_SHOTS ? p.screenshot({ path: path.join(process.env.KINDS_SHOTS, `${name}.png`), fullPage: true }) : null
+    const p = await page(browser, errors, { width: 390, height: 844 })
+    await toMuster(p, base, { faction: 'rome' })
+    const choices = p.locator('.kind-choice')
+    assert.equal(await choices.count(), 2)
+    assert.match(await choices.nth(0).textContent(), /^\s*A pitched battle\s*No ground to fight for: army against army/)
+    assert.match(await choices.nth(1).textContent(), /A battle for ground\s*The ground to fight for: the North Ford, Miller's Crossing and the South Ford\. Hold two of the three fords/)
+    assert.ok(await p.locator('input[name="kind"][value="pitched"]').isChecked(), 'the pitched battle is offered first')
+    for (let i = 0; i < 2; i++) assert.ok((await choices.nth(i).boundingBox()).height >= 44, 'a finger\'s size')
+    assert.ok(await p.evaluate(() => document.documentElement.scrollWidth <= 390), 'no sideways scroll')
+    await shot(p, 'muster-kinds')
+    // Thornwood's ground is the king of the hill.
+    await p.selectOption('select[name="map"]', 'thornwood')
+    assert.match(await choices.nth(1).textContent(), /King of the hill\. The ground to fight for: Thorn Knoll/)
+    await p.selectOption('select[name="map"]', 'crownhill')
+
+    // The battle for the fords.
+    await p.check('input[name="kind"][value="ground"]')
+    await p.click('button[type="submit"]')
+    await p.waitForSelector('#map-scroll svg')
+    assert.equal(await p.textContent('#ground-line'), 'You hold none of the fords: hold two of the three fords alone for 1 h and the field is yours.')
+    const svg = await p.locator('#map-scroll svg').innerHTML()
+    for (const ford of ['the North Ford', 'Miller\'s Crossing', 'the South Ford']) assert.ok(svg.includes(ford.replace("'", '&#39;')) || svg.includes(ford), `${ford} is marked on the map`)
+    assert.equal(await p.textContent('[data-example] >> nth=0'), 'everyone take the fords')
+    await shot(p, 'tent-fords')
+    // The whole field, so the three fords are in view together.
+    await p.click('#whole')
+    await shot(p, 'tent-fords-whole')
+
+    // A pitched battle: no ground, and the line says how it is won.
+    await p.goto(base + '/muster')
+    await p.waitForSelector('form#muster')
+    await p.selectOption('select[name="map"]', 'ashford')
+    await p.click('button[type="submit"]')
+    await p.waitForSelector('#map-scroll svg')
+    assert.match(await p.textContent('#ground-line'), /^A pitched battle: no ground to fight for\. Break the enemy, or make him yield the field\. At nightfall, an army still standing with half the men it began the day with/)
+    assert.equal(await p.textContent('[data-example] >> nth=0'), 'everyone advance')
+    await shot(p, 'tent-pitched')
+
+    // Your battles name the kind.
+    await p.goto(base + '/battles')
+    await p.waitForSelector('.battle-link')
+    const list = await p.locator('.battle-link').allTextContents()
+    assert.ok(list.some(l => /A pitched battle, Red/.test(l)) && list.some(l => /A battle for ground, Red/.test(l)), list.join(' | '))
+    await shot(p, 'battles-kinds')
   })
 })

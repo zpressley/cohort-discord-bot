@@ -97,5 +97,9 @@ module.exports = {
   // The ground to fight for (engine/orchestrator/victory.js, objectiveArea):
   // the saddle where the road goes through the ridge, held from on it (the
   // open ground between the two halves of the ridge, not the whole road).
-  ground: [{ name: 'Raven Gap', tiles: GAP }]
+  ground: [{ name: 'Raven Gap', tiles: GAP }],
+  // The kinds of battle fought here, the first offered first at the muster
+  // (docs/DECISIONS.md, "How the kinds of battle were built"): the gap is a
+  // choke point, made for a battle for ground.
+  kinds: ['pitched', 'ground']
 }

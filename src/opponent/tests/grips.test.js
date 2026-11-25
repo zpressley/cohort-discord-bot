@@ -98,8 +98,15 @@ test('knowing nothing of the enemy, it goes to the map\'s ground between the arm
 })
 
 test('ground to fight for off to a side of the field (the Crownhill) is no meeting place', () => {
-  const game = createGame({ ...loadScenario('meeting-battle', { map: 'crownhill', deploy: true }), standingOrders: {} }, { seed: 1 })
-  assert.equal(meetingPlace(game, 'blue', WEST, DOWN, CHARACTERS.steady), null)
+  // (Crownhill's ground was the hill, at the north edge of the field, until
+  // November 25; its three fords since. The hill is put back for this.)
+  const { MAPS } = require('../../data/maps')
+  const was = MAPS.crownhill.ground
+  MAPS.crownhill.ground = [{ feature: 'The Crownhill', name: 'the Crownhill' }]
+  try {
+    const game = createGame({ ...loadScenario('meeting-battle', { map: 'crownhill', deploy: true }), standingOrders: {} }, { seed: 1 })
+    assert.equal(meetingPlace(game, 'blue', WEST, DOWN, CHARACTERS.steady), null)
+  } finally { MAPS.crownhill.ground = was }
 })
 
 test('it looks next where the enemy would hold: the good ground it would choose itself from his side of the field', () => {

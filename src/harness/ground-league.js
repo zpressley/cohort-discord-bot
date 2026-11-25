@@ -19,6 +19,10 @@
 //                   --ground "thornwood=Brook Ford:1", or a box of open
 //                   tiles: "ravenridge=Raven Gap@20-22;19-21"; several
 //                   maps joined by ",map:"
+//   --kind k        the kind of battle (src/data/maps, kindSpec): 'ground'
+//                   (default) the field's ground, as many of it to hold as
+//                   the field says; 'pitched' none, and night decides by
+//                   the men left (tables.PITCHED)
 //   --rounds N      battles per faction per map (default 2)
 //   --map name      one map only
 //
@@ -32,12 +36,13 @@ const { fieldFactions, FACTIONS } = require('../engine/army/factions')
 const { withSecondLine } = require('../engine/army/secondLine')
 const { leadUnit } = require('../engine/command/company')
 const { byCommandPost } = require('../engine/command/messengers')
-const { groundOf } = require('../data/maps')
+const { groundOf, kindSpec } = require('../data/maps')
 const T = require('../engine/combat/tables')
 
 const MODE = arg('--mode', 'mirror')
 const ROUNDS = Number(arg('--rounds', 2))
 const NONE = process.argv.includes('--none')
+const KIND = arg('--kind', 'ground')
 // map=Name[:reach][@x0-x1,y0-y1]+Name...: a feature by name, or the open
 // tiles of a box (water left out) called by that name.
 const { resolveMap } = require('../engine/map/map')
@@ -58,9 +63,10 @@ const OTHER = Object.fromEntries(String(arg('--ground', '')).split(',map:').filt
 const MAX_STOPS = 600
 
 function play(map, red, blue, seed) {
-  let spec = withSecondLine(fieldFactions(loadScenario('meeting-battle', { map, deploy: true }), { red, blue }), { red, blue })
-  const objectives = NONE ? [] : OTHER[map] ?? groundOf(map)
-  spec = { ...spec, standingOrders: {}, dayMinutes: T.DAY.MINUTES, ...(objectives.length ? { objectives } : {}) }
+  let spec = withSecondLine(fieldFactions(loadScenario('meeting-battle', { map, deploy: true, kind: NONE ? null : KIND }), { red, blue }), { red, blue })
+  const kind = NONE || OTHER[map] ? {} : kindSpec(map, KIND)
+  const objectives = NONE ? [] : OTHER[map] ?? kind.objectives ?? groundOf(map)
+  spec = { ...spec, standingOrders: {}, dayMinutes: T.DAY.MINUTES, ...kind, ...(objectives.length ? { objectives } : {}) }
   if (MODE !== 'mirror') {
     const mine = spec.units.filter(u => u.side === 'red')
     spec = { ...spec, commanders: { red: { unitId: mine[leadUnit(mine)].id } } }

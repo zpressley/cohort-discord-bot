@@ -235,3 +235,8 @@ table.losses th:first-child, table.losses td:first-child { text-align: left; }
 .move-list[hidden] { display: none; }
 .perks { margin: 0; padding: 0 0 0 18px; font-size: 14px; display: flex; flex-direction: column; gap: 4px; }
 .perks .drawback { color: var(--ink-soft); }
+/* The kind of battle at the muster: a choice with how it is won under it. */
+.kind-choice { align-items: flex-start; padding: 10px 12px; }
+.kind-choice input { margin-top: 3px; }
+.kind-choice .note { font-size: 13px; }
+#kind-field[hidden] { display: none; }

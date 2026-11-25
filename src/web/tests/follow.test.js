@@ -16,7 +16,7 @@ test('"velites stay with the legionaries" is shown on the Army tab, and a saved 
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'cohort-follow-'))
   try {
     const store = createBattleStore({ dir })
-    const token = store.muster({ map: 'crownhill', opponent: 'computer', side: 'red', faction: 'rome', enemyFaction: 'han', seed: 11 }).seats.red
+    const token = store.muster({ map: 'crownhill', opponent: 'computer', side: 'red', faction: 'rome', enemyFaction: 'han', seed: 11, kind: 'ground' }).seats.red
     await store.submit(token, 'velites stay with the legionaries\nlegionaries go east 400 m')
     for (let t = 0; t < 3; t++) await store.submit(token, '')
     const view = store.view(token)

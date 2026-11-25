@@ -47,8 +47,10 @@ const { narrateTurn, report } = require('../narrator/turnNarrator')
 const { orderWords, RIDER, NIGHT, REPORT, GROUND, ENEMY_COMMANDER, FIELD } = require('../narrator/words')
 const { BATTLE_OVER, kindWords } = require('../narrator/words')
 const { VERDICT } = require('../narrator/words')
+const { KINDS } = require('../narrator/words')
+const { standShare } = require('../engine/orchestrator/victory')
 const { loadScenario, SCENARIOS, mapChoices } = require('../adapters/hotseat/scenarios')
-const { MAPS, groundOf } = require('../data/maps')
+const { MAPS, groundOf, kindsOf, kindSpec } = require('../data/maps')
 const { FACTIONS, factionChoices } = require('../engine/army/factions')
 const { fieldArmies, anyFaction, usualArmy, kitOf, baseOf } = require('../engine/army/standard')
 const { withSecondLine, linesOf } = require('../engine/army/secondLine')
@@ -125,6 +127,60 @@ function knownOnGround(game, side, groundName) {
     : game.battle.world.units.some(u => u.side === side && u.strength > 0 && !game.battle.broken.has(u.id) && on(u.position))
   const enemy = Object.values(enemyKnowledge(game, side)).some(e => e.status !== 'gone' && on(e.position))
   return { own, enemy }
+}
+
+// ── The kinds of battle (ruled 2026-11-25) ──
+// A battle's kind: its spec's, else (a battle saved before the kinds, or
+// one whose ground the API named) a battle for ground if it has ground, a
+// pitched battle if not.
+const kindOfBattle = (spec) => spec.kind ?? ((spec.objectives ?? []).length ? 'ground' : 'pitched')
+// Some of several grounds to hold: how many, or null.
+const neededOf = (game) => (Number.isInteger(game.spec.objectivesNeeded) && game.spec.objectivesNeeded < game.objectives.length ? game.spec.objectivesNeeded : null)
+const calledOf = (game) => game.spec.groundCalled ?? 'pieces of ground'
+
+// The line under the map in the tent, for the whole battle, when one line
+// says it better than a line for each piece of ground: a pitched battle's
+// rule; or, with some of several grounds to hold, who holds which (every
+// side knows at once) and the rule, with the time left to the side on the
+// clock. Null otherwise (each piece's own line, groundStatus).
+function battleLine(game, side) {
+  if (game.spec.kind === 'pitched' && game.objectives.length === 0) return KINDS.pitched.tent(T.PITCHED.STAND_SHARE)
+  const needed = neededOf(game)
+  if (!needed) return null
+  const holder = (o) => game.objectiveHolds[o.id]?.side ?? null
+  const length = game.spec.objectiveHoldMinutes ?? T.GROUND.HOLD_MINUTES
+  const f = !game.outcome.decided ? game.fieldHold ?? null : null
+  return GROUND.some.status({
+    mine: game.objectives.filter(o => holder(o) === side).map(o => o.name),
+    theirs: game.objectives.filter(o => holder(o) !== null && holder(o) !== side).map(o => o.name),
+    needed, count: game.objectives.length, called: calledOf(game), minutes: length,
+    onClock: f ? f.side === side : null,
+    left: f ? Math.max(0, length - (game.minutesElapsed - f.sinceMinute)) : null,
+    held: game.battle.commanders?.[side]?.status === 'held'
+  })
+}
+
+// The battle's end as the verdict says it, for the endings that need more
+// than BATTLE_OVER's words: the ground (and which of it), and night in a
+// pitched battle. Null for the rest.
+function endSaid(game, side) {
+  const o = game.outcome
+  const mine = o.winner === side
+  const length = game.spec.objectiveHoldMinutes ?? T.GROUND.HOLD_MINUTES
+  if (o.reason === 'objectives held') {
+    const needed = neededOf(game)
+    if (!needed) return GROUND.won(game.objectives.map(g => g.name), mine, length)
+    const held = game.objectives.filter(g => game.objectiveHolds[g.id]?.side === o.winner).map(g => g.name)
+    return GROUND.some.won(held, mine, length, needed, game.objectives.length, calledOf(game))
+  }
+  const share = T.PITCHED.STAND_SHARE
+  if (o.reason === 'field held at nightfall') return KINDS.pitched.held(mine, share)
+  if (o.reason === 'night fell' && game.spec.kind === 'pitched') {
+    const all = Object.keys(game.startingStrength)
+    const standing = all.filter(s => standShare(game.battle.world, game.battle.broken, s, game.startingStrength) >= share)
+    return standing.length === all.length ? KINDS.pitched.tie(share) : KINDS.pitched.neither(share)
+  }
+  return null
 }
 
 // Text for one side with unit ids swapped for names: its own units by name
@@ -462,7 +518,15 @@ function createBattleStore({ dir = null, storage = null, ai = null, now = () => 
   function muster(m = {}) {
     const scenario = SCENARIOS[m.scenario] ? m.scenario : 'meeting-battle'
     const mapName = MAPS[m.map] ? m.map : 'crownhill'
-    let spec = loadScenario(scenario, { map: mapName, deploy: true })
+    // The kind of battle (ruled 2026-11-25): as chosen, else the field's
+    // first (src/data/maps, kindsOf). A battle for ground fights for the
+    // field's own ground, unless the player named his own; a pitched battle
+    // for none. (The next day: the same kind, and the same ground.) Its
+    // armies form up where the field says for that kind.
+    const kinds = kindsOf(mapName)
+    const named = Array.isArray(m.ground) || Array.isArray(m.objectives)
+    const kind = kinds.includes(m.kind) ? m.kind : named ? null : kinds[0]
+    let spec = loadScenario(scenario, { map: mapName, deploy: true, kind })
     const allSides = Object.keys(spec.sides)
     const side = allSides.includes(m.side) ? m.side : allSides[0]
     const other = allSides.find(s => s !== side)
@@ -478,14 +542,18 @@ function createBattleStore({ dir = null, storage = null, ai = null, now = () => 
     spec = Number.isInteger(m.turnLimit) && m.turnLimit > 0
       ? { ...spec, turnLimit: m.turnLimit }
       : { ...spec, dayMinutes: Number.isInteger(m.dayMinutes) && m.dayMinutes > 0 ? m.dayMinutes : T.DAY.MINUTES }
-    // Every map comes with its own ground to fight for, unless the player
-    // named his own (or none).
+    const made = kind ? kindSpec(mapName, kind) : {}
     const objectives = Array.isArray(m.ground) ? m.ground
-      : !Array.isArray(m.objectives) ? groundOf(mapName)
+      : !Array.isArray(m.objectives) ? made.objectives
         : m.objectives.filter(Boolean).map((ground, i) => isGridRef(ground)
           ? { id: `objective-${i + 1}`, square: ground }
           : { id: `objective-${i + 1}`, feature: ground })
+    const needed = Number.isInteger(m.objectivesNeeded) ? m.objectivesNeeded : Array.isArray(m.ground) ? null : made.objectivesNeeded ?? null
+    // (Ground named by the API with no kind, a testing aid: no kind in the
+    // spec, and the battle ends as battles did before the kinds.)
+    if (kind) spec = { ...spec, kind }
     if (objectives.length) spec = { ...spec, objectives }
+    if (objectives.length && needed && needed < objectives.length) spec = { ...spec, objectivesNeeded: needed, ...(m.groundCalled ?? made.groundCalled ? { groundCalled: m.groundCalled ?? made.groundCalled } : {}) }
 
     const seed = m.seed ?? crypto.randomInt(1, 1_000_000)
     const commander = m.commander ? commanders.get(m.commander) : null
@@ -977,9 +1045,13 @@ function createBattleStore({ dir = null, storage = null, ai = null, now = () => 
       // Fought on the next day: one battle in the list, under its first
       // day's title, "fought over two days" (the day before is not listed).
       ...(previousOf(entry) ? { firstTitle: firstTitle(entry), overDays: NIGHT.overDays(entry.day ?? 2) } : {}),
-      outcome: game.outcome.decided ? { decided: true, winner: game.outcome.winner, reason: game.outcome.reason, ...(game.outcome.reason === 'night fell' ? { title: NIGHT.title, said: NIGHT.ended, listed: NIGHT.listed } : {}),
-        // The ground decided it: the verdict names it.
-        ...(game.outcome.reason === 'objectives held' ? { said: GROUND.won(game.objectives.map(o => o.name), game.outcome.winner === side, game.spec.objectiveHoldMinutes ?? T.GROUND.HOLD_MINUTES) } : {}) } : null,
+      outcome: game.outcome.decided ? { decided: true, winner: game.outcome.winner, reason: game.outcome.reason, ...(game.outcome.reason === 'night fell' ? { title: NIGHT.title, said: endSaid(game, side) ?? NIGHT.ended, listed: NIGHT.listed } : {}),
+        // The ground decided it, or night a pitched battle: the verdict
+        // names it.
+        ...(['objectives held', 'field held at nightfall'].includes(game.outcome.reason) ? { said: endSaid(game, side) } : {}) } : null,
+      // The kind of battle (ruled 2026-11-25), in words.
+      kind: kindOfBattle(game.spec),
+      kindTitle: KINDS[kindOfBattle(game.spec)]?.title ?? null,
       updatedAt: entry.updatedAt,
       sentAt: entry.pending[side]?.at ?? null,
       // How the table between a held Commander and his captors stands, as
@@ -1222,6 +1294,12 @@ function createBattleStore({ dir = null, storage = null, ai = null, now = () => 
       fallen,
       enemies,
       objectives,
+      // One line under the map for the whole battle, where it says it
+      // better: a pitched battle's rule; some of several grounds to hold.
+      groundLine: battleLine(game, side),
+      // Some of several grounds to hold: how many, and what they are called
+      // together ("fords"), for the first turn's example orders.
+      ...(neededOf(game) ? { groundHold: { needed: neededOf(game), called: calledOf(game) } } : {}),
       pending: entry.pending[side] ?? null,
       // While his orders are with the army (narrator/words.js).
       carryingOut: RIDER.carryingOut,
@@ -1458,6 +1536,8 @@ function createBattleStore({ dir = null, storage = null, ai = null, now = () => 
       ...(game.spec.turnLimit ? { turnLimit: game.spec.turnLimit } : { dayMinutes: game.spec.dayMinutes }),
       nightBefore: night.units,
       ground: game.spec.objectives ?? [],
+      ...(game.spec.kind ? { kind: game.spec.kind } : {}),
+      ...(game.spec.objectivesNeeded ? { objectivesNeeded: game.spec.objectivesNeeded, groundCalled: game.spec.groundCalled ?? null } : {}),
       ...(solo ? { enemyCommander: enemyCommanderOf(game.spec, other) } : {}),
       day: (entry.day ?? 1) + 1
     })
@@ -1936,8 +2016,13 @@ function createBattleStore({ dir = null, storage = null, ai = null, now = () => 
       // His first dispatch of a battle tells him the ground to fight for.
       if (entry.dispatches[side].length === 0 && game.objectives.length > 0) {
         const names = game.objectives.map(o => o.name)
-        lines.unshift(`${GROUND.toFightFor(names)} ${GROUND.rule(names, game.spec.objectiveHoldMinutes ?? T.GROUND.HOLD_MINUTES, game.objectives.some(o => (o.reach ?? (o.single ? 1 : 0)) > 0))}`)
+        const minutes = game.spec.objectiveHoldMinutes ?? T.GROUND.HOLD_MINUTES
+        lines.unshift(`${GROUND.toFightFor(names)} ${neededOf(game)
+          ? GROUND.some.rule(neededOf(game), names.length, calledOf(game), minutes)
+          : GROUND.rule(names, minutes, game.objectives.some(o => (o.reach ?? (o.single ? 1 : 0)) > 0))}`)
       }
+      // ... or, in a pitched battle, that there is none, and how it is won.
+      if (entry.dispatches[side].length === 0 && game.objectives.length === 0 && game.spec.kind === 'pitched') lines.unshift(KINDS.pitched.tent(T.PITCHED.STAND_SHARE))
       if (captivity?.captor) {
         lines.unshift(`You are held by ${name(captivity.captor.id)} at ${where(captivity.captor.position)}, and hear the reports as they come in to your captors`)
       }
@@ -1987,14 +2072,21 @@ function createBattleStore({ dir = null, storage = null, ai = null, now = () => 
     storage: kept,
     commanderView,
     scenarios: () => Object.keys(SCENARIOS).map(id => ({ id, title: SCENARIO_TITLES[id] ?? id })),
-    // Each field with its own ground to fight for, in the muster's words.
+    // Each field with its own ground to fight for, in the muster's words;
+    // and the kinds of battle fought on it (ruled 2026-11-25), the one
+    // offered first first, each with a line on how it is won.
     maps: () => mapChoices().map(m => {
       const ground = groundOf(m.id)
       const names = ground.map(g => g.name)
-      const said = names.length ? `${GROUND.toFightFor(names)} ${GROUND.rule(names, T.GROUND.HOLD_MINUTES, ground.some(g => g.reach > 0))}` : ''
+      const hold = MAPS[m.id]?.hold
+      const rule = hold?.needed && hold.needed < names.length
+        ? GROUND.some.rule(hold.needed, names.length, hold.called ?? 'pieces of ground', T.GROUND.HOLD_MINUTES)
+        : GROUND.rule(names, T.GROUND.HOLD_MINUTES, ground.some(g => g.reach > 0))
+      const said = names.length ? `${MAPS[m.id]?.kingOfTheHill ? `${KINDS.kingOfTheHill} ` : ''}${GROUND.toFightFor(names)} ${rule}` : ''
       // A big field says so, and that its armies come in two lines.
       const lines = linesOf(m.id) > 1 ? FIELD.lines : ''
-      return { ...m, ground: names, said: [said, lines].filter(Boolean).join(' '), ...(m.km > 1 ? { size: FIELD.size(m.km) } : {}) }
+      const kinds = kindsOf(m.id).map(k => ({ id: k, title: KINDS[k].title, said: k === 'ground' ? said : KINDS[k].said(T.PITCHED.STAND_SHARE) }))
+      return { ...m, ground: names, said: [said, lines].filter(Boolean).join(' '), kinds, ...(lines ? { lines } : {}), ...(m.km > 1 ? { size: FIELD.size(m.km) } : {}) }
     }),
     // Each with its people's perks, a line each (armies.js, perkLines).
     factions: () => factionChoices().map(f => ({ ...f, perks: perkLines(f.id) })),

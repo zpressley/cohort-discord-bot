@@ -207,7 +207,7 @@ function fieldArmies(spec, armies) {
   for (const [side, { faction, units: bought, gained = [], elite = null }] of Object.entries(armies)) {
     const homeEdge = spec.sides?.[side]?.homeEdge
     const mine = bought ? standardUnits(faction, bought, side, homeEdge, { gained, elite, mayBeEmpty: true }) : factionUnits(faction, side, homeEdge)
-    const army = deployArmies(map, mine, { [side]: spec.sides?.[side] ?? {} })
+    const army = deployArmies(map, mine, { [side]: spec.sides?.[side] ?? {} }, spec.deploy ?? map.deploy ?? {})
     const at = units.findIndex(u => u.side === side)
     const rest = units.filter(u => u.side !== side)
     units = at < 0 ? [...rest, ...army] : [...rest.slice(0, at), ...army, ...rest.slice(at)]

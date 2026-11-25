@@ -66,15 +66,34 @@ none), the muster says so, and "Undo your changes" drops them. With none
 bought, or with "Take the usual army", he musters with his faction's
 default army.
 
-The muster has one kind of battle: to the end, won when the other side
-yields the field, loses its army, or loses its Commander. Against the
-computer you choose its faction or let the lot choose (your own among
-them); against a friend you do not: his Commander brings his own army.
+The muster offers the kinds of battle the field chosen is fought as
+(ruled 2026-11-25; `src/data/maps`, `kinds`, and `kindsOf`), as a choice
+with a line on how each is won, the first offered first (on every field
+the pitched battle: one line in each map file to swap). Every battle is
+to the end, won when the other side yields the field, loses its army, or
+loses its Commander:
+- **A pitched battle**: no ground to fight for. If night falls first, the
+  army still standing with half the men it began the day with
+  (`tables.PITCHED.STAND_SHARE`), when the other's is not, holds the field
+  and wins; both or neither is a tie, and the next day may be called.
+- **A battle for ground**: the field's own ground to fight for (`ground`),
+  held alone for an hour; night ends it with no winner. On Crownhill it is
+  the three fords, two of them to hold (`hold`); Thornwood's Thorn Knoll is
+  the king of the hill, and its muster line says so.
+The kind is saved in the battle's spec (`kind`), so a saved battle
+replays; the tent says it under the top bar, the list of your battles and
+the verdict name it. Against the computer you choose its faction or let
+the lot choose (your own among them); against a friend you do not: his
+Commander brings his own army.
 
-Every field has its own ground to fight for (`src/data/maps`, `ground`):
-the muster names it under the field chosen, the tent marks it on the map
-and says under the top bar who holds it, the first dispatch tells it, and
-the verdict says so when holding it alone for an hour decided the battle.
+In a battle for ground the tent marks the ground on the map and says under
+the top bar who holds it (with several pieces, one line: who holds which,
+how many must be held, and the time left to the side on the clock), the
+first dispatch tells it, and the verdict says so when holding it alone for
+an hour decided the battle. In a pitched battle that line says how it is
+won. The first turn's examples fit the kind: "everyone take the fords" on
+Crownhill's fords, the ground's name on a field with one, none in a
+pitched battle.
 
 The fields are 1 km (Crownhill, Ashford Vale, Thornwood, Raven Ridge) or
 2 km (Greywater: "Greywater (2 km)" in the list). On a 2 km field each army
@@ -89,7 +108,7 @@ The map in the tent opens with your army and the ground to fight for both
 in view when they fit at 12 px a tile or more (on a desktop, the 1 km
 fields); else at about 15 px a tile on a phone (a 2 km field is then three
 screens wide), centred on your army, with a mark at the map's edge ("↑ the
-Crownhill") pointing to the ground while it is out of the window: a tap
+North Ford") pointing to each piece of the ground out of the window: a tap
 brings it into view. It moves by finger (drag to pan, pinch to zoom) or by mouse
 (drag to pan, the wheel to zoom about the pointer), and by its buttons:
 + and − zoom, ⤢ shows the whole field in the window and, pressed again,

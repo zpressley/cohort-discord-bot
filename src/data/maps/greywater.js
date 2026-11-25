@@ -173,6 +173,9 @@ module.exports = {
   // was built").
   deploy: { west: { x: 14, y: 41 }, east: { x: 65, y: 38 } },
   ground: [{ name: 'Elderby', tiles: ELDERBY }],
+  // The kinds of battle fought here, the first offered first at the muster
+  // (docs/DECISIONS.md, "How the kinds of battle were built").
+  kinds: ['pitched', 'ground'],
   // Each army is called out in two lines here: its own, and its faction's
   // usual army again, raised for the day (src/engine/army/secondLine.js).
   // About eight units a side, where a 1 km field has four or five.

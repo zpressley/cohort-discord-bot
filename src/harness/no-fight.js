@@ -29,6 +29,9 @@
 //
 //   node src/harness/no-fight.js                    every map, red computer
 //   node src/harness/no-fight.js --red idle --map ashford
+//   --kind k      the kind of battle: 'ground' (default; the field's ground,
+//                 as many of it to hold as the field says) or 'pitched'
+//                 (none, and night decides by the men left)
 //   --none        no ground to fight for (a battle where the player named
 //                 none)
 //   --noday       no day either: the battle ends only by the fighting or at
@@ -48,7 +51,7 @@ const { withSecondLine } = require('../engine/army/secondLine')
 const { leadUnit } = require('../engine/command/company')
 const { byCommandPost } = require('../engine/command/messengers')
 const { tileDistance } = require('../engine/world')
-const { groundOf } = require('../data/maps')
+const { groundOf, kindSpec } = require('../data/maps')
 const { boughtArmies } = require('./bought-league')
 const T = require('../engine/combat/tables')
 
@@ -64,19 +67,21 @@ const FIGHT = new Set(['contact', 'volley', 'thrown', 'objective', 'rout', 'dest
  *   redPlays ('computer'|'planner'|'charge'|'idle'), character (blue's),
  *   redCharacter (red's, when the computer), seed, none (no ground), noDay }
  */
-function play({ map, red, blue, bought = null, redPlays = 'computer', character, redCharacter = null, seed, none = false, noDay = false }) {
+function play({ map, red, blue, bought = null, redPlays = 'computer', character, redCharacter = null, seed, none = false, noDay = false, battleKind = 'ground' }) {
   let spec = bought
-    ? fieldArmies(loadScenario('meeting-battle', { map, deploy: true }), { red: { faction: red, units: bought }, blue: { faction: blue, units: null } })
-    : fieldFactions(loadScenario('meeting-battle', { map, deploy: true }), { red, blue })
+    ? fieldArmies(loadScenario('meeting-battle', { map, deploy: true, kind: none ? null : battleKind }), { red: { faction: red, units: bought }, blue: { faction: blue, units: null } })
+    : fieldFactions(loadScenario('meeting-battle', { map, deploy: true, kind: none ? null : battleKind }), { red, blue })
   spec = withSecondLine(spec, { red, blue })
   spec = withCommander(spec, 'blue', seed, { character })
   if (redPlays === 'computer' && redCharacter) spec = withCommander(spec, 'red', seed + 1, { character: redCharacter })
-  const objectives = none ? [] : groundOf(map)
+  const asKind = none ? {} : kindSpec(map, battleKind)
+  const objectives = none ? [] : asKind.objectives ?? groundOf(map)
   const mine = spec.units.filter(u => u.side === 'red')
   spec = {
     ...spec,
     standingOrders: {},
     ...(noDay ? {} : { dayMinutes: T.DAY.MINUTES }),
+    ...asKind,
     ...(objectives.length ? { objectives } : {}),
     ...(redPlays !== 'computer' ? { commanders: { red: { unitId: mine[leadUnit(mine)].id } } } : {})
   }
@@ -105,7 +110,7 @@ function play({ map, red, blue, bought = null, redPlays = 'computer', character,
   const all = [...game.battle.world.units, ...game.battle.fledUnits]
   const lost = { red: 1 - men('red', all) / startMen.red, blue: 1 - men('blue', all) / startMen.blue }
   const events = game.battle.log.all()
-  const night = !o.decided || o.reason === 'night fell'
+  const night = !o.decided || o.reason === 'night fell' || o.reason === 'field held at nightfall'
   const quiet = quietest(start, events, game.battle.turn)
   const contact = events.find(e => e.type === 'contact')
   const firstShot = events.find(e => e.type === 'volley' || e.type === 'contact')
@@ -180,9 +185,9 @@ function battles({ maps, rounds = 1, redPlays = 'computer' }) {
   return out
 }
 
-function study({ maps, rounds = 1, redPlays = 'computer', none = false, noDay = false }) {
+function study({ maps, rounds = 1, redPlays = 'computer', none = false, noDay = false, battleKind = 'ground' }) {
   const rows = []
-  for (const b of battles({ maps, rounds, redPlays })) rows.push({ ...b, ...play({ ...b, redPlays, none, noDay }) })
+  for (const b of battles({ maps, rounds, redPlays })) rows.push({ ...b, ...play({ ...b, redPlays, none, noDay, battleKind }) })
   return rows
 }
 
@@ -211,8 +216,9 @@ if (require.main === module) {
   const none = process.argv.includes('--none')
   const noDay = process.argv.includes('--noday')
   const started = Date.now()
-  const rows = study({ maps, rounds: Number(arg('--rounds', 1)), redPlays, none, noDay })
-  console.log(`${rows.length} battles, red ${redPlays}, ${none ? 'no ground' : 'the ground'}, ${noDay ? 'no day' : 'the day'}; ${((Date.now() - started) / 1000).toFixed(0)} s\n`)
+  const battleKind = arg('--kind', 'ground')
+  const rows = study({ maps, rounds: Number(arg('--rounds', 1)), redPlays, none, noDay, battleKind })
+  console.log(`${rows.length} battles, red ${redPlays}, ${none ? 'no ground' : battleKind === 'pitched' ? 'a pitched battle' : 'the ground'}, ${noDay ? 'no day' : 'the day'}; ${((Date.now() - started) / 1000).toFixed(0)} s\n`)
   console.log(table(rows, () => 'all', 'All') + '\n')
   console.log(table(rows, r => r.map, 'Map') + '\n')
   console.log(table(rows, r => r.character, "Computer's character") + '\n')

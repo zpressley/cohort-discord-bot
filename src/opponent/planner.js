@@ -37,7 +37,7 @@ const { positionKey } = require('../engine/map/labels')
 const { arrivalOf } = require('../engine/orchestrator/word')
 const { objectiveArea } = require('../engine/orchestrator/victory')
 const { findPath } = require('../engine/movement/pathfinding')
-const { groundOf } = require('../data/maps')
+const { groundOf, MAPS } = require('../data/maps')
 
 const TUNING = {
   // How near (tiles) an enemy in sight must be for the line to go in.
@@ -111,7 +111,13 @@ const CHARACTERS = {
     horseInReserve: false,
     // How long he waits where the enemy should come before he goes to find
     // him, as a share of TUNING.MEET_WAIT.
-    nerve: 1
+    nerve: 1,
+    // Some of several grounds to hold (splitGround): he goes for one the
+    // enemy holds only when the enemy holds as many as he needs ('clock'),
+    // or whenever he holds any ('any'); and he takes them all at once, or
+    // one at a time with the whole army (oneAtATime).
+    contest: 'clock',
+    oneAtATime: false
   },
   // Throws his horse at whatever he sees, goes in from further off, and
   // fights on with men near breaking. His battles are the shortest.
@@ -121,7 +127,9 @@ const CHARACTERS = {
     prey: 14,
     horseAt: 'any',      // (alone: 47%, and his battles 20 minutes shorter)
     horseInReserve: false,
-    nerve: 0.5           // goes to find the enemy sooner
+    nerve: 0.5,          // goes to find the enemy sooner
+    contest: 'any',      // goes for the ground the enemy holds
+    oneAtATime: false
   },
   // Keeps his horse back until his line is fighting, lets the enemy come
   // closer before going in, and pulls men out of the fight early. His
@@ -133,7 +141,9 @@ const CHARACTERS = {
     prey: 0,             // his horse do not go hunting...
     horseAt: 'archers',
     horseInReserve: true, // ...but wait (with prey 0, alone: 46%; a battle in twelve ends at night)
-    nerve: 1.5           // and waits longer for the enemy to come
+    nerve: 1.5,          // and waits longer for the enemy to come
+    contest: 'clock',
+    oneAtATime: true     // takes the grounds one at a time, the army together
   }
 }
 // (Where a side waits on good ground, and for how long, is left to the
@@ -210,13 +220,19 @@ function planTurn(game, side) {
   const taken = strong && (strong.objective
     ? inSight.some(e => onTheGround(game, e.position))
     : inSight.some(e => tileDistance(e.position, strong.anchor) <= 1) && !mine.some(u => tileDistance(u.position, strong.anchor) <= 2))
-  const holding = Boolean(strong) && !taken && (strong.objective || (temper.holds && patient && !everFought))
+  // Some of several grounds to hold (spec.objectivesNeeded): the army is
+  // split among those it goes for, each part to its own (splitGround).
+  const split = splitGround(game, side, forward, across, ch, { line: [...front, ...(front === archers ? [] : archers), ...(front === horse ? [] : horse)], archers: [], horse: [] },
+    (unit) => !battle.isShaken(unit) && (battle.resolver.getState(unit.id)?.morale ?? 100) > ch.pullOut)
+  const holding = Boolean(split) || (Boolean(strong) && !taken && (strong.objective || (temper.holds && patient && !everFought)))
 
   // ── Where the line stands ───────────────────────────
   let anchor
   // Waiting where the enemy should come (meetingPlace, below).
   let waiting = false
-  if (holding) {
+  if (split) {
+    anchor = split.targets[0].anchor
+  } else if (holding) {
     anchor = strong.anchor
   } else {
     // Where he is: the enemy in sight, else where this side's units last
@@ -242,7 +258,7 @@ function planTurn(game, side) {
 
   const orders = []
   const give = (unit, order) => orders.push({ unitRef: unit.id, ...order })
-  const slots = anchor ? formation(map, anchor, forward, across, {
+  const slots = split ? split.slots : anchor ? formation(map, anchor, forward, across, {
     line: front, archers: front === archers ? [] : archers, horse: front === horse ? [] : horse
   }, temper.flank) : new Map()
   const toSlot = (unit, holdThere) => {
@@ -327,6 +343,13 @@ function planTurn(game, side) {
       continue
     }
     if (attacking) { goIn(unit); continue }
+    // Split among several grounds: an enemy seen on the ground a unit is
+    // sent to hold is gone for at once, there (not wherever "advance" would
+    // take it).
+    if (split && !fighting.has(unit.id)) {
+      const foe = enemyOn(game, split.targetOf.get(unit.id), inSight)
+      if (foe) { give(unit, { action: 'attack', target: { ...foe.position } }); continue }
+    }
     // Holding good ground: the line stands, the archers shoot from behind
     // it (they do that unasked), and a unit attacked fights where it is.
     // A holding line whose enemy has come within reach of one of its units
@@ -409,7 +432,10 @@ function theirGround(game, side, forward, across) {
   // need not mirror each other: Crownhill's east army forms up further
   // south, so both are as long marching to the hill); else the mirror.
   const edge = Object.entries(game.spec.sides ?? {}).find(([s]) => s !== side)?.[1]?.homeEdge
-  const mirrored = map.deploy?.[edge] ? { ...map.deploy[edge] } : forward.x !== 0
+  // (Where the field forms its armies up for this kind of battle, if
+  // elsewhere: Crownhill's fords, src/data/maps, deployFor.)
+  const deploy = MAPS[map.name]?.deployFor?.[game.spec?.kind] ?? map.deploy
+  const mirrored = deploy?.[edge] ? { ...deploy[edge] } : forward.x !== 0
     ? { x: map.width - 1 - started.x, y: started.y }
     : { x: started.x, y: map.height - 1 - started.y }
   const theirs = strongpoint(game, side, { x: -forward.x, y: -forward.y }, across, mirrored)
@@ -487,6 +513,171 @@ function strongpoint(game, side, forward, across, from = null) {
   // A crossing is held from its near bank; a hill from its top.
   const anchor = best.feature.kind === 'hill' ? best.feature.centre : add(best.feature.centre, forward, -2)
   return { anchor: standable(map, anchor, new Set()) ?? best.feature.centre, objective: false, kind: best.feature.kind }
+}
+
+// ── Some of several grounds ─────────────────────────────
+// A battle whose ground is several pieces, some of them to hold
+// (spec.objectivesNeeded; ruled 2026-11-25: "controlling 2 fords wins the
+// game"). Which it goes for: as many as must be held, those it holds first,
+// then the nearest to where it formed up that no one holds, then those the
+// enemy holds; and one the enemy holds whenever he holds as many (he is on
+// the clock). By character:
+//   steady    as above
+//   bold      goes for what the enemy holds before what no one does
+//   cautious  takes them one at a time, the whole army together, the
+//             nearest first: once he holds one, he leaves a part there and
+//             goes on with the rest
+// The army is shared out, the units nearest each ground to it, as evenly as
+// they go, every kind of unit in the line: a part is one, two or three
+// units, and horse kept off its flank held nothing (crownhill, parthia,
+// seed 11: the horse beside the South Ford, the spears worn out short of
+// it, night with the ford no one's). Each part forms up at its ground as a
+// whole army would (formation). Null for any other battle, which goes on as
+// before.
+function splitGround(game, side, forward, across, ch, { line, archers, horse }, fit = () => true) {
+  const objectives = game.objectives ?? []
+  const needed = game.spec?.objectivesNeeded
+  if (!Number.isInteger(needed) || needed <= 0 || needed >= objectives.length || line.length === 0) return null
+  const map = game.battle.map
+  const started = centroid(game.spec.units.filter(u => u.side === side).map(u => toXY(u.position)))
+  const holder = (o) => game.objectiveHolds?.[o.id]?.side ?? null
+  const theirs = (o) => holder(o) !== null && holder(o) !== side
+  const all = objectives.map(o => {
+    const anchor = holdFrom(map, o, started)
+    return { objective: o, anchor, d: tileDistance(started, anchor) }
+  }).sort((a, b) => a.d - b.d || String(a.objective.id).localeCompare(String(b.objective.id)))
+  // What he holds he keeps; then the nearest no one holds; then the
+  // nearest the enemy holds (a bold Commander's before those no one holds).
+  // Two armies each holding one of three, and each going for the other's,
+  // stood off all day: the third is the one to go for.
+  const rank = (g) => (holder(g.objective) === side ? 0 : theirs(g.objective) ? (ch.contest === 'any' ? 1 : 2) : (ch.contest === 'any' ? 2 : 1))
+  // Among the rest, one his men are already on their way to comes first:
+  // he keeps to what he set out for (a ford won and lost behind him turned
+  // the part going for another back to it, and again, for hours: crownhill,
+  // kush, seed 5).
+  const goingTo = (g) => line.some(u => {
+    const to = game.battle.orderBook?.get(u.id)?.target
+    return Boolean(to) && tileDistance(to, g.anchor) <= 2
+  })
+  let targets = [...all].sort((a, b) => rank(a) - rank(b) || Number(goingTo(b)) - Number(goingTo(a)) || a.d - b.d || String(a.objective.id).localeCompare(String(b.objective.id))).slice(0, needed)
+  // The enemy on the clock: one he holds is always among them.
+  const enemyHolds = all.filter(g => theirs(g.objective)).length
+  const contest = all.find(g => theirs(g.objective))
+  if (enemyHolds >= needed && contest && !targets.some(g => theirs(g.objective))) targets = [...targets.slice(0, needed - 1), contest]
+  // One at a time: the whole army to the first not yet his, leaving a part
+  // at each he holds.
+  if (ch.oneAtATime) {
+    const mine = targets.filter(g => holder(g.objective) === side)
+    const next = targets.find(g => holder(g.objective) !== side)
+    targets = next ? [...mine, next] : mine
+    if (targets.length === 0) targets = all.slice(0, 1)
+  }
+  // Shared out: the part for each ground its nearest units, as evenly as
+  // they go (one at a time: one unit at each he holds, the rest on).
+  const n = line.length
+  const k = targets.length
+  const counts = ch.oneAtATime
+    ? targets.map((g, i) => (i < k - 1 ? 1 : Math.max(0, n - (k - 1))))
+    : targets.map((g, i) => Math.floor(n / k) + (i < n % k ? 1 : 0))
+  // Ground still to take is given its men first, and fit men (not worn
+  // out: `fit`) before the worn, who keep what is held. (Worn men sent to
+  // take a ford held where they stood, and the fresh kept one already
+  // held: crownhill, carthage, seed 11.)
+  const free = [...line].sort((a, b) => a.id.localeCompare(b.id))
+  const parts = targets.map(() => [])
+  const order = targets.map((g, i) => i).sort((a, b) => Number(holder(targets[a].objective) === side) - Number(holder(targets[b].objective) === side) || a - b)
+  // A unit already sent to one of them keeps to it, while it is still
+  // gone for and has room: its own order says where (re-sharing every turn
+  // marched units to and fro between two fords for ever: crownhill,
+  // parthia, seed 11).
+  const sentTo = (unit) => {
+    const to = game.battle.orderBook?.get(unit.id)?.target
+    return to ? targets.findIndex(g => tileDistance(to, g.anchor) <= 2) : -1
+  }
+  for (const i of order) {
+    const keep = free.filter(u => sentTo(u) === i).slice(0, counts[i])
+    for (const u of keep) free.splice(free.indexOf(u), 1)
+    parts[i].push(...keep)
+  }
+  for (const i of order) {
+    const g = targets[i]
+    const toTake = holder(g.objective) !== side
+    free.sort((a, b) => (toTake ? Number(!fit(a)) - Number(!fit(b)) : 0) || tileDistance(a.position, g.anchor) - tileDistance(b.position, g.anchor) || a.id.localeCompare(b.id))
+    parts[i].push(...free.splice(0, Math.max(0, counts[i] - parts[i].length)))
+  }
+  parts[order.at(-1)].push(...free)
+  const horseTo = ch.contest === 'any' ? Math.max(0, targets.findIndex(g => theirs(g.objective))) : 0
+  const slots = new Map()
+  const targetOf = new Map()
+  const taken = new Set()
+  targets.forEach((g, i) => {
+    const part = { line: parts[i], archers: i === 0 ? archers : [], horse: i === horseTo ? horse : [] }
+    // The tiles that hold it first, nearest where it is held from, and the
+    // fit units on them (a ford is held from a tile or two at its ends;
+    // a line spread across beside it held it from one, and that one a unit
+    // worn out short of it: crownhill, carthage, seed 4). The rest form up
+    // about it as a line does.
+    const holding = holdTiles(map, g.objective).sort((a, b) => tileDistance(a, g.anchor) - tileDistance(b, g.anchor) || a.y - b.y || a.x - b.x)
+    const units = [...part.line].sort((a, b) => Number(!fit(a)) - Number(!fit(b)) || a.id.localeCompare(b.id))
+    const rest = []
+    for (const u of units) {
+      const tile = holding.find(t => !taken.has(positionKey(t)))
+      if (tile) { taken.add(positionKey(tile)); slots.set(u.id, tile) } else rest.push(u)
+    }
+    for (const [id, tile] of formation(map, g.anchor, forward, across, { ...part, line: rest }, 1)) {
+      if (taken.has(positionKey(tile))) continue
+      taken.add(positionKey(tile))
+      slots.set(id, tile)
+    }
+    for (const u of [...part.line, ...part.archers, ...part.horse]) targetOf.set(u.id, g.objective)
+  })
+  return { targets, slots, targetOf }
+}
+
+// Where a part forms up to hold one piece of the ground: the tile nearest
+// where the army formed up that a line can stand on and holds it (on it,
+// or within its reach). (Stepping back off a ford, as strongpoint does,
+// put the line two tiles off a ford held from one tile, and it held
+// nothing: crownhill, carthage, seed 11, night with the North Ford no
+// one's.)
+function holdFrom(map, objective, from) {
+  const tiles = objective.tiles ?? [objective.coord]
+  let best = null
+  for (const p of holdTiles(map, objective)) {
+    const d = tileDistance(p, from)
+    if (!best || d < best.d) best = { p, d }
+  }
+  return best ? best.p : (standable(map, centroid(tiles), new Set()) ?? centroid(tiles))
+}
+
+// Every tile a line can stand on that holds a piece of the ground: on it,
+// or within its reach (as victory.js counts it), in order of rows.
+function holdTiles(map, objective) {
+  const tiles = objective.tiles ?? [objective.coord]
+  const reach = objective.reach ?? (objective.single === false ? 0 : 1)
+  const out = new Map()
+  for (const t of tiles) {
+    for (let dy = -reach; dy <= reach; dy++) {
+      for (let dx = -reach; dx <= reach; dx++) {
+        const p = { x: t.x + dx, y: t.y + dy }
+        if (tileDistance(p, t) > reach || !map.inBounds(p) || !map.passable(p) || NOT_HERE.includes(map.terrainAt(p))) continue
+        out.set(positionKey(p), p)
+      }
+    }
+  }
+  return [...out.values()].sort((a, b) => a.y - b.y || a.x - b.x)
+}
+
+// An enemy this side sees on, or at the edge of, one piece of the ground
+// (within its reach and a tile more), nearest it; or null.
+function enemyOn(game, objective, inSight) {
+  if (!objective) return null
+  const tiles = objective.tiles ?? [objective.coord]
+  const reach = (objective.reach ?? (objective.single === false ? 0 : 1)) + 1
+  return inSight
+    .map(e => ({ e, d: Math.min(...tiles.map(t => tileDistance(e.position, t))) }))
+    .filter(x => x.d <= reach)
+    .sort((a, b) => a.d - b.d || a.e.id.localeCompare(b.e.id))[0]?.e ?? null
 }
 
 // A place on, or near enough to hold or contest, the battle's ground to

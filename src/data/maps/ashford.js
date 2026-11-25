@@ -113,5 +113,9 @@ module.exports = {
   // reaches it first, the west's way lying through the woods, and won 82
   // battles in 100. docs/DECISIONS.md, "How each map's ground to fight for
   // was built".)
-  ground: [{ name: 'the Old Mill Bridge', tiles: OLD_MILL }]
+  ground: [{ name: 'the Old Mill Bridge', tiles: OLD_MILL }],
+  // The kinds of battle fought here, the first offered first at the muster
+  // (docs/DECISIONS.md, "How the kinds of battle were built"): the bridge is
+  // a choke point, made for a battle for ground.
+  kinds: ['pitched', 'ground']
 }
