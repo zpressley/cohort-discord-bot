@@ -238,7 +238,11 @@ function createCombatResolver(options = {}) {
           prepared: aPrepared,
           bonusAttack: flankBonusAgainst(b.id) + (aSurprises ? T.SURPRISE.ATTACK : 0),
           surprise: aSurprises,
-          crowding: crowdingPenalty(a)
+          crowding: crowdingPenalty(a),
+          // A camp battle's (battle/camp.js): fighting from inside its own
+          // camp, or carrying it. Zero in every other battle.
+          bonusDefense: engagement.aCampDefense ?? 0,
+          burden: engagement.aBurden ?? 0
         }
         const bCtx = {
           stamina: bState.stamina,
@@ -249,7 +253,9 @@ function createCombatResolver(options = {}) {
           prepared: bPrepared,
           bonusAttack: flankBonusAgainst(a.id) + (bSurprises ? T.SURPRISE.ATTACK : 0),
           surprise: bSurprises,
-          crowding: crowdingPenalty(b)
+          crowding: crowdingPenalty(b),
+          bonusDefense: engagement.bCampDefense ?? 0,
+          burden: engagement.bBurden ?? 0
         }
 
         const exchange = D.resolveExchange(a, b, aCtx, bCtx)
@@ -395,11 +401,20 @@ function createCombatResolver(options = {}) {
   }
   // Is this unit in a state to form up again? Men standing and fatigue,
   // against a bar its experience lowers (tables.RALLY).
-  resolveCombat.canRally = (unit) => {
+  // (ease, below 1, lowers the bar: a broken unit in its own camp.)
+  resolveCombat.canRally = (unit, ease = 1) => {
     if (!(unit.strength > 0)) return false
     const men = unit.strength / (unit.maxStrength || unit.strength)
     const fatigue = R.fatigueMultiplier(stateFor(unit).stamina / R.staminaPool(unit))
-    return men * fatigue >= T.RALLY.CONDITION / R.moraleResistance(unit)
+    return men * fatigue >= T.RALLY.CONDITION * ease / R.moraleResistance(unit)
+  }
+  // A night's rest in camp (battle/camp.js): wind back by a share of what
+  // the unit can spend, and, if heart, morale back to where it began.
+  resolveCombat.rest = (unit, wind, heart) => {
+    const state = stateFor(unit)
+    state.stamina = Math.min(R.staminaPool(unit), state.stamina + wind * R.staminaPool(unit))
+    if (heart) state.morale = Math.max(state.morale, T.MORALE.START)
+    return { stamina: state.stamina, morale: state.morale }
   }
   // A broken unit forms up again (ruled 2026-11-21). Its morale is what it
   // was: rallying brings back order, not heart.

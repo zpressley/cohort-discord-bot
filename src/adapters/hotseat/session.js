@@ -60,7 +60,9 @@ function createSession(spec, options = {}) {
         enemies: sideView(game, side).intel,
         lyingInWait: lyingInWait(game.battle, side),
         // So the read-back can say where a unit falling back will stop.
-        homeEdge: game.spec.sides?.[side]?.homeEdge ?? null
+        homeEdge: game.spec.sides?.[side]?.homeEdge ?? null,
+        // A camp battle's camps, as this side knows them.
+        ...(game.battle.camps ? { camps: sideView(game, side).camps } : {})
       }
     },
 

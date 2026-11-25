@@ -847,3 +847,80 @@ GROUND.some = {
 
 // The battle's end in the dispatch, when night decided a pitched battle.
 BATTLE_OVER.why['field held at nightfall'] = ['night fell with your army still standing and the enemy\'s beaten', 'night fell with the enemy\'s army still standing and yours beaten']
+// ── Camps (ruled 2026-11-25) ───────────────────────────
+// A camp battle's words (engine/battle/camp.js). The camp: "your camp", the
+// enemy's "the enemy's camp" (in an enemy unit's own doing, "their camp").
+// Pitch, strike, carry: what is done with it. Burned: lost. Zach's own line
+// for a camp lost undefended is kept as near his words as plain grammar
+// lets it be ("Your camp lay undefended you can see the flames rising along
+// with knowledge that your men will have no rest tonight.").
+const CAMP = {
+  ours: 'your camp',
+  theirs: 'the enemy\'s camp',
+  // What is done with it, in the dispatch. `who` is the unit's name as the
+  // Commander knows it; `where` the place written out.
+  pitched: (who, where, mine) => (mine ? `${who} pitched your camp ${where}` : `${who} pitched their camp ${where}`),
+  struck: (who, mine) => (mine ? `${who} struck your camp and are carrying it` : `${who} struck their camp and are carrying it off`),
+  dropped: (who, where, mine) => (mine
+    ? (who ? `${who} broke and dropped your camp ${where}: it lies there for either side to take` : `the men carrying your camp are gone, and it lies ${where} for either side to take`)
+    : `the enemy dropped their camp ${where}`),
+  found: (who, where, status) => `${who} found the enemy's camp ${where}` + (status === 'dropped' ? ', lying where it was dropped' : ''),
+  assailed: (by, where, hits, of, mine) => (mine
+    ? `the enemy is in your camp ${where}: your men there are holding it, but it will not hold for ever (${hits} of ${of} assaults)`
+    : `${by} are in the enemy's camp ${where}, fighting its guard`),
+  burned: (by, where, undefended, mine) => (mine
+    ? (undefended
+      ? 'Your camp lay undefended: you can see the flames rising, and you know your men will have no rest tonight'
+      : 'Your camp has fallen: its guard could hold it no longer. You can see the flames rising, and you know your men will have no rest tonight')
+    : `${by} burned the enemy's camp ${where}: the smoke is rising over it, and his men will have no rest tonight`),
+  tiring: 'Your army is tiring while the camp is on the move: every hour it is carried costs your men wind, until it is pitched again',
+  // The night, told to each side of its own army.
+  rest: {
+    pitched: 'Night has fallen. Your men rested in camp, and will be fresh at first light',
+    carried: 'Night has fallen, and your camp is not pitched: your men have no rest tonight, and will be as tired at first light as they are now',
+    dropped: 'Night has fallen, and your camp lies where it was dropped: your men have no rest tonight, and will be as tired at first light as they are now',
+    burned: 'Night has fallen. Your camp is burned: your men have no rest tonight, and will be as tired at first light as they are now'
+  },
+  dawn: (day) => `Dawn: the ${DAYS[day] ?? `${day}th`} day of the battle begins`,
+  // After the last day the battle may run (combat/tables.js, CAMP.MAX_DAYS).
+  daysOut: (day) => `The ${DAYS[day] ?? `${day}th`} night has fallen with neither army beaten: the battle is over, and neither side has won`,
+  // Reading orders that name a camp.
+  notFound: 'Your men have not found the enemy\'s camp. Send them to look for it, or name a place.',
+  burnedTheirs: 'The enemy\'s camp is already burned.',
+  noneOurs: 'Your camp is burned: there is none to go to. Name a place instead.',
+  carriedBy: (who) => `Your camp is not pitched: ${who} are carrying it.`
+}
+// An army with no steady unit left holds out by its standing camp: what
+// is left to do, told to both sides.
+CAMP.holdsOut = (mine) => (mine
+  ? 'Your army is broken and shelters in your camp: if the camp falls, the field is the enemy\'s. Hold the camp, and your men may rally there and rest tonight'
+  : 'Their army is broken and shelters in its camp: take the camp and the field is yours')
+module.exports.CAMP = CAMP
+// The orders that work the camp, in the read-back's words (ORDER, above).
+ORDER.pitch = { say: 'pitch the camp', doing: 'pitching the camp', did: 'pitched the camp', to: 'at' }
+ORDER.strike = { say: 'strike the camp and carry it', doing: 'carrying the camp', did: 'struck the camp' }
+
+// The battle of camps as a kind of battle (data/maps, kindsOf): the
+// muster's card, and the tent's line under the map (web/battles.js,
+// campLine). `where` is a grid square.
+KINDS.camps = {
+  title: 'A battle of camps',
+  name: 'battle of camps',
+  said: () => 'Each army marches out with its camp packed up, and pitches it where you choose. Keep yours standing: your broken men run to it and rally there, and it gives your army its night\'s rest. Carried or burned, your men tire and get no rest. Break the enemy and burn his camp, and the field is yours. Night does not end it: it may run over several days.'
+}
+CAMP.tent = {
+  day: (day) => `Day ${day}.`,
+  pitched: (where, hits, of) => `Your camp is pitched at ${where}${hits ? `, and has taken ${hits} of the ${of} assaults it can` : ''}.`,
+  carried: (who) => `Your camp is packed up and carried by ${who ?? 'your men'}: your army tires while it is carried. Pitch it: "pitch the camp here".`,
+  dropped: (where) => `Your camp lies dropped at ${where}: send men to take it up and pitch it.`,
+  burned: 'Your camp is burned: your men tire, and will have no rest at night.',
+  notFound: 'The enemy\'s camp: not yet found.',
+  theirs: (where) => `The enemy's camp: at ${where}.`,
+  theirsCarried: (where) => `The enemy's camp: carried, last seen at ${where}.`,
+  theirsBurned: 'The enemy\'s camp: burned.'
+}
+// The Army tab, on the unit carrying the camp.
+CAMP.carrying = 'They march at half their pace and fight worse for it, and your whole army tires while the camp is carried. Order them to pitch it: "pitch the camp here".'
+// The verdict's reason, when the days ran out (combat/tables.js,
+// CAMP.MAX_DAYS).
+BATTLE_OVER.why['the days ran out'] = 'the days ran out with neither army beaten'

@@ -181,7 +181,9 @@ module.exports = {
   ground: [{ name: 'Elderby', tiles: ELDERBY }],
   // The kinds of battle fought here, the first offered first at the muster
   // (docs/DECISIONS.md, "How the kinds of battle were built").
-  kinds: ['pitched', 'ground'],
+  // The battle of camps too: armies start far apart, out of each other's
+  // sight, with room to pitch a camp behind each.
+  kinds: ['pitched', 'ground', 'camps'],
   // Each army is called out in two lines here: its own, and its faction's
   // usual army again, raised for the day (src/engine/army/secondLine.js).
   // About eight units a side, where a 1 km field has four or five.

@@ -40,7 +40,8 @@ test('every field offers the pitched battle, and a field made for ground its bat
   try {
     const maps = (await app.api('GET', '/api/maps')).body
     for (const m of maps) {
-      assert.deepEqual(m.kinds.map(k => k.id), ['pitched', 'ground'], m.id)
+      // (Greywater offers the battle of camps as well, third: camps.test.js.)
+      assert.deepEqual(m.kinds.map(k => k.id), m.id === 'greywater' ? ['pitched', 'ground', 'camps'] : ['pitched', 'ground'], m.id)
       assert.equal(m.kinds[0].title, 'A pitched battle')
       assert.match(m.kinds[0].said, /^No ground to fight for: army against army\. Break the enemy, or make him yield the field\. If night falls first, an army still standing with half the men it began the day with/)
       assert.equal(m.kinds[1].title, 'A battle for ground')

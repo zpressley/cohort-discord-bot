@@ -176,6 +176,14 @@ function clock(minutes) {
   if (!minutes) return 'the battle has not begun'
   return `${h ? `${h} h ` : ''}${m ? `${m} min ` : ''}of battle`
 }
+// A battle of camps runs day after day: the day, and the hour of it.
+function dayClock(b) {
+  const into = b.minutes - (b.day - 1) * b.dayMinutes
+  const h = Math.floor(into / 60)
+  const m = into % 60
+  const left = b.dayMinutes - into
+  return `<strong>day ${b.day}</strong>, ${into ? `${h ? `${h} h ` : ''}${m ? `${m} min` : ''}`.trim() : 'first light'} · night in ${esc(clock(left).replace(/ of battle$/, '').trim())}`
+}
 function ago(at) {
   if (!at) return ''
   const minutes = Math.round((Date.now() - at) / 60000)
@@ -195,6 +203,7 @@ const WHY = {
   stalled: 'all was quiet', ready: 'your orders were carried out', fire: 'there was shooting', rallied: 'a broken unit rallied', objective: 'ground changed hands', decided: 'the battle was decided',
   rider: 'a rider came back: he could not get through', night: 'night fell',
   riderTaken: 'your men caught an enemy rider',
+  camp: 'there was news of a camp',
   surrender: 'a commander yielded'
 }
 const sideName = (side) => side.charAt(0).toUpperCase() + side.slice(1)
@@ -225,7 +234,7 @@ function verdictWords(battle) {
   if (o.said && o.reason === 'night fell') return { title: o.title, reason: o.said.charAt(0).toUpperCase() + o.said.slice(1), night: true }
   if (o.winner === 'draw') {
     const why = { 'both commanders killed': 'Both Commanders were killed', 'mutual collapse': 'Both armies broke', 'mutual ruin': 'Both armies were ruined', 'time ran out: equal losses': 'The day ended with losses even' }
-    return { title: 'A draw', reason: why[o.reason] ?? o.reason }
+    return { title: 'A draw', reason: o.said ? o.said.charAt(0).toUpperCase() + o.said.slice(1) : why[o.reason] ?? o.reason }
   }
   const won = o.winner === battle.side
   const words = REASONS[o.reason]
@@ -1230,7 +1239,7 @@ async function tent(token) {
     const chip = b.status === 'your-orders' ? '<span class="chip chip-dark">Your orders</span>' : `<span class="chip">${esc(STATUS[b.status])}</span>`
     document.getElementById('bar').innerHTML = `
       <a href="/battles" data-link>Battles</a>
-      <div class="bar-title"><strong>${esc(b.title)}</strong><span>${esc(sideName(b.side))} · turn ${b.turn}${b.turnLimit ? ` of ${b.turnLimit}` : ''} · ${esc(clock(b.minutes))}${b.dayMinutes ? ` · night falls at ${esc(clock(b.dayMinutes).replace(/ of battle$/, ''))}` : ''}</span></div>
+      <div class="bar-title"><strong>${esc(b.title)}</strong><span>${esc(sideName(b.side))} · turn ${b.turn}${b.turnLimit ? ` of ${b.turnLimit}` : ''} · ${b.day ? dayClock(b) : `${esc(clock(b.minutes))}${b.dayMinutes ? ` · night falls at ${esc(clock(b.dayMinutes).replace(/ of battle$/, ''))}` : ''}`}</span></div>
       ${chip}`
   }
 
@@ -1577,6 +1586,7 @@ async function tent(token) {
         ${u.word && !u.word.live ? `<p class="unit-order word${u.word.cutOff || u.word.noWord ? ' cut-off' : ''}"><strong>${u.word.cutOff ? 'Cut off.' : 'By rider:'}</strong> ${esc(u.word.cutOff ? u.word.said.replace(/^cut off: n/, 'N') : u.word.noWord ? `${u.word.said}. This is where they last were` : `as they were ${u.word.said}`)}</p>` : ''}
         ${u.rider ? `<p class="unit-order"><strong>On the road:</strong> ${esc(u.rider.said)}</p>` : ''}
         ${v.commander?.unitId === u.id ? '<p class="unit-order"><strong>You ride with them.</strong> If they are cut to half and still in the fight, you can be taken or killed.</p>' : ''}
+        ${u.carriesCamp ? `<p class="unit-order"><strong>They carry your camp.</strong> ${esc(v.camps?.carryingSaid ?? '')}</p>` : ''}
         <div class="bars">${meter('Men', u.strength, u.maxStrength)}${meter('Morale', u.morale, 100)}${meter('Wind', u.stamina, u.staminaPool)}</div>
         ${officerLine(u)}
         <p class="unit-order"><strong>Orders:</strong> ${esc(u.order)}${u.shootsTo ? esc(u.holdingFire ? '; holding fire' : `; shoots at enemies within ${u.shootsTo} m`) : ''}</p>
@@ -1645,7 +1655,12 @@ async function tent(token) {
     const east = (u, n) => gridRef(Math.min(v.map.width - 1, u.position.x + n), u.position.y)
     const a = own[0]
     const b = own[own.length > 1 ? 1 : 0]
+    // A battle of camps: pitching the camp first (it is carried, and the
+    // army tires until it is pitched).
+    const camp = v.camps?.own?.status === 'carried' ? v.camps.own : null
     const examples = [
+      // (A square behind them: toward the nearer edge of the field.)
+      ...(camp ? ['pitch the camp here', ((c) => `${camp.carrier} pitch the camp at ${gridRef(Math.max(0, Math.min(v.map.width - 1, c.position.x + (c.position.x < v.map.width / 2 ? -3 : 3))), c.position.y)}`)(own.find(u => u.id === camp.carrierId) ?? a)] : []),
       // The field's ground to fight for, first: a player who only advances
       // on an enemy he cannot see watches the computer take it.
       // (None in a pitched battle. With several to hold, the army sent

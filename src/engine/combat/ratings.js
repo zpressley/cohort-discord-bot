@@ -276,13 +276,15 @@ function attackRating(unit, ctx = {}) {
     bonusAttack = 0,
     // Crowding penalty (Stage 3): friends packed onto one tile. Zero for a
     // unit alone on its tile.
-    crowding = 0
+    crowding = 0,
+    // Carrying its camp (a camp battle's: battle/camp.js). Zero elsewhere.
+    burden = 0
   } = ctx
 
   const terrainMod = terrainModifier(terrain, enemyTerrain, prepared).attack
   // Its people's perks (combat/perks.js): 0 for a unit with none.
   const perkMod = P.fightEdge(unit, ctx).attack
-  const base = Math.max(0, baseAttackRating(unit) + (veteranEdge(unit).fight ?? 0) + terrainMod + perkMod + bonusAttack - crowding)
+  const base = Math.max(0, baseAttackRating(unit) + (veteranEdge(unit).fight ?? 0) + terrainMod + perkMod + bonusAttack - crowding - burden)
 
   return base
     * fatigueMultiplier(stamina / staminaPool(unit))
@@ -298,7 +300,10 @@ function defenseRating(unit, ctx = {}) {
     enemyTerrain = 'plains',
     chaos = 0,
     prepared = false,
-    crowding = 0
+    crowding = 0,
+    // Inside its own camp, or carrying it (battle/camp.js). Zero elsewhere.
+    bonusDefense = 0,
+    burden = 0
   } = ctx
 
   const terrainMod = terrainModifier(terrain, enemyTerrain, prepared).defense
@@ -306,7 +311,7 @@ function defenseRating(unit, ctx = {}) {
   // armour (combat/perks.js). Both 0 where neither has a perk.
   const perkMod = P.fightEdge(unit, ctx).defense -
     (ctx.enemy ? resolveArmor(unit).defense * (1 - P.armorLeft(ctx.enemy)) : 0)
-  const base = Math.max(0, baseDefenseRating(unit) + (veteranEdge(unit).fight ?? 0) + terrainMod + perkMod - crowding)
+  const base = Math.max(0, baseDefenseRating(unit) + (veteranEdge(unit).fight ?? 0) + terrainMod + perkMod - crowding + bonusDefense - burden)
 
   // Defense does not scale with the strength snowball. A thinner line is
   // easier to kill because there are fewer men in it, which the casualty

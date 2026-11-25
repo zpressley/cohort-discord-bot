@@ -142,7 +142,7 @@ function evaluateVictory(ctx) {
   const yielded = yieldedOutcome(ctx.yielded, ctx.allSides ?? sides(world))
   if (yielded) return yielded
 
-  const broken_ = checkBattleOutcome(world, broken, ctx.isShaken)
+  const broken_ = checkBattleOutcome(world, broken, ctx.isShaken, ctx.holdsOut ?? null)
   if (broken_.decided) return broken_
 
   // Strength collapse. Checked for both sides; if both collapse in the same

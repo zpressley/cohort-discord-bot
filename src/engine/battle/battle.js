@@ -49,6 +49,7 @@ const { coverFor } = require('./hiding')
 const { canSkirmish, fallBack } = require('./skirmish')
 const { formUp } = require('./formUp')
 const { intoTheCrossing } = require('./crossing')
+const camps = require('./camp')
 
 const DEFAULT_MAX_TURNS = 20
 
@@ -125,6 +126,8 @@ function createBattleState(spec, options = {}) {
     exposure: new Map(),
     outcome: { decided: false, winner: null, reason: 'battle still open' }
   }
+  // A camp battle's camps (battle/camp.js): only when the spec has them.
+  if (spec.camps) state.camps = camps.createCamps(spec, state.map)
   // A unit that has rallied and not taken heart since: formed up, but its
   // morale still at or under the rout line. It will break at the next blow.
   state.isShaken = (unit) => state.rallied.has(unit.id) &&
@@ -812,7 +815,8 @@ function stepTurn(state, sideOrders = {}, { sameTurn = false } = {}) {
       nearestEnemy: (u) => toPress(u, { toGround: true }),
       namedEnemy: (u, id) => toFollow(u, id),
       followed: (u, order) => followed(u, order),
-      homeTarget: (u) => edgeTarget(map, u.position, edge)
+      homeTarget: (u) => edgeTarget(map, u.position, edge),
+      ...(state.camps ? { campWay: (u, order) => camps.campWay(state, u, order) } : {})
     })
 
     const onHisOwn = ownJudgement(side, effective)
@@ -933,12 +937,21 @@ function stepTurn(state, sideOrders = {}, { sameTurn = false } = {}) {
   for (const unit of livingUnits(world)) {
     if (!broken.has(unit.id)) continue
     const edge = spec.sides?.[unit.side]?.homeEdge ?? 'west'
+    // In a camp battle, for its own camp while it stands, and no further
+    // once inside it (battle/camp.js).
+    const refuge = state.camps ? camps.refugeOf(state, unit) : null
+    if (refuge && refuge(unit.position)) continue
     // For its own edge by the cheapest open way, round the enemy; cut off
     // from it, away from him (flightPath).
-    const way = flightPath(map, world, unit, edge, broken)
+    const way = flightPath(map, world, unit, edge, broken, refuge)
     orders.push(way
       ? { unitId: unit.id, target: way[way.length - 1], path: way, fleeing: true }
       : { unitId: unit.id, target: chooseFlightTarget(map, world, unit, edge), fleeing: true })
+  }
+
+  // The unit carrying its camp goes at a share of its pace (battle/camp.js).
+  if (state.camps) {
+    for (const o of orders) if (!o.fleeing && camps.carries(state, getUnit(world, o.unitId))) o.pace = T.CAMP.CARRY_PACE
   }
 
   // ── Movement (phase 3) ──────────────────────────
@@ -1066,7 +1079,7 @@ function stepTurn(state, sideOrders = {}, { sameTurn = false } = {}) {
     // it does now: 'hold' (digs in) or 'standing' (back to its side's
     // standing orders).
     const order = state.orderBook.get(move.unitId)
-    if (move.reachedTarget && order && order.action !== 'hold' && order.action !== 'advance' && order.action !== 'follow' && !order.enemy) {
+    if (move.reachedTarget && order && order.action !== 'hold' && order.action !== 'advance' && order.action !== 'follow' && order.action !== 'pitch' && order.action !== 'strike' && !order.enemy) {
       log.emit('arrived', turn, {
         unitId: move.unitId, action: order.action, at: { ...move.to },
         then: order.then === 'hold' ? 'hold' : 'standing',
@@ -1101,6 +1114,9 @@ function stepTurn(state, sideOrders = {}, { sameTurn = false } = {}) {
     })
   }
 
+  // The camp taken up and pitched by those told to (battle/camp.js).
+  if (state.camps) camps.settleCampOrders(state, { turn, log, broken, movement })
+
   // ── Flight off the field ────────────────────────
   // A broken unit standing on its home edge after moving has left the
   // battle. Removed from the roster so occupancy, engagement detection and
@@ -1109,6 +1125,8 @@ function stepTurn(state, sideOrders = {}, { sameTurn = false } = {}) {
   for (const unit of [...livingUnits(world)]) {
     if (!broken.has(unit.id)) continue
     const edge = spec.sides?.[unit.side]?.homeEdge ?? 'west'
+    // (Sheltering in its own camp, pitched at the edge, it has not left.)
+    if (state.camps && camps.inOwnCamp(state, unit)) continue
     if (isOnEdge(map, unit.position, edge)) {
       world.units.splice(world.units.indexOf(unit), 1)
       fledUnits.push({ ...unit })
@@ -1142,6 +1160,8 @@ function stepTurn(state, sideOrders = {}, { sameTurn = false } = {}) {
     reveal(e.aId, 'fought')
     reveal(e.bId, 'fought')
   }
+  // Fought from inside a camp, or by the unit carrying one (battle/camp.js).
+  if (state.camps) camps.markEngagements(state, engagements)
 
   // How each unit spent the turn: marching (moved at full pace) or on guard
   // (moved carefully, or stood).
@@ -1341,7 +1361,9 @@ function stepTurn(state, sideOrders = {}, { sameTurn = false } = {}) {
   for (const unit of livingUnits(world)) {
     if (!broken.has(unit.id)) continue
     if (log.forTurn(turn).some(e => e.type === 'rout' && e.unitId === unit.id)) continue
-    const trapped = samePosition(positionsAtTurnStart.get(unit.id), unit.position)
+    // (Not one that has reached its camp and stopped there: it is not
+    // hemmed in, it is home.)
+    const trapped = samePosition(positionsAtTurnStart.get(unit.id), unit.position) && !(state.camps && camps.inOwnCamp(state, unit))
     applyPursuit(world, unit, turn, log, broken, trapped)
   }
 
@@ -1354,16 +1376,27 @@ function stepTurn(state, sideOrders = {}, { sameTurn = false } = {}) {
   // order, which for a commander's own units is to hold.
   const brokeThisTurn = new Set(log.forTurn(turn).filter(e => e.type === 'rout').map(e => e.unitId))
   for (const unit of livingUnits(world)) {
-    if (!broken.has(unit.id) || brokeThisTurn.has(unit.id) || !resolver.canRally(unit)) continue
+    // Inside its own camp, the more easily (battle/camp.js).
+    const home = Boolean(state.camps) && camps.inOwnCamp(state, unit)
+    if (!broken.has(unit.id) || brokeThisTurn.has(unit.id) || !resolver.canRally(unit, home ? T.CAMP.EASE : 1)) continue
+    const safe = home ? T.CAMP.SAFE_TILES : T.RALLY.SAFE_TILES
     const chased = livingUnits(world).some(e =>
-      e.side !== unit.side && !broken.has(e.id) && tileDistance(e.position, unit.position) <= T.RALLY.SAFE_TILES)
+      e.side !== unit.side && !broken.has(e.id) && tileDistance(e.position, unit.position) <= safe)
     if (chased) continue
     broken.delete(unit.id)
     state.rallied.set(unit.id, (state.rallied.get(unit.id) ?? 0) + 1)
     state.orderBook.delete(unit.id)
     state.groundPost?.delete(unit.id)
     const morale = resolver.rally(unit)
-    log.emit('rallied', turn, { unitId: unit.id, at: { ...unit.position }, strength: unit.strength, morale })
+    log.emit('rallied', turn, { unitId: unit.id, at: { ...unit.position }, strength: unit.strength, morale, ...(home ? { inCamp: true } : {}) })
+  }
+
+  // ── The camps ───────────────────────────────
+  // Dropped, fought for, burned; wind shed for them; found by the enemy
+  // (battle/camp.js).
+  if (state.camps) {
+    camps.stepCamps(state, { turn, log, broken, resolver })
+    camps.seeCamps(state, { turn, log, broken })
   }
 
   // ── Searching and hiding ────────────────────
@@ -1460,7 +1493,8 @@ function stepTurn(state, sideOrders = {}, { sameTurn = false } = {}) {
   if (state.commanders) {
     const fell = stepCommanders({
       commanders: state.commanders, world, broken, fledUnits,
-      events: log.forTurn(turn), mustered: state.mustered, random: state.commanderRandom
+      events: log.forTurn(turn), mustered: state.mustered, random: state.commanderRandom,
+      ...(state.camps ? { sheltered: (unit) => camps.sheltered(state, unit) } : {})
     })
     for (const e of fell) log.emit(e.type, turn, e.fields)
     // A Commander who gets free brings out what he heard in the enemy's
@@ -1477,7 +1511,7 @@ function stepTurn(state, sideOrders = {}, { sameTurn = false } = {}) {
   // ── Victory ─────────────────────────────────────
   const allSides = [...new Set(spec.units.map(u => u.side))]
   const outcome = commandersOutcome(state.commanders, allSides) ?? yieldedOutcome(state.yielded, allSides) ??
-    checkBattleOutcome(world, broken, state.isShaken)
+    checkBattleOutcome(world, broken, state.isShaken, state.camps ? (side) => camps.holdsOut(state, side) : null)
   if (outcome.decided) {
     state.outcome = outcome
     log.emit('victory', turn, { winner: outcome.winner, reason: outcome.reason })
@@ -1663,7 +1697,7 @@ function chooseFlightTarget(map, world, unit, edge) {
 // FLIGHT.AWAY tiles farthest from any formed enemy. Null when it can get no
 // farther from him than it stands (it is caught, and pursuit settles it).
 // The path includes where it stands.
-function flightPath(map, world, unit, edge, broken) {
+function flightPath(map, world, unit, edge, broken, goal = null) {
   const start = toPosition(unit.position)
   const enemyAt = new Set()
   const formed = []
@@ -1721,7 +1755,8 @@ function flightPath(map, world, unit, edge, broken) {
     if (done.has(key)) continue
     done.add(key)
     reached.push({ p, cost, key })
-    if (!samePosition(p, start) && isOnEdge(map, p, edge)) return pathTo(key, p)
+    // (Its own camp instead of its edge, in a camp battle: goal.)
+    if (!samePosition(p, start) && (goal ? goal(p) : isOnEdge(map, p, edge))) return pathTo(key, p)
     for (const n of map.neighbors(p)) {
       const nk = positionKey(n)
       if (done.has(nk) || !map.passable(n) || enemyAt.has(nk)) continue
@@ -1846,10 +1881,12 @@ function yieldedOutcome(yielded, allSides) {
   return { decided: true, winner, reason: 'enemy officers yielded' }
 }
 
-function checkBattleOutcome(world, broken, isShaken = () => false) {
+// holdsOut(side): a camp battle's (battle/camp.js, holdsOut): an army with
+// no steady unit left is not yet beaten while its camp stands to rally in.
+function checkBattleOutcome(world, broken, isShaken = () => false, holdsOut = null) {
   const formed = (side) => unitsOnSide(world, side).filter(u => u.strength > 0 && !broken.has(u.id))
   const steady = (side) => formed(side).filter(u => !isShaken(u))
-  const remaining = sides(world).filter(side => steady(side).length > 0)
+  const remaining = sides(world).filter(side => steady(side).length > 0 || Boolean(holdsOut?.(side)))
 
   if (remaining.length === 1) {
     return { decided: true, winner: remaining[0], reason: 'enemy army broken' }

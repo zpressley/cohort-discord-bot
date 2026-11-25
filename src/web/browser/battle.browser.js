@@ -1292,3 +1292,65 @@ test('on a phone: the muster offers the pitched battle first and the battle for 
     await shot(p, 'battles-kinds')
   })
 })
+
+// The battle of camps (ruled 2026-11-25; engine/battle/camp.js).
+// CAMPS_SHOTS: a folder for its screenshots.
+test('on a phone: Greywater offers the battle of camps; the tent shows the camp carried, the day, and the camp pitched on the map; the Army tab says who carries it', { skip }, async () => {
+  await withApp(async ({ base, browser, errors }) => {
+    const shot = (p, name, full = true) => process.env.CAMPS_SHOTS ? p.screenshot({ path: path.join(process.env.CAMPS_SHOTS, `${name}.png`), fullPage: full }) : null
+    const p = await page(browser, errors, { width: 390, height: 844 })
+    await toMuster(p, base, { faction: 'rome' })
+    await p.selectOption('select[name="map"]', 'greywater')
+    const choices = p.locator('.kind-choice')
+    assert.equal(await choices.count(), 3)
+    assert.match(await choices.nth(2).textContent(), /A battle of camps\s*Each army marches out with its camp packed up.*Night does not end it: it may run over several days\./)
+    assert.ok((await choices.nth(2).boundingBox()).height >= 44)
+    assert.ok(await p.evaluate(() => document.documentElement.scrollWidth <= 390), 'no sideways scroll')
+    await p.check('input[name="kind"][value="camps"]')
+    await shot(p, 'muster-camps')
+    await p.click('button[type="submit"]')
+    await p.waitForSelector('#map-scroll svg')
+    // The day, and where the camp is.
+    assert.match(await p.textContent('#bar'), /day 1, first light · night in 12 h/)
+    assert.match(await p.textContent('#ground-line'), /^Day 1\. Your camp is packed up and carried by .*: your army tires while it is carried\. Pitch it: "pitch the camp here"\. The enemy's camp: not yet found\.$/)
+    assert.equal(await p.textContent('[data-example] >> nth=0'), 'pitch the camp here')
+    assert.match(await p.textContent('[data-example] >> nth=1'), /pitch the camp at [A-Z]\d+-[NS][EW]$/)
+    assert.ok(await p.locator('#map-scroll svg g.camp').count() >= 1, 'a tent beside the unit carrying it')
+    await shot(p, 'tent-camp-carried', false)
+    // The Army tab: who carries it.
+    await p.click('[data-tab="army"]')
+    assert.match(await p.textContent('#panel-body'), /They carry your camp\. They march at half their pace and fight worse for it/)
+    await shot(p, 'army-carrier')
+    // Pitch it, and everyone else holds.
+    await p.click('[data-tab="orders"]')
+    await p.fill('#orders', 'pitch the camp here\neveryone hold')
+    await p.click('#send')
+    await p.waitForFunction(() => /Your camp is pitched at/.test(document.querySelector('#ground-line')?.textContent ?? ''), null, { timeout: 15000 })
+    const svg = await p.locator('#map-scroll svg').innerHTML()
+    assert.ok(svg.includes('Your camp'), 'the camp is drawn and named on the map')
+    assert.ok(!svg.includes('Enemy camp'), 'the enemy\'s is not, until it is found')
+    assert.ok(await p.evaluate(() => document.documentElement.scrollWidth <= 390), 'no sideways scroll')
+    await shot(p, 'tent-camp-pitched', false)
+  })
+})
+
+test('on a phone: in a battle of camps the night passes plainly: the dispatch tells the rest and the dawn, and the bar counts the second day', { skip }, async () => {
+  await withApp(async ({ base, browser, errors, store }) => {
+    const shot = (p, name, full = true) => process.env.CAMPS_SHOTS ? p.screenshot({ path: path.join(process.env.CAMPS_SHOTS, `${name}.png`), fullPage: full }) : null
+    // A short day (an hour), so that night comes soon.
+    const made = store.muster({ map: 'greywater', kind: 'camps', opponent: 'standing', side: 'red', seed: 5, faction: 'rome', enemyFaction: 'rome', dayMinutes: 60 })
+    const game = store.seatOf(made.seats.red).entry.game
+    for (let i = 0; i < 40 && game.day === 1 && !game.outcome.decided; i++) await store.submit(made.seats.red, i === 0 ? 'pitch the camp here' : '')
+    assert.equal(game.day, 2)
+    const p = await page(browser, errors, { width: 390, height: 844 })
+    await p.goto(`${base}/b/${made.seats.red}`)
+    await p.waitForSelector('#map-scroll svg')
+    assert.match(await p.textContent('#bar'), /day 2/)
+    await p.click('[data-tab="dispatches"]')
+    const told = await p.textContent('#panel-body')
+    assert.match(told, /Night has fallen\. Your men rested in camp, and will be fresh at first light/)
+    assert.match(told, /Dawn: the second day of the battle begins/)
+    assert.ok(await p.evaluate(() => document.documentElement.scrollWidth <= 390), 'no sideways scroll')
+    await shot(p, 'tent-dawn', false)
+  })
+})

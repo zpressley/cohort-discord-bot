@@ -125,7 +125,16 @@ const CHARACTERS = {
     // or whenever he holds any ('any'); and he takes them all at once, or
     // one at a time with the whole army (oneAtATime).
     contest: 'clock',
-    oneAtATime: false
+    oneAtATime: false,
+    // A camp battle's (campPlan, below): tiles ahead of where the army
+    // formed up that he pitches his camp (behind, if less than 0); how
+    // many units he leaves to guard it; and the odds (his men to the
+    // enemy's he knows of) at which he sends men for the enemy's camp once
+    // it is found, and whether foot go when he has no horse.
+    campAhead: 4,
+    campGuard: 1,
+    campOdds: 1,
+    raidWithFoot: false
   },
   // Throws his horse at whatever he sees, goes in from further off, and
   // fights on with men near breaking. His battles are the shortest.
@@ -137,7 +146,11 @@ const CHARACTERS = {
     horseInReserve: false,
     nerve: 0.5,          // goes to find the enemy sooner
     contest: 'any',      // goes for the ground the enemy holds
-    oneAtATime: false
+    oneAtATime: false,
+    campAhead: 12,       // pitches forward, near the fight
+    campGuard: 1,        // guards it as the steady one does (0: 64% against him, the guard a man short in the line)
+    campOdds: 0.8,       // and goes for the enemy's camp at worse odds
+    raidWithFoot: true
   },
   // Keeps his horse back until his line is fighting, lets the enemy come
   // closer before going in, and pulls men out of the fight early. His
@@ -151,7 +164,11 @@ const CHARACTERS = {
     horseInReserve: true, // ...but wait (with prey 0, alone: 46%; a battle in twelve ends at night)
     nerve: 1.5,          // and waits longer for the enemy to come
     contest: 'clock',
-    oneAtATime: true     // takes the grounds one at a time, the army together
+    oneAtATime: true,     // takes the grounds one at a time, the army together
+    campAhead: -4,       // pitches behind where he formed up
+    campGuard: 1,        // (2 guards: 30% against steady; 1: 47%)
+    campOdds: 1.3,       // and risks men for the enemy's only at good odds
+    raidWithFoot: false
   }
 }
 // (Where a side waits on good ground, and for how long, is left to the
@@ -181,12 +198,18 @@ const centroid = (points) => ({
 function planTurn(game, side) {
   const battle = game.battle
   const map = battle.map
-  const mine = battle.world.units.filter(u => u.side === side && u.strength > 0 && !battle.broken.has(u.id))
-  if (mine.length === 0) return []
+  const all = battle.world.units.filter(u => u.side === side && u.strength > 0 && !battle.broken.has(u.id))
+  if (all.length === 0) return []
 
   const temper = temperament(game, side)
   const ch = characterOf(game, side)
   const view = sideView(game, side)
+  // A camp battle's: the units at the camp's work (carrying it, guarding
+  // it, going for the enemy's) are given their orders here, and the rest
+  // fight as before (campPlan). With no camps, none.
+  const camp = view.camps ? campPlan(game, side, all, view, ch) : null
+  const mine = camp ? all.filter(u => !camp.busy.has(u.id)) : all
+  if (mine.length === 0) return camp?.orders ?? []
   const kindOf = (id) => battle.world.units.find(u => u.id === id) ?? battle.fledUnits.find(u => u.id === id)
   const enemies = view.intel
     .filter(e => e.strength > 0)
@@ -383,10 +406,87 @@ function planTurn(game, side) {
     }
     toSlot(unit, holding || waiting)
   }
-  return orders
+  return camp ? [...camp.orders, ...orders] : orders
 }
 
 const lineFighting = (line, fighting) => line.some(u => fighting.has(u.id))
+
+// ── The camp ────────────────────────────────────────────
+// A camp battle's (engine/battle/camp.js), played as the Commander would,
+// from what his side knows (sideView's camps: his own camp, and the
+// enemy's as found):
+//   - carried and never pitched: the unit carrying it pitches it ahead of
+//     (or behind) where the army formed up, by his character (campAhead);
+//   - dropped: the nearest unit not fighting takes it up and pitches it
+//     where it lies;
+//   - pitched: the weakest of his foot (campGuard of them, while he has
+//     enough left for a line) guard it, inside it;
+//   - the enemy's found, and his men to the enemy's he knows of at least
+//     campOdds: his horse (or, if he has none and dares, the fastest of
+//     his foot) go for it.
+// Returns { orders, busy }: the orders, and the units given them.
+function campPlan(game, side, all, view, ch) {
+  const battle = game.battle
+  const map = battle.map
+  const orders = []
+  const busy = new Set()
+  const give = (unit, order) => { orders.push({ unitRef: unit.id, ...order }); busy.add(unit.id) }
+  const fighting = new Set([...battle.previousEngagementKeys].flatMap(k => k.split('|')))
+  const own = view.camps.own
+  const theirEdge = Object.entries(game.spec.sides ?? {}).find(([s]) => s !== side)?.[1]?.homeEdge ?? 'east'
+  const forward = FORWARD[theirEdge] ?? FORWARD.east
+  const started = centroid(game.spec.units.filter(u => u.side === side).map(u => toXY(u.position)))
+  const rank = (u) => ['levy', 'militia', 'tribal_warriors', 'professional', 'veteran_mercenary', 'elite'].indexOf(u.quality)
+  const weakest = (a, b) => rank(a) - rank(b) || a.strength - b.strength || a.id.localeCompare(b.id)
+
+  if (own?.status === 'carried') {
+    const carrier = all.find(u => u.id === own.carrier)
+    const ever = battle.log.ofType('campPitched').some(e => e.side === side)
+    if (carrier && !ever) {
+      const spot = standable(map, add(started, forward, ch.campAhead ?? 4), new Set()) ?? carrier.position
+      give(carrier, { action: 'pitch', target: spot })
+    } else if (carrier) give(carrier, { action: 'pitch' })
+  } else if (own?.status === 'dropped') {
+    const near = all.filter(u => !fighting.has(u.id))
+      .sort((a, b) => tileDistance(a.position, own.at) - tileDistance(b.position, own.at) || a.id.localeCompare(b.id))[0]
+    if (near) give(near, { action: 'pitch', target: { ...own.at } })
+  } else if (own?.status === 'pitched') {
+    const foot = all.filter(u => !u.mounted && !busy.has(u.id)).sort(weakest)
+    const guards = all.length - (ch.campGuard ?? 1) >= 2 ? foot.slice(0, ch.campGuard ?? 1) : []
+    const inside = (u) => own.tiles.some(t => t.x === u.position.x && t.y === u.position.y)
+    for (const unit of guards) {
+      if (fighting.has(unit.id)) { busy.add(unit.id); continue }
+      give(unit, inside(unit) ? { action: 'hold' } : { action: 'defend', target: { ...own.at } })
+    }
+  }
+
+  const theirs = view.camps.enemy
+  const men = all.reduce((sum, u) => sum + u.strength, 0)
+  // The enemy his side knows of, and of them those not seen running: men he
+  // can see break and run are no longer an army in his way.
+  const known = view.intel.filter(e => e.strength > 0)
+  const formedMen = known.filter(e => !(e.status === 'visible' && battle.broken.has(e.id))).reduce((sum, e) => sum + e.strength, 0)
+  // His men far outnumber those still formed against him (twice campOdds),
+  // or none is: everyone not at the camp's work goes for the enemy's camp,
+  // if it is found, or after the men running to it, if it is not.
+  const allIn = formedMen === 0 || men / formedMen >= 2 * (ch.campOdds ?? 1)
+  const running = known.filter(e => e.status === 'visible' && battle.broken.has(e.id))
+    .sort((a, b) => tileDistance(centroid(all.map(u => u.position)), a.position) - tileDistance(centroid(all.map(u => u.position)), b.position) || a.id.localeCompare(b.id))[0]
+  const goal = theirs && theirs.status !== 'burned' && theirs.at ? theirs.at : null
+  if (allIn && (goal || running)) {
+    for (const unit of all.filter(u => !busy.has(u.id) && !fighting.has(u.id))) give(unit, { action: 'attack', target: { ...(goal ?? running.position) } })
+  } else if (goal) {
+    if (known.length === 0 || men / Math.max(1, formedMen) >= (ch.campOdds ?? 1)) {
+      let raiders = all.filter(u => u.mounted && !busy.has(u.id) && !fighting.has(u.id))
+      if (raiders.length === 0 && ch.raidWithFoot) {
+        raiders = all.filter(u => !busy.has(u.id) && !fighting.has(u.id))
+          .sort((a, b) => (b.movementRange ?? 1) - (a.movementRange ?? 1) || weakest(b, a)).slice(0, 1)
+      }
+      for (const unit of raiders) give(unit, { action: 'attack', target: { ...theirs.at } })
+    }
+  }
+  return { orders, busy }
+}
 
 // ── Coming to grips ─────────────────────────────────────
 // Where a side that knows nothing of the enemy goes to look for him, before

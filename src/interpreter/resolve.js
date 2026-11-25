@@ -27,6 +27,7 @@ const { lettersApart } = require('./grammar')
 const { detectFeatures } = require('../engine/map/features')
 const { compassWord, KIND_WORDS: GROUND_KIND_WORDS } = require('../engine/map/places')
 const { unitsByKind, enemiesByKind } = require('./kinds')
+const { CAMP: CAMP_WORDS } = require('../narrator/words')
 
 // The extra parts of an order the engine reads (Stage 3), carried through
 // unchanged when set.
@@ -234,6 +235,9 @@ function resolvePlace(map, origin, words, known = {}) {
     if (!known.homeEdge) return { question: ORDERS_READ.noEdge }
     text = `${back[1]} m ${known.homeEdge}`
   }
+  // A camp battle's camps: his own, and the enemy's if his men have found it.
+  const camp = campPlace(text, known)
+  if (camp) return camp
   // The ground to fight for, one of his own units, a name loosely written.
   const wide = widePlace(map, origin, text, known)
   if (wide) return wide
@@ -264,6 +268,61 @@ function resolvePlace(map, origin, words, known = {}) {
     }
   }
   return { question: `I can't place "${text}": ${found.none}. Try the ground (the ridge to the east, the clearing) or a grid square like C7.` }
+}
+
+// "the camp", "our camp", "their camp": a camp battle's camps as his side
+// knows them (known.camps: sideView's camps, { own, enemy }). Null for any
+// other words, or a battle with no camps.
+const OUR_CAMP_WORDS = /^(?:the |our |your |my )?camp$/i
+const THEIR_CAMP_WORDS = /^(?:the enemy'?s? |their |enemy |the enemy )camp$/i
+function campPlace(text, known) {
+  const camps = known.camps
+  if (!camps) return null
+  if (OUR_CAMP_WORDS.test(text)) {
+    const own = camps.own
+    if (!own || own.status === 'burned') return { question: CAMP_WORDS.noneOurs }
+    if (own.status === 'carried') return { question: CAMP_WORDS.carriedBy(own.carrier) }
+    return { position: { ...own.at }, description: CAMP_WORDS.ours }
+  }
+  if (THEIR_CAMP_WORDS.test(text)) {
+    const theirs = camps.enemy
+    if (!theirs?.at) return { question: CAMP_WORDS.notFound }
+    if (theirs.status === 'burned') return { question: CAMP_WORDS.burnedTheirs }
+    return { position: { ...theirs.at }, description: CAMP_WORDS.theirs }
+  }
+  return null
+}
+
+// Pitching or striking the camp (a camp battle's): who does it, and where.
+// With no one named, the unit carrying it; else his unit nearest it. A
+// camp burned is no camp; one carried cannot be struck again.
+function resolveCampWork(intent, units, context, known) {
+  const own = known.camps?.own
+  if (!own) return { question: 'There are no camps in this battle.' }
+  if (own.status === 'burned') return { question: CAMP_WORDS.noneOurs }
+  let match = intent.unitRef === 'everyone' ? null : resolveUnitsWide(intent.unitRef, units, {})
+  if (match && match.units.length === 0) return { question: `Who do you mean by "${match.unknown ?? intent.unitRef}"? Your units: ${units.map(u => u.id).join(', ')}.` }
+  let unit
+  if (!match) {
+    unit = own.status === 'carried'
+      ? units.find(u => u.id === own.carrier)
+      : [...units].sort((a, b) => Math.max(Math.abs(a.position.x - own.at.x), Math.abs(a.position.y - own.at.y)) - Math.max(Math.abs(b.position.x - own.at.x), Math.abs(b.position.y - own.at.y)) || a.id.localeCompare(b.id))[0]
+    if (!unit) return { question: 'None of your units can reach the camp.' }
+  } else unit = match.units[0]
+  if (intent.action === 'strike' && own.status === 'carried') return { question: CAMP_WORDS.carriedBy(own.carrier) }
+  let target = null
+  let where = null
+  if (intent.place) {
+    const place = resolvePlace(context.map, unit.position, intent.place, known)
+    if (place.question) return { question: place.question, ...(place.options ? { choice: { question: place.question, place: intent.place, options: place.options } } : {}) }
+    target = place.position
+    where = `${place.description} (${gridLabel(target, { quarter: true })})`
+  } else if (intent.action === 'pitch') {
+    target = { ...unit.position }
+    where = `where they stand (${gridLabel(target, { quarter: true })})`
+  }
+  const order = { unitRef: unit.id, action: intent.action, ...(target ? { target: { ...target } } : {}) }
+  return { order, understood: `${unit.id}: ${orderWords('say', { action: intent.action }, where, { relative: !intent.place })}` }
 }
 
 /**
@@ -302,7 +361,19 @@ function resolveIntents(intents, context) {
   const named = namedIn(intents, units, context.named)
   // What places may be said by: his own edge, the ground to fight for, his
   // own units.
-  const known = { homeEdge: context.homeEdge, ground: context.ground, groundNeeded: context.groundNeeded ?? null, units: context.allOwn ?? units }
+  let known = { homeEdge: context.homeEdge, ground: context.ground, groundNeeded: context.groundNeeded ?? null, units: context.allOwn ?? units, ...(context.camps ? { camps: context.camps } : {}) }
+
+  // The units working the camp in these orders (pitch, strike): "everyone"
+  // in another line does not take them off it.
+  const campWork = known.camps ? intents.filter(i => i.kind === 'order' && (i.action === 'pitch' || i.action === 'strike'))
+    .map(i => resolveCampWork(i, units, context, known).order).filter(Boolean) : []
+  const campWorkers = new Set(campWork.map(o => o.unitRef))
+  // ... and where it is being pitched is "the camp" for the other lines:
+  // "pitch the camp here, everyone guard the camp".
+  const pitching = campWork.find(o => o.action === 'pitch' && o.target)
+  const campKnown = pitching ? { ...known, camps: { ...known.camps, own: { ...known.camps.own, status: 'pitched', at: { ...pitching.target } } } } : known
+  const campBase = known
+  known = campKnown
 
   for (let intent of intents) {
     if (intent.kind === 'surrender') { surrender = true; continue }
@@ -327,6 +398,20 @@ function resolveIntents(intents, context) {
     }
     if (intent.kind !== 'order') continue
 
+    // Pitching or striking the camp: one unit, the resolver's choice when
+    // no one is named (resolveCampWork).
+    if (intent.action === 'pitch' || intent.action === 'strike') {
+      const work = resolveCampWork(intent, units, context, campBase)
+      if (work.question) {
+        questions.push(work.question)
+        if (work.choice) choices.push(work.choice)
+        continue
+      }
+      orders.push(work.order)
+      understood.push(work.understood + carried([work.order.unitRef]))
+      continue
+    }
+
     let match = intent.unitIds
       ? { units: units.filter(u => intent.unitIds.includes(u.id)) }
       : resolveUnitsWide(intent.unitRef, units, { named })
@@ -344,6 +429,7 @@ function resolveIntents(intents, context) {
         continue
       }
     }
+    if (campWorkers.size && /^everyone/.test(intent.unitRef ?? '') && !intent.unitIds) match = { ...match, units: match.units.filter(u => !campWorkers.has(u.id)) }
     if (match.units.length === 0) {
       questions.push(`Who do you mean by "${match.unknown ?? intent.unitRef}"? Your units: ${units.map(u => u.id).join(', ')}.`)
       continue

@@ -21,6 +21,7 @@
 //                                and again with the computer led by a bold and
 //                                by a cautious Commander; and a short
 //                                section on the big fields (2 km); and
+//                                the battle of camps where it is fought; and
 //                                battles that must come to grips
 //                                (harness/no-fight.js)
 //   npm run soak -- --seeds 50
@@ -268,6 +269,36 @@ for (const field of bigFields) for (const name of Object.keys(SCENARIOS)) {
   })
 }
 
+// The battle of camps (engine/battle/camp.js), on every field that offers
+// it: every faction's army with its second line, red a Commander on the
+// field played by the three kinds of commander (one who never pitches his
+// camp among them), blue the computer, a day of twelve hours, and the
+// battle run on day after day. Every one must end (by CAMP.MAX_DAYS at the
+// latest).
+const campFields = mapChoices().map(m => m.id).filter(f => kindsOf(f).includes('camps'))
+const camped = { games: 0, finished: 0, days: 0, longest: 0, burned: 0, daysOut: 0, stuck: [] }
+campFields.forEach((field, m) => factionKeys.forEach((red, i) => {
+  const [foe, orders] = Object.entries(FOES)[i % 3]
+  const blue = factionKeys[(i + 3 + m * 5) % factionKeys.length]
+  const seed = 11 + i + factionKeys.length * m
+  const spec = withSecondLine(fieldFactions(loadScenario('meeting-battle', { map: field, deploy: true, kind: 'camps' }), { red, blue }), { red, blue })
+  const mine = spec.units.filter(u => u.side === 'red')
+  const game = createGame({ ...spec, standingOrders: {}, dayMinutes: T.DAY.MINUTES, ...kindSpec(field, 'camps'), commanders: { red: { unitId: mine[leadUnit(mine)].id } } }, { seed })
+  let turns = 0
+  while (!game.outcome.decided && turns < 8 * MAX_PLAYER_TURNS) {
+    if (waitingOn(game).includes('red')) submitOrders(game, 'red', orders(game))
+    if (!game.outcome.decided && waitingOn(game).includes('blue')) submitOrders(game, 'blue', byCommandPost(planTurn(game, 'blue')))
+    turns++
+  }
+  camped.games++
+  if (!game.outcome.decided) { camped.stuck.push(`${field} camps ${red} v ${blue}, red a commander who ${foe}, seed ${seed}`); return }
+  camped.finished++
+  camped.days += game.day
+  camped.longest = Math.max(camped.longest, game.day)
+  camped.burned += game.battle.log.ofType('campBurned').length
+  if (game.outcome.reason === 'the days ran out') camped.daysOut++
+}))
+
 // Every battle comes to grips (harness/no-fight.js): two armies led by the
 // computer, and the computer against a player who gives no orders, on
 // every map, in a battle for the map's ground and in a pitched battle (none
@@ -319,9 +350,12 @@ for (const stuck of pitched.stuck.slice(0, 10)) console.log(`  stuck: ${stuck}`)
 console.log(`the big fields (${bigFields.join(', ')}): ${big.finished} of ${big.games} finished, ${big.byGround} decided by the ground, ` +
   `${big.night} ended by night, ${Math.round(big.minutes / Math.max(1, big.finished))} battle minutes on average; hotseat ${bigHotseat.finished} of ${bigHotseat.games}`)
 for (const stuck of [...big.stuck, ...bigHotseat.stuck].slice(0, 10)) console.log(`  stuck: ${stuck}`)
+console.log(`the battle of camps (${campFields.join(', ')}): ${camped.finished} of ${camped.games} finished, ` +
+  `${(camped.days / Math.max(1, camped.finished)).toFixed(1)} days on average, the longest ${camped.longest}; ${camped.burned} camps burned; ${camped.daysOut} ran out of days`)
+for (const stuck of camped.stuck.slice(0, 10)) console.log(`  stuck: ${stuck}`)
 console.log(`coming to grips: ${grips.games - grips.nothing.length} of ${grips.games} came to a fight or a verdict; ${grips.night} ended by night, ${grips.quiet} with two hours or more in which nothing happened`)
 for (const nothing of grips.nothing.slice(0, 10)) console.log(`  came to nothing: ${nothing}`)
 console.log(`meeting battle: a verdict in ${decided} of 50, ` +
   `${(meetingTurns / Math.max(1, decided)).toFixed(1)} battle turns on average`)
 
-if (result.stuck.length > 0 || thinking.stuck.length > 0 || armies.stuck.length > 0 || characters.stuck.length > 0 || bought.stuck.length > 0 || ground.stuck.length > 0 || pitched.stuck.length > 0 || big.stuck.length > 0 || bigHotseat.stuck.length > 0 || grips.nothing.length > 0 || decided < 50 || result.unread > 0) process.exitCode = 1
+if (result.stuck.length > 0 || thinking.stuck.length > 0 || armies.stuck.length > 0 || characters.stuck.length > 0 || bought.stuck.length > 0 || ground.stuck.length > 0 || pitched.stuck.length > 0 || big.stuck.length > 0 || bigHotseat.stuck.length > 0 || camped.stuck.length > 0 || grips.nothing.length > 0 || decided < 50 || result.unread > 0) process.exitCode = 1
