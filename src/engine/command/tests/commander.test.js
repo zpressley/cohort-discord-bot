@@ -247,3 +247,17 @@ test('freed, he brings out what he heard in the enemy\'s camp: his side knows wh
   assert.deepEqual([far.status, far.position], ['ghost', { x: 36, y: 36 }])
   assert.deepEqual(game.battle.lastSeen.get('red').get('far'), { x: 36, y: 36 }, 'and his units know where to go for them')
 })
+
+test('caught running, his unit broken and pursued, he may be taken whatever its strength, on a roll of his own', () => {
+  const units = [unit({ id: 'guard', strength: 90 }), unit({ id: 'foe', side: 'blue' })]
+  const pursued = { type: 'pursuit', unitId: 'guard', by: 'foe', killed: 9, remaining: 90, trapped: false }
+  const fresh = () => ({ red: { unitId: 'guard', status: 'free', heldBy: null } })
+  const rolls = (list) => { let i = 0; return () => list[i++] }
+  let commanders = fresh()
+  assert.deepEqual(tick({ commanders, world: world(units), broken: new Set(['guard']), events: [pursued], random: rolls([COMMANDER.CAUGHT - 0.001, COMMANDER.KILLED_SHARE]) }),
+    [{ type: 'commanderTaken', fields: { side: 'red', unitId: 'guard', by: 'foe', running: true } }], 'and the dispatch will say he was taken as his men ran')
+  commanders = fresh()
+  assert.deepEqual(tick({ commanders, world: world(units), events: [pursued], random: () => COMMANDER.CAUGHT }), [], 'the roll came up high')
+  commanders = fresh()
+  assert.deepEqual(tick({ commanders, world: world(units), events: [fight('guard', 'foe')], random: () => 0 }), [], 'struck in a fight above the threshold, he does not fall, as before')
+})

@@ -725,6 +725,7 @@ const COMMANDER = {
   DEATH_THRESHOLD: 0.25, // he can be killed only at or under this share (ruled 2026-11-23); above it he is taken
   CHANCE: 0.04,        // each tick it is struck while under the threshold
   OVERRUN: 0.3,        // the tick it is destroyed around him
+  CAUGHT: 0.06,        // a tick it is caught running (pursued), whatever its strength: since broken units run round the enemy they are seldom overrun; at 0.06 he is taken 1 battle in 21.3 (it fell to 1 in 45.5 without; "How columns, wavering under fire and flight were mended")
   KILLED_SHARE: 0.12   // of those who fall, killed; the rest are taken
 }
 
@@ -1213,7 +1214,12 @@ module.exports.FORM_UP = {
 module.exports.FIRE_NEWS = {
   QUIET: 6,        // ten minutes (an hour) after he was told of shooting, more of it calls him only if it grows
   HEAVY: 0.05,     // ... a unit of his losing this share of its mustered men in one ten minutes of it
-  SHAKEN: 50       // ... or a unit of his down to this heart (of 100) as its report has it
+  SHAKEN: 50,      // ... or a unit of his down to this heart (of 100) as its report has it, the first time
+  WORSE: 10        // ... or, wavering already when he was last called for shooting, its heart down this much more since
+  // (SHAKEN called him at every volley once a unit wavered: Ashford seed
+  // 410344, four calls in 50 minutes for a man or two each, the second
+  // playthrough's S6. WORSE is Claude's, open to change: "How columns,
+  // wavering under fire and flight were mended".)
 }
 
 // A unit going in at an enemy this near (tiles) across a ford or bridge
@@ -1247,4 +1253,39 @@ module.exports.FOLLOW = {
 module.exports.GROUND_FIGHT = {
   BESIDE: 0,
   ORDERS: ['move', 'defend']
+}
+
+// Marching in column (the second playthrough of November 24, S5 and S8:
+// every Thornwood battle opened with 300 men packed onto one spot of the
+// road, and the army fought at the ford two or three units to a tile). In
+// a battle a unit on the march does not step onto a tile a unit of its own
+// side stands on: it waits while that unit moves on (a column), goes round
+// it if the way round costs at most ROUND movement more, passes through if
+// it can clear the tile in the same ten minutes, else waits behind men in a
+// fight or on their way, and goes in among men only standing there.
+// It still goes onto a friend's tile that is the very place it was sent,
+// or beside an enemy it is going at (joining a fight); never onto a
+// crossing (CROSSINGS) a friend holds: a ford or bridge passes one unit at
+// a time. Units may still share ground (ruled 2026-10-21) when sent there,
+// pushed or running. Claude's values, open to change (docs/DECISIONS.md,
+// "How columns, wavering under fire and flight were mended").
+module.exports.MARCH = {
+  ROUND: 3,                       // movement more a way round may cost (three tiles of open ground; a wood's tile is 2)
+  CROSSINGS: ['ford', 'bridge']   // ground that takes one unit at a time
+}
+
+// A broken unit runs for its own edge by the cheapest open way: through no
+// enemy, round its own men where it can (FRIENDS more a tile), and wide of
+// formed enemies (BESIDE_ENEMY more a tile beside one). With no way to its
+// edge at all (cut off across a river whose crossing the enemy holds), it
+// runs from the enemy instead, to the ground within AWAY tiles farthest from
+// any formed enemy, where it may rally (RALLY.SAFE_TILES) or be caught.
+// Before, a unit whose way home lay through an enemy stood and was cut
+// down over an hour or more, and two broken units of either side, each in
+// the other's way, stood for hours (the second playthrough, S7). Claude's
+// values, open to change (docs/DECISIONS.md, as above).
+module.exports.FLIGHT = {
+  FRIENDS: 2,
+  BESIDE_ENEMY: 2,
+  AWAY: 8
 }

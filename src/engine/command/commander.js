@@ -125,7 +125,10 @@ function stepCommanders({ commanders, world, broken, fledUnits, events, mustered
     let fallen = false
     if (strikers.length > 0) {
       const share = gone ? 0 : unit.strength / (mustered.get(c.unitId) || unit.strength)
-      const chance = gone ? COMMANDER.OVERRUN : share <= COMMANDER.THRESHOLD ? COMMANDER.CHANCE : 0
+      // Caught running (his unit broken and pursued) is as bad as overrun.
+      const caught = events.some(e => e.type === 'pursuit' && e.unitId === c.unitId)
+      const chance = gone ? COMMANDER.OVERRUN
+        : Math.max(caught ? COMMANDER.CAUGHT : 0, share <= COMMANDER.THRESHOLD ? COMMANDER.CHANCE : 0)
       if (chance > 0 && random() < chance) {
         fallen = true
         // Death comes only when the unit is cut to a quarter or less, or
@@ -136,7 +139,8 @@ function stepCommanders({ commanders, world, broken, fledUnits, events, mustered
           out.push({ type: 'commanderKilled', fields: { side, unitId: c.unitId, by: strikers[0] } })
         } else {
           Object.assign(c, { status: 'held', heldBy: strikers[0] })
-          out.push({ type: 'commanderTaken', fields: { side, unitId: c.unitId, by: strikers[0] } })
+          // (Caught as his men ran: the dispatch says so.)
+          out.push({ type: 'commanderTaken', fields: { side, unitId: c.unitId, by: strikers[0], ...(caught && broken.has(c.unitId) ? { running: true } : {}) } })
         }
       }
     }

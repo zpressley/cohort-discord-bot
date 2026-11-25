@@ -51,3 +51,11 @@ test('with a Commander on each side, each hears his own fate as "you" and the ot
     'With blue_spears gone you got away to blue_horse'
   ])
 })
+
+test('a Commander taken as his men ran is told so, and the side that took him hears it', () => {
+  const ran = [{ type: 'commanderTaken', turn: 3, side: 'red', unitId: 'red_spears', by: 'blue_swords', running: true }]
+  const tell = (own, seen) => report({ map, ownIds: new Set(own), seenEnemyIds: new Set(seen), events: ran })
+  assert.deepEqual(tell(['red_spears'], ['blue_swords']),
+    ['You were taken by blue_swords as your men ran. You can send no orders; each of your officers now leads his own unit as he sees fit'])
+  assert.deepEqual(tell(['blue_swords'], ['red_spears']), ['blue_swords took the enemy Commander as his men ran'])
+})

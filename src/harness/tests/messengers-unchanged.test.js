@@ -50,6 +50,15 @@
 // grips, with its step into a crossing moved into the engine for every
 // unit). Alone, the planner's change had made them 61e100aa 25, 824d0cc9 27, 15f2219b 13,
 // 4fa3b601 23.
+//
+// Retaken when armies marched in column, a ford took one unit at a time,
+// broken units ran round the enemy, skirmishers stood with their backs
+// to the edge, Ashford's east army formed up a tile further back,
+// Crownhill's five tiles north, Elderby's bridge was made four abreast,
+// Thornwood's west a tile nearer, and a Commander caught running may be
+// taken (docs/DECISIONS.md, "How columns,
+// wavering under fire and flight were mended"). The battles were b01c713a 25, 39ecf1e5 26,
+// 15f2219b 13, 842dd7c2 23.
 
 const { test } = require('node:test')
 const assert = require('node:assert/strict')
@@ -67,10 +76,10 @@ function fingerprint(text) {
 }
 
 const BEFORE = {
-  'crownhill 1': 'b01c713a 25',
-  'crownhill 2': '39ecf1e5 26',
-  'ashford 1': '15f2219b 13',
-  'ashford 2': '842dd7c2 23'
+  'crownhill 1': 'e9cfed6f 17',
+  'crownhill 2': '86491ec2 19',
+  'ashford 1': 'ccfaaf84 14',
+  'ashford 2': '7e232cf6 17'
 }
 
 test('a battle with no Commander on the field runs exactly as before riders, event for event', () => {

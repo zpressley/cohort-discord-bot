@@ -94,6 +94,19 @@ function fallBack(unit, enemies, { map, engagementRange = 1, enemyAt = () => fal
   if (threats.length === 0) return null
   // One it cannot outmarch among them: falling back is no use.
   if (threats.some(e => !outruns(unit, e))) return null
+  // Its back to the field's edge (the next tile straight away from the
+  // nearest of them is off the field): it has nowhere to fall back to, and
+  // stands and shoots, or fights. Giving ground along the edge instead, horse
+  // archers kept out of reach of foot for hours (Greywater, Carthage against
+  // Parthia, seed 9559233 of the captive league; docs/DECISIONS.md, "How
+  // columns, wavering under fire and flight were mended").
+  const nearest = [...threats].sort((a, b) => tileDistance(unit.position, a.position) - tileDistance(unit.position, b.position) || a.id.localeCompare(b.id))[0]
+  const dx = unit.position.x - nearest.position.x
+  const dy = unit.position.y - nearest.position.y
+  const back = Math.abs(dx) >= Math.abs(dy)
+    ? { x: unit.position.x + Math.sign(dx), y: unit.position.y }
+    : { x: unit.position.x, y: unit.position.y + Math.sign(dy) }
+  if (!map.inBounds(back)) return null
 
   const margin = (tile) => Math.min(...threats.map(e => tileDistance(tile, e.position) - reachOf(e, engagementRange)))
   // In reach of its weapon, and of its own sight (map/sight.js).

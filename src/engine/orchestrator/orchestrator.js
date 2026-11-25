@@ -547,7 +547,10 @@ function wantedNow(game, turnRecord, sightedBy, heard, objectiveChanges) {
     if (why) by[side] = why
     // The shooting he is told of as he is called, whatever called him: the
     // spell of quiet runs from then.
-    if (why && reasons.includes('fire')) (game.firedAt ??= {})[side] = battle.turn
+    if (why && reasons.includes('fire')) {
+      (game.firedAt ??= {})[side] = battle.turn
+      rememberHeart(game, side)
+    }
   }
   return Object.keys(by).length > 0 ? by : null
 }
@@ -611,10 +614,23 @@ function smallFire(game, side, recent) {
   for (const [id, men] of lost) {
     const mustered = battle.mustered.get(id) ?? 0
     if (mustered > 0 && men >= FIRE_NEWS.HEAVY * mustered) return false
+    // Wavering is news once: the first time a unit of his is down to
+    // FIRE_NEWS.SHAKEN under fire, and again only if it is FIRE_NEWS.WORSE
+    // lower than when he was last called for shooting (the second
+    // playthrough, S6: a wavering unit called him at every volley).
     const morale = word.units[id]?.morale
-    if (morale !== null && morale !== undefined && morale <= FIRE_NEWS.SHAKEN) return false
+    if (morale === null || morale === undefined || morale > FIRE_NEWS.SHAKEN) continue
+    const told = game.firedHeart?.[side]?.[id]
+    if (told === undefined || told === null || told > FIRE_NEWS.SHAKEN || told - morale >= FIRE_NEWS.WORSE) return false
   }
   return true
+}
+
+// The heart of each of his units as he is called for shooting, as their
+// reports have it (smallFire reads it).
+function rememberHeart(game, side) {
+  const units = game.word?.[side]?.units ?? {}
+  ;(game.firedHeart ??= {})[side] = Object.fromEntries(Object.entries(units).map(([id, u]) => [id, u?.morale ?? null]))
 }
 
 // Objective control is measured once per TICK but victory counts consecutive

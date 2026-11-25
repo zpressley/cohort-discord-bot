@@ -157,8 +157,9 @@ test('fog of war, a rider caught: the Commander who sent him is told nothing, an
       const game = store.seatOf(seat).entry.game
       const { battle } = game
       // A rider of his to the hastati, riding past the enemy's cataphracts
-      // (27, 24) two tiles off, and due long after.
-      battle.riders = [{ side: 'red', unitId: 'red_hastati', order: { unitId: 'red_hastati', action: 'move', target: { x: 20, y: 2 } }, sent: battle.turn, arrives: battle.turn + 30, path: column(25, 14, 13) }]
+      // two tiles off (where they stand, (30, 25); it was (27, 24) before the east army formed up
+      // further north), and due long after.
+      battle.riders = [{ side: 'red', unitId: 'red_hastati', order: { unitId: 'red_hastati', action: 'move', target: { x: 20, y: 2 } }, sent: battle.turn, arrives: battle.turn + 30, path: column(28, 14, 13) }]
       await app.api('POST', `/api/seat/${seat}/orders`, { text: 'legionaries hold' })
       const taken = battle.log.all().filter(e => e.type === 'riderTaken')
       assert.deepEqual(taken.map(e => [e.from, e.to]), [['red', 'red_hastati']], 'the enemy took him')

@@ -36,6 +36,15 @@
 // unit). Alone, the planner's change had made them 21bfd107, 9d3ccd07, 398af68c, 1305e5a5 (thornwood is
 // back as it was before both: the computer now guesses where the enemy
 // would hold from the field's own forming-up places).
+//
+// Retaken when armies marched in column, a ford took one unit at a time,
+// broken units ran round the enemy, skirmishers stood with their backs
+// to the edge, Ashford's east army formed up a tile further back,
+// Crownhill's five tiles north, Elderby's bridge was made four abreast,
+// Thornwood's west a tile nearer, and a Commander caught running may be
+// taken (docs/DECISIONS.md, "How columns,
+// wavering under fire and flight were mended"). They were d6b78ab1, fc0d511e, 7ceeb2cc, a9616de5,
+// df860211, ade1ebaa, 29c7796a.
 
 const { test } = require('node:test')
 const assert = require('node:assert/strict')
@@ -54,13 +63,13 @@ function fingerprint(text) {
 }
 
 const BEFORE = {
-  'crownhill 1': 'd6b78ab1',
-  'crownhill 2': 'fc0d511e',
-  'thornwood 1': '7ceeb2cc',
-  'thornwood 2': 'a9616de5',
-  'meeting 1': 'df860211',
-  'meeting 2': 'ade1ebaa',
-  'meeting 3': '29c7796a'
+  'crownhill 1': 'b0797f8',
+  'crownhill 2': 'b5d0c64d',
+  'thornwood 1': '1f044c71',
+  'thornwood 2': '3bd40f16',
+  'meeting 1': 'b3d6f42f',
+  'meeting 2': 'cfde19ad',
+  'meeting 3': 'aa331d26'
 }
 
 test('a battle in which no unit is told to attack a named enemy runs exactly as before', () => {

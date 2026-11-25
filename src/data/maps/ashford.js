@@ -101,8 +101,12 @@ module.exports = {
   height: H,
   cells: CELLS,
   terrain: map.terrain(),
-  // Where each side's army forms up when a scenario is fought here.
-  deploy: { west: { x: 8, y: 25 }, east: { x: 32, y: 25 } },
+  // Where each side's army forms up when a scenario is fought here. The
+  // east at (33, 25) since armies march in column and the bridge takes one
+  // unit at a time (it was (32, 25)): there the computer against itself
+  // gave the west 70%; here 51% (400 battles). docs/DECISIONS.md, "How
+  // columns, wavering under fire and flight were mended".
+  deploy: { west: { x: 8, y: 25 }, east: { x: 33, y: 25 } },
   // The ground to fight for (engine/orchestrator/victory.js, objectiveArea):
   // the bridge mid-field and the mill at its west end, held from on them.
   // (The bridge alone, held from either end, was tried first: the east army

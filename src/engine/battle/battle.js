@@ -896,7 +896,12 @@ function stepTurn(state, sideOrders = {}, { sameTurn = false } = {}) {
   for (const unit of livingUnits(world)) {
     if (!broken.has(unit.id)) continue
     const edge = spec.sides?.[unit.side]?.homeEdge ?? 'west'
-    orders.push({ unitId: unit.id, target: chooseFlightTarget(map, world, unit, edge), fleeing: true })
+    // For its own edge by the cheapest open way, round the enemy; cut off
+    // from it, away from him (flightPath).
+    const way = flightPath(map, world, unit, edge, broken)
+    orders.push(way
+      ? { unitId: unit.id, target: way[way.length - 1], path: way, fleeing: true }
+      : { unitId: unit.id, target: chooseFlightTarget(map, world, unit, edge), fleeing: true })
   }
 
   // ── Movement (phase 3) ──────────────────────────
@@ -935,7 +940,10 @@ function stepTurn(state, sideOrders = {}, { sameTurn = false } = {}) {
 
   const movement = resolveSimultaneousMovement(world, orders, map, {
     hidden: new Set(state.hidden.keys()), ambushers, ambush: decideAmbush,
-    engaged: new Set(engagedAtStart.keys()), glue: T.DISENGAGE.MOVE_COST
+    engaged: new Set(engagedAtStart.keys()), glue: T.DISENGAGE.MOVE_COST,
+    // Units on the march keep a tile apart: in column, round or waiting
+    // (tables.MARCH).
+    keepApart: true
   })
 
   // A sprung ambush is spent: the unit presses the attack on the nearest
@@ -1018,6 +1026,9 @@ function stepTurn(state, sideOrders = {}, { sameTurn = false } = {}) {
     if (!['move', 'defend', 'withdraw'].includes(order.action)) continue
     const stuck = move.failed || (!move.held && !move.skipped && move.tilesMoved === 0)
     if (!stuck || move.failed === 'already there') continue
+    // Waiting its turn behind its own men, who are on the move or fighting
+    // (a column at a ford): it keeps its order and goes on when they do.
+    if (move.queued?.busy) continue
 
     const then = order.then === 'hold' ? 'hold' : 'standing'
     if (then === 'hold') state.orderBook.set(move.unitId, { action: 'hold', target: null, then: null })
@@ -1575,6 +1586,99 @@ function chooseFlightTarget(map, world, unit, edge) {
   // Every lane is walled off by friends. Aim down the unit's own row anyway —
   // it will stand, count as trapped, and the overrun rule applies.
   return edgeTarget(map, unit.position, edge)
+}
+
+// The way a broken unit runs (the second playthrough of November 24, S7: a
+// unit whose way home lay through an enemy stood and was cut down for an
+// hour and more; two broken units of either side, each in the other's way,
+// stood for hours, for neither pursues). The cheapest way to any tile of its
+// own edge, never through an enemy, dearer through its own men and beside a
+// formed enemy (tables.FLIGHT); the nearer its own row (or column) on a
+// tie, so on open ground it runs straight back, as before. With no way to
+// its edge at all, it runs from the enemy: to the ground it can reach within
+// FLIGHT.AWAY tiles farthest from any formed enemy. Null when it can get no
+// farther from him than it stands (it is caught, and pursuit settles it).
+// The path includes where it stands.
+function flightPath(map, world, unit, edge, broken) {
+  const start = toPosition(unit.position)
+  const enemyAt = new Set()
+  const formed = []
+  const friendAt = new Set()
+  for (const u of livingUnits(world)) {
+    if (u === unit) continue
+    if (u.side === unit.side) { friendAt.add(positionKey(u.position)); continue }
+    enemyAt.add(positionKey(u.position))
+    if (!broken.has(u.id)) formed.push(u.position)
+  }
+  const besideEnemy = (p) => formed.some(e => tileDistance(e, p) <= 1)
+  const horizontal = edge === 'west' || edge === 'east'
+  const off = (p) => horizontal ? Math.abs(p.y - start.y) : Math.abs(p.x - start.x)
+  // Between two ways alike, the one to its right as it runs, so that two
+  // running past each other from either side keep apart.
+  const right = (p) => ({ west: p.y, east: -p.y, north: -p.x, south: p.x }[edge] ?? p.y)
+  const less = (a, b) => a.cost - b.cost || a.off - b.off || right(a.p) - right(b.p) || a.p.y - b.p.y || a.p.x - b.p.x
+  const heap = []
+  const push = (n) => {
+    heap.push(n)
+    for (let i = heap.length - 1; i > 0;) {
+      const j = (i - 1) >> 1
+      if (less(heap[i], heap[j]) >= 0) break
+      ;[heap[i], heap[j]] = [heap[j], heap[i]]; i = j
+    }
+  }
+  const pop = () => {
+    const top = heap[0]
+    const last = heap.pop()
+    if (heap.length > 0) {
+      heap[0] = last
+      for (let i = 0; ;) {
+        const l = 2 * i + 1; const r = l + 1; let m = i
+        if (l < heap.length && less(heap[l], heap[m]) < 0) m = l
+        if (r < heap.length && less(heap[r], heap[m]) < 0) m = r
+        if (m === i) break
+        ;[heap[i], heap[m]] = [heap[m], heap[i]]; i = m
+      }
+    }
+    return top
+  }
+  const best = new Map([[positionKey(start), 0]])
+  const from = new Map()
+  const done = new Set()
+  const reached = []
+  push({ p: start, cost: 0, off: 0 })
+  const pathTo = (key, p) => {
+    const path = [p]
+    for (let k = key; from.has(k);) { const prev = from.get(k); path.unshift(prev.p); k = prev.key }
+    return path
+  }
+  while (heap.length > 0) {
+    const { p, cost } = pop()
+    const key = positionKey(p)
+    if (done.has(key)) continue
+    done.add(key)
+    reached.push({ p, cost, key })
+    if (!samePosition(p, start) && isOnEdge(map, p, edge)) return pathTo(key, p)
+    for (const n of map.neighbors(p)) {
+      const nk = positionKey(n)
+      if (done.has(nk) || !map.passable(n) || enemyAt.has(nk)) continue
+      const step = map.moveCost(n) + (friendAt.has(nk) ? T.FLIGHT.FRIENDS : 0) + (besideEnemy(n) ? T.FLIGHT.BESIDE_ENEMY : 0)
+      const c = cost + step
+      if (best.has(nk) && best.get(nk) <= c) continue
+      best.set(nk, c)
+      from.set(nk, { key, p })
+      push({ p: n, cost: c, off: off(n) })
+    }
+  }
+  // Cut off from its edge: away from the enemy, as far as it can get.
+  if (formed.length === 0) return null
+  const clear = (p) => Math.min(...formed.map(e => tileDistance(e, p)))
+  const here = clear(start)
+  const away = reached
+    .filter(r => tileDistance(r.p, start) <= T.FLIGHT.AWAY)
+    .map(r => ({ ...r, clear: clear(r.p) }))
+    .sort((a, b) => b.clear - a.clear || a.cost - b.cost || a.p.y - b.p.y || a.p.x - b.p.x)[0]
+  if (!away || away.clear <= here) return null
+  return pathTo(away.key, away.p)
 }
 
 function offsetEdgeTarget(map, pos, edge, offset) {

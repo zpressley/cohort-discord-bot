@@ -31,7 +31,11 @@ test('the verdict tells which of your units broke, and what became of each: rall
   const mine = tent.verdict.sides.red
   assert.equal(mine.broke.length, routed('red_').length, 'every unit of his that broke is there')
   assert.ok(mine.broke.length > 0)
-  assert.deepEqual(mine.broke.find(b => b.name === 'Horse'), { name: 'Horse', said: 'broke twice, and rallied' })
+  // (Seed 9's horse broke twice before armies marched in column and broken
+  // units ran round the enemy; since, once. The count is checked instead.)
+  const horse = mine.broke.find(b => b.name === 'Horse')
+  const times = game.battle.log.all().filter(e => e.type === 'rout' && e.unitId === 'red_horse').length
+  assert.match(horse.said, new RegExp(`^broke${times === 1 ? '' : times === 2 ? ' twice' : ` ${times} times`}, and rallied`))
   for (const b of mine.broke) assert.match(b.said, /^broke( twice| \d+ times)?, and (rallied|left the field|were destroyed|were still fleeing)/)
 })
 

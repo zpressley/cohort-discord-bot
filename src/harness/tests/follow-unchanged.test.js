@@ -6,6 +6,14 @@
 // of whole event logs, taken from the code just before the order was added
 // (main at 832d94e): the computer against itself, faction against faction,
 // on three fields.
+//
+// Retaken when armies marched in column, a ford took one unit at a time,
+// broken units ran round the enemy, skirmishers stood with their backs
+// to the edge, Ashford's east army formed up a tile further back,
+// Crownhill's five tiles north, Elderby's bridge was made four abreast,
+// Thornwood's west a tile nearer, and a Commander caught running may be
+// taken (docs/DECISIONS.md, "How columns,
+// wavering under fire and flight were mended"). They were 1d9ca512 26, 9d62f154 15, 3d0c58e3 12.
 
 const { test } = require('node:test')
 const assert = require('node:assert/strict')
@@ -29,9 +37,9 @@ const BATTLES = [
 ]
 
 const BEFORE = {
-  'thornwood macedon parthia 3': '1d9ca512 26',
-  'ravenridge thrace sarmatia 4': '9d62f154 15',
-  'greywater rome germania 5': '3d0c58e3 12'
+  'thornwood macedon parthia 3': '3c83cec6 25',
+  'ravenridge thrace sarmatia 4': '150f188e 16',
+  'greywater rome germania 5': '7675a063 11'
 }
 
 function fight([field, red, blue, seed]) {

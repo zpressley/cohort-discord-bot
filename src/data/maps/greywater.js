@@ -52,9 +52,19 @@ map.line(GREY.map(([x, y]) => [x + 1, y]), 'river', { width: 2 })
 // river (its twin south, east of the river).
 map.line([[79, 36], [65, 36], [55, 38], [41, 39]], 'road', { over: g => g !== 'river' })
 map.line([[32, 39], [24, 36], [20, 30], [18, 22], [21, 12], [21, 0]], 'road', { over: g => g !== 'river' })
-// The bridge at Elderby: two tiles of the four that span the Grey (with its twin).
+// The bridge at Elderby: tiles that span the Grey (with its twin).
 map.set(39, 39, 'bridge')
 map.set(40, 39, 'bridge')
+// Since a ford or bridge takes one unit at a time (docs/DECISIONS.md, "How
+// columns, wavering under fire and flight were mended"), Elderby's stone
+// bridge is four abreast, not two (rows 38 to 41 with its twin), and the
+// village street meets every lane of it from either bank. Two abreast,
+// "everyone take Elderby" won 27 battles in 100 (46 before columns); four
+// abreast, 45, and the computer against itself is even (51% west).
+map.set(39, 38, 'bridge')
+map.set(40, 38, 'bridge')
+for (let x = 41; x <= 44; x++) map.set(x, 38, 'road')
+for (let x = 35; x <= 38; x++) map.set(x, 39, 'road')
 const ELDERBY_BRIDGE = [40, 39]
 
 // Shepherd's Ford: a band of shallows across the river (Ladyford its twin).

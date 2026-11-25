@@ -592,7 +592,9 @@ test('on a phone: a Commander the battle is not waiting on sees his orders with 
       const seats = (await post('/api/battles', { opponent: 'friend', side: 'red', seed, commander: redC, objectives: [] })).seats
       await post(`/api/seat/${seats.blue}/join`, { commander: blueC })
       const game = store.seatOf(seats.red).entry.game
-      await post(`/api/seat/${seats.red}/orders`, { text: 'everyone advance' })
+      // (Sent 300 m east since columns, November 24: told to advance, every
+      // stop called both; src/web/tests/asked.test.js the same.)
+      await post(`/api/seat/${seats.red}/orders`, { text: 'everyone go east 300 m' })
       await post(`/api/seat/${seats.blue}/orders`, { text: 'everyone hold' })
       for (let t = 0; t < 30 && !game.outcome.decided && waitingOn(game).length !== 1; t++) {
         for (const side of waitingOn(game)) await post(`/api/seat/${seats[side]}/orders`, { text: '' })

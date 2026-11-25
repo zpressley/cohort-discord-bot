@@ -192,7 +192,13 @@ module.exports = {
   // faction; it was 106 and 86, 191 and 163, and the east held the hill
   // first in 185 battles of 200). docs/DECISIONS.md, "How the first
   // battle, being asked, and forming up were built".
-  deploy: { west: { x: 11, y: 23 }, east: { x: 30, y: 29 } },
+  // The east army five tiles north, (30, 24), since armies march in column
+  // and a ford takes one unit at a time: its way to the hill lies over the
+  // North Ford, a unit at a time, and from (30, 29) the west held the hill
+  // first in 335 battles of 400 and won 62% between two computer armies;
+  // from here 53%. docs/DECISIONS.md, "How columns, wavering under fire and
+  // flight were mended".
+  deploy: { west: { x: 11, y: 23 }, east: { x: 30, y: 24 } },
   // The ground to fight for (engine/orchestrator/victory.js, objectiveArea):
   // the hill commanding the north, held from on it. (Miller's Crossing, the
   // ford between the two armies, was tried first: the east army reaches it

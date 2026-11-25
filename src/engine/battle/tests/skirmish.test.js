@@ -159,3 +159,14 @@ test('a battle with no missile troops in it has no falling back', () => {
   assert.equal(of(state, 'gaveGround').length, 0)
   assert.ok(of(state, 'contact').length > 0)
 })
+
+test('with its back to the edge of the field, a skirmisher stands and shoots or fights, rather than give ground along the edge', () => {
+  // On the open field's south edge, foot coming straight at it from the
+  // north: there is room east and west along the edge, but none behind.
+  const open = resolveMap(MAP)
+  const here = horseArchers({ position: { x: 10, y: 19 } })
+  const there = foe({ position: { x: 10, y: 15 } })
+  assert.equal(fallBack(here, [there], { map: open }), null)
+  // A tile in from the edge, it still falls back.
+  assert.ok(fallBack({ ...here, position: { x: 10, y: 18 } }, [{ ...there, position: { x: 10, y: 14 } }], { map: open }))
+})
