@@ -154,7 +154,11 @@ test('alone, on a phone: muster, an order written on the map, turns to a verdict
       await p.waitForSelector('#send, #wait, .verdict')
       if (await p.locator('.verdict').count()) break
       await p.click(await p.locator('#send').count() ? '#send' : '#wait')
-      await p.waitForSelector('.dispatch')
+      // The turn has run when the page is no longer sending. (Not "a
+      // dispatch is shown": a Commander held stays on the orders tab, and
+      // waiting for a dispatch there timed out, in about one battle in
+      // twenty: round two of "How the kinds of battle were built".)
+      await p.waitForFunction(() => !document.querySelector('#send[disabled], #wait[disabled]'))
     }
     await p.click('[data-tab="orders"]')
     await p.waitForSelector('.verdict h2')
@@ -1263,7 +1267,8 @@ test('on a phone: the muster offers the pitched battle first and the battle for 
     assert.equal(await p.textContent('#ground-line'), 'You hold none of the fords: hold two of the three fords alone for 1 h and the field is yours.')
     const svg = await p.locator('#map-scroll svg').innerHTML()
     for (const ford of ['the North Ford', 'Miller\'s Crossing', 'the South Ford']) assert.ok(svg.includes(ford.replace("'", '&#39;')) || svg.includes(ford), `${ford} is marked on the map`)
-    assert.equal(await p.textContent('[data-example] >> nth=0'), 'everyone take the fords')
+    assert.equal(await p.textContent('[data-example] >> nth=0'), 'everyone advance')
+    assert.equal(await p.textContent('[data-example] >> nth=1'), 'everyone take the fords')
     await shot(p, 'tent-fords')
     // The whole field, so the three fords are in view together.
     await p.click('#whole')

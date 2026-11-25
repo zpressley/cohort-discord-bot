@@ -45,6 +45,14 @@
 // taken (docs/DECISIONS.md, "How columns,
 // wavering under fire and flight were mended"). They were d6b78ab1, fc0d511e, 7ceeb2cc, a9616de5,
 // df860211, ade1ebaa, 29c7796a.
+//
+// Retaken when ties of who steps first, which fight is taken first and
+// which volley lands first were made a seeded draw of their own instead of
+// the units' names, so that a side called "red" is no longer ahead of one
+// called "blue" (docs/DECISIONS.md, "How the kinds of battle were built",
+// round two). They were b0797f8 (crownhill 1), b5d0c64d (crownhill 2),
+// b3d6f42f (meeting 1), cfde19ad (meeting 2), aa331d26 (meeting 3),
+// 1f044c71 (thornwood 1), 3bd40f16 (thornwood 2).
 
 const { test } = require('node:test')
 const assert = require('node:assert/strict')
@@ -63,13 +71,13 @@ function fingerprint(text) {
 }
 
 const BEFORE = {
-  'crownhill 1': 'b0797f8',
-  'crownhill 2': 'b5d0c64d',
-  'thornwood 1': '1f044c71',
-  'thornwood 2': '3bd40f16',
-  'meeting 1': 'b3d6f42f',
-  'meeting 2': 'cfde19ad',
-  'meeting 3': 'aa331d26'
+  'crownhill 1': '65cab3c9',
+  'crownhill 2': '63d711d6',
+  'thornwood 1': '4a76f0d0',
+  'thornwood 2': 'b2674223',
+  'meeting 1': '89bf4221',
+  'meeting 2': 'b86fbee6',
+  'meeting 3': '679d6476'
 }
 
 test('a battle in which no unit is told to attack a named enemy runs exactly as before', () => {

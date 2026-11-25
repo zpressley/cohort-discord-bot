@@ -722,6 +722,46 @@ const VERDICT = {
 }
 module.exports.VERDICT = VERDICT
 
+// Discord (src/discord, src/web/signin.js): signing in, and what the bot
+// says. A message says only what a player could know from outside the
+// battle: never a dispatch, never the other side's doings. `title` is the
+// battle's own ("Crownhill: Rome against Parthia").
+const DISCORD = {
+  // On the page.
+  signIn: 'Sign in with Discord',
+  signInNote: 'You need not. Signed in, your Commanders and battles follow you to any phone or computer, and Discord tells you when your orders are wanted.',
+  signedInAs: (name) => `Signed in as ${name}`,
+  signOut: 'Sign out',
+  signOutNote: 'Signing out takes your Commanders and battles off this browser. They stay with your Discord account.',
+  signInFailed: 'Signing in with Discord did not work. Go back to the game and try again.',
+  thread: 'Talk in this battle\'s thread on Discord',
+  // Direct messages to a player.
+  wanted: (title) => `${title}: your orders are wanted.`,
+  joined: (title, wanted) => `${title}: a friend has joined your battle.${wanted ? ' Your orders are wanted.' : ''}`,
+  reminder: (title) => `${title}: your orders are still wanted. The battle waits on you.`,
+  calledOut: (title, day) => `${title}: ${NIGHT.calledOut(day).replace(/^The /, 'the ')}`,
+  over: {
+    won: (title) => `${title}: the battle is over, and you have won.`,
+    lost: (title) => `${title}: the battle is over, and you have lost.`,
+    draw: (title) => `${title}: the battle is over, and neither side has won.`,
+    night: (title) => `${title}: night fell, and neither side has won.`
+  },
+  tent: (url) => `Your tent: ${url}`,
+  // In the battle's thread, where both players read.
+  threadFirst: (a, b, title) => `${a} and ${b}: this is the thread for ${title}. Talk here as you like; your orders go in your tents.`,
+  threadWanted: (who) => `${who}, your orders are wanted.`,
+  threadCalled: (by, other, day) => `Night fell. ${by} has called ${other} out for a ${DAYS[day] ?? `${day}th`} day.`,
+  threadOver: {
+    won: (who) => `The battle is over. ${who} won.`,
+    draw: 'The battle is over, and neither side has won.',
+    night: 'Night fell, and neither side has won.'
+  },
+  // Who a player is, in the thread, when he has not signed in.
+  commander: (name) => `Commander ${name}`,
+  friend: 'a friend'
+}
+module.exports.DISCORD = DISCORD
+
 // ── The kinds of battle (ruled 2026-11-25) ──
 // Chosen at the muster (src/data/maps, kindsOf), saved in the battle's
 // spec (`kind`), named in the tent, the verdict and "your battles".
@@ -807,47 +847,6 @@ GROUND.some = {
 
 // The battle's end in the dispatch, when night decided a pitched battle.
 BATTLE_OVER.why['field held at nightfall'] = ['night fell with your army still standing and the enemy\'s beaten', 'night fell with the enemy\'s army still standing and yours beaten']
-
-// Discord (src/discord, src/web/signin.js): signing in, and what the bot
-// says. A message says only what a player could know from outside the
-// battle: never a dispatch, never the other side's doings. `title` is the
-// battle's own ("Crownhill: Rome against Parthia").
-const DISCORD = {
-  // On the page.
-  signIn: 'Sign in with Discord',
-  signInNote: 'You need not. Signed in, your Commanders and battles follow you to any phone or computer, and Discord tells you when your orders are wanted.',
-  signedInAs: (name) => `Signed in as ${name}`,
-  signOut: 'Sign out',
-  signOutNote: 'Signing out takes your Commanders and battles off this browser. They stay with your Discord account.',
-  signInFailed: 'Signing in with Discord did not work. Go back to the game and try again.',
-  thread: 'Talk in this battle\'s thread on Discord',
-  // Direct messages to a player.
-  wanted: (title) => `${title}: your orders are wanted.`,
-  joined: (title, wanted) => `${title}: a friend has joined your battle.${wanted ? ' Your orders are wanted.' : ''}`,
-  reminder: (title) => `${title}: your orders are still wanted. The battle waits on you.`,
-  calledOut: (title, day) => `${title}: ${NIGHT.calledOut(day).replace(/^The /, 'the ')}`,
-  over: {
-    won: (title) => `${title}: the battle is over, and you have won.`,
-    lost: (title) => `${title}: the battle is over, and you have lost.`,
-    draw: (title) => `${title}: the battle is over, and neither side has won.`,
-    night: (title) => `${title}: night fell, and neither side has won.`
-  },
-  tent: (url) => `Your tent: ${url}`,
-  // In the battle's thread, where both players read.
-  threadFirst: (a, b, title) => `${a} and ${b}: this is the thread for ${title}. Talk here as you like; your orders go in your tents.`,
-  threadWanted: (who) => `${who}, your orders are wanted.`,
-  threadCalled: (by, other, day) => `Night fell. ${by} has called ${other} out for a ${DAYS[day] ?? `${day}th`} day.`,
-  threadOver: {
-    won: (who) => `The battle is over. ${who} won.`,
-    draw: 'The battle is over, and neither side has won.',
-    night: 'Night fell, and neither side has won.'
-  },
-  // Who a player is, in the thread, when he has not signed in.
-  commander: (name) => `Commander ${name}`,
-  friend: 'a friend'
-}
-module.exports.DISCORD = DISCORD
-
 // ── Camps (ruled 2026-11-25) ───────────────────────────
 // A camp battle's words (engine/battle/camp.js). The camp: "your camp", the
 // enemy's "the enemy's camp" (in an enemy unit's own doing, "their camp").

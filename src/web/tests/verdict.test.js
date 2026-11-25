@@ -24,8 +24,9 @@ async function finished(seed) {
 }
 
 test('the verdict tells which of your units broke, and what became of each: rallied, left the field, destroyed or still fleeing', async () => {
-  // Seed 9: his horse broke twice and rallied; the enemy's horse broke once.
-  const { tent, game } = await finished(9)
+  // Seed 1 (9 until ties of who steps first were a seeded draw, November
+  // 25): his horse broke and rallied; the enemy's horse broke.
+  const { tent, game } = await finished(1)
   assert.equal(tent.battle.status, 'finished')
   const routed = (side) => [...new Set(game.battle.log.all().filter(e => e.type === 'rout' && e.unitId.startsWith(side)).map(e => e.unitId))]
   const mine = tent.verdict.sides.red
@@ -40,7 +41,7 @@ test('the verdict tells which of your units broke, and what became of each: rall
 })
 
 test('the verdict\'s men add up: standing, fallen and those who left the field are the men each side went in with', async () => {
-  const { tent } = await finished(9)
+  const { tent } = await finished(1)
   for (const [side, n] of Object.entries(tent.verdict.sides)) {
     assert.equal(n.standing + n.fallen + n.fled, n.start, side)
     assert.equal(n.standingSaid, `${n.standing} of ${n.start}`)
@@ -49,7 +50,7 @@ test('the verdict\'s men add up: standing, fallen and those who left the field a
 })
 
 test('fog of war, the verdict: the enemy\'s units that broke are only those his side saw, by the names he knows, and nothing of what became of them', async () => {
-  const { tent, game } = await finished(9)
+  const { tent, game } = await finished(1)
   const theirs = tent.verdict.sides.blue
   const routed = new Set(game.battle.log.all().filter(e => e.type === 'rout' && e.unitId.startsWith('blue_')).map(e => e.unitId))
   assert.ok(theirs.broke.length <= routed.size)
@@ -65,12 +66,13 @@ test('fog of war, the verdict: the enemy\'s units that broke are only those his 
 // with no word of who was on it, while the line under the map said it was
 // held by no one.
 test('ground he held and lost is "held by neither side alone" under the map, and his dispatch says who he knows is on it', async () => {
-  // Raven Ridge, seed 1, Rome against Rome, a battle for ground: he takes
+  // Raven Ridge, seed 3 (1 until ties of who steps first were a seeded
+  // draw, November 25), Rome against Rome, a battle for ground: he takes
   // the gap, and the enemy, reported on it, comes up beside his men. (It
   // was Crownhill, seed 5, and the hill, until Crownhill's ground became
   // its three fords on November 25.)
   const store = createBattleStore({})
-  const token = (await store.muster({ opponent: 'standing', side: 'red', seed: 1, map: 'ravenridge', faction: 'rome', enemyFaction: 'rome', kind: 'ground' })).seats.red
+  const token = (await store.muster({ opponent: 'standing', side: 'red', seed: 3, map: 'ravenridge', faction: 'rome', enemyFaction: 'rome', kind: 'ground' })).seats.red
   let tent = store.view(token)
   assert.equal(tent.objectives[0].said, 'The ground to fight for, Raven Gap, is held by no one.')
   let lost = null

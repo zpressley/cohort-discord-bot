@@ -1303,6 +1303,21 @@ module.exports.FLIGHT = {
 // half too.
 module.exports.PITCHED = { STAND_SHARE: 0.5 }
 
+// Advancing in a pitched battle with no enemy known (battle/battle.js,
+// marchOn; round two of the kinds of battle, docs/DECISIONS.md): the army
+// marches on where the enemy formed up, as a body, each unit keeping its
+// place in the line; the march is over when the army's middle is within
+// THERE tiles of the place (three), and the search begins as before.
+// Claude's value, measured with harness/first-battle.js.
+module.exports.ADVANCE = { THERE: 3 }
+
+// A searching unit that has got no nearer the place it set out to look at in
+// STUCK turns running gives the place up and looks elsewhere
+// (battle/battle.js; round two of the kinds of battle, docs/DECISIONS.md).
+// Three: half an hour of trying. Claude's value; the soak found a unit that
+// walked round a friend and back for five days.
+module.exports.SEARCH = { STUCK: 3 }
+
 // ── Camps (ruled 2026-11-25) ───────────────────────────
 //
 // Zach's design: "each army starts far away and can place a camp. They have

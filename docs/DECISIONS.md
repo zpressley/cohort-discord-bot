@@ -5923,6 +5923,175 @@ Where the database and the server are hosted is not decided yet.
 - Hosted Postgres was not tried (no account here): TLS was tested only by
   the URL parsing tests, not against a real certificate.
 
+### How Discord sign-in, your-move messages and battle threads were built (Claude's choices, open to change)
+
+Built from the rulings above ("I like their OAuth", "an easy chat
+feature", "I have a discord server", the old bot's application reused).
+Zach asked not to be brought small questions: these are the details
+decided, each open to change.
+
+**What was built.**
+- **Off unless configured.** Settings by name from the environment
+  (`src/discord/config.js`; `docs/HOSTING.md`, "Connecting Discord"). With
+  none set there is no sign-in button, no `/auth/...` route, nothing sent,
+  nothing remembered on a battle; every test from before passes unchanged.
+  Sign-in and the bot each work without the other.
+- **No Discord library, no gateway.** Node's own `fetch` against Discord's
+  HTTP API (`src/discord/client.js`): the authorization-code sign-in, and
+  four bot calls (open a direct message, send a message, make a thread,
+  give a role). The API's address is a setting, so the tests use a local
+  stand-in (`src/web/tests/fixtures/discord-standin.js`); no test reaches
+  Discord.
+- **Sign-in** (`src/web/signin.js`, `session.js`): scope `identify` only; a
+  random state in a 10-minute cookie (HttpOnly, SameSite=Lax, path
+  `/auth`) that must match what Discord sends back; the page to go back to
+  is always one of this game's own. The session is a cookie signed with
+  `SESSION_SECRET` (HMAC-SHA256) holding only his Discord id and when it
+  runs out: **30 days**, HttpOnly, SameSite=Lax, Secure when `PUBLIC_URL`
+  is https. A forged or run-out cookie is no one. His Discord access token
+  is used once, to ask who he is, and thrown away.
+- **The account** (`src/web/accounts.js`): a document of kind `account`
+  keyed by his Discord id: his Discord name and avatar, his Commanders'
+  tokens and his seats' tokens (200 of each at most). The browser sends
+  the links it holds (`POST /api/me/keep`) on each page load while signed
+  in, and a moment after it keeps a new one; the server keeps only links
+  that are real, and answers with all the account holds, which the
+  browser adds to its own. Links are only ever added, never taken out of
+  an account. Mustering, joining, a next day and making a Commander while
+  signed in add his link on the server as well.
+- **Where it shows**: "Sign in with Discord", with a line saying he need
+  not, at the top of making a Commander (where a new browser lands) and at
+  the foot of Your officers; once signed in, "Signed in as <name>" and
+  "Sign out" there instead. With Discord off, `GET /api/me` answers
+  `{ signedIn: false }` with nothing to offer, so the page shows nothing
+  (a 404 there would be an error in every page's console). The battle's
+  thread is a button at the end of the tent's Army tab. Words in
+  `words.js`, `DISCORD`.
+- **What the bot sends** (`src/discord/notices.js`), only in a battle
+  between two players, only to a player with an account, by direct
+  message: "a friend has joined your battle" (with "Your orders are
+  wanted" when they are), "your orders are wanted", "the enemy has called
+  you out for a second day. Your orders are wanted.", and "the battle is
+  over, and you have won / lost" (or "neither side has won", or "night
+  fell, and neither side has won"), each as "<title>: ..." and then
+  "Your tent: <PUBLIC_URL>/b/<his seat>".
+- **The thread**: made in `DISCORD_BATTLES_CHANNEL_ID` when the friend
+  joins, a public thread named for the battle ("Crownhill: Rome against
+  Parthia"), archived by Discord after a week quiet (a post wakes it). Its
+  first post names both players (a mention for one signed in; "Commander
+  <name>" or "a friend" for one who is not) and says it is for talking.
+  Later posts: "Night fell. <A> has called <B> out for a second day." and
+  "The battle is over. <B> won." (or neither won, or night fell). A next
+  day goes on in the same thread. No tent's link is ever posted there.
+- **Once per event.** What was sent is remembered on the battle's own
+  saved document (`discord`: events sent, the wait for each side, the
+  thread's id), so a poll sends nothing and a restart sends nothing again.
+  An event is marked when it is queued, not when Discord takes it: at most
+  once, never twice; one dropped after failing is not tried again later.
+- **Reminders**: the server looks the battles over every 10 minutes (and
+  5 s after start). A side whose orders have been wanted for 24 hours is
+  reminded ("your orders are still wanted. The battle waits on you."),
+  then once a day at most, three times in all for that wait. The server's
+  clock is used for this; the engine never sees it.
+- **Roles**: a signed-in player who makes a Commander, or whose
+  Commanders come into his account when he signs in, is given the role of
+  each one's kind in the server, from the old bot's mapping, now
+  `src/data/discordRoles.js` (`gate` is `threshold`). If the bot may not,
+  nothing happens but a log line.
+- **Sending never holds up play.** Every call goes through one queue, one
+  at a time, after the turn's answer is on its way. A call is tried 4
+  times, 1, 2 and 4 s apart; on "slow down" (429) it waits as long as
+  Discord says (up to 60 s); a call not answered in 10 s counts as failed.
+  Then it is dropped with one plain line ("Discord: a direct message not
+  sent (Discord answered 503); dropped."). `/healthz` does not look at
+  Discord. Never logged: a secret, a token, a message (it carries a tent's
+  link).
+- **Battles from before** (a battle with nothing remembered that was not
+  mustered with the bot on) are taken as told: their state is marked and
+  nothing is sent, so switching Discord on does not send a flood about old
+  battles.
+- `battles.js` changed only by two small hooks: the `discord` memory kept
+  on its saved document, and `allBattles()` / `remember()` for the
+  notices. `server.js` calls the hooks; the engine is untouched.
+
+**Guesses, and the other reading.**
+- **Signing in is offered, never required** (the task's guess at Zach's
+  wish). The other reading: sign-in required to keep a Commander or to
+  play a friend. Everything here works either way; requiring it would be
+  a few lines on the page.
+- **Signing out takes his Commanders and battles off this browser** (every
+  `cohort.` key but "hide how to play"), as the safer for a phone that is
+  shared; they stay with his account and come back when he signs in. The
+  other reading: leave the browser as it was before he signed in. The page
+  says what signing out does.
+- **The player whose own request changed the battle is not messaged about
+  it**: he is looking at the page. Red's orders run the turn, and only
+  Blue is told his orders are wanted; the one who yields is not told he
+  lost. The other reading: message both every time. If he then walks
+  away, the reminder after a day still reaches him.
+- **The thread never says whose orders are wanted in the middle of a
+  day.** The task listed it among the thread's posts, but the ruling of
+  2026-11-23 ("both would only be notified when there are commands to give
+  or things happen to them") means a Commander is not told that the battle
+  stands for the other; a post where both read would tell him. So the
+  thread says only what both are told anyway. For the same reason, a
+  player Discord will not message (he has left the server, or takes no
+  direct messages) is named in the thread instead only for what both know:
+  the day's first orders ("<A>, your orders are wanted.", when the friend
+  joins, or he is called out to a next day). A refused mid-day message is
+  dropped. The other reading: post every "your orders are wanted" in the
+  thread, which would let each player see when the battle waits on the
+  other.
+- **Three reminders for each wait**, not for the whole battle: a friend
+  who answers and later goes quiet again is reminded again. The other
+  reading: three in all for the battle.
+- **The thread is made even if neither player has signed in**, as long as
+  the battles channel is set: the tent links to it and either may join.
+  The other reading: only for players with accounts.
+- **Night is told to both** as "night fell, and neither side has won",
+  without saying a next day may be called (a side with no one left able to
+  fight has none; the tent says which).
+- `PUBLIC_URL` is needed by the bot as well as by sign-in: every message
+  carries the link to his tent.
+
+**What was measured.**
+- `src/web/tests/discord.test.js` (15 tests, against the stand-in): the
+  sign-in round trip and its state check; forged and expired sessions;
+  an account gathering a browser's Commanders and battles and giving them
+  to another browser after a restart; nothing of it when not configured;
+  "your move" once, not again after five polls of each kind or a restart
+  and a look-over; nothing for a battle against the computer; reminders at
+  24 h 30 min, once a day, three in all; the thread made once with both
+  named; a refused message named in the thread; fog of war over everything
+  sent in a whole battle (two days, nightfall, a next day called, a
+  yield): no line of any dispatch of either side, no unit's name, no
+  other side's link, no link at all in the thread; the same battle played
+  with Discord down, slowing us down and refusing gives the same views,
+  turn for turn, as with no Discord; a turn answered while Discord does
+  not answer at all; no secret or access token in any log line or answer.
+  Postgres: an account saved and read back (runs when
+  `TEST_DATABASE_URL` is set).
+- `src/web/browser/discord.browser.js`, 390 px: the button where a new
+  browser lands (44 px tall, no sideways scroll), signing in from Your
+  officers, "Signed in as Aulus", his Commander and battle on a second
+  phone after signing in there, the thread's button in the tent, signing
+  out (the links gone from that phone, still on the first); and with no
+  Discord settings, no sign-in anywhere.
+
+**Left undone.**
+- Nothing was tried against the real Discord (no keys here): the
+  sign-in's consent page, a real direct message, a real thread, a real
+  role, and Discord's real rate limits are untested.
+- The avatar is in `/api/me` but not shown on the page (it would load an
+  image from Discord's servers on every page).
+- D3 (a friend who goes quiet) is helped, not settled: there is still no
+  way to let the battle go on without him, and a player who has not signed
+  in gets no reminder.
+- No way to leave Discord: an account cannot be deleted from the page,
+  and a link once in an account stays there.
+- Unit names and Commander names are still not moderated; a Commander's
+  name can reach the thread, with Discord's own markup taken out.
+
 ## Rulings, November 25, 2026 (kinds of battle)
 
 Zach's words, on the ground to fight for and the kinds of battle
@@ -6146,174 +6315,167 @@ Commander's "line for line" no longer counts the captor's own late word
   78%, so it needs a proper search, field by field.
 - The camps (the next work).
 
-### How Discord sign-in, your-move messages and battle threads were built (Claude's choices, open to change)
+#### Round two (Claude's choices, open to change)
 
-Built from the rulings above ("I like their OAuth", "an easy chat
-feature", "I have a discord server", the old bot's application reused).
-Zach asked not to be brought small questions: these are the details
-decided, each open to change.
+Asked for after the first round: the pitched battle, offered first, was not
+yet a fair fight. Five pieces, in order.
 
-**What was built.**
-- **Off unless configured.** Settings by name from the environment
-  (`src/discord/config.js`; `docs/HOSTING.md`, "Connecting Discord"). With
-  none set there is no sign-in button, no `/auth/...` route, nothing sent,
-  nothing remembered on a battle; every test from before passes unchanged.
-  Sign-in and the bot each work without the other.
-- **No Discord library, no gateway.** Node's own `fetch` against Discord's
-  HTTP API (`src/discord/client.js`): the authorization-code sign-in, and
-  four bot calls (open a direct message, send a message, make a thread,
-  give a role). The API's address is a setting, so the tests use a local
-  stand-in (`src/web/tests/fixtures/discord-standin.js`); no test reaches
-  Discord.
-- **Sign-in** (`src/web/signin.js`, `session.js`): scope `identify` only; a
-  random state in a 10-minute cookie (HttpOnly, SameSite=Lax, path
-  `/auth`) that must match what Discord sends back; the page to go back to
-  is always one of this game's own. The session is a cookie signed with
-  `SESSION_SECRET` (HMAC-SHA256) holding only his Discord id and when it
-  runs out: **30 days**, HttpOnly, SameSite=Lax, Secure when `PUBLIC_URL`
-  is https. A forged or run-out cookie is no one. His Discord access token
-  is used once, to ask who he is, and thrown away.
-- **The account** (`src/web/accounts.js`): a document of kind `account`
-  keyed by his Discord id: his Discord name and avatar, his Commanders'
-  tokens and his seats' tokens (200 of each at most). The browser sends
-  the links it holds (`POST /api/me/keep`) on each page load while signed
-  in, and a moment after it keeps a new one; the server keeps only links
-  that are real, and answers with all the account holds, which the
-  browser adds to its own. Links are only ever added, never taken out of
-  an account. Mustering, joining, a next day and making a Commander while
-  signed in add his link on the server as well.
-- **Where it shows**: "Sign in with Discord", with a line saying he need
-  not, at the top of making a Commander (where a new browser lands) and at
-  the foot of Your officers; once signed in, "Signed in as <name>" and
-  "Sign out" there instead. With Discord off, `GET /api/me` answers
-  `{ signedIn: false }` with nothing to offer, so the page shows nothing
-  (a 404 there would be an error in every page's console). The battle's
-  thread is a button at the end of the tent's Army tab. Words in
-  `words.js`, `DISCORD`.
-- **What the bot sends** (`src/discord/notices.js`), only in a battle
-  between two players, only to a player with an account, by direct
-  message: "a friend has joined your battle" (with "Your orders are
-  wanted" when they are), "your orders are wanted", "the enemy has called
-  you out for a second day. Your orders are wanted.", and "the battle is
-  over, and you have won / lost" (or "neither side has won", or "night
-  fell, and neither side has won"), each as "<title>: ..." and then
-  "Your tent: <PUBLIC_URL>/b/<his seat>".
-- **The thread**: made in `DISCORD_BATTLES_CHANNEL_ID` when the friend
-  joins, a public thread named for the battle ("Crownhill: Rome against
-  Parthia"), archived by Discord after a week quiet (a post wakes it). Its
-  first post names both players (a mention for one signed in; "Commander
-  <name>" or "a friend" for one who is not) and says it is for talking.
-  Later posts: "Night fell. <A> has called <B> out for a second day." and
-  "The battle is over. <B> won." (or neither won, or night fell). A next
-  day goes on in the same thread. No tent's link is ever posted there.
-- **Once per event.** What was sent is remembered on the battle's own
-  saved document (`discord`: events sent, the wait for each side, the
-  thread's id), so a poll sends nothing and a restart sends nothing again.
-  An event is marked when it is queued, not when Discord takes it: at most
-  once, never twice; one dropped after failing is not tried again later.
-- **Reminders**: the server looks the battles over every 10 minutes (and
-  5 s after start). A side whose orders have been wanted for 24 hours is
-  reminded ("your orders are still wanted. The battle waits on you."),
-  then once a day at most, three times in all for that wait. The server's
-  clock is used for this; the engine never sees it.
-- **Roles**: a signed-in player who makes a Commander, or whose
-  Commanders come into his account when he signs in, is given the role of
-  each one's kind in the server, from the old bot's mapping, now
-  `src/data/discordRoles.js` (`gate` is `threshold`). If the bot may not,
-  nothing happens but a log line.
-- **Sending never holds up play.** Every call goes through one queue, one
-  at a time, after the turn's answer is on its way. A call is tried 4
-  times, 1, 2 and 4 s apart; on "slow down" (429) it waits as long as
-  Discord says (up to 60 s); a call not answered in 10 s counts as failed.
-  Then it is dropped with one plain line ("Discord: a direct message not
-  sent (Discord answered 503); dropped."). `/healthz` does not look at
-  Discord. Never logged: a secret, a token, a message (it carries a tent's
-  link).
-- **Battles from before** (a battle with nothing remembered that was not
-  mustered with the bot on) are taken as told: their state is marked and
-  nothing is sent, so switching Discord on does not send a flood about old
-  battles.
-- `battles.js` changed only by two small hooks: the `discord` memory kept
-  on its saved document, and `allBattles()` / `remember()` for the
-  notices. `server.js` calls the hooks; the engine is untouched.
+**1. A side was ahead for its name.** Found by the camps work: the same
+armies on Greywater (its own mirror), the west won about 4 points more when
+called "red" than when called "blue". Reproduced (pitched, the computer on
+both sides, each faction against another, the same seeds, only the names
+swapped): Greywater 50 and 51% for a west called red, 42% called blue (300
+and 400 battles); Thornwood 61% and 55% (400). Where a tie between the two
+sides was settled by name, every turn:
+- *Who steps first* within a speed tier (`movement/initiative.js`): by unit
+  id, so every "blue_" unit before every "red_" one. The likeliest cause:
+  moving first, a unit came up beside the enemy and stopped; the one moving
+  after it chose where to meet it.
+- *Which fight is taken first* in a round (`combat/resolve.js`): sorted by
+  the first unit's id; a unit in two fights takes its second blow after its
+  first, and may break between them.
+- *Which volley and which throw land first* (`battle/battle.js`).
+Each is now ordered by a seeded draw of its own (`rng.js`, `tieBreak`: a
+hash of the battle's seed, the turn and the unit or fight, drawing nothing
+from any stream, so no other roll moves). Where no draw is given (the duel
+harness, the balance matrix) the order is by name as before. Measured
+after: Greywater 53% called red, 55% called blue (800 battles each);
+Thornwood 60% and 58% (400); the same army on each side of an empty field,
+both pressing, 52% and 49% for Rome, 47% and 49% for Macedon (800). Tested
+by name (`battle/tests/even-sides.test.js`). Not changed: ties within one
+side (which of his own units goes for which tile) are by name, and fall
+the same for both sides; ties between tiles (north before south, west
+before east) are by place, not by name, and showed no lean on the empty
+field. `npm run balance`: the last table unchanged (its duels use no draw).
+Fingerprints: every "unchanged" test retaken, old values in its header.
 
-**Guesses, and the other reading.**
-- **Signing in is offered, never required** (the task's guess at Zach's
-  wish). The other reading: sign-in required to keep a Commander or to
-  play a friend. Everything here works either way; requiring it would be
-  a few lines on the page.
-- **Signing out takes his Commanders and battles off this browser** (every
-  `cohort.` key but "hide how to play"), as the safer for a phone that is
-  shared; they stay with his account and come back when he signs in. The
-  other reading: leave the browser as it was before he signed in. The page
-  says what signing out does.
-- **The player whose own request changed the battle is not messaged about
-  it**: he is looking at the page. Red's orders run the turn, and only
-  Blue is told his orders are wanted; the one who yields is not told he
-  lost. The other reading: message both every time. If he then walks
-  away, the reminder after a day still reaches him.
-- **The thread never says whose orders are wanted in the middle of a
-  day.** The task listed it among the thread's posts, but the ruling of
-  2026-11-23 ("both would only be notified when there are commands to give
-  or things happen to them") means a Commander is not told that the battle
-  stands for the other; a post where both read would tell him. So the
-  thread says only what both are told anyway. For the same reason, a
-  player Discord will not message (he has left the server, or takes no
-  direct messages) is named in the thread instead only for what both know:
-  the day's first orders ("<A>, your orders are wanted.", when the friend
-  joins, or he is called out to a next day). A refused mid-day message is
-  dropped. The other reading: post every "your orders are wanted" in the
-  thread, which would let each player see when the battle waits on the
-  other.
-- **Three reminders for each wait**, not for the whole battle: a friend
-  who answers and later goes quiet again is reminded again. The other
-  reading: three in all for the battle.
-- **The thread is made even if neither player has signed in**, as long as
-  the battles channel is set: the tent links to it and either may join.
-  The other reading: only for players with accounts.
-- **Night is told to both** as "night fell, and neither side has won",
-  without saying a next day may be called (a side with no one left able to
-  fight has none; the tent says which).
-- `PUBLIC_URL` is needed by the bot as well as by sign-in: every message
-  carries the link to his tent.
+**2. The pitched battle, field by field.** After the fix, two computer
+armies (same faction both sides, 80 battles a field): Crownhill 53%,
+Ashford 69%, Thornwood 74%, Raven Ridge 36%, Greywater 54%. What the swing
+was, from each battle's two plans (`opponent/planner.js`, `strongpoint`,
+`temperament`): with no ground, each side holds a crossing or hill ahead of
+where it formed up (two times in three), and the battle goes to whoever
+must cross into the other.
+- *Ashford*: the west held the Old Mill Bridge, the east the ford by the
+  southern marsh; the fight came to the bridge. Formed up three tiles
+  north, at (33, 22), the east holds the bridge's other end: 50, 55, 45%
+  at (33, 21), (33, 22), (33, 23).
+- *Thornwood*: both held the brook's ford, each on its own bank, and the
+  east crossed into the west's line under Thorn Knoll; with neither
+  holding they met at the knoll, on the west's bank. Moving the west a
+  tile at a time along the road changed nothing (69 to 74% from x 7 to 9);
+  from y 17 and north of it the share fell off a cliff (65% at (6, 17),
+  47% at (6, 16), 43 to 48% from (6, 13) to (6, 15) and a tile either
+  way). From the north field, at (6, 14), the west goes through the wood
+  to the knoll, not along the road to the ford.
+- *Raven Ridge*: the west held the southern ridge, off the road, the east
+  the Stone Ford on it. From (9, 19) the west holds the northern half
+  above the gap: 48 to 57% a tile either way.
+These are each field's places for a pitched battle (`deployFor.pitched`;
+the battle for ground keeps its own). After everything below (80 battles a
+field): Crownhill 53%, Ashford 53%, Thornwood 50%, Raven Ridge 48%,
+Greywater 54%. The battle for ground, the same way: Crownhill 49% (the
+east's place for the fords moved from (28, 17) to (27, 18), see 3),
+Ashford 55%, Thornwood 49%, Raven Ridge 53%, Greywater 46% (its east army
+a tile nearer for the battle for Elderby, at (64, 38): it had drifted to
+58% with the fix).
 
-**What was measured.**
-- `src/web/tests/discord.test.js` (15 tests, against the stand-in): the
-  sign-in round trip and its state check; forged and expired sessions;
-  an account gathering a browser's Commanders and battles and giving them
-  to another browser after a restart; nothing of it when not configured;
-  "your move" once, not again after five polls of each kind or a restart
-  and a look-over; nothing for a battle against the computer; reminders at
-  24 h 30 min, once a day, three in all; the thread made once with both
-  named; a refused message named in the thread; fog of war over everything
-  sent in a whole battle (two days, nightfall, a next day called, a
-  yield): no line of any dispatch of either side, no unit's name, no
-  other side's link, no link at all in the thread; the same battle played
-  with Discord down, slowing us down and refusing gives the same views,
-  turn for turn, as with no Discord; a turn answered while Discord does
-  not answer at all; no secret or access token in any log line or answer.
-  Postgres: an account saved and read back (runs when
-  `TEST_DATABASE_URL` is set).
-- `src/web/browser/discord.browser.js`, 390 px: the button where a new
-  browser lands (44 px tall, no sideways scroll), signing in from Your
-  officers, "Signed in as Aulus", his Commander and battle on a second
-  phone after signing in there, the thread's button in the tent, signing
-  out (the links gone from that phone, still on the first); and with no
-  Discord settings, no sign-in anywhere.
+**3. A new player's plain orders.**
+- *The fords.* "Everyone take the fords" alone won 8 to 10 battles in 40:
+  his army split in two and held still; the computer took the third ford
+  and brought half its army on one of his. "Everyone advance" won 33 in 40:
+  his whole army met the computer's halves one at a time. So the split
+  computer was beaten in detail, and beat in detail a split player. Mended
+  in the planner: a computer army shared out among the fords goes in
+  together, at the nearest enemy it sees, when a part of it is outnumbered
+  by the enemy close by (more of his men than its own:
+  `TUNING.OUTNUMBERED`), and shares itself out again when none is near.
+  Going in together whenever any enemy came near, it gave up the fords (two
+  computer armies took the field by them in 2 battles of 60, the west 33%);
+  at 0.9 times its own men, the west 62%. At 1: two computer armies 49%,
+  the fords deciding a third of battles; "everyone advance" alone 65 to 70%
+  (three runs of 40); "everyone take the fords" 20%. The first example on
+  the fords is now "everyone advance", "everyone take the fords" second.
+  Above the band asked for (40 to 60%); nearer it than any other plain
+  order measured ("everyone take Miller's Crossing": 28%).
+- *The pitched battle.* "Everyone advance" with no enemy known sent each
+  unit straight ahead along its own row to the far edge. Now (a pitched
+  battle only: `battle.js`, `marchOn`) the army marches on where the
+  enemy formed up, each unit keeping its place in the line, and searches
+  from there. Measured: 23 / 53 / 38 / 23% (Crownhill, Ashford, Thornwood,
+  Raven Ridge; it was 35 / 28 / 50 / 33% before round two, and 23 / 30 /
+  45 / 33% with the bias fix and the new places but the old advance).
+  **Not mended.** Why it loses, from the worst seeds (Raven Ridge, Rome,
+  seed 101): the computer holds the crossing in front of it; the
+  advancing army strings out on the road (its legionaries at the Stone
+  Ford eight tiles ahead of its hastati), and meets the computer's line a
+  unit at a time over the ford; men who rally with no heart then hold
+  where they are and are shot. Tried and dropped: a unit more than two
+  tiles (or one) ahead of its army's middle waiting for the rest, on the
+  march and closing on an enemy (23 / 40 / 40 / 23% and 30 / 28 / 28 /
+  35%: no better, and more battles ran to night); the computer not
+  holding good ground in a pitched battle (30 / 55 / 48 / 30%, and two
+  computer armies leaned as far again). His own stand-in, planning each
+  turn as the computer does, wins 40 / 55 / 58 / 38%: the plain order is
+  the weak part, not the field. What would mend it is an advance that
+  forms up short of a held crossing and goes in together, as the planner
+  does; not built.
 
-**Left undone.**
-- Nothing was tried against the real Discord (no keys here): the
-  sign-in's consent page, a real direct message, a real thread, a real
-  role, and Discord's real rate limits are untested.
-- The avatar is in `/api/me` but not shown on the page (it would load an
-  image from Discord's servers on every page).
-- D3 (a friend who goes quiet) is helped, not settled: there is still no
-  way to let the battle go on without him, and a player who has not signed
-  in gets no reminder.
-- No way to leave Discord: an account cannot be deleted from the page,
-  and a link once in an account stays there.
-- Unit names and Commander names are still not moderated; a Commander's
-  name can reach the thread, with Discord's own markup taken out.
+**4. The Commander's odds.** By the captive league's measure (the one the
+ruling was made on: 960 battles, a player who sends everyone in, no day):
+battles of no kind 1 in 21.3 (1 in 19.6 before round two), battles for
+ground 1 in 22.9, pitched battles 1 in 18.5. Within the ruled 1 in 19 to
+24, the pitched battle at its edge; not changed. (The new player's harness
+counts more, 1 in 11 in pitched battles, 1 in 13 for ground: his Commander
+rides with his best unit at the head of an advance, and that harness's 160
+battles a kind are few.)
+
+**5. The night**: as ruled, unchanged; the fords included.
+
+**The first browser test** ("alone, on a phone...") timed out waiting for a
+dispatch in 2 of 4 full runs on the camps branch. Looked for a fault in
+pitched battles first: 150 first turns of new players in pitched battles
+(30 a field, random seeds, "everyone advance") came back after 20 to 50
+minutes of battle (Greywater the longest) and in under a tenth of a second;
+60 whole battles of the test's own kind (Macedon against Rome on Crownhill)
+each asked him again within an hour of battle at every turn. In 3 of the
+60 his Commander was taken, at his sixth turn. Taken, he can send no
+orders: the page shows "Wait, and let them fight" and, after the turn,
+stays on the orders tab, so a test waiting for a dispatch to be shown
+waits for ever. So it was the test: it now presses whichever button is
+there, and waits for the page to finish sending, not for a dispatch.
+Five runs alone and the full suite pass.
+
+**A unit that searched for ever.** The soak found one battle that never
+ended (Crownhill, Han against Maurya, seed 8, a player who only advances;
+no day): the computer's bowmen, sent to look into a wood two tiles off,
+walked round a friend standing in the road and back to where they began,
+every ten minutes, for five days. (Not new: the tie draws only made this
+battle the one to show it.) A searching unit that gets no nearer its place
+in `T.SEARCH.STUCK` turns running (three) now gives the place up as looked
+over and looks elsewhere. That battle ends now; the fingerprints did not
+move.
+
+**Tests whose battles changed** (seeds found again, each test's meaning
+kept): the night test's man who ran (Thornwood seed 2, was 27), the
+verdict's horse that broke and rallied (seed 1, was 9), ground held and
+lost (Raven Ridge seed 3, was 1); two muster tests compare with armies
+formed up for the pitched battle, the kind offered first.
+
+| | before round two | after |
+|---|---|---|
+| Same armies, names swapped (west's share: called red / called blue) | Greywater 50 / 42%, Thornwood 61 / 55% | 53 / 55%, 60 / 58% |
+| Pitched, computer v computer (Crownhill / Ashford / Thornwood / Raven Ridge / Greywater) | 59 / 68 / 71 / 44 / 54% | 53 / 53 / 50 / 48 / 54% |
+| Ground, computer v computer | 50 / 44 / 53 / 49 / 58% | 49 / 55 / 49 / 53 / 46% |
+| Pitched, "everyone advance" alone | 35 / 28 / 50 / 33% | 23 / 53 / 38 / 23% |
+| Ground, "everyone advance" alone | 68 / 45 / 45 / 45% | 70 / 43 / 45 / 48% |
+| Ground, the ground's order alone ("take the fords" on Crownhill) | 23 / 55 / 60 / 55% | 20 / 53 / 58 / 43% |
+| The stand-in planner, ground / pitched | 43 / 58 / 63 / 60%, 40 / 68 / 53 / 40% | 50 / 50 / 55 / 45%, 40 / 55 / 58 / 38% |
+| Commander taken, captive league (none / ground / pitched) | 1 in 19.6 / – / – | 1 in 21.3 / 22.9 / 18.5 |
+| Characters, steady / bold / cautious (ground; pitched) | 51 / 48 / 51%; 52 / 48 / 50% | 49 / 54 / 48%; 52 / 50 / 48% |
+| Battles that come to nothing (ground; pitched; idle player) | 0; 0; 0 | 0; 0; 0 |
+| Battle minutes, computer v computer, Crownhill (ground; pitched) | 310; 199 | 341; 187 |
+| `npm run balance`, last table | | unchanged |
 
 ## Rulings, November 25, 2026 (camps)
 

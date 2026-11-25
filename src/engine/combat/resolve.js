@@ -95,7 +95,7 @@ function createCombatResolver(options = {}) {
     return state
   }
 
-  function resolveCombat({ engagements, world, random, turn }) {
+  function resolveCombat({ engagements, world, random, turn, tieKey = null }) {
     const casualties = new Map()
     const events = []
     // Units that broke this turn. Reported alongside casualties so the scenario
@@ -165,7 +165,11 @@ function createCombatResolver(options = {}) {
         state.moraleDamageTaken += loss
       }
 
-      for (const engagement of engagements) {
+      // The fights of a round are taken one after another, and a unit in
+      // two takes its second blow after its first: given the battle's
+      // tie-break (`tieKey`), in its seeded order each round, not by name.
+      const inOrder = tieKey ? [...engagements].sort((x, y) => tieKey(x, round) - tieKey(y, round)) : engagements
+      for (const engagement of inOrder) {
         const a = getUnit(world, engagement.aId)
         const b = getUnit(world, engagement.bId)
         if (!a || !b) continue
