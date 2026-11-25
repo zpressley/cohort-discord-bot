@@ -138,7 +138,8 @@ test('a Commander with no army built musters with his faction\'s usual one', asy
     const made = (await app.api('POST', '/api/commanders', { faction: 'macedon' })).body
     const seat = (await app.api('POST', '/api/battles', { opponent: 'standing', side: 'red', commander: made.token, enemyFaction: 'han', seed: 9, map: 'ravenridge' })).body.seats.red
     const spec = store.seatOf(seat).entry.game.spec
-    const usual = fieldFactions(loadScenario('meeting-battle', { map: 'ravenridge', deploy: true }), { red: 'macedon', blue: 'han' })
+    // (Formed up for the kind offered first, the pitched battle.)
+    const usual = fieldFactions(loadScenario('meeting-battle', { map: 'ravenridge', deploy: true, kind: 'pitched' }), { red: 'macedon', blue: 'han' })
     assert.deepEqual(spec.units.map(u => [u.id, u.position, u.primaryWeapon]), usual.units.map(u => [u.id, u.position, u.primaryWeapon]))
   } finally { await app.close() }
 })

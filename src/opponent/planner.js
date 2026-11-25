@@ -78,7 +78,15 @@ const TUNING = {
   // more); against a player who never came out, the computer then sat
   // there, and 37 of 1,140 such battles ended in night with no blow.
   MEET_REACH: 3,
-  MEET_WAIT: 30
+  MEET_WAIT: 30,
+  // Shared out among several grounds (splitGround), the whole army goes in
+  // together when a part of it is outnumbered by the enemy it sees close
+  // by: by more men than this many times its own (1: any more). At 0.9 two
+  // computer armies on Crownhill's fords gave the west 62% (120 battles)
+  // and the fords decided a fifth as many battles; at 1, 49%, and "everyone
+  // advance" alone won 65 to 70% against it (40 battles, three runs).
+  // docs/DECISIONS.md, "How the kinds of battle were built", round two.
+  OUTNUMBERED: 1
   // (CROSSING_NEAR, 3, moved to the engine: tables.CROSSING.NEAR.)
 }
 
@@ -313,7 +321,7 @@ function planTurn(game, side) {
     if (near.length === 0) return false
     const friends = mine.filter(u => near.some(e => tileDistance(e.position, u.position) <= ch.engage))
     const men = (units) => units.reduce((n, u) => n + Math.max(0, u.strength ?? u.unit?.strength ?? 0), 0)
-    return men(near) > men(friends)
+    return men(near) > men(friends) * TUNING.OUTNUMBERED
   }
   const together = Boolean(split) && mine.some(outnumbered)
   const attacking = together || (!holding && !waiting && (closeBy || !anchor || formed))

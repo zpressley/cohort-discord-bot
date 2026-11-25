@@ -154,7 +154,11 @@ test('alone, on a phone: muster, an order written on the map, turns to a verdict
       await p.waitForSelector('#send, #wait, .verdict')
       if (await p.locator('.verdict').count()) break
       await p.click(await p.locator('#send').count() ? '#send' : '#wait')
-      await p.waitForSelector('.dispatch')
+      // The turn has run when the page is no longer sending. (Not "a
+      // dispatch is shown": a Commander held stays on the orders tab, and
+      // waiting for a dispatch there timed out, in about one battle in
+      // twenty: round two of "How the kinds of battle were built".)
+      await p.waitForFunction(() => !document.querySelector('#send[disabled], #wait[disabled]'))
     }
     await p.click('[data-tab="orders"]')
     await p.waitForSelector('.verdict h2')

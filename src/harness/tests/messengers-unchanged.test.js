@@ -59,6 +59,13 @@
 // taken (docs/DECISIONS.md, "How columns,
 // wavering under fire and flight were mended"). The battles were b01c713a 25, 39ecf1e5 26,
 // 15f2219b 13, 842dd7c2 23.
+//
+// Retaken when ties of who steps first, which fight is taken first and
+// which volley lands first were made a seeded draw of their own instead of
+// the units' names, so that a side called "red" is no longer ahead of one
+// called "blue" (docs/DECISIONS.md, "How the kinds of battle were built",
+// round two). They were ccfaaf84 14 (ashford 1), 7e232cf6 17 (ashford 2),
+// e9cfed6f 17 (crownhill 1), 86491ec2 19 (crownhill 2).
 
 const { test } = require('node:test')
 const assert = require('node:assert/strict')
@@ -76,10 +83,10 @@ function fingerprint(text) {
 }
 
 const BEFORE = {
-  'crownhill 1': 'e9cfed6f 17',
-  'crownhill 2': '86491ec2 19',
-  'ashford 1': 'ccfaaf84 14',
-  'ashford 2': '7e232cf6 17'
+  'crownhill 1': 'f4b9ff0f 22',
+  'crownhill 2': '8ae0423b 22',
+  'ashford 1': '5ec857e2 13',
+  'ashford 2': '61de1d55 16'
 }
 
 test('a battle with no Commander on the field runs exactly as before riders, event for event', () => {
