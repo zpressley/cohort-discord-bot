@@ -23,22 +23,30 @@ function field(map, kind) {
     enemies: [],
     homeEdge: game.spec.sides.red.homeEdge,
     ground: game.battle.ground,
+    groundNeeded: game.spec.objectivesNeeded ?? null,
     lyingInWait: []
   }
 }
 const fords = field('crownhill', 'ground')
 const near = (target, ground) => ground.tiles.some(t => Math.abs(t.x - target.x) + Math.abs(t.y - target.y) <= (ground.reach ?? 0) + 1)
 
-test('"everyone take the fords" shares the army out among the three fords, each unit told which, and the read-back says where each goes', async () => {
+test('"everyone take the fords" shares the army out between as many fords as must be held, the nearest two, and the read-back says where each goes', async () => {
   for (const said of ['everyone take the fords', 'everyone take the ground']) {
     const r = await interpretText(said, fords, {})
     assert.equal(r.questions.length, 0, said)
     assert.equal(r.orders.length, fords.units.length)
     const where = fords.ground.map(g => r.orders.filter(o => near(o.target, g)).length)
-    assert.ok(where.every(n => n >= 1), `${said}: ${where}`)
-    assert.ok(Math.max(...where) - Math.min(...where) <= 1, 'as evenly as they go')
-    for (const name of ['the North Ford', 'Miller\'s Crossing', 'the South Ford']) assert.match(r.understood[0], new RegExp(`${name}, the ground to fight for`))
+    assert.equal(where.filter(n => n > 0).length, 2, `${said}: two fords (${where})`)
+    assert.equal(where[0], 0, 'not the North Ford, the farthest')
+    assert.ok(Math.abs(where[1] - where[2]) <= 1, 'as evenly as they go')
+    for (const name of ['Miller\'s Crossing', 'the South Ford']) assert.match(r.understood[0], new RegExp(`${name}, the ground to fight for`))
   }
+})
+
+test('with every ground to hold, "take the fords" shares the army out among all of them', async () => {
+  const r = await interpretText('everyone take the fords', { ...fords, groundNeeded: null }, {})
+  const where = fords.ground.map(g => r.orders.filter(o => near(o.target, g)).length)
+  assert.ok(where.every(n => n >= 1), `${where}`)
 })
 
 test('"the north ford" and "millers crossing" are those fords; "the nearest ford" is the nearest', async () => {

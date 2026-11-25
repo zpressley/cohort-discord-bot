@@ -1113,6 +1113,8 @@ function createBattleStore({ dir = null, storage = null, ai = null, now = () => 
       // The ground to fight for, which every side knows: "the hill" is it
       // where it is a hill.
       ground: game.battle.ground ?? [],
+      // Some of several to hold: "take the fords" goes for that many.
+      groundNeeded: neededOf(game),
       lyingInWait: lyingInWait(game.battle, side),
       // For counsel: the units that would break at the first blow.
       shaken: game.battle.world.units.filter(u => u.side === side && game.battle.isShaken(u)).map(u => u.id),

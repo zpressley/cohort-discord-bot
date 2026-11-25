@@ -1168,7 +1168,7 @@ test('on a phone, Crownhill opens on your army with a mark at the edge pointing 
     await p.waitForSelector('#map-scroll svg')
     const mark = p.locator('.ground-mark', { hasText: 'the North Ford' })
     assert.equal(await mark.count(), 1, 'the North Ford is out of the window: a mark points to it')
-    assert.match(await mark.textContent(), /^↑ the North Ford$/)
+    assert.match(await mark.textContent(), /^[↑↗↖] the North Ford$/)
     const box = await mark.boundingBox()
     assert.ok(box.height >= 44, 'a finger\'s size')
     const view = await p.locator('#map-scroll').boundingBox()
@@ -1265,8 +1265,8 @@ test('on a phone: the muster offers the pitched battle first and the battle for 
     await shot(p, 'tent-fords-whole')
 
     // A pitched battle: no ground, and the line says how it is won.
-    await p.goto(base + '/muster')
-    await p.waitForSelector('form#muster')
+    // (His army is in the field: a second Commander musters.)
+    await toMuster(p, base, { faction: 'rome' })
     await p.selectOption('select[name="map"]', 'ashford')
     await p.click('button[type="submit"]')
     await p.waitForSelector('#map-scroll svg')

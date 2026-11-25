@@ -302,7 +302,7 @@ function resolveIntents(intents, context) {
   const named = namedIn(intents, units, context.named)
   // What places may be said by: his own edge, the ground to fight for, his
   // own units.
-  const known = { homeEdge: context.homeEdge, ground: context.ground, units: context.allOwn ?? units }
+  const known = { homeEdge: context.homeEdge, ground: context.ground, groundNeeded: context.groundNeeded ?? null, units: context.allOwn ?? units }
 
   for (let intent of intents) {
     if (intent.kind === 'surrender') { surrender = true; continue }
@@ -910,16 +910,20 @@ function groundPoint(map, origin, ground) {
 }
 
 // Several pieces of the ground to fight for at once ("take the fords"):
-// each with where to go to hold it, nearest first. The first is the place;
-// resolveIntents shares the units out among them (shareOut).
-function spreadOver(map, origin, grounds) {
+// each with where to go to hold it, nearest first: as many as must be held
+// (`needed`, when the battle says: two of Crownhill's three fords), else
+// all. (All three, an army of four split three ways, won 11 battles of 40
+// for a new player against the computer; the nearest two, see
+// docs/DECISIONS.md, "How the kinds of battle were built".) The first is
+// the place; resolveIntents shares the units out among them (shareOut).
+function spreadOver(map, origin, grounds, needed = null) {
   const spread = grounds.map(g => {
     const position = groundPoint(map, origin, g)
     if (!position) return null
     const tiles = Math.max(Math.abs(position.x - origin.x), Math.abs(position.y - origin.y))
     const way = tiles === 0 ? '(here)' : `${tiles * TILE_METRES} m ${compassWord(origin, position)}`
     return { position, ground: g, description: `${PLACE.name(g.name)}, ${ORDERS_READ.ground}, ${way}`, tiles }
-  }).filter(Boolean).sort((a, b) => a.tiles - b.tiles || a.ground.name.localeCompare(b.ground.name))
+  }).filter(Boolean).sort((a, b) => a.tiles - b.tiles || a.ground.name.localeCompare(b.ground.name)).slice(0, needed && needed < grounds.length ? needed : grounds.length)
   if (spread.length === 0) return null
   return { position: spread[0].position, description: spread[0].description, spread }
 }
@@ -972,7 +976,7 @@ function widePlace(map, origin, text, known) {
     if (grounds.length === 0) return { question: 'There is no ground to fight for on this field. Name a place or a grid square: "to C5".' }
     // Several to fight for (ruled 2026-11-25: three fords): all of them,
     // shared out among the units sent.
-    if (grounds.length > 1) return spreadOver(map, origin, grounds)
+    if (grounds.length > 1) return spreadOver(map, origin, grounds, known.groundNeeded)
     ground = grounds[0]
   }
   if (!ground) ground = grounds.find(g => squash(g.name) === squash(text) || lettersApart(squash(g.name), squash(text), 2) <= slackOf(squash(g.name)))
@@ -984,7 +988,7 @@ function widePlace(map, origin, text, known) {
     const plural = word.length === 1 && /[^s]s$/.test(bare) ? wordsFor(bare.replace(/s$/, '')) : null
     const kinds = plural ?? wordsFor(bare)
     const ofKind = kinds ? grounds.filter(g => { const has = groundKinds(map, g); return kinds.some(k => has.has(k)) }) : []
-    if (ofKind.length > 1 && plural) return spreadOver(map, origin, ofKind)
+    if (ofKind.length > 1 && plural) return spreadOver(map, origin, ofKind, known.groundNeeded)
     if (ofKind.length > 1) {
       const question = GROUND.some.which(bare, ofKind.map(g => PLACE.name(g.name)))
       return {

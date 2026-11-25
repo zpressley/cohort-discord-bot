@@ -239,4 +239,4 @@ table.losses th:first-child, table.losses td:first-child { text-align: left; }
 .kind-choice { align-items: flex-start; padding: 10px 12px; }
 .kind-choice input { margin-top: 3px; }
 .kind-choice .note { font-size: 13px; }
-#kind-field[hidden] { display: none; }
+#kind-field[hidden], #ground-note[hidden] { display: none; }

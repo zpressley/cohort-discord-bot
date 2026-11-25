@@ -634,7 +634,9 @@ async function muster() {
     document.getElementById('kind-choices').innerHTML = kinds.map(k => `<label class="choice kind-choice"><input type="radio" name="kind" value="${esc(k.id)}"${k.id === kindChosen ? ' checked' : ''}> <span><strong>${esc(k.title)}</strong><br><span class="note">${esc(k.said)}</span></span></label>`).join('')
     document.querySelectorAll('input[name="kind"]').forEach(r => r.addEventListener('change', () => { kindChosen = r.value }))
     // A big field's two lines, under the choice.
-    document.getElementById('ground-note').textContent = kinds.length ? (m.lines ?? '') : m?.said ?? ''
+    const note = document.getElementById('ground-note')
+    note.textContent = kinds.length ? (m.lines ?? '') : m?.said ?? ''
+    note.hidden = !note.textContent
   }
   pickMap.addEventListener('change', showGround)
   showGround()
