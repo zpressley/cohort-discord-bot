@@ -5721,41 +5721,82 @@ seed 80190, 154 ticks) -> 10, at most once.
   up at (33, 25), (32, 25) before; Thornwood's west at (6, 20), (5, 20)
   before. This is not a smooth dial: Ashford's east at 30, 31, 32, 33, 34
   gave 85, 77, 70, 53, 77% (200 battles each); Thornwood's west at 5, 6, 7,
-  41, 51, 62% (400). Crownhill was tried at five places and stayed 56 to
-  68% west; left at (30, 29).
-- *The Commander taken.* With fewer units cut down running, the
-  captive league's Commander was taken 1 in 45.5 on the 1 km fields (19.2
-  before). Ruled: "Retun commander taken odds". **Built**
+  41, 51, 62% (400).
+- *Crownhill, second round.* Why the west: the hill lies on the west bank
+  of its river; the east's way up is over the North Ford, which now takes
+  a unit at a time, so the east comes onto the hill in file and the west,
+  first there, held it first in 335 battles of 400 (250 before columns)
+  and won 62%. Forming-up places tried, west's share between two computer
+  armies: east at (30, 28) 56% and 61% (two runs), (29, 29) 65%, (31, 29)
+  63%, (31, 28) 68%, (30, 26) 59% (200), (30, 22) 77%; west at (10, 23) 59
+  to 61%, (11, 24) 67%, (11, 25) 71% (200), (9, 23) 56%; both moved, west
+  (9, 23) and east (30, 24), 36%. A wider North Ford (three tiles more) made
+  it 69%: the east only gets across faster to be beaten piecemeal on the
+  west bank. **Kept: the east at (30, 24)**, five tiles north, 53% (400);
+  the two armies' first units reach the hill within ten minutes of each
+  other (the test), and the player's three plays on Crownhill are 62, 49
+  and 50%.
+- *Greywater, second round.* Elderby's bridge was two tiles abreast, each
+  fed from one bank's road, so an army crossed it a unit at a time.
+  Drawn wider in the map (`data/maps/greywater.js`), not by a rule for one
+  crossing: four bridge tiles abreast (rows 38 to 41, the map's twin
+  drawing keeping it fair), the village street meeting every lane from
+  either bank. Tried first: four abreast with no street to the new lanes,
+  "take" 45% but the computer against itself 29% west; the street to both
+  old lanes only, "take" 32%. Kept: "take" 45%, "advance" 52%; the computer
+  against itself 52% west (it was 42% on main, 53% after the first round).
+- *The Commander taken: a new way to be taken, added to hold the ruled
+  odds* (about 1 battle in 19 to 24 on the 1 km fields). With fewer units
+  cut down running, the captive league's Commander was taken 1 in 45.5 on
+  the 1 km fields (19.2 before). Ruled: "Retun commander taken odds". To
+  undo it, set `COMMANDER.CAUGHT` to 0: he is then taken only as before,
+  and about 1 in 45. **Built**
   (`commander.js`; `tables.COMMANDER.CAUGHT` 0.06): a tick his unit is
   caught running (pursued) he may be taken on a roll of 6%, whatever its
   strength (before, only under half strength, 4%). Tried 0.03, 0.05, 0.08,
-  0.15, 0.3: 1 in 38.5, 26.7, 17.2, 9.0, 5.0. Test: "caught running, his
-  unit broken and pursued, he may be taken whatever its strength ...".
+  0.15, 0.3: 1 in 38.5, 26.7, 17.2, 9.0, 5.0. Now, with the second round:
+  1 in 23.3 on the 1 km fields, 1 in 12.5 on Greywater (13.3 on main). His
+  dispatch says how: "You were taken by ... as your men ran" (and the side
+  that took him, "... took the enemy Commander as his men ran"). Tests:
+  "caught running, his unit broken and pursued, he may be taken whatever
+  its strength ..."; "a Commander taken as his men ran is told so ...".
+- *Raven Ridge "advance" 41% -> 35%, left.* Of 30 seeds, 5 changed hands
+  either way; the lost one looked at (Maurya, seed 7917): the computer's army is over the ford first and
+  meets his column on the road at Raven Gap, his units fighting one at a
+  time in file as they come up. No one-tile forming-up change is cheap
+  where the computer against itself is even (51%); "take" there rose 50
+  -> 55%.
 
-**The leagues, before -> after:**
+**The leagues: before, after the first round, and now** (the second round:
+Elderby's bridge four abreast, Crownhill's east army at (30, 24), the line
+for a Commander taken as his men ran):
 
-| | before (main 6bafcf5) | after |
-|---|---|---|
-| `first-battle.js`, 200 a field, "take": Crownhill / Ashford / Thornwood / Raven Ridge | 59 / 47 / 53 / 50% | 59 / 46 / 63 / 55% |
-| "advance" | 46 / 51 / 53 / 41% | 59 / 44 / 50 / 35% |
-| his stand-in planner | 53 / 60 / 47 / 51% | 55 / 57 / 55 / 49% |
-| asked an hour, "take" | 3.2 / 4.7 / 4.8 / 4.8 | 3.6 / 4.4 / 4.7 / 4.6 |
-| Greywater, "take" / "advance" (100, `measure.js` in the work's scratchpad) | 46 / 49% | 27 / 46% |
-| `no-fight.js`, came to nothing: computer / planner / charge / idle | 0 / 0 / 0 / 0 | 0 / 0 / 0 / 0 |
-| computer against computer, west's share (`ground-league.js --mode mirror --rounds 20`) | 49 / 50 / 49 / 50% | 62 / 51 / 51 / 51% |
-| as the app plays (`--mode app --rounds 5`) | 51 / 56 / 51 / 49% | 54 / 58 / 51 / 47% |
-| character league (`--rounds 4`): steady / bold / cautious | 51 / 51 / 48% | 49 / 51 / 49% |
-| messenger league (672, `--day 720 --ground --character mix`): red won | 51% | 52% |
-| Commander taken (`captive-league.js --policy wait`): 1 km / Greywater | 1 in 19.2 / 13.3 | 1 in 22.2 / 10.8 |
-| soak | every battle ends | every battle ends |
-| `npm run balance` | | unchanged, every line (a duel has no march) |
+| | before (main 6bafcf5) | first round | now |
+|---|---|---|---|
+| `first-battle.js`, 200 a field, "take": Crownhill / Ashford / Thornwood / Raven Ridge | 59 / 47 / 53 / 50% | 59 / 46 / 63 / 55% | 62 / 46 / 63 / 55% |
+| "advance" | 46 / 51 / 53 / 41% | 59 / 44 / 50 / 35% | 49 / 44 / 50 / 35% |
+| his stand-in planner | 53 / 60 / 47 / 51% | 55 / 57 / 55 / 49% | 50 / 57 / 55 / 49% |
+| asked an hour, "take" | 3.2 / 4.7 / 4.8 / 4.8 | 3.6 / 4.4 / 4.7 / 4.6 | 3.7 / 4.4 / 4.7 / 4.6 |
+| Greywater, "take" / "advance" (100, `measure.js` in the work's scratchpad) | 46 / 49% | 27 / 46% | 45 / 52% |
+| "ranks were critical" a battle, "take", five fields | 4.0 / 1.6 / 5.1 / 1.7 / 12.6 | 0.3 / 1.5 / 1.9 / 0.7 / 5.5 | 0.4 / 1.5 / 1.9 / 0.7 / 2.7 |
+| `no-fight.js`, came to nothing: computer / planner / charge / idle | 0 / 0 / 0 / 0 | 0 / 0 / 0 / 0 | 0 / 0 / 0 / 0 |
+| computer against computer, west's share (`ground-league.js --mode mirror --rounds 20`), the four 1 km fields | 49 / 50 / 49 / 50% | 62 / 51 / 51 / 51% | 53 / 51 / 51 / 51% |
+| the same on Greywater (`--map greywater`, 400) | 42% | 53% (200) | 52% |
+| as the app plays (`--mode app --rounds 5`) | 51 / 56 / 51 / 49% | 54 / 58 / 51 / 47% | not re-run |
+| character league (`--rounds 4`): steady / bold / cautious | 51 / 51 / 48% | 49 / 51 / 49% | 49 / 48 / 52% |
+| messenger league (672, `--day 720 --ground --character mix`): red won | 51% | 52% | 53% |
+| Commander taken (`captive-league.js --policy wait`): 1 km / Greywater | 1 in 19.2 / 13.3 | 1 in 22.2 / 10.8 | 1 in 23.3 / 12.5 |
+| soak | every battle ends | every battle ends | every battle ends |
+| `npm run balance` | | unchanged, every line (a duel has no march) | unchanged |
 
 Fingerprints retaken (old values in their headers): `asked-unchanged`,
 `messengers-unchanged`, `attack-named-unchanged`, `follow-unchanged`. Web
 tests whose battles moved, the smallest change each: `asked.test.js` and
 the browser test's two-Commander battle send red "everyone go east 300 m"
 (told to advance, every stop of seeds 5 to 150 called both);
-`held-commander.test.js` seed 1477 -> 2; `night.test.js` Ashford seed 1 ->
+`held-commander.test.js` seed 1477 -> 11; `messengers.test.js`, the rider
+caught, rides past the enemy's cataphracts where they now form up;
+`night.test.js` Ashford seed 1 ->
 Thornwood seed 27 (on Ashford no unit of his ran off the field in the day
 in seeds 1 to 200); `verdict.test.js` checks the horse's "broke ..." by the
 count of its routs (it broke twice, now once).
@@ -5780,11 +5821,7 @@ count of its routs (it broke twice, now once).
   chance in a fight, which put Greywater at 1 in 7.4 for 1 in 21.5.
 
 **Left undone.**
-- Crownhill between two computer armies favours the west 62% (49%
-  before); no forming-up place tried brought it under 56%. A new player's
-  first battle there is 59% "take", as before.
-- Greywater "take" 46% -> 27%: the army crosses Elderby's bridge a unit or
-  two at a time.
-- Raven Ridge "advance" 41% -> 35%.
+- Raven Ridge "advance" 41% -> 35% (above); Ashford "advance" 51% -> 44%.
+- Crownhill "take" 62%, a little over the 60% aimed at.
 - Units shoved back into their own men still pack (the push rule).
-- The Commander taken on Greywater 1 in 10.8 (13.3 before).
+- "As the app plays" (`--mode app`) was not re-run after the second round.
