@@ -148,7 +148,12 @@ test('alone, on a phone: muster, an order written on the map, turns to a verdict
       if (await p.locator('.verdict').count()) break
       await p.click('[data-tab="orders"]')
       if (await p.locator('.verdict').count()) break
-      await p.click('#send')
+      // (Taken by the enemy, he has no orders to send: he waits, and lets
+      // his army fight. More often since the pitched battle, with no ground,
+      // is offered first: November 25.)
+      await p.waitForSelector('#send, #wait, .verdict')
+      if (await p.locator('.verdict').count()) break
+      await p.click(await p.locator('#send').count() ? '#send' : '#wait')
       await p.waitForSelector('.dispatch')
     }
     await p.click('[data-tab="orders"]')
