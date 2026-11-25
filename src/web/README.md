@@ -7,6 +7,7 @@ step.
 npm run web                    http://localhost:3000
 PORT=8080 npm run web
 COHORT_DATA_DIR=/some/dir      where battles are saved (default data/web)
+DATABASE_URL=postgres://...    saved in Postgres instead (docs/HOSTING.md)
 GROQ_API_KEY=...               orders read and turns narrated by the AI
                                (without it: the fixed grammar, plain reports;
                                model and costs in docs/ai/MODELS.md)
@@ -17,8 +18,11 @@ npm run test:browser           a full battle in Chromium (needs Playwright)
 battles.js     the battles: muster, seats by link, each side's view (fog of
                war held here), read-back, orders, dispatches, saving and
                rebuilding from the order log, the replay
-server.js      the HTTP server: the JSON API (listed at the top of the file)
-               and the app's files
+server.js      the HTTP server: the JSON API (listed at the top of the file),
+               the app's files, and /healthz for the host
+storage.js     where battles and Commanders are kept: files, or Postgres
+               when DATABASE_URL is set; writes queued, in order, retried
+import-files.js  copies battles saved as files into Postgres (safe twice)
 public/        the browser app: index.html, app.js (screens), map.js (the
                map and its gestures), app.css (layout)
 themes/        one folder per theme; parchment is the only one so far. A

@@ -2,6 +2,9 @@
   "name": "cohort-discord-bot",
   "version": "1.0.0",
   "main": "src/web/server.js",
+  "engines": {
+    "node": "22.x"
+  },
   "scripts": {
     "start": "node src/web/server.js",
     "dev": "node --watch src/web/server.js",
@@ -28,7 +31,8 @@
   "description": "Cohort: an ancient warfare battle game. A pure engine, a web app (the Command Tent) and a hotseat CLI.",
   "dependencies": {
     "ajv": "^8.17.1",
-    "dotenv": "^16.3.1"
+    "dotenv": "^16.3.1",
+    "pg": "^8.23.1"
   },
   "devDependencies": {
     "eslint": "^9.38.0"

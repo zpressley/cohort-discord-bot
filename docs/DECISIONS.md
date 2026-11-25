@@ -5825,3 +5825,100 @@ count of its routs (it broke twice, now once).
 - Crownhill "take" 62%, a little over the 60% aimed at.
 - Units shoved back into their own men still pack (the push rule).
 - "As the app plays" (`--mode app`) was not re-run after the second round.
+
+## Rulings, November 25, 2026 (hosting and Discord)
+
+- "Need to figure out hosting, I want to connect back to discord, I like their OAuth and it's nice to have an easy chat feature premade."
+- Asked whether the game stays in the browser, with Discord for sign-in, "your move" notices and chat: "Yes it is. I have a discord server."
+- Asked whether the old bot's Discord application still exists: "It should".
+- "A lot of the discord side is built and still in the code, secrets etc you could get most of the way there with what you have now. Server, channel etc."
+- "Why can't we do a Postgres's database for this? It feels like I had so many commit issues with my FBP website build on railway."
+
+### How saving to Postgres was built (Claude's choices, open to change)
+
+Where the database and the server are hosted is not decided yet.
+`docs/HOSTING.md` says what any host needs.
+
+**What was built.**
+- One small saving layer, `src/web/storage.js`, with two backends behind
+  the same calls (`put(kind, id, data)`, `all(kind)`, `remove(kind, id)`,
+  `flush()`, `health()`, `close()`). Battles are kind `battle`, Commanders
+  `commander`; the Discord work can add `account` with no change to the
+  layer.
+- **No `DATABASE_URL`: files, exactly as before** (`<dir>/<id>.json`,
+  `<dir>/commanders/<id>.json`, written at once). The tests, the soak and
+  the browser tests need no database.
+- **`DATABASE_URL` set: Postgres**, one table:
+  `documents(kind text, id text, data json, updated_at timestamptz,
+  primary key (kind, id))`, made at start if missing (`create table if not
+  exists`; no migration tool). Everything is read in at start, then the
+  server listens. Memory stays the truth while it runs.
+- **`json`, not `jsonb`.** Found while testing: jsonb sorts an object's
+  keys, and a Commander's company came back with its units in another
+  order (the game reads that order). `json` keeps the text as written.
+  The cost: no indexing inside documents, which nothing needs.
+- **Writes are queued per document.** One write at a time for each
+  document, in the order made; if several changes come while one is being
+  written, only the newest is written next (each is the whole document, so
+  nothing is lost). A failed write is tried again after 0.25, 0.5, 1, 2
+  and 4 s, then every 5 s for as long as the server runs, each failure
+  logged plainly (never the connection string).
+- **A turn is never answered as done while its save has failed.** Every
+  POST waits for everything written so far to be saved before it is
+  answered (about 2 to 4 ms on a local database). If a write has failed
+  five times running (about 8 s of trying), that POST is answered 503 ("The game could not be
+  saved just now, so nothing new can be played. Try again in a minute."),
+  and every POST after it is refused 503 until saving works again; GETs
+  still answer. `GET /healthz` is 503 while this lasts. The change stays in
+  memory and is written when the database comes back, so a battle refused
+  this way can still turn out to have been played: honest, but the page
+  only learns it on its next look.
+- **On SIGTERM and SIGINT** the server stops taking requests, waits up to
+  10 s for those under way, writes the queue (up to 20 s), closes the pool,
+  and exits 0.
+- **TLS.** `sslmode` is read from the URL by the server, not by the
+  driver, so `require` means what it means in every other Postgres client:
+  encrypted, certificate not checked (the driver now treats `require` as
+  "check the certificate", which hosted databases with their own
+  certificates fail). `verify-full`/`verify-ca` check it; `disable` turns
+  it off. With no `sslmode`: encrypted unless the host is this machine or
+  ends `.internal` (a host's private network). Pool of 3 connections.
+- **`GET /healthz`**: `{ ok, saving }` (and `why` when not ok). Nothing
+  secret.
+- **`node src/web/import-files.js`** copies battles and Commanders saved
+  as files into the database, skipping any already there, so it is safe
+  twice and never overwrites a game played since.
+- `engines` is Node `22.x`; `npm start` is unchanged; `pg` is the only new
+  dependency. CI runs a `postgres:16` service and sets `TEST_DATABASE_URL`
+  (its user and password are the CI container's own, not a secret).
+
+**What was measured** (this container, Postgres 16 on the same machine).
+- 200 battles of five turns each (about 10 KB a battle document): read
+  from the database in 12 ms; rebuilding them by replaying their order
+  logs took 5.6 s. The replay is the cost, the same as with files.
+- A turn's save, waited on before the answer: median 2.4 ms, 95th
+  percentile 3.7 ms. A database across a network will add its round trip.
+- One whole battle (12 turns) played against the real server on Postgres
+  over HTTP, stopped with SIGTERM after turn 3 and killed outright
+  (SIGKILL) after turn 5: after each start the battle was the same as
+  before it, and it went on to its end; the Commander's battle was counted.
+
+**Guesses, and the other reading.**
+- That "the simplest honest behaviour" is: wait for the save, and refuse
+  new orders while saving fails. The other reading: queue the change and
+  answer at once, telling the page later. Waiting costs a few ms a turn.
+- That one copy of the server runs. Two copies on one database would each
+  hold their own memory and overwrite each other's battles. Hosts run one
+  by default.
+- That an unnamed `sslmode` on a remote host should still encrypt. The
+  other reading: plain unless asked; some databases refuse that and some
+  refuse TLS. `sslmode=disable` or `=require` in the URL settles it.
+- That changes arriving during a slow write may be merged into the newest
+  version rather than each written in turn. Each document is written
+  whole, so the stored result is the same.
+
+**Left undone.**
+- Accounts (`account` documents) are for the Discord sign-in work.
+- Where to host is not chosen; no host's own config file is added.
+- Hosted Postgres was not tried (no account here): TLS was tested only by
+  the URL parsing tests, not against a real certificate.
