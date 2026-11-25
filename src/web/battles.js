@@ -5,16 +5,15 @@
 // A battle is the engine's game (src/engine/orchestrator) plus what the web
 // needs around it: one secret link per side (a "seat"), the turn reports
 // each side has received, and when things happened. It is saved as a JSON
-// file and rebuilt on start by replaying its order log (gameRecord /
-// replayGame), so a battle survives the server stopping, which matters for
-// a game played over days (ruled 2026-10-29).
+// document (storage.js: a file, or a row in Postgres) and rebuilt on start
+// by replaying its order log (gameRecord / replayGame), so a battle
+// survives the server stopping, which matters for a game played over days
+// (ruled 2026-10-29).
 //
 // Fog of war is enforced here, not in the browser: a seat only ever gets
 // its own side's view. Nothing about an enemy the side has not seen leaves
 // this module.
 
-const fs = require('fs')
-const path = require('path')
 const crypto = require('crypto')
 
 const { createGame, submitOrders, forceProcess, sideView, gameRecord, replayGame, commanderOf, captorOf, checkOffer, checkAnswer, waitingOn } = require('../engine/orchestrator')
@@ -40,6 +39,7 @@ const { knownEnemies, newsBetween, arrivalOf } = require('../engine/orchestrator
 const { aboutHowMany } = require('../engine/orchestrator/reports')
 const { captorAnswer } = require('../opponent/captor')
 const { createCommanderStore } = require('./commanders')
+const { createFileStorage } = require('./storage')
 const { digest, summarise, placeName } = require('../narrator/turnNarrator')
 const { gradeOf, DEATH_ODDS, loyaltyBand } = require('../engine/command/officers')
 const T = require('../engine/combat/tables')
@@ -343,20 +343,21 @@ function newToken() {
  * @param {Object} options
  *   dir   where battles are saved (one JSON file each); null keeps them in
  *         memory only (tests)
+ *   storage  where battles and Commanders are kept (storage.js), already
+ *         opened; in place of dir (the server's, for Postgres)
  *   ai    an AI client (src/llm) for reading orders and narrating; null for
  *         the grammar and plain reports
  *   now   clock, for "the turn ran 2 h ago" (injectable for tests)
  */
-function createBattleStore({ dir = null, ai = null, now = () => Date.now() } = {}) {
+function createBattleStore({ dir = null, storage = null, ai = null, now = () => Date.now() } = {}) {
   const battles = new Map()   // id -> entry
   const seats = new Map()     // token -> { id, side }
-  const commanders = createCommanderStore({ dir, now })
+  const kept = storage ?? createFileStorage(dir)
+  const commanders = createCommanderStore({ storage: kept, now })
 
   // ── Saving and loading ────────────────────────────
 
   function save(entry) {
-    if (!dir) return
-    fs.mkdirSync(dir, { recursive: true })
     const data = {
       id: entry.id,
       scenario: entry.scenario,
@@ -389,15 +390,11 @@ function createBattleStore({ dir = null, ai = null, now = () => Date.now() } = {
       asked: !entry.game.spec.everyoneAsked,
       record: gameRecord(entry.game)
     }
-    const file = path.join(dir, `${entry.id}.json`)
-    fs.writeFileSync(`${file}.tmp`, JSON.stringify(data))
-    fs.renameSync(`${file}.tmp`, file)
+    return kept.put('battle', entry.id, data)
   }
 
   function load() {
-    if (!dir || !fs.existsSync(dir)) return
-    for (const name of fs.readdirSync(dir).filter(n => n.endsWith('.json')).sort()) {
-      const data = JSON.parse(fs.readFileSync(path.join(dir, name), 'utf8'))
+    for (const data of kept.all('battle')) {
       // A battle saved before orders and news went by rider replays as it
       // was played, and goes on so.
       let record = data.riders ? data.record : { ...data.record, spec: { ...data.record.spec, messengers: false } }
@@ -1985,6 +1982,9 @@ function createBattleStore({ dir = null, ai = null, now = () => Date.now() } = {
     day: () => ({ minutes: T.DAY.MINUTES, said: NIGHT.day(T.DAY.MINUTES) }),
     seatOf,
     commanders,
+    // Where it is all kept (storage.js): the server waits on it before it
+    // answers, and asks it whether saving works.
+    storage: kept,
     commanderView,
     scenarios: () => Object.keys(SCENARIOS).map(id => ({ id, title: SCENARIO_TITLES[id] ?? id })),
     // Each field with its own ground to fight for, in the muster's words.

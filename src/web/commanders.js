@@ -7,11 +7,10 @@
 // several battles going; each Commander's army fights one battle at a time
 // (ruled 2026-11-22), so a Commander remembers which battle he is in.
 //
-// Saved one file a commander under <dir>/commanders, written whole each
-// time it changes.
+// Saved as one document a commander (storage.js: a file under
+// <dir>/commanders, or a row in Postgres), written whole each time it
+// changes.
 
-const fs = require('fs')
-const path = require('path')
 const crypto = require('crypto')
 
 const { createCompany, unitsOf } = require('../engine/command/company')
@@ -20,6 +19,7 @@ const { PLAIN } = require('../data/officers')
 const { FACTIONS } = require('../data/factions')
 const { usualArmy } = require('../engine/army/standard')
 const { rosterView, RESERVED } = require('./roster')
+const { createFileStorage } = require('./storage')
 const { KINDS, HOLDS, TITLE_AFTER } = require('../data/commanders')
 const { veterancyLevel } = require('../engine/veterans/veterancy')
 const { VETERANCY_WORDS, MAKING, COMMANDER_KINDS, NATURE_SAID, HOLDS_DEAR, COMMANDER_TITLES } = require('../narrator/words')
@@ -64,23 +64,14 @@ function titleOf(commander) {
   return COMMANDER_TITLES[commander.holds]?.[commander.kind] ?? null
 }
 
-function createCommanderStore({ dir = null, now = () => Date.now() } = {}) {
-  const folder = dir ? path.join(dir, 'commanders') : null
+function createCommanderStore({ dir = null, storage = null, now = () => Date.now() } = {}) {
+  const kept = storage ?? createFileStorage(dir)
   const byToken = new Map()
 
   function save(commander) {
-    if (!folder) return
-    fs.mkdirSync(folder, { recursive: true })
-    const file = path.join(folder, `${commander.id}.json`)
-    fs.writeFileSync(`${file}.tmp`, JSON.stringify(commander))
-    fs.renameSync(`${file}.tmp`, file)
+    return kept.put('commander', commander.id, commander)
   }
-  if (folder && fs.existsSync(folder)) {
-    for (const name of fs.readdirSync(folder).filter(n => n.endsWith('.json')).sort()) {
-      const commander = JSON.parse(fs.readFileSync(path.join(folder, name), 'utf8'))
-      byToken.set(commander.token, commander)
-    }
-  }
+  for (const commander of kept.all('commander')) byToken.set(commander.token, commander)
 
   // A plain name, offered so that he need not type one: one no other
   // Commander here bears, while there are any left.

@@ -7,7 +7,12 @@
 //   npm run web                       http://localhost:3000
 //   PORT=8080 npm run web
 //   COHORT_DATA_DIR=/some/dir         where battles are saved (default data/web)
+//   DATABASE_URL=postgres://...       saved in Postgres instead (storage.js)
 //   GROQ_API_KEY=...                  orders read and turns narrated by the AI
+//
+// For the host: GET /healthz is 200 while saving works, 503 when it does not.
+// Every POST is answered only once what it changed is saved; while saving
+// is failing, POSTs are refused (503) and nothing new is played.
 //
 // The API, all JSON:
 //   GET  /api/scenarios                     what can be mustered
@@ -76,6 +81,7 @@ const fs = require('fs')
 const path = require('path')
 
 const { createBattleStore } = require('./battles')
+const { openStorage, createFileStorage } = require('./storage')
 
 const PUBLIC = path.join(__dirname, 'public')
 const THEMES = path.join(__dirname, 'themes')
@@ -134,17 +140,35 @@ function serveFile(res, file) {
   send(res, 200, fs.readFileSync(file), TYPES[path.extname(file)] ?? 'application/octet-stream')
 }
 
+// What the player is told when the game cannot be saved.
+const NOT_SAVED = 'The game could not be saved just now, so nothing new can be played. Try again in a minute.'
+
 // A list of unit names from the browser, or null if none was sent.
 const names = (list) => (Array.isArray(list) ? list.slice(0, 60).map(n => String(n).slice(0, 40)) : null)
 
 function createServer(store) {
+  const storage = store.storage ?? createFileStorage(null)
   return http.createServer(async (req, res) => {
+    // A POST is answered once what it changed is saved; if that save has
+    // failed for good, it is answered 503 instead, never as done.
+    const sendNow = send
     try {
       const url = new URL(req.url, 'http://localhost')
       const parts = url.pathname.split('/').filter(Boolean)
+      const send = req.method !== 'POST' ? sendNow : async (res, status, body, type) => {
+        try { await storage.flush() } catch { return sendNow(res, 503, { error: NOT_SAVED }) }
+        return sendNow(res, status, body, type)
+      }
+
+      // For the host: is the game saving? (Nothing secret in the answer.)
+      if (req.method === 'GET' && url.pathname === '/healthz') {
+        const health = storage.health()
+        return sendNow(res, health.ok ? 200 : 503, health)
+      }
 
       // ── The API ─────────────────────────────────
       if (parts[0] === 'api') {
+        if (req.method === 'POST' && !storage.health().ok) return sendNow(res, 503, { error: NOT_SAVED })
         if (req.method === 'GET' && parts[1] === 'scenarios' && parts.length === 2) {
           return send(res, 200, store.scenarios())
         }
@@ -268,6 +292,8 @@ function createServer(store) {
       // Every page is the one app; it reads the address itself.
       return serveFile(res, path.join(PUBLIC, 'index.html'))
     } catch (error) {
+      // What was changed before the error is saved before the answer.
+      if (req.method === 'POST') await storage.flush().catch(() => {})
       send(res, error.status ?? 500, error.status
         ? { error: error.message, ...(Array.isArray(error.errors) ? { errors: error.errors } : {}) }
         : { error: 'something went wrong' })
@@ -276,17 +302,48 @@ function createServer(store) {
   })
 }
 
+/**
+ * Start the server: open where the game is kept and read it all in, then
+ * listen. On SIGTERM or SIGINT (a host sends SIGTERM on every redeploy) it
+ * stops taking requests, lets those under way finish, writes what is
+ * queued, and exits.
+ */
+async function main(env = process.env) {
+  const { aiClientFromEnv } = require('../llm')
+  const dir = env.COHORT_DATA_DIR ?? path.join(process.cwd(), 'data', 'web')
+  const started = Date.now()
+  const storage = await openStorage({ databaseUrl: env.DATABASE_URL || null, dir })
+  const store = createBattleStore({ storage, ai: aiClientFromEnv() })
+  console.log(`Saving to ${storage.where === 'postgres' ? 'Postgres (DATABASE_URL)' : `files in ${dir}`}; read in at start in ${Date.now() - started} ms.`)
+  const port = Number(env.PORT ?? 3000)
+  const server = createServer(store)
+  await new Promise(resolve => server.listen(port, resolve))
+  console.log(`Cohort is up: http://localhost:${port}`)
+
+  let stopping = false
+  async function stop(signal) {
+    if (stopping) return
+    stopping = true
+    console.log(`${signal}: stopping. Finishing requests and saving.`)
+    const closed = new Promise(resolve => server.close(resolve))
+    server.closeIdleConnections()
+    await Promise.race([closed, new Promise(resolve => setTimeout(resolve, 10000).unref())])
+    await storage.close()
+    console.log('Saved. Stopped.')
+    process.exit(0)
+  }
+  process.on('SIGTERM', () => stop('SIGTERM'))
+  process.on('SIGINT', () => stop('SIGINT'))
+  return server
+}
+
 if (require.main === module) {
   require('dotenv').config()
-  const { aiClientFromEnv } = require('../llm')
-  const store = createBattleStore({
-    dir: process.env.COHORT_DATA_DIR ?? path.join(process.cwd(), 'data', 'web'),
-    ai: aiClientFromEnv()
-  })
-  const port = Number(process.env.PORT ?? 3000)
-  createServer(store).listen(port, () => {
-    console.log(`Cohort is up: http://localhost:${port}`)
+  main().catch((error) => {
+    // Never the connection string: only what went wrong.
+    console.error(`Cohort could not start: ${error.message}`)
+    process.exit(1)
   })
 }
 
-module.exports = { createServer }
+module.exports = { createServer, main }

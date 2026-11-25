@@ -24,6 +24,16 @@ the screens.
   log, and rebuilt by playing the log back. Anything that changes a battle
   must go through `submitOrders` so it is in the log. Changing a spec after
   the game is made breaks the replay.
+- **Saving goes through `storage.js`.** Battles and Commanders (and,
+  later, accounts) are documents: `put(kind, id, data)`, `all(kind)`,
+  `remove(kind, id)`. Files under `COHORT_DATA_DIR` when no database is
+  set (tests, the soak, a developer's machine), Postgres when
+  `DATABASE_URL` is. Memory is the truth while the server runs: all is read
+  in at start, a document written whole when it changes. A POST is answered
+  only once its writes are saved (`storage.flush()`); while saving fails,
+  POSTs get 503 and `/healthz` says so. Postgres keeps `json`, not `jsonb`
+  (jsonb reorders keys, and the game reads key order). Hosting:
+  `docs/HOSTING.md`. Postgres tests run when `TEST_DATABASE_URL` is set.
 - **The game works with no AI.** With no key, orders are read by the
   grammar and reports are the plain account.
 
