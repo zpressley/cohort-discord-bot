@@ -5923,6 +5923,229 @@ Where the database and the server are hosted is not decided yet.
 - Hosted Postgres was not tried (no account here): TLS was tested only by
   the URL parsing tests, not against a real certificate.
 
+## Rulings, November 25, 2026 (kinds of battle)
+
+Zach's words, on the ground to fight for and the kinds of battle
+(November 25, 2026):
+
+- "I don't know if I like ground.... I think it should be used in some
+  cases but not in others."
+- "In a deathmatch surrendering the field is a loss. A tie is where both
+  armies are surviving with some % of their troops by the end of the day.
+  Not sure the % but that incentivizes ... fighting."
+- "The ground can be used on choke point maps, need a king of the hill
+  style one. Crown hill was actually meant to be 3 fords and controlling 2
+  fords wins the game. So two grounds."
+- "The other option is a point capture situation where each army starts
+  far away and can place a camp. They have to defend the camp or they
+  start losing wind. Games go as long as they need to multiple days. So
+  the camp can be picked up by a unit and moved but if the camp is moving
+  the entire army begins to shed wind till it's placed back down and if
+  it's destroyed, they must fight on without it. Not sure of the rates but
+  it's a solid game type. Capture the flag in a way."
+
+(The camps are a third kind of battle, built after this; the kinds are
+left open to it.)
+
+### How the kinds of battle were built (Claude's choices, open to change)
+
+Built from the rulings above, the first three; the camps are left for the
+work after this one.
+
+**1. A battle has a kind.** Chosen at the muster, saved in the battle's spec
+(`kind`), so a saved battle replays and the next day is the same kind.
+`src/data/maps/index.js` has the kinds (`KIND_IDS`), which a field offers
+(`kindsOf`, from a `kinds` line in each map file) and what each puts in the
+spec (`kindSpec`). A third kind is a new id there, its spec, and its words
+(`KINDS` in `narrator/words.js`).
+- **The pitched battle** (Zach's "deathmatch"): no ground to fight for. Won
+  as every battle is: the enemy yields, his army breaks or is destroyed (below
+  20% of his men), his Commander is killed. At nightfall
+  (`orchestrator/victory.js`, `kind: 'pitched'`): the army still standing
+  with `tables.PITCHED.STAND_SHARE` of the men it began the day with, when
+  the other's is not, has held the field and won (`'field held at
+  nightfall'`); both, or neither, is a tie (`'night fell'`, as before, so
+  either side may call the next day, ruled November 24). Men standing: in
+  units on the field that are not broken; those who ran, broken or off the
+  field, do not stand. "The men it began the day with": the battle's own
+  start (the next day is a battle of its own, begun with the men left).
+- **"Surrendering the field is a loss"**: checked, and it already was. A side
+  that yields loses (`'enemy surrendered'`, as for any battle); a side whose
+  every unit has left the field loses (`checkBattleOutcome`: the side is gone
+  from the roster). Unbroken units cannot leave the field (falling back to
+  your own edge stands there). Tested by name.
+- **The battle for ground**: as before (an hour alone; night with no
+  winner), on a field made for it.
+- A battle saved before the kinds has no `kind` and ends as it always did;
+  so does one whose ground the API names without a kind (a testing aid).
+
+**The name.** "A pitched battle" (Zach's lean was the same): plain,
+in-world, and what a deathmatch between two armies was called. Guessed;
+the other reading was "a battle to the end", which every kind is.
+
+**The nightfall share: a half.** Measured (a script of the moment over the
+app's battles, 20 a field on all five, the stand-in planner, "everyone
+advance" and "everyone hold"): when an army breaks, the loser has a third to
+two fifths of the men it began with in its ranks (median 0.33 to 0.40), the
+winner about 0.70. Battles that reached nightfall (only those where the
+player held all day: 7 of 100 before, 7 after) stood at 0.50 to 0.77 a side.
+At a half, those seven became five ties and two wins for the side still
+whole (one army at 0.22). At 0.6, four of five ties would have become wins
+for whoever had lost a little less: a stand-off decided by a few men, which
+is not what he asked for. So under a half is beaten, over it still in the
+fight. The other reading: a higher share (0.6, 0.7) makes a tie rarer and
+pushes harder to fight; it is one number in `tables.js`.
+
+**When only one side has it**: he wins, as the brief said. The other
+reading is that a side below the share at nightfall has only "not tied"
+and the battle is still a tie; then night would never decide anything.
+
+**2. More than one ground: hold some of several.** A spec may say how many
+of its grounds must be held (`objectivesNeeded`; the map's `hold: {
+needed, called }`). The orchestrator keeps `game.fieldHold`: the side
+holding at least that many, each alone, and since when; the hour runs while
+he holds as many, whichever, and starts again when he holds fewer
+(`someHeld`). Where `needed` is half the grounds or fewer, both sides could
+hold enough at once: then no one is on the clock. With one ground, or every
+ground to hold, nothing changes (tested: no new field on any event).
+- *What each side is told.* Every change of hands now says how many each
+  side holds after it (`holding`, `needed`, `of`, `called` on the event):
+  "you took the North Ford, and hold one of the three fords: hold two and
+  the field is yours"; "the enemy took Miller's Crossing, and holds two of
+  the three fords: take one from him, or the field is his". The half hour's
+  notice is one event naming the grounds held: "hold the North Ford and
+  Miller's Crossing 30 min more and the field is yours". Who holds which is
+  known to every side at once, as before; who stands on them comes by rider
+  (S12, unchanged). The held Commander's lines speak of his army (S11).
+- *Being called.* `groundCalls` was already per ground; unchanged. A ford
+  swaying between two sides calls no one again.
+- *The tent.* One line under the map for the whole battle (`groundLine`):
+  "You hold the North Ford and Miller's Crossing: hold two of the three
+  fords alone for 1 h and the field is yours. 25 min more and it is." The
+  map marks each ford, with a mark at the edge for each out of the window.
+- *The verdict*: "You held the North Ford and Miller's Crossing, two of the
+  three fords, alone for 1 h, and the field is yours".
+- *Units sent to a ground* fight for it as before (`GROUND_FIGHT`), each
+  for its own.
+- *The order reader.* "Take the fords" and "take the ground" share his
+  units out between as many as must be held, the nearest (Miller's Crossing
+  and the South Ford from where the west forms up), each unit to the nearest
+  with fewest, and the read-back says where each goes. "The north ford",
+  "millers crossing": that ford. "The nearest ford": the nearest, as before
+  (a question when two are as near). "The ford" alone: "There are three
+  fords to fight for on this field: the North Ford, Miller's Crossing and the
+  South Ford. Which do you mean?", with each as a choice. Guessed: "the
+  fords" means as many as win, not all three. Shared among all three, a new
+  player who gave that order and nothing more won 11 battles in 40; among
+  the nearest two, 9 in 40 (both lose to a computer that takes the third:
+  the order is a start, not a plan). The other reading, all three, is one
+  argument in `spreadOver`.
+- *The computer's planner* (`splitGround`). It goes for as many as must be
+  held: those it holds first; then the nearest no one holds; then those the
+  enemy holds; always one the enemy holds when he holds enough to be on the
+  clock; and among equals one it has men on the way to already (else a
+  part turned back and forth between two fords for hours). Its army is
+  shared out, every unit in a line at its ford, fit men to ground still to
+  take, worn men keeping what is held; the tiles that hold a ford first
+  (a ford is held from one or two tiles at its ends, and a line spread
+  across beside it held nothing). By character: steady as above; bold goes
+  for what the enemy holds before what no one holds; cautious takes them
+  one at a time with his whole army, leaving one unit at each he holds.
+  Character league (every field, the battle for ground, 640 battles a
+  character against the others): steady 51%, bold 48%, cautious 51%.
+
+**3. Crownhill is the battle of the three fords.** Its grounds are the
+North Ford, Miller's Crossing and the South Ford, each held from on it or a
+tile off it (`reach: 1`), two to hold. The hill is no longer ground;
+Harrow Bridge stays a crossing. Fairness, marching alone (every faction):
+from where the armies formed up, each side's first unit reached its nearest
+ford after 18 minutes, but its second nearest after 37 (west) and 60 (east).
+Moving the west instead (to (10, 21)) evened it but moved every unit in a
+dozen tests tuned to Crownhill's old ground; moving the east to (28, 17)
+gives 18 and 17, 37 and 44 minutes, and the computer against itself 50%
+for the west (80 battles; 46 to 52% at other places tried). But the east
+there changes the pitched battle and the battles with no kind too, so it is
+where the armies form up *for the battle for the fords only*: a map's
+`deployFor: { ground: ... }`, read when the scenario is loaded with its
+kind (`adapters/hotseat/scenarios.js`) and carried in the spec (`deploy`)
+so that armies called out for it form up there (`army/factions.js`,
+`standard.js`, `secondLine.js`; one line each, pure). The test that both
+are as long marching now compares each side's nearest and second nearest.
+
+**4. Which fields offer what.** Every field offers the pitched battle and
+its battle for ground: Crownhill (two of the three fords), Ashford Vale (the
+Old Mill Bridge, a choke point), Raven Ridge (Raven Gap, a choke point),
+Thornwood (Thorn Knoll, the king of the hill: its muster line begins "King
+of the hill."), Greywater (Elderby). Offered first: the pitched battle, on
+every field, since Zach doubts ground as the default. Guessed; the other
+reading is the ground first where a field is made for it. It is one line in
+each map file (`kinds: ['pitched', 'ground']`; swap them). The muster shows
+the choice as two large radio cards under the field, each with its line on
+how it is won; changing the field keeps the kind if the new field offers
+it. The API takes `kind` (`POST /api/battles`); with none, the field's
+first. The first turn's examples fit the kind: "everyone take the fords" on
+the fords, the ground's name on a field with one, none in a pitched battle
+(whose first is "everyone advance").
+
+**5. Measured** (before: main at d3eb86e; after: this branch). Wins are the
+new player's, 40 battles a field (`harness/first-battle.js`); fairness is
+the west's share between two computer armies (`ground-league.js --mode
+mirror`, 80 a field after, 40 before; night a half).
+
+| | before (ground, the hill) | after: battle for ground | after: pitched battle |
+|---|---|---|---|
+| "everyone advance", wins (Crownhill / Ashford / Thornwood / Raven Ridge) | 50 / 45 / 45 / 45% | 68 / 45 / 45 / 45% | 35 / 28 / 50 / 33% |
+| The kind's first example | 65 / 55 / 60 / 55% | 23 / 55 / 60 / 55% ("take the fords") | as "advance" |
+| The stand-in planner | 45 / 58 / 63 / 60% | 43 / 58 / 63 / 60% | 40 / 68 / 53 / 40% |
+| West's share, computer v computer | 48 / 47 / 53 / 50% | 50 / 44 / 53 / 49% | 59 / 68 / 71 / 44% |
+| Battle minutes, computer v computer | 207 / 168 / 127 / 148 | 310 / 166 / 127 / 130 | 199 / 203 / 161 / 218 |
+| How computer v computer ended, Crownhill | ground 16, broken 24 of 40 | ground 61, broken 11, night 8 of 80 | broken 80 of 80 |
+| Battles that come to nothing (`no-fight.js`, 570) | 0 | 0 (night 17, 15 of them on the fords) | 0 (night 1); against an idle player 0 (night 17) |
+| Commander taken, new player, 480 battles | 33 (1 in 15) | 35 (1 in 14) | 45 (1 in 11) |
+| Characters (steady / bold / cautious) | 49 / 49 / 52% | 51 / 48 / 51% | 52 / 48 / 50% |
+
+- Every other field's battle for ground is as before, battle for battle
+  (the same seeds give the same battles).
+- The fords run longer, and one battle in ten between two computer armies
+  ends at night with no winner (13% of `no-fight.js`'s on Crownhill): two
+  armies each holding one ford and fighting over the third till both are
+  worn out. A ground battle's night has no winner, as ruled.
+- The pitched battle's west lean (Ashford 68%, Thornwood 71%, Crownhill
+  59%) is not new: with no ground at all the same battles gave 63%, 75% and
+  68% before (`--none`). The ground's forming-up places were set for the
+  ground; nothing was moved for the pitched battle (see below).
+- The new player who sends everyone forward and nothing more wins a third
+  of pitched battles: the computer, with no ground, holds a crossing or a
+  hill ahead of it and lets him come. More of his Commanders are taken in
+  pitched battles (1 in 11 against 1 in 14 in this harness; the ruled 1 in
+  19 to 24 was measured another way, with more battles): there is more
+  fighting at close quarters. Not changed.
+- The share of men at the moment battles are decided, and at nightfall, are
+  above (the nightfall share).
+- `npm run balance`: the last table unchanged.
+- The soak plays every kind on every field: 240 battles for ground and 240
+  pitched on the 1 km fields, 60 on Greywater (both kinds), and the
+  coming-to-grips study in both kinds; every one ends.
+- Fingerprints: none changed. (The battles of the "unchanged" tests have no
+  kind and no ground, and their forming-up places did not move.)
+
+**Tests whose game changed** (each now names the kind it plays, or a field
+whose ground is what it needs): the plain-orders fixture ("the hill" on
+Crownhill is Shepherd's Ridge or the hill by name, no longer ground; "take
+the fords" and "take the ground" added); the S3 and S12 tests moved from
+the Crownhill to Thorn Knoll and Raven Gap; the planner's "ground off to a
+side is no meeting place" puts the hill back as ground for itself; the held
+Commander's "line for line" no longer counts the captor's own late word
+("Word from 10 min ago"), which he heard as it came in.
+
+**Left undone.**
+- The pitched battle's lean to the west on Ashford and Thornwood (and the
+  new player's third of pitched battles won with "everyone advance"). A
+  pitched forming-up place per field, as Crownhill's fords have, is the
+  likely mend; small moves on Thornwood swung the west's share from 45% to
+  78%, so it needs a proper search, field by field.
+- The camps (the next work).
+
 ### How Discord sign-in, your-move messages and battle threads were built (Claude's choices, open to change)
 
 Built from the rulings above ("I like their OAuth", "an easy chat

@@ -12,8 +12,14 @@
 //   4. objective control  holding every named objective for an hour of
 //                         battle time (Stage 3; or, if the spec says so, N
 //                         consecutive player turns) wins the field
+//                         or, with several, as many of them as the spec
+//                         says (objectivesNeeded; ruled 2026-11-25)
 //   5. night              the end of the day: the battle ends with no winner
-//                         ('night fell'; ruled 2026-11-24)
+//                         ('night fell'; ruled 2026-11-24); in a pitched
+//                         battle (spec.kind 'pitched', ruled 2026-11-25) a
+//                         side still standing with PITCHED.STAND_SHARE of
+//                         its men, when the other is not, wins ('field held
+//                         at nightfall')
 //   6. time limit         when set (a testing aid): more objectives held
 //                         wins, then fewer losses
 //
@@ -31,6 +37,16 @@ const COLLAPSE_FRACTION = 0.20   // [old docs] army destruction threshold
 const OBJECTIVE_TURNS_TO_WIN = 3 // [old docs] consecutive turns of control
 // Stage 3 plan F3: an hour of battle time (combat/tables.js, GROUND).
 const OBJECTIVE_HOLD_MINUTES = require('../combat/tables').GROUND.HOLD_MINUTES
+const { PITCHED } = require('../combat/tables')
+
+// The share of the men a side began the day with that still stand in its
+// ranks: in units on the field, not broken (a pitched battle's nightfall).
+function standShare(world, broken, side, startingStrength) {
+  const start = startingStrength[side]
+  if (!start) return 0
+  const now = unitsOnSide(world, side).filter(u => !broken.has(u.id)).reduce((n, u) => n + Math.max(0, u.strength), 0)
+  return now / start
+}
 
 /**
  * An objective as the spec gives it, made into ground: { id, name, tiles,
@@ -147,13 +163,25 @@ function evaluateVictory(ctx) {
 
   // Objectives: one side must hold ALL of them, each long enough: an hour
   // of battle time, or as many consecutive player turns as the spec says.
-  // Holding two of three fords is pressure, not victory.
+  // Holding two of three fords is pressure, not victory, unless the spec
+  // says some of them are enough (objectivesNeeded, below).
   const holds = Object.values(objectiveHolds)
   const objectiveCount = ctx.objectiveCount ?? holds.length
   const heldLongEnough = (h) => objectiveTurnsToWin
     ? h.turns >= objectiveTurnsToWin
     : minutesElapsed - (h.sinceMinute ?? minutesElapsed) >= objectiveHoldMinutes
-  if (holds.length > 0 && holds.length === objectiveCount) {
+  // Several grounds and some of them to hold (ruled 2026-11-25: "controlling
+  // 2 fords wins the game"): a side holding that many, each alone, for the
+  // hour wins; the hour runs while he holds at least that many
+  // (ctx.fieldHold, kept by the orchestrator) and starts again when he
+  // does not.
+  const needed = ctx.objectivesNeeded ?? null
+  if (needed && needed < objectiveCount) {
+    const f = ctx.fieldHold
+    if (f && minutesElapsed - f.sinceMinute >= objectiveHoldMinutes) {
+      return { decided: true, winner: f.side, reason: 'objectives held' }
+    }
+  } else if (holds.length > 0 && holds.length === objectiveCount) {
     for (const side of sides(world)) {
       const holdsAll = holds.every(h => h.side === side && heldLongEnough(h))
       if (holdsAll) {
@@ -168,6 +196,15 @@ function evaluateVictory(ctx) {
   // limit's rule is kept as `ahead` (a side, or null), for the harness's
   // own tables only: the game never calls it a win.
   if (ctx.dayOver) {
+    // A pitched battle (ruled 2026-11-25: "A tie is where both armies are
+    // surviving with some % of their troops by the end of the day"): at
+    // nightfall a side still standing with PITCHED.STAND_SHARE of the men
+    // it began the day with, when the other is not, has held the field.
+    if (ctx.kind === 'pitched') {
+      const all = ctx.allSides ?? sides(world)
+      const standing = all.filter(side => standShare(world, broken, side, startingStrength) >= PITCHED.STAND_SHARE)
+      if (standing.length === 1) return { decided: true, winner: standing[0], reason: 'field held at nightfall' }
+    }
     const by = evaluateVictory({ ...ctx, dayOver: false, timeLimitMinutes: 1, minutesElapsed: Math.max(1, minutesElapsed) })
     return { decided: true, winner: 'draw', reason: 'night fell', ahead: by.winner === 'draw' ? null : by.winner }
   }
@@ -204,6 +241,7 @@ module.exports = {
   evaluateVictory,
   objectiveController,
   objectiveArea,
+  standShare,
   COLLAPSE_FRACTION,
   OBJECTIVE_TURNS_TO_WIN,
   OBJECTIVE_HOLD_MINUTES

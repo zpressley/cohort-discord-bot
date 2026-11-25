@@ -1290,6 +1290,19 @@ module.exports.FLIGHT = {
   AWAY: 8
 }
 
+// The kinds of battle (ruled 2026-11-25; docs/DECISIONS.md, "How the kinds
+// of battle were built"). A pitched battle has no ground to fight for: at
+// nightfall a side still standing with STAND_SHARE of the men it began the
+// day with (in units on the field, not broken), when the other is not, has
+// held the field and won; both, or neither, is a tie. A half, measured:
+// as the app plays them (harness/first-battle.js and the soak's battles),
+// the side that breaks has a third to two fifths of its men in its ranks
+// when it does (median 0.33 to 0.40), the winner about 0.70; battles that
+// ran to nightfall with both armies still in being stood at 0.50 to 0.77.
+// Under a half is beaten; over it, still in the fight. Zach's lean was a
+// half too.
+module.exports.PITCHED = { STAND_SHARE: 0.5 }
+
 // ── Camps (ruled 2026-11-25) ───────────────────────────
 //
 // Zach's design: "each army starts far away and can place a camp. They have

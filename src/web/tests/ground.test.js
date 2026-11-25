@@ -1,7 +1,9 @@
 // src/web/tests/ground.test.js
 //
 // Every map comes with its own ground to fight for (src/data/maps,
-// `ground`): the default at the muster for every kind of battle, told at the
+// `ground`), fought for in a battle for ground (ruled 2026-11-25: the
+// pitched battle, with none, is offered first: tests/battle-kinds.test.js),
+// told at the
 // muster, on the map, in the first dispatch, whenever it changes hands or is
 // close to deciding the battle, and in the verdict when it decided it.
 
@@ -30,7 +32,8 @@ async function start(store = createBattleStore({})) {
   return { store, api, close: () => new Promise(resolve => server.close(resolve)) }
 }
 
-const GROUND = { crownhill: 'the Crownhill', ashford: 'the Old Mill Bridge', thornwood: 'Thorn Knoll', ravenridge: 'Raven Gap', greywater: 'Elderby' }
+// (Crownhill's is its three fords since November 25; it was the Crownhill.)
+const GROUND = { crownhill: ['the North Ford', 'Miller\'s Crossing', 'the South Ford'], ashford: ['the Old Mill Bridge'], thornwood: ['Thorn Knoll'], ravenridge: ['Raven Gap'], greywater: ['Elderby'] }
 
 test('every field offered at the muster names its own ground to fight for, in the muster\'s words', async () => {
   const app = await start()
@@ -38,13 +41,14 @@ test('every field offered at the muster names its own ground to fight for, in th
     const maps = (await app.api('GET', '/api/maps')).body
     assert.deepEqual(maps.map(m => m.id).sort(), Object.keys(MAPS).sort())
     for (const m of maps) {
-      assert.deepEqual(m.ground, [GROUND[m.id]], m.id)
-      assert.match(m.said, new RegExp(`^The ground to fight for: ${GROUND[m.id]}\\. Hold it alone for 1 h, with no enemy on it${m.id === 'thornwood' ? ' or beside it' : ''}, and the field is yours`))
+      assert.deepEqual(m.ground, GROUND[m.id], m.id)
+      if (m.id === 'crownhill') assert.match(m.said, /^The ground to fight for: the North Ford, Miller's Crossing and the South Ford\. Hold two of the three fords alone for 1 h/)
+      else assert.match(m.said, new RegExp(`^${m.id === 'thornwood' ? 'King of the hill\\. ' : ''}The ground to fight for: ${GROUND[m.id][0]}\\. Hold it alone for 1 h, with no enemy on it${m.id === 'thornwood' ? ' or beside it' : ''}, and the field is yours`))
     }
   } finally { await app.close() }
 })
 
-test('the map\'s ground is the default for every kind of battle: against the computer, against a friend, with a faction\'s army or one he bought', async () => {
+test('a battle for ground fights for the map\'s ground in every muster: against the computer, against a friend, with a faction\'s army or one he bought', async () => {
   const app = await start()
   try {
     const kinds = {
@@ -56,10 +60,10 @@ test('the map\'s ground is the default for every kind of battle: against the com
     assert.equal((await app.api('POST', `/api/commander/${made.token}/army`, { units: [{ name: 'swords', quality: 'professional', weapon: 'roman_gladius' }] })).status, 200)
     for (const [i, map] of Object.keys(MAPS).entries()) {
       for (const [kind, body] of Object.entries({ ...kinds, bought: { opponent: 'standing', side: 'red', commander: made.token } })) {
-        const seats = (await app.api('POST', '/api/battles', { ...body, map, seed: 3 + i })).body.seats
+        const seats = (await app.api('POST', '/api/battles', { ...body, map, seed: 3 + i, kind: 'ground' })).body.seats
         const tent = (await app.api('GET', `/api/seat/${seats[body.side]}`)).body
-        assert.deepEqual(tent.objectives.map(o => [o.name, o.holder]), [[GROUND[map], null]], `${map}, ${kind}`)
-        assert.equal(tent.objectives[0].said, `The ground to fight for, ${GROUND[map]}, is held by no one.`)
+        assert.deepEqual(tent.objectives.map(o => [o.name, o.holder]), GROUND[map].map(g => [g, null]), `${map}, ${kind}`)
+        assert.equal(tent.objectives[0].said, `The ground to fight for, ${GROUND[map][0]}, is held by no one.`)
         // The bought army's battle is over before the next is mustered.
         if (kind === 'bought') await app.api('POST', `/api/seat/${seats.red}/orders`, { text: 'yield' })
       }
@@ -81,10 +85,9 @@ test('neither army starts on the ground, and each has to cross the field to reac
   const app = await start()
   try {
     for (const map of Object.keys(MAPS)) {
-      const seats = (await app.api('POST', '/api/battles', { opponent: 'friend', side: 'red', seed: 4, map, faction: 'rome', enemyFaction: 'rome' })).body.seats
+      const seats = (await app.api('POST', '/api/battles', { opponent: 'friend', side: 'red', seed: 4, map, faction: 'rome', enemyFaction: 'rome', kind: 'ground' })).body.seats
       const game = app.store.seatOf(seats.red).entry.game
-      const ground = game.objectives[0]
-      for (const side of ['red', 'blue']) {
+      for (const ground of game.objectives) for (const side of ['red', 'blue']) {
         const from = Math.min(...game.battle.world.units.filter(u => u.side === side)
           .flatMap(u => ground.tiles.map(t => Math.max(Math.abs(t.x - u.position.x), Math.abs(t.y - u.position.y)))))
         assert.ok(from >= 6, `${map}: ${side} starts ${from} tiles from ${ground.name}`)
@@ -96,7 +99,7 @@ test('neither army starts on the ground, and each has to cross the field to reac
 test('a player who will not come out loses the field to the computer, which takes the ground: he is told in his first dispatch, as it changes hands, when it is close, and in the verdict', async () => {
   const app = await start()
   try {
-    const seat = (await app.api('POST', '/api/battles', { opponent: 'standing', side: 'red', seed: 5, map: 'ashford', faction: 'rome', enemyFaction: 'rome' })).body.seats.red
+    const seat = (await app.api('POST', '/api/battles', { opponent: 'standing', side: 'red', seed: 5, map: 'ashford', faction: 'rome', enemyFaction: 'rome', kind: 'ground' })).body.seats.red
     let tent = (await app.api('GET', `/api/seat/${seat}`)).body
     for (let turn = 0; turn < 40 && tent.battle.status !== 'finished'; turn++) {
       await app.api('POST', `/api/seat/${seat}/orders`, { text: 'everyone hold' })
@@ -119,7 +122,7 @@ test('the computer\'s side, holding the ground, hears it in its own words: you t
   const app = await start()
   try {
     // Against a friend who holds still, the seat that takes it is told so.
-    const seats = (await app.api('POST', '/api/battles', { opponent: 'friend', side: 'red', seed: 5, map: 'ashford', faction: 'rome', enemyFaction: 'rome' })).body.seats
+    const seats = (await app.api('POST', '/api/battles', { opponent: 'friend', side: 'red', seed: 5, map: 'ashford', faction: 'rome', enemyFaction: 'rome', kind: 'ground' })).body.seats
     await app.api('POST', `/api/seat/${seats.blue}/join`, { commander: null })
     for (let turn = 0; turn < 20; turn++) {
       await app.api('POST', `/api/seat/${seats.red}/orders`, { text: 'everyone hold' })
@@ -154,7 +157,7 @@ test('the map\'s ground is in the battle\'s spec when it is made, so a saved bat
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'cohort-ground-'))
   try {
     let app = await start(createBattleStore({ dir }))
-    const seat = (await app.api('POST', '/api/battles', { opponent: 'standing', side: 'red', seed: 5, map: 'ashford', faction: 'rome', enemyFaction: 'rome' })).body.seats.red
+    const seat = (await app.api('POST', '/api/battles', { opponent: 'standing', side: 'red', seed: 5, map: 'ashford', faction: 'rome', enemyFaction: 'rome', kind: 'ground' })).body.seats.red
     assert.deepEqual(app.store.seatOf(seat).entry.game.spec.objectives, groundOf('ashford'))
     for (let turn = 0; turn < 4; turn++) await app.api('POST', `/api/seat/${seat}/orders`, { text: 'everyone hold' })
     const before = (await app.api('GET', `/api/seat/${seat}`)).body

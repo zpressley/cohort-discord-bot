@@ -89,8 +89,10 @@ test('"guard", "secure", "defend", "take" and "occupy" a place go there and hold
 })
 
 test('"the hill" on a field whose ground to fight for is a hill is that ground, and the read-back says so', async () => {
-  const r = await read('everyone take the hill', 'crownhill')
-  assert.match(r.understood[0], /march to the Crownhill, the ground to fight for, \d+ m north/)
+  // (Crownhill's ground is its three fords since November 25: Thorn Knoll
+  // is the hill that is ground.)
+  const r = await read('everyone take the hill', 'thornwood')
+  assert.match(r.understood[0], /march to Thorn Knoll, the ground to fight for, \d+ m east/)
   const bridge = await read('take the bridge', 'ashford')
   assert.match(bridge.understood[0], /the Old Mill Bridge, the ground to fight for/)
   const gap = await read('everyone hold the gap', 'ravenridge')
@@ -160,7 +162,8 @@ test('an order not understood says which part, and offers orders in his own unit
   const r = await read('legionaries go nuts')
   assert.match(r.questions[0], /^I know red_legionaries, but I don't follow what you want of them: "go nuts"\. Orders read like: /)
   assert.match(r.questions[0], /legionaries advance/)
-  assert.match(r.questions[0], /everyone take the Crownhill/)
+  // (Crownhill's ground is three fords: all of them, shared out.)
+  assert.match(r.questions[0], /everyone take the fords/)
   const none = await read('blah blah')
   assert.match(none.questions[0], /^I don't follow "blah blah"\. Orders read like: /)
 })

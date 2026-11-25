@@ -10,6 +10,8 @@
 //
 //   --rounds N    seeds per faction, map and pairing (default 2)
 //   --only a,b    these characters only
+//   --kind k      the kind of battle: 'ground' (default; the field's ground,
+//                 as many of it to hold as the field says) or 'pitched'
 //   --none        no ground to fight for (a battle where the player named
 //                 none), to compare
 //
@@ -25,20 +27,23 @@ const { createGame, submitOrders, waitingOn } = require('../engine/orchestrator'
 const { planTurn, CHARACTER_NAMES } = require('../opponent/planner')
 const { loadScenario, mapChoices } = require('../adapters/hotseat/scenarios')
 const { fieldFactions, FACTIONS } = require('../engine/army/factions')
-const { groundOf } = require('../data/maps')
+const { groundOf, kindSpec } = require('../data/maps')
 const T = require('../engine/combat/tables')
 
 const MAX_STOPS = 600
 const NONE = process.argv.includes('--none')
+const KIND = arg('--kind', 'ground')
 
 /** One battle: `west` and `east` are characters. */
 function play(map, faction, west, east, seed) {
-  let spec = fieldFactions(loadScenario('meeting-battle', { map, deploy: true }), { red: faction, blue: faction })
-  const objectives = NONE ? [] : groundOf(map)
+  let spec = fieldFactions(loadScenario('meeting-battle', { map, deploy: true, kind: NONE ? null : KIND }), { red: faction, blue: faction })
+  const kind = NONE ? {} : kindSpec(map, KIND)
+  const objectives = NONE ? [] : kind.objectives ?? groundOf(map)
   spec = {
     ...spec,
     standingOrders: {},
     dayMinutes: T.DAY.MINUTES,
+    ...kind,
     ...(objectives.length ? { objectives } : {}),
     sides: { ...spec.sides, red: { ...spec.sides.red, character: west }, blue: { ...spec.sides.blue, character: east } }
   }

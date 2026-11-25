@@ -54,7 +54,7 @@ function withSecondLine(spec, sides) {
         })
       }
     }
-    const army = deployArmies(map, formUp([...first, ...raised], homeEdge), { [side]: spec.sides?.[side] ?? { homeEdge } })
+    const army = deployArmies(map, formUp([...first, ...raised], homeEdge), { [side]: spec.sides?.[side] ?? { homeEdge } }, spec.deploy ?? map.deploy ?? {})
     const at = units.findIndex(u => u.side === side)
     const rest = units.filter(u => u.side !== side)
     units = at < 0 ? [...rest, ...army] : [...rest.slice(0, at), ...army, ...rest.slice(at)]

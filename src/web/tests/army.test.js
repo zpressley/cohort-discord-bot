@@ -258,18 +258,21 @@ test('a deathmatch ends when a side yields the field, loses its army or loses it
     // Each map's own ground, held alone for an hour.
     'objectives held',
     // The end of the day: night ends it, and neither side has won (ruled
-    // 2026-11-24: "No the day just ends the battle").
-    'night fell']
+    // 2026-11-24: "No the day just ends the battle"); in a pitched battle,
+    // the side still standing with half its men, when the other is not,
+    // has held the field (ruled 2026-11-25).
+    'night fell', 'field held at nightfall']
   try {
     const reasons = new Set()
     for (let seed = 1; seed <= 6; seed++) {
       const made = (await app.api('POST', '/api/commanders', { faction: Object.keys(FACTIONS)[seed % 4] })).body
-      // As the app musters: a day of twelve hours, and the map's own ground
-      // to fight for.
-      const seat = (await app.api('POST', '/api/battles', { opponent: 'standing', side: 'red', commander: made.token, seed, map: ['crownhill', 'ashford', 'thornwood'][seed % 3] })).body.seats.red
+      // As the app musters a battle for ground: a day of twelve hours, and
+      // the map's own ground to fight for (Crownhill's three fords).
+      const map = ['crownhill', 'ashford', 'thornwood'][seed % 3]
+      const seat = (await app.api('POST', '/api/battles', { opponent: 'standing', side: 'red', commander: made.token, seed, map, kind: 'ground' })).body.seats.red
       let tent = (await app.api('GET', `/api/seat/${seat}`)).body
       assert.equal(tent.battle.timeLimitMinutes, null)
-      assert.equal(tent.objectives.length, 1)
+      assert.equal(tent.objectives.length, map === 'crownhill' ? 3 : 1)
       for (let turn = 0; turn < 60 && tent.battle.status !== 'finished'; turn++) {
         await app.api('POST', `/api/seat/${seat}/orders`, { text: seed === 1 && turn === 2 ? 'yield' : 'everyone advance' })
         tent = (await app.api('GET', `/api/seat/${seat}`)).body
