@@ -21,6 +21,8 @@
 //                   never pitches: is it a good plan never to pitch?)
 //   --mode nopitch  the west plays as the computer but never pitches
 //   --mode hold     the west pitches where it formed up and holds there
+//   --mode lost     the west's camp burned before a blow is struck: what
+//                   losing it costs an army with all its men
 //   --mode stand    the west's camp pitched where it formed up from the
 //                   start, and it plays as the computer (the other reading:
 //                   a camp that starts pitched)
@@ -69,13 +71,16 @@ function play(red, blue, seed, { mode = MODE, character = CHARACTER, against = A
     const units = spec.units.filter(u => u.side === side)
     return { x: Math.round(units.reduce((s, u) => s + u.position.x, 0) / units.length), y: Math.round(units.reduce((s, u) => s + u.position.y, 0) / units.length) }
   }
-  const camps = mode === 'stand' ? { red: { at: formed('red') } } : true
+  const camps = mode === 'stand' || mode === 'lost' ? { red: { at: formed('red') } } : true
   spec = { ...spec, sides, standingOrders: {}, dayMinutes: T.DAY.MINUTES, ...(NO_CAMPS ? {} : { camps }) }
   if (COMMANDER) {
     const west = spec.units.filter(u => u.side === 'red')
     spec = { ...spec, commanders: { red: { unitId: west[leadUnit(west)].id } } }
   }
   const game = createGame(spec, { seed })
+  // The west's camp lost before a blow is struck: what losing it costs an
+  // army that still has all its men (a measure only; no event is logged).
+  if (mode === 'lost' && game.battle.camps) Object.assign(game.battle.camps.red, { status: 'burned', tiles: null })
   let stops = 0
   const atBurn = []
   while (!game.outcome.decided && stops < MAX_STOPS) {

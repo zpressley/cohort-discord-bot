@@ -233,10 +233,11 @@ function stepCamps(state, { turn, log, broken, resolver }) {
         }
       }
     }
-    // Wind shed for it: while it is carried (after the first march's grace),
-    // and once it is burned (CAMP.BURNED_DRAIN).
+    // Wind shed for it: while it is carried or lies dropped (after the
+    // first march's grace), and once it is burned (CAMP.BURNED_DRAIN).
     const minutes = state.turn * 10
-    const carrying = camp.status === 'carried' && (camp.pitched || minutes > CAMP.GRACE_MINUTES)
+    // (Dropped is as carried: not pitched, and none of the grace left.)
+    const carrying = (camp.status === 'carried' || camp.status === 'dropped') && (camp.pitched || minutes > CAMP.GRACE_MINUTES)
     const drain = carrying ? CAMP.CARRIED_DRAIN : camp.status === 'burned' ? CAMP.BURNED_DRAIN : 0
     if (drain > 0) {
       for (const unit of unitsOnSide(world, side)) if (unit.strength > 0) resolver.tire(unit, drain)

@@ -1310,11 +1310,16 @@ module.exports.CAMP = {
   // of it (a square three tiles, 75 m, across). "A few tiles deployed".
   RADIUS: 1,
   // Wind every unit of an army sheds each ten minutes while its camp is
-  // carried (after GRACE_MINUTES, below).
+  // carried, or lies dropped (after GRACE_MINUTES, below). At 1 an army
+  // that never pitches is spent by nightfall (6% of its wind left, against
+  // 43% with a camp) and wins 28 battles in 100 against one that does;
+  // 0.5: 23% of its wind, 28 in 100; 2: spent by mid-afternoon, 25 in 100
+  // (camps.js --mode nopitch, round 2).
   CARRIED_DRAIN: 1,
   // Minutes of the opening march, before the camp is first pitched, in
   // which carrying it costs no wind: the walk to a sensible place is not
-  // punished.
+  // punished. The computer pitches 40 minutes in; one that never pitches
+  // won 27, 28 and 32 in 100 with 0, 60 and 120 (round 2): an hour.
   GRACE_MINUTES: 60,
   // The pace of the unit carrying the camp, as a share of its own.
   CARRY_PACE: 0.5,
@@ -1322,23 +1327,34 @@ module.exports.CAMP = {
   // defence (a hill is +1 on defence: TERRAIN_MODIFIERS).
   BURDEN: 1,
   // A unit fighting from inside its own pitched camp: on its defence, as
-  // a hill's is.
+  // a hill's is. (2 changed nothing measured: round 3.)
   DEFENSE: 1,
   // A defended camp "could take a few hits": ten-minute ticks with an
   // enemy inside it before it is overrun and burned, however many still
   // defend it. Undefended (no formed unit of its own inside), one tick.
+  // Three, a "few". Measured, it seldom matters: 54 of 61 camps burned
+  // fell undefended, at the end of a battle already lost; with 1 or 6
+  // the battles came out the same (round 3).
   HITS: 3,
   // Wind every unit of an army sheds each ten minutes once its camp is
-  // burned ("they start losing wind").
-  BURNED_DRAIN: 0,
+  // burned ("they start losing wind"). An army whose camp is burned before
+  // a blow is struck won 59 battles in 100 with 0 (the camp was only a
+  // burden: no carrier, no guard), 55 with 0.5, 38 with 1, 29 with 1.5,
+  // 18 with 2 (camps.js --mode lost, round 6). 1: a heavy blow, not the
+  // end, and the same rate as a camp carried.
+  BURNED_DRAIN: 1,
   // A broken unit inside its own pitched camp rallies with no formed enemy
   // within this many tiles (RALLY.SAFE_TILES elsewhere), and with its
-  // condition eased by EASE (RALLY.CONDITION times EASE).
+  // condition eased by EASE (RALLY.CONDITION times EASE). With them, 624
+  // of 2,586 rallies were in camp; without (6 tiles, no ease), 77 of
+  // about as many (round 3).
   SAFE_TILES: 3,
   EASE: 0.75,
   // A night's rest in a standing camp: wind back by this share of what a
   // unit can spend, and heart back to where it began, for every unit of
-  // the army. With no camp pitched, none of either.
+  // the army; and its broken units form up. With no camp pitched, none of
+  // it. Without the heart, two battles in 120 ran to the seventh day
+  // (round 3).
   REST_WIND: 1,
   REST_HEART: true,
   // The battle goes on day after day; after this many it ends as a draw,

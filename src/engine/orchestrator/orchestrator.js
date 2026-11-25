@@ -507,8 +507,8 @@ function nightPasses(game) {
   }
   const rest = nightRest(battle)
   battle.previousEngagementKeys = new Set()
-  battle.log.emit('nightPassed', battle.turn, { day: game.day + 1 })
   for (const side of Object.keys(rest)) battle.log.emit('campRest', battle.turn, { side, rested: rest[side].rested, why: rest[side].why, wind: rest[side].wind })
+  battle.log.emit('nightPassed', battle.turn, { day: game.day + 1 })
   game.day += 1
 }
 

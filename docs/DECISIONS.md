@@ -5922,3 +5922,244 @@ Where the database and the server are hosted is not decided yet.
 - Where to host is not chosen; no host's own config file is added.
 - Hosted Postgres was not tried (no account here): TLS was tested only by
   the URL parsing tests, not against a real certificate.
+
+## Rulings, November 25, 2026 (camps)
+
+The camp battle itself ("The other option is a point capture situation
+where each army starts far away and can place a camp ...") is recorded
+under "Rulings, November 25, 2026 (kinds of battle)". These follow it.
+
+- Asked whether destroying the enemy's camp is only a blow or wins the
+  battle: "I would assume it could take a few hits. It's a few tiles
+  deployed so a unit fighting from within gets a defensive bonus but
+  without units and undefended camp gets captures in 1 turn. "Your camp
+  lay undefended you can see the flames rising along with knowledge that
+  your men will have no rest tonight. "" (November 25, 2026)
+- "Oh a great mechanic... broken troops would have a place to retreat
+  to." (November 25, 2026)
+- Asked whether the player chooses where his camp goes before the battle
+  starts, or it starts where the army forms up: "No it's packed up and
+  placed somewhere" (November 25, 2026)
+
+### How camps were built (Claude's choices, open to change)
+
+Phase 1: the engine, the computer, the grammar, the words and a harness,
+all behind `spec.camps`. Not yet offered at the muster or drawn in the
+tent (phase 2, after the kinds of battle are merged). A battle without
+`camps` runs exactly as before: tested event for event on three fields
+(`harness/tests/camps.test.js`, the fingerprints of main before camps),
+`npm run balance` unchanged, the soak unchanged.
+
+**How a camp battle plays.** Each army marches out with its camp packed
+up, carried by one of its units, and pitches it where its Commander says
+("velites pitch the camp at the Long Down"). Choosing where is the opening
+decision. Pitched, the camp is a square of tiles 75 m across. While it
+stands, broken units run to it rather than off the field, stop there and
+rally there the more easily; an army with no steady unit left is not
+beaten while it does; a night's rest there gives the army back its wind
+and heart; men fighting inside it defend better. While it is carried, or
+lies dropped, or once it is burned, the whole army sheds wind each ten
+minutes and has no rest at night. An enemy inside it with no formed
+unit of its own there burns it at once; defended, it falls after three ten-minute
+ticks with an enemy inside. Night does not end the battle: it goes on day
+after day until one side yields, breaks, or falls below a fifth of its
+men; after seven days it ends with no winner.
+
+**The rules, and the numbers** (`combat/tables.js`, `CAMP`; the engine in
+`engine/battle/camp.js`):
+- *The camp's ground*: its place and the tiles within 1 (`RADIUS`), 3 by
+  3 where the ground allows (no river).
+- *Who carries it at the start*: the unit the Commander names in the spec
+  (`camps.side.carrier`); with none named, the unit least use in the
+  line: not the unit his Commander rides with, not horse while there is
+  foot, then the least trained, the fewest men, by name
+  (`defaultCarrier`). Guessed: the brief's lean. The other reading, that
+  the player chooses at the muster, is phase 2's to offer; the spec
+  already takes it.
+- *Carrying it*: half pace (`CARRY_PACE` 0.5, a movement order's new
+  `pace`), and 1 off its attack and defence (`BURDEN`, the size of a
+  hill's edge). The whole army sheds 1 wind a tick (`CARRIED_DRAIN`) after
+  the first hour (`GRACE_MINUTES` 60) on the opening march, and at once
+  when the camp is moved after it was first pitched.
+- *Orders*: two new engine actions. `pitch` (target, or where the unit
+  stands): the carrier goes there and pitches it; another unit goes to the
+  camp first (pitched or dropped), takes it up, carries it there. `strike`:
+  take it up and carry it. A pitch order for a camp already standing there
+  is done at once (an order on the road arrived after the one before it
+  had pitched it: found in the riders' harness, where the camp was taken
+  up and pitched again over and over). Guarding, falling back to and
+  burning a camp are the orders there were: defend, withdraw and attack a
+  place, the camp being a place.
+- *Inside it*: +1 defence (`DEFENSE`) for a unit of its own side, through
+  two new fields on an engagement that the resolver hands to the ratings
+  (`bonusDefense`, `burden`, zero in every other battle).
+- *Taken*: each tick, an unbroken enemy on a tile of a pitched camp with
+  no unbroken unit of its own on one burns it ("captures in 1 turn":
+  read as the engine's ten-minute tick; the other reading, a player turn,
+  can run to six hours now that each side is asked only when wanted). With
+  a unit of its own inside, each such tick is a hit, and the third (`HITS`, "a
+  few") burns it, however many defend it. A dropped camp is burned by an
+  enemy standing on it with no formed unit of its own beside it.
+- *Dropped*: the carrier broken or destroyed drops it where it stood (the
+  brief's lean); either side may then take it, its own to take up and
+  pitch, the enemy to burn.
+- *Broken units*: run for a tile of their own pitched camp by the same
+  way-finding as for the edge (`flightPath` with a goal); there they stop,
+  are not "cornered" (no triple pursuit for standing still), do not count
+  as leaving the field, and rally with no formed enemy within 3 tiles
+  (`SAFE_TILES`, 6 elsewhere) and at three quarters of the condition
+  (`EASE`). A unit rallied in camp is shaken as any rallied unit is: it
+  holds, guarding, and will not go at the enemy (the ruling of November
+  24) until it takes heart; a night's rest in camp gives heart back. With
+  no camp standing they flee for the edge as before. The rally is logged
+  `inCamp`.
+- *Beaten*: an army with no steady unit is not beaten while its camp is
+  pitched and it has men on the field (`holdsOut`, passed to
+  `checkBattleOutcome`): its broken units are rallying there. Guessed:
+  without it every camp battle was over in three hours on the first day,
+  as a pitched battle is, and the camp never mattered (measured: 6 of 6,
+  3.1 h). The other reading is that an army broken is beaten, camp or no.
+  Below a fifth of its men it is beaten as before.
+- *The Commander*: among his own tents (his unit inside its own pitched
+  camp) he is not taken or killed while it stands; the enemy must take
+  the camp first (`stepCommanders`, `sheltered`). Without it he was taken
+  in 32 battles in 100 (9 without camps); with it, 20. Guessed; the other
+  reading is that a camp is no safer for him than open ground.
+- *Night*: at the end of each day of `dayMinutes` (twelve hours) the
+  orchestrator, in place of ending the battle, rests each army
+  (`nightRest`): a pitched camp gives every unit its wind back in full
+  (`REST_WIND` 1) and its heart back to where it began (`REST_HEART`),
+  and its broken units form up. An army with no camp pitched gets nothing
+  back. No one is still locked in a fight at first light. The next day
+  begins with both armies where night found them. `game.day` counts the
+  days; `minutesElapsed` counts daylight. After `MAX_DAYS` (7, the brief's
+  lean) the battle ends `{ winner: 'draw', reason: 'the days ran out' }`.
+  Guessed: that a night in camp restores heart, as "rest" suggests. The
+  rulings say morale comes back only with success nearby or the
+  Commander's presence; this is a third way, only in a camp battle. The
+  other reading (wind only): measured, two battles in 120 then ran to the
+  seventh day.
+- *The day's drain without a camp* ("they start losing wind"): measured
+  both readings. With no drain, an army whose camp was burned before a
+  blow was struck won 59 battles in 100 (the camp had only been a burden
+  to it: no carrier, no guard); with 1 wind a tick, 38; 0.5, 55; 1.5, 29;
+  2, 18. Taken: 1 (`BURNED_DRAIN`), the same as a camp carried. So the
+  simple rule is: no camp pitched, the army tires, and has no rest.
+- *What each side knows*: its own camp always; the enemy's once a formed
+  unit of its own has seen a tile of it, or where it lies, or the unit
+  carrying it (`state.campSeen`, `sideView(game, side).camps`). Found, it
+  is news to the finder (`campFound`, its own side's alone). Taken up and
+  carried off, it is forgotten once a unit stands where it was seen. A
+  burned camp is known to both at once: the owner sees the flames; the
+  burners were there. Guessed: smoke seen from afar is no more than that
+  (no new sight rule); with riders the burner's Commander hears by his
+  unit's report.
+- *News* (events): `campPitched`, `campStruck`, `campDropped`,
+  `campFound`, `campAssailed`, `campBurned`, `campTiring` (once each spell
+  of carrying), `campRest` (each army's night, with its wind as night
+  fell), `nightPassed` (told to all). The owner's camp burned, assailed or
+  dropped, his army tiring and his night are known to him at once, riders
+  or not (`arrivalOf`, `visibleEvents` with the side). A camp found,
+  fought in, burned or dropped calls the side it concerns back
+  (`'camp'`); a camp pitched or taken up is an order carried out.
+
+**The words** (`narrator/words.js`, `CAMP`; the plain account's lines in
+`toTheCamp`, `WEIGHT`, `PRIVATE`; the terminal's in `render.js`). Zach's
+line as near his words as plain grammar lets it be: "Your camp lay
+undefended: you can see the flames rising, and you know your men will
+have no rest tonight." Defended: "Your camp has fallen: its guard could
+hold it no longer. You can see the flames rising, and you know your men
+will have no rest tonight." Those who burned it: "Horse burned the
+enemy's camp ...: the smoke is rising over it, and his men will have no
+rest tonight." The night: "Night has fallen. Your men rested in camp, and
+will be fresh at first light", or "... your camp is burned: your men have
+no rest tonight, and will be as tired at first light as they are now";
+then "Dawn: the second day of the battle begins". The read-back: "pitch
+the camp at the Long Down (D12-NE)", "strike the camp and carry it".
+
+**The orders in plain words** (`interpreter/grammar.js`, `readCamp`;
+`resolve.js`, `campPlace`, `resolveCampWork`): "velites pitch the camp at
+the Long Down", "pitch the camp here", "make camp", "move the camp to C5",
+"strike the camp", "horse burn their camp", "take the enemy camp", and,
+the camp being a place, "guard the camp", "hold the camp", "fall back to
+the camp". With no one named, the camp is worked by the unit carrying it,
+else the unit nearest it, and the read-back names it. "Their camp" is a
+place only once his men have found it ("Your men have not found the
+enemy's camp ..."); "the camp" while it is carried says who has it. The
+AI reader was not taught these (as with follow). The hotseat terminal
+passes the camps to the reader; the app will in phase 2.
+
+**The computer** (`opponent/planner.js`, `campPlan`; numbers in
+`CHARACTERS`): it pitches its camp on the opening march, ahead of where it
+formed up by its character (`campAhead`: bold 12 tiles, steady 4,
+cautious 4 behind), in about 40 minutes; leaves its weakest foot unit to
+guard it (`campGuard` 1); takes up a dropped camp with its nearest unit
+not fighting; once it has found the enemy's camp, sends its horse at it
+when its men to the enemy's it knows of are at least `campOdds` (bold 0.8,
+steady 1, cautious 1.3), the bold sending foot if he has no horse; and
+when it far outnumbers the enemy still formed (twice those odds, or none
+formed), everyone goes for the enemy's camp, or after the men running to
+it. Characters, each against steady (120 battles): bold 57%, cautious 47%.
+Tried: a cautious Commander guarding with two units, 30%; a bold one with
+none, 64% (a guard is a man short in the line, and the computer seldom
+raids a defended camp mid-battle).
+
+**Measured** (`node src/harness/camps.js --battles 120 [--mode ...]`;
+Greywater, the computer against itself, faction against itself, no
+Commander on the field, a seed each; no ground to fight for):
+
+| | camps | no camps |
+|---|---|---|
+| West's wins (fair 45 to 55) | 53% | 52% |
+| Faction against faction, west's wins | 61% | 50% |
+| Hours a battle (daylight) | 7.9 | 3.9 |
+| Days: 1 / 2 / 3 | 109 / 10 / 1 | (night ends it) |
+| How it ends | broken 59, below a fifth 61 | broken 117, night 2 |
+| A camp burned | 51% of battles (54 of 61 undefended) | |
+| Assaults on a defended camp | 35 ticks in 120 battles | |
+| Rallies, of them in camp | 2,586, 624 | 1,444 |
+| Units that left the field | 2 | 143 |
+| Wind at nightfall, camp pitched | 43% | |
+| Every battle ended | 120 of 120 | 120 of 120 |
+
+Plain stand-ins against the computer (west's wins): never pitching its
+camp (plays as the computer otherwise) 28%, its wind 6% by nightfall;
+its camp pitched where it formed up from the start (the other reading of
+"placed somewhere") 48%; its camp burned before a blow is struck 38%;
+pitching where it stands and doing nothing else 5%; no orders at all 0%.
+A Commander on the field with his orders by rider, against the computer:
+43% with camps, 53% without; taken 20% (9% without), killed 3%.
+
+The tuning rounds (one change at a time, 120 battles each):
+
+| Round | Tried | West | What it showed |
+|---|---|---|---|
+| 1 | as first built | 53% mirror, 28% never pitching | a burned camp's side always lost: the burn ends a battle already lost |
+| 2 | never pitching: grace 0 / 60 / 120 min; drain 0.5 / 1 / 2 | 27 / 28 / 32; 28 / 28 / 25 | the camp's shelter matters more than the drain; kept 60 and 1 |
+| 3 | hits 1 / 3 / 6; defence 2; burned drain 0.5; no heart at night; no ease in camp | all 52 to 53 | each seldom comes into play; without the ease 77 rallies in camp, not 624 |
+| 4 | characters: bold, cautious against steady | 57, 30 | cautious too weak with two guards |
+| 5 | cautious with one guard; bold with none | 47; 64 | kept one guard each |
+| 6 | camp burned at the start: burned drain 0 / 0.25 / 0.5 / 1 / 1.5 / 2 | 59 / 60 / 55 / 38 / 29 / 18 | took 1 |
+
+What it showed, and left as it is:
+- A camp is burned in half the battles, but almost always at the end of
+  one already lost: the computer reaches the camp after it has broken
+  the army, and the broken army's last refuge falls with it. Burned while
+  its army still had steady men half the enemy's or more: 1 battle in
+  120. So the defended camp's three hits, and the +1 inside it, seldom
+  decide anything between two computers. A player who raids early will
+  find out more.
+- Most battles still end on the first day (91%). The camp makes them
+  twice as long, and a tenth go on into a second day or a third.
+- Faction against faction the west won 61% with camps and 50% without:
+  the same seeds and pairings, and the field is the same on both sides,
+  so it is which factions do well in a long battle, not the side; not
+  looked into further.
+- A Commander on the field fares worse with camps (43% against 53%):
+  his rider-borne orders reach the camp's work late. Not looked into.
+
+**Left undone (phase 2):** the muster's choice of a camp battle, the camp
+drawn on the map, the tent's lines, the Army tab, the verdict, the order
+examples (pitching first), the day counter and the night shown on a
+phone, a soak section, browser tests, and passing the camps to the order
+reader in `web/battles.js`.
