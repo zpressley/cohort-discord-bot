@@ -5583,3 +5583,208 @@ decided and are recorded here.
     enemy unit's name), none touching.
 - Also: the Army tab's list of units lost said "fled the field"; it says
   "left the field", the vocabulary's words.
+
+### How columns, wavering under fire and flight were mended (Claude's choices, open to change)
+
+From the second playthrough (`docs/REVIEW-2026-11.md`, S5 to S8 and S15),
+and the loose end of horse archers along the field's edge. No ruling was
+changed: holding the ground alone for an hour wins, orders go by rider,
+the day is twelve hours, a rallied unit takes heart only from a success
+near it. Friends may still share a tile (ruled 2026-10-21) when sent to
+one, pushed, or running. Measured against main at 6bafcf5, the same seeds
+before and after.
+
+**1. Marching off in a heap (S5, S8). Cause:** the movement resolver
+let a unit step onto any friend's tile under the 300-man cap, and every
+path is planned over an empty field, so units sent the same way converged
+on the cheapest line (a road costs half a tile) and walked onto one
+another: Thornwood seed 256318, turn 3, 280 men of three Roman units on
+the road tile beside Brook Ford, "critical". Deployment was not a cause:
+500 musters (five fields, every faction, five seeds) start no two units on
+one tile. **Built** (`movement/simultaneous.js`, `makeWay`, switched on by
+the battle with `keepApart`; `tables.MARCH`): a unit on the march about to
+step onto a friend's tile
+- goes in if it is the very place it was sent, or (going at an enemy) the
+  tile is beside him, unless a tile of its own beside him is in reach this
+  ten minutes: it joins the fight;
+- else waits while the men there are moving on (a column, one to a tile);
+- else goes round if that costs at most `MARCH.ROUND` (3) movement more;
+- else passes through if it clears the tile in the same ten minutes;
+- else waits behind men in a fight or still on their way, keeping its
+  order (it is not "halted"), and goes in among men only standing there.
+- A ford or bridge (`MARCH.CROSSINGS`) is never entered while a friend
+  stands on it, even to join a fight: the rest wait on the bank.
+- Two units of one side each waiting on the other (opposite ways on one
+  road) do not wait: the second goes round or through (the soak found it,
+  Crownhill, Tibet against Celts, seed 16, 150 turns). And a unit holding
+  on a road in a wood no longer stops its own army for good (Thornwood,
+  the soak's meeting battle against a Commander who gives no orders,
+  seed 4, 150 turns, before the last rule above).
+- Tests (`battle/tests/columns.test.js`): "units sent along a road at the
+  same time march in column, one unit to a tile, each waiting for the tile
+  ahead to clear"; "two units of one side marching opposite ways along one
+  road pass each other ..."; "a unit whose road through a wood is held by a
+  friend standing on it ... goes on through him"; "a ford passes one unit at
+  a time: the rest wait on the bank, not on it"; "a column held up at a ford
+  by its head in a fight waits on the bank with its orders ..."; "a unit
+  going at an enemy may still step in beside a friend already fighting
+  him".
+
+"Ranks were critical" a battle, a new player's "everyone take ..." (100 a
+field; the first hour in brackets): Crownhill 3.98 (2.94) -> 0.32 (0);
+Ashford 1.60 (1.36) -> 1.48 (1.20); Thornwood 5.11 (4.88) -> 1.87 (1.62);
+Raven Ridge 1.67 (1.56) -> 0.71 (0.71); Greywater 12.6 (5.9) -> 5.5
+(0.4). "Everyone advance" the same: 4.75, 1.98, 5.19, 1.38, 10.6 -> 0.24,
+1.62, 3.37, 0.44, 5.33. Most left are men shoved back by a push into those
+behind them (the push rule, not touched). Any crowding at all, a battle:
+take 18.8, 14.0, 23.7, 14.1, 49.6 -> 8.0, 11.4, 12.4, 9.4, 28.5. Time for
+three quarters of his army to stand on the ground ("take", median): 160,
+50, 40, 30, 70 min -> 120, 40, 40, 40, 70; the first unit there as before
+(110, 30, 30, 20; Greywater 50 -> 40).
+
+**2. A unit in flight losing men for an hour and more (S7). Cause:**
+flight went down the unit's own row, or the first of seven rows whose
+first step held no friend; an enemy in the way did not turn it ("running
+along the enemy line is not flight"), so a unit broken on the far side of
+a crossing the enemy held stood and was cut down as trapped (30% a
+pursuer each ten minutes), an hour or more: of the spells of an hour or
+more on the 1 km fields, most were this (Thornwood, units broken on the
+east bank at (21, 19) with their way home through Brook Ford). And two
+broken units of either side, each in the other's way home, stood for
+hours, for broken men pursue no one and no formed enemy was ever far
+enough to rally: Ashford, Samnium, seed 13779 of `first-battle.js`, 420
+minutes on the road west of the bridge. Pursuit itself ends as it should:
+only a formed enemy beside a running unit strikes, and no order sends men
+after the broken. **Built** (`battle.js`, `flightPath`; `tables.FLIGHT`): a
+broken unit runs for its own edge by the cheapest way to any tile of it,
+never through an enemy, dearer through its own men (`FRIENDS` 2) and
+beside a formed enemy (`BESIDE_ENEMY` 2), its own row on a tie, and to its
+right of two ways alike (so two running past each other keep apart); cut
+off from its edge altogether, it runs to the ground within `AWAY` (8)
+tiles farthest from any formed enemy, where it may rally. A running unit
+an enemy steps in front of goes round him, once a ten minutes. Tests:
+"a broken unit runs for its own edge round an enemy in its way ...",
+"two broken units, each in the other's way home, both get away", "a
+broken unit cut off from its own edge runs from the enemy instead, and
+rallies once clear of him".
+
+Broken on the field ("take", 100 a field; from breaking to rallying,
+leaving the field or being destroyed): median 30, 10, 20, 10, 20 min ->
+30, 20, 20, 20, 20; longest 130, 420, 140, 110, 280 -> 90, 60, 130, 60,
+170 (Greywater is 2 km: a run home is long). Units destroyed while
+running, a hundred battles: 10, 30, 59, 23, 70 -> 0, 2, 0, 0, 2; they
+rally instead (328 -> 512 rallies on Crownhill).
+
+**3. A wavering unit called him at every volley (S6). Cause:**
+`smallFire` let any unit at or under `FIRE_NEWS.SHAKEN` (50) call him, every
+time. **Built** (`orchestrator.js`, `smallFire`, `rememberHeart`;
+`FIRE_NEWS.WORSE` 10): wavering is news once, the first time a unit is at
+or under 50 under fire; then not again for the spell (an hour) unless its
+heart is 10 lower than when he was last called for shooting, it loses 5%
+of its men in ten minutes, or a new enemy shoots. Tests
+(`orchestrator/tests/wavering.test.js`): "a wavering unit under light
+shooting calls a free Commander once, not at every volley" (fails on
+main) and "... whose heart falls a further mark under fire calls him
+again". Measured with this change alone (100 a field, "take"): asked for
+shooting an hour of battle 0.41, 0.77, 0.87, 0.53 -> 0.30, 0.42, 0.65,
+0.38; asked at all an hour 3.19, 4.58, 4.76, 4.66 -> 3.10, 4.26, 4.58,
+4.53. With everything here, `first-battle.js` "take", times asked for
+shooting in 200 battles: 326, 480, 503, 261 -> 244, 196, 277, 226.
+
+**4. Plain plans barely vary with the seed (S15). Not a bug.** The seed
+reaches every roll on every path: the server's muster passes it (an
+integer only), the hotseat and the harnesses pass it to `createGame`, and
+each stream (combat, officers, Commanders, riders) is seeded from it.
+Thornwood, Germania against Carthage, "everyone attack", seeds 2 to 15, on
+main: the first blows' chaos rolls all differ, the computer's Commander
+was steady, bold or cautious, his officers differed; and all 14 were
+Germania's by breaking the enemy, in 80 to 110 minutes, Germania losing
+99 to 142 men and Carthage 179 to 238. The matchup and the plan decide it.
+After: 11 won, 3 lost, 80 to 230 minutes, losses 78 to 199 and 106 to 250.
+(The playthrough's 160 minutes each was not seen through the store.)
+
+**5. Horse archers along the field's edge (Greywater, Carthage against
+Parthia, seed 9559233 of the captive league). Built** (`skirmish.js`,
+`fallBack`): a skirmisher whose next tile straight away from the nearest
+threat is off the field has nowhere to fall back to: it stands and shoots,
+or fights. Test: "with its back to the edge of the field, a skirmisher
+stands and shoots or fights, rather than give ground along the edge".
+The captive league's player on Greywater, 200 battles: ground given along
+the edge 171 times, one unit 39 times in a row (Rome against Parthia,
+seed 80190, 154 ticks) -> 10, at most once.
+
+**6. Two numbers put back.**
+- *Fair fields.* Columns and one-at-a-time crossings changed who a field
+  favours between two computer armies: Ashford, whose ground is the mill
+  at the bridge's west end, the east attacking over the bridge a unit at a
+  time, went to 70% west; Thornwood to 36%. Ashford's east army now forms
+  up at (33, 25), (32, 25) before; Thornwood's west at (6, 20), (5, 20)
+  before. This is not a smooth dial: Ashford's east at 30, 31, 32, 33, 34
+  gave 85, 77, 70, 53, 77% (200 battles each); Thornwood's west at 5, 6, 7,
+  41, 51, 62% (400). Crownhill was tried at five places and stayed 56 to
+  68% west; left at (30, 29).
+- *The Commander taken.* With fewer units cut down running, the
+  captive league's Commander was taken 1 in 45.5 on the 1 km fields (19.2
+  before). Ruled: "Retun commander taken odds". **Built**
+  (`commander.js`; `tables.COMMANDER.CAUGHT` 0.06): a tick his unit is
+  caught running (pursued) he may be taken on a roll of 6%, whatever its
+  strength (before, only under half strength, 4%). Tried 0.03, 0.05, 0.08,
+  0.15, 0.3: 1 in 38.5, 26.7, 17.2, 9.0, 5.0. Test: "caught running, his
+  unit broken and pursued, he may be taken whatever its strength ...".
+
+**The leagues, before -> after:**
+
+| | before (main 6bafcf5) | after |
+|---|---|---|
+| `first-battle.js`, 200 a field, "take": Crownhill / Ashford / Thornwood / Raven Ridge | 59 / 47 / 53 / 50% | 59 / 46 / 63 / 55% |
+| "advance" | 46 / 51 / 53 / 41% | 59 / 44 / 50 / 35% |
+| his stand-in planner | 53 / 60 / 47 / 51% | 55 / 57 / 55 / 49% |
+| asked an hour, "take" | 3.2 / 4.7 / 4.8 / 4.8 | 3.6 / 4.4 / 4.7 / 4.6 |
+| Greywater, "take" / "advance" (100, `measure.js` in the work's scratchpad) | 46 / 49% | 27 / 46% |
+| `no-fight.js`, came to nothing: computer / planner / charge / idle | 0 / 0 / 0 / 0 | 0 / 0 / 0 / 0 |
+| computer against computer, west's share (`ground-league.js --mode mirror --rounds 20`) | 49 / 50 / 49 / 50% | 62 / 51 / 51 / 51% |
+| as the app plays (`--mode app --rounds 5`) | 51 / 56 / 51 / 49% | 54 / 58 / 51 / 47% |
+| character league (`--rounds 4`): steady / bold / cautious | 51 / 51 / 48% | 49 / 51 / 49% |
+| messenger league (672, `--day 720 --ground --character mix`): red won | 51% | 52% |
+| Commander taken (`captive-league.js --policy wait`): 1 km / Greywater | 1 in 19.2 / 13.3 | 1 in 22.2 / 10.8 |
+| soak | every battle ends | every battle ends |
+| `npm run balance` | | unchanged, every line (a duel has no march) |
+
+Fingerprints retaken (old values in their headers): `asked-unchanged`,
+`messengers-unchanged`, `attack-named-unchanged`, `follow-unchanged`. Web
+tests whose battles moved, the smallest change each: `asked.test.js` and
+the browser test's two-Commander battle send red "everyone go east 300 m"
+(told to advance, every stop of seeds 5 to 150 called both);
+`held-commander.test.js` seed 1477 -> 2; `night.test.js` Ashford seed 1 ->
+Thornwood seed 27 (on Ashford no unit of his ran off the field in the day
+in seeds 1 to 200); `verdict.test.js` checks the horse's "broke ..." by the
+count of its routs (it broke twice, now once).
+
+**Guessed, and the other reading.**
+- *A ford or bridge holds one unit, even to join a fight.* The brief said
+  so. The other reading lets units share a crossing: tried midway (100
+  battles a field, "take"), Thornwood 59%, Ashford 47%, Greywater 43%,
+  against 64, 56 and 31% with the rule at that point: Elderby's bridge,
+  the village on both banks, is where the rule costs a plain "take" most.
+- *Going in among men only standing there* when there is no way round:
+  waiting for ever stalled a soak battle. The other reading always waits,
+  and needs men told to hold on a road to step aside.
+- *Not marching abreast.* Tried (a follower steps beside the road when no
+  dearer by a tile): Raven Ridge's computer against computer went to 28%
+  west, Thornwood 33%; not kept.
+- *Running wide of formed enemies* (`BESIDE_ENEMY` 2). At 0, nearly the
+  same: units still run round, rally, and are seldom cut down.
+- *Wavering called again at ten lower.* The other reading calls at each
+  new mark of the words' morale scale.
+- *The Commander's odds put back by "caught running"*, not by raising the
+  chance in a fight, which put Greywater at 1 in 7.4 for 1 in 21.5.
+
+**Left undone.**
+- Crownhill between two computer armies favours the west 62% (49%
+  before); no forming-up place tried brought it under 56%. A new player's
+  first battle there is 59% "take", as before.
+- Greywater "take" 46% -> 27%: the army crosses Elderby's bridge a unit or
+  two at a time.
+- Raven Ridge "advance" 41% -> 35%.
+- Units shoved back into their own men still pack (the push rule).
+- The Commander taken on Greywater 1 in 10.8 (13.3 before).
