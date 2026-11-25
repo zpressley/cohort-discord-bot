@@ -45,6 +45,20 @@ private network (a name ending `.internal`) plainly.
   the ones under way, writes what is waiting, and exits.
 - It uses at most 3 connections.
 
+### On Supabase
+
+- Use the **session pooler** connection string (Supabase's dashboard:
+  Connect, "Session pooler") as `DATABASE_URL`. The direct connection is
+  on IPv6 only unless the project pays for the IPv4 add-on, and many hosts
+  reach out on IPv4 only. The session pooler suits a server that stays
+  running, as this one does; the transaction pooler is for short-lived
+  functions.
+- The server turns **row level security** on for its table when it makes
+  it, with no policy, so Supabase's own web API offers nothing from it.
+  The table holds every seat's and Commander's token: leave it that way.
+- The database password is part of the connection string. It goes in the
+  host's settings only.
+
 ## The health address
 
 `GET /healthz` answers 200 while the game is loaded and saving works, and
