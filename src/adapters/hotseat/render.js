@@ -285,6 +285,7 @@ function wordEvent(event) {
     case 'campTiring': return `${event.side}'s army tires while its camp is carried`
     case 'campRest': return event.rested ? `${event.side} rests in camp through the night` : `${event.side} has no camp to rest in tonight`
     case 'nightPassed': return `── DAWN: DAY ${event.day} ──`
+    case 'campHoldsOut': return `${event.side}'s army is broken and shelters in its camp: take the camp and the field is won`
     case 'victory': return null // rendered as the banner instead
     case 'nightfall': return null // rendered as the banner instead
     default: return null

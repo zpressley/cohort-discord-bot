@@ -6163,3 +6163,98 @@ drawn on the map, the tent's lines, the Army tab, the verdict, the order
 examples (pitching first), the day counter and the night shown on a
 phone, a soak section, browser tests, and passing the camps to the order
 reader in `web/battles.js`.
+
+**Round 7: the three open measures, settled** (the same harness; the west
+a Commander on the field, his orders by rider, against the computer, with
+`--commander`; 240 battles unless said).
+
+*1. The Commander taken.* Where he fell, by a tally of each battle's
+first fall (`fell` in the harness): with camps, at first, 8 of 21 falls
+came while his own army had no steady unit and held out by its camp (a
+battle that without camps would already be over), 5 of them with his
+unit cut down inside the camp by pursuers standing outside it; 3 to 4 on
+a second or third day, riding with a unit fought down the day before; the
+rest as without camps (caught running, or fighting under half his men, on
+the first day). Not once with the unit carrying or guarding the camp, and
+not at night. Three changes, each by its cause:
+- He is safe once his army has no steady unit left and holds out by its
+  camp (`camp.js`, `sheltered`): he rides back to it ahead of his running
+  men, as in a battle with no camp he would leave the field with them.
+  When the camp falls the battle is lost.
+- Inside his own camp he is safe even when his unit is cut down there:
+  he goes over to another unit (`stepCommanders`: `sheltered` now asked of
+  a unit destroyed too).
+- At first light, after a night in a standing camp, if his unit is down
+  to half its men or fewer he rides out with his strongest unit (most of
+  its men left, then the best trained; never the one carrying the camp),
+  and is told so (`commanderRode`, `atNight`).
+- Tried and dropped: making pursuers outside a camp unable to strike the
+  broken men inside it. The camp became a fortress: battles ran to the
+  second and third day (48 and 58 of 120), and the west won 57%.
+- Tried and dropped: at first light, with every unit fought down, he
+  stays in camp with its strongest unit. Nothing changed (the falls on a
+  later day come after a day's fighting, not at dawn).
+
+| | taken or killed, of battles |
+|---|---|
+| no camps (Greywater) | 10% (24 of 240) |
+| camps, as first built | 20% (of 120) |
+| + rides out at dawn with his strongest | 17% (of 120) |
+| + safe while his army holds out by its camp | 16% (of 120) |
+| + safe inside it even cut down | 14.6% (35 of 240) |
+
+What is left is the length of the battle: on the first day he falls as
+often as without camps (27 of 240 against 24); the rest (8) is the
+second and third days, which a battle without camps does not have. Left
+there: a day of camp battle is as dangerous to him as a day of battle
+without one.
+
+*2. A player on the field: 43% with camps, 53% without.* Not his
+rider-borne orders: both sides pitch at 39 minutes on average, both by
+rider (the computer from its command post). Split by whether he fell
+(`split`, 240 battles): when he did not fall he won 49% with camps, 47%
+without; he fell in 35 battles with camps (24 without), and won 9 of them
+(17 of 24 without), for a fall in a camp battle comes more often in one
+going badly and leaves his army a long battle without him. After round 7
+the whole is 46% with camps, 50% without. So no standing behaviour was
+given to the carrier: it is not idle, it pitches as soon as told.
+The stand-in that pitches where the carrier stands and does nothing else
+(5%): it loses as badly without camps (6%, an army that only holds
+anywhere: the computer forms a line and brings it in together, while the
+holding army is fought unit by unit and never goes for the enemy); with
+camps, its camp, guarded by men who only hold, is overrun mid-battle in
+102 battles in 120, and its army fights on with no rest.
+
+*3. Faction against faction: west 61%.* Swapping the factions of every
+pairing (`--swap`) left it at 58%: it is not the peoples. Seeds 1000 on:
+mirror 54%, mixed 58%, swapped 58%. Then the sides' names (the same
+armies, the same seeds, the west called "blue"): the west won 41% with
+no camps and 43% with camps carried; 52% with both camps pitched from the
+start. Read together: the field is even (the west's edge about 0 to 2
+points), and the side called red is ahead by about 5 points without
+camps and about 8 with them, in tie-breaks by unit name (units are
+sorted by id in many places; "blue" before "red"). That edge is the
+engine's, from before camps, longer battles only showing more of it. Not
+mended here: it is outside camps, and touches every battle. Flagged for
+the review list: which side the player is given in the app decides who
+has it.
+
+*4. A battle cannot hang on a broken army in its camp.* The computer goes
+for the enemy's camp, every unit, once no enemy it knows of is still
+formed (tested on a small field: it finds the camp, burns it, and wins on
+the same day). Both sides are told when an army with no steady unit left
+begins to hold out by its camp (`campHoldsOut`, to everyone at once,
+weight 0): "Their army is broken and shelters in its camp: take the camp
+and the field is yours", and to that army's own side "Your army is broken
+and shelters in your camp: if the camp falls, the field is the enemy's.
+Hold the camp, and your men may rally there and rest tonight". It calls
+both sides back. Guessed: that both sides may know an army is broken
+and in its camp, as both know who holds the ground to fight for; the
+other reading tells only what each side sees. The camp's place is still
+told only to those who have found it. Measured (240 battles, the
+computer against itself): in every battle the beaten army held out by
+its camp before the end, for 3.9 hours on average and 21 hours at the
+longest (over a night, after which
+its men rested and fought on); every battle ended, none by the days
+running out.
+

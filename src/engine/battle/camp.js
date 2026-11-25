@@ -244,6 +244,11 @@ function stepCamps(state, { turn, log, broken, resolver }) {
       if (carrying && !camp.tiring) log.emit('campTiring', turn, { side })
     }
     camp.tiring = carrying
+    // Its army with no steady unit left, holding out by its standing camp
+    // (holdsOut): both sides are told, once a spell, what is left to do.
+    const holding = holdsOut(state, side) && !unitsOnSide(world, side).some(u => formed(u) && !state.isShaken(u))
+    if (holding && !camp.holdingOut) log.emit('campHoldsOut', turn, { side, at: camp.at ? { ...camp.at } : null })
+    camp.holdingOut = holding
   }
 }
 
@@ -329,6 +334,26 @@ function nightRest(state) {
         state.orderBook.delete(unit.id)
       }
     }
+    // A free Commander whose unit is down to COMMANDER.THRESHOLD of its men
+    // or fewer rides out at first light with the strongest unit he has
+    // (most of its men left, then the best trained): he chooses afresh in
+    // camp, where before he was taken one battle in five, mostly riding
+    // with a unit fought down on the day before (docs/DECISIONS.md, "How
+    // camps were built", round 7). The log says so (commanderRode).
+    const c = state.commanders?.[side]
+    if (c?.status === 'free') {
+      const share = (u) => u.strength / (state.mustered.get(u.id) || u.strength || 1)
+      const his = units.find(u => u.id === c.unitId)
+      if (his && share(his) <= T.COMMANDER.THRESHOLD) {
+        const rank = (u) => T.QUALITY_ORDER.indexOf(u.quality)
+        const best = units.filter(u => u.id !== camp.carrier)
+          .sort((a, b) => share(b) - share(a) || rank(b) - rank(a) || a.id.localeCompare(b.id))[0]
+        if (best && best.id !== his.id && share(best) > share(his)) {
+          out[side].rode = { from: his.id, to: best.id }
+          c.unitId = best.id
+        }
+      }
+    }
   }
   return out
 }
@@ -344,6 +369,20 @@ function holdsOut(state, side) {
   return Boolean(camp && camp.status === 'pitched' && unitsOnSide(state.world, side).some(u => u.strength > 0))
 }
 
+/**
+ * Is a Commander riding with this unit safe from being taken? In a camp
+ * battle: among his own tents (the unit inside its own pitched camp); and
+ * once his army has no steady unit left and holds out by its camp, for he
+ * rides back to it ahead of his running men, as in a battle with no camp he
+ * would leave the field with them (docs/DECISIONS.md, "How camps were
+ * built", round 7). When the camp falls, the battle is lost.
+ */
+function sheltered(state, unit) {
+  if (inOwnCamp(state, unit)) return true
+  if (!holdsOut(state, unit.side)) return false
+  return !unitsOnSide(state.world, unit.side).some(u => u.strength > 0 && !state.broken.has(u.id) && !state.isShaken(u))
+}
+
 /** A side's own camp and what it knows of the enemy's, as plain data. */
 function campsView(state, side) {
   if (!state.camps) return null
@@ -357,5 +396,5 @@ function campsView(state, side) {
 
 module.exports = {
   createCamps, defaultCarrier, campTiles, inCamp, inOwnCamp, carries, campWay,
-  settleCampOrders, markEngagements, stepCamps, refugeOf, seeCamps, nightRest, campsView, holdsOut
+  settleCampOrders, markEngagements, stepCamps, refugeOf, seeCamps, nightRest, campsView, holdsOut, sheltered
 }

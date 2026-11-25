@@ -28,6 +28,10 @@
 //                   a camp that starts pitched)
 //   --character c   the west's Commander's character (bold, steady,
 //                   cautious); --against c the east's
+//   --from N        the first seed (default 1)
+//   --swap          the factions of each pairing on the other sides
+//   --nocamps       no camps at all, the same field and seeds
+//   --commander     the west a Commander on the field, his orders by rider
 //   --set NAME=v    try a CAMP rate (tables.CAMP), e.g. --set HITS=6
 //   --verbose       one line a battle
 //
@@ -59,6 +63,10 @@ const VERBOSE = process.argv.includes('--verbose')
 const COMMANDER = process.argv.includes('--commander')
 // No camps at all, on the same field and seeds: to compare.
 const NO_CAMPS = process.argv.includes('--nocamps')
+// Swap the two sides' factions (with --mode mixed).
+const SWAP = process.argv.includes('--swap')
+// The first seed (default 1).
+const FROM = Number(arg('--from', 1))
 const MAX_STOPS = 4000
 
 /** One camp battle; returns what was measured of it. */
@@ -83,6 +91,7 @@ function play(red, blue, seed, { mode = MODE, character = CHARACTER, against = A
   if (mode === 'lost' && game.battle.camps) Object.assign(game.battle.camps.red, { status: 'burned', tiles: null })
   let stops = 0
   const atBurn = []
+  const fell = []
   while (!game.outcome.decided && stops < MAX_STOPS) {
     stops++
     for (const side of ['red', 'blue']) {
@@ -106,6 +115,22 @@ function play(red, blue, seed, { mode = MODE, character = CHARACTER, against = A
       const formedMen = (s) => game.battle.world.units.filter(u => u.side === s && u.strength > 0 && !game.battle.broken.has(u.id) && !game.battle.isShaken(u)).reduce((n, u) => n + u.strength, 0)
       const other = e.side === 'red' ? 'blue' : 'red'
       atBurn.push({ side: e.side, turn: e.turn, steady: formedMen(e.side), against: formedMen(other) })
+    }
+    // Where the west's Commander was taken or killed (after the stop that
+    // saw it: near enough for a tally).
+    for (const e of game.battle.log.all().filter(x => (x.type === 'commanderTaken' || x.type === 'commanderKilled') && x.side === 'red').slice(fell.length)) {
+      const b = game.battle
+      const u = b.world.units.find(x => x.id === e.unitId) ?? null
+      const steady = (s) => b.world.units.filter(x => x.side === s && x.strength > 0 && !b.broken.has(x.id) && !b.isShaken(x)).length
+      const camp = b.camps?.red ?? null
+      fell.push({
+        type: e.type, day: game.day ?? 1, hour: Math.floor(((e.turn * 10) % T.DAY.MINUTES) / 60), running: Boolean(e.running),
+        broken: b.broken.has(e.unitId), share: u ? Math.round(100 * u.strength / (u.maxStrength || u.strength)) : 0,
+        campStatus: camp?.status ?? null, inCamp: Boolean(u && camp?.tiles?.some(t => t.x === u.position.x && t.y === u.position.y)),
+        carried: b.log.ofType('campStruck').some(x => x.unitId === e.unitId) || spec.units.find(x => x.id === e.unitId)?.id === (b.camps ? game.spec.camps?.red?.carrier : null),
+        steadyRed: steady('red'), steadyBlue: steady('blue'),
+        order: b.orderBook.get(e.unitId)?.action ?? null
+      })
     }
   }
   const log = game.battle.log
@@ -134,6 +159,9 @@ function play(red, blue, seed, { mode = MODE, character = CHARACTER, against = A
     // whether its camp was pitched to rest in.
     rests: rests.map(e => ({ side: e.side, rested: e.rested, wind: e.wind, day: game.battle.log.ofType('nightPassed').filter(n => n.turn <= e.turn).length })),
     status: { red: camp('red').status, blue: camp('blue').status },
+    fell,
+    // Hours from an army first holding out by its camp, broken, to the end.
+    heldOut: log.ofType('campHoldsOut').length ? (game.battle.turn - log.ofType('campHoldsOut')[0].turn) / 6 : null,
     commander: game.battle.commanders?.red ? {
       taken: log.ofType('commanderTaken').some(e => e.side === 'red'),
       killed: log.ofType('commanderKilled').some(e => e.side === 'red')
@@ -145,9 +173,12 @@ function league(n = BATTLES, options = {}) {
   const keys = Object.keys(FACTIONS)
   const out = []
   for (let i = 0; i < n; i++) {
-    const red = keys[i % keys.length]
-    const blue = (options.mode ?? MODE) === 'mixed' ? keys[(i * 7 + 3) % keys.length] : red
-    const r = play(red, blue, 1 + i, options)
+    let red = keys[i % keys.length]
+    let blue = (options.mode ?? MODE) === 'mixed' ? keys[(i * 7 + 3) % keys.length] : red
+    // The same pairings with the sides swapped: is it the peoples, or the
+    // side of the field?
+    if (SWAP) [red, blue] = [blue, red]
+    const r = play(red, blue, FROM + i, options)
     out.push(r)
     if (VERBOSE) console.log(`${String(r.seed).padStart(3)} ${red}/${blue}: ${r.winner} (${r.reason}) day ${r.days}, ${Math.round(r.minutes / 60)} h; burned ${r.burned.map(b => `${b.side}${b.undefended ? '' : '*'}`).join(',') || '-'}; rallied ${r.ralliedInCamp}/${r.rallied} in camp; camps ${r.status.red}/${r.status.blue}`)
   }
@@ -188,6 +219,8 @@ function summary(rows) {
     // enemy's: a blow mid-battle, not the end of one lost.
     burnedMidBattle: rows.flatMap(r => r.burned).filter(b => b.steady > 0 && b.steady * 2 >= b.against).length,
     burnedMidBattleLost: (() => { const m = rows.flatMap(r => r.burned.map(b => ({ b, r }))).filter(({ b }) => b.steady > 0 && b.steady * 2 >= b.against); return `${m.filter(({ b, r }) => r.winner !== b.side).length} of ${m.length}` })(),
+    heldOutBattles: rows.filter(r => r.heldOut !== null).length,
+    heldOutHours: (() => { const h = rows.map(r => r.heldOut).filter(x => x !== null); return h.length ? `mean ${Math.round(10 * mean(h)) / 10}, longest ${Math.round(10 * Math.max(...h)) / 10}` : '-' })(),
     hoursFromBurnToEnd: Math.round(10 * (mean(rows.flatMap(r => r.burned.map(b => b.after / 6))) ?? 0)) / 10,
     assailedTicks: rows.reduce((s, r) => s + r.assailed, 0),
     struck: rows.reduce((s, r) => s + r.struck, 0),

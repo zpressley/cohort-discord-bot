@@ -507,7 +507,11 @@ function nightPasses(game) {
   }
   const rest = nightRest(battle)
   battle.previousEngagementKeys = new Set()
-  for (const side of Object.keys(rest)) battle.log.emit('campRest', battle.turn, { side, rested: rest[side].rested, why: rest[side].why, wind: rest[side].wind })
+  for (const side of Object.keys(rest)) {
+    battle.log.emit('campRest', battle.turn, { side, rested: rest[side].rested, why: rest[side].why, wind: rest[side].wind })
+    // He rode over in the night to a stronger unit (camp.js, nightRest).
+    if (rest[side].rode) battle.log.emit('commanderRode', battle.turn, { side, unitId: rest[side].rode.to, from: rest[side].rode.from, atNight: true })
+  }
   battle.log.emit('nightPassed', battle.turn, { day: game.day + 1 })
   game.day += 1
 }
@@ -576,7 +580,7 @@ function wantedNow(game, turnRecord, sightedBy, heard, objectiveChanges) {
       if (sightedBy[side]?.length > 0) reasons.push('sighting')
       if (ordersCarriedOut(battle, { side })) reasons.push('ready')
       if (now.some(e => e.type === 'rallied' && ofSide(e.unitId, side))) reasons.push('rallied')
-      if (now.some(e => CAMP_NEWS.includes(e.type) && (e.side === side || e.of === side))) reasons.push('camp')
+      if (now.some(e => CAMP_NEWS.includes(e.type) && (e.side === side || e.of === side || e.type === 'campHoldsOut'))) reasons.push('camp')
       if (nothingMoved(turnRecord)) reasons.push('stalled')
       if (quiet(side)) reasons.push('time')
     }
@@ -808,13 +812,13 @@ function newsFor(game, side, recent, heard) {
   if (heard[side]?.sighted.length > 0) reasons.push('sighting')
   if (ordersCarriedOut(battle, { side, events: arrived })) reasons.push('ready')
   if (arrived.some(e => e.type === 'rallied')) reasons.push('rallied')
-  if (arrived.some(e => CAMP_NEWS.includes(e.type) && (e.side === side || e.of === side))) reasons.push('camp')
+  if (arrived.some(e => CAMP_NEWS.includes(e.type) && (e.side === side || e.of === side || e.type === 'campHoldsOut'))) reasons.push('camp')
   return reasons
 }
 
 // What befalls a camp that calls its side back (a camp battle's): found,
 // fought in, burned, dropped; its own pitched or taken up is 'ready'.
-const CAMP_NEWS = ['campFound', 'campAssailed', 'campBurned', 'campDropped']
+const CAMP_NEWS = ['campFound', 'campAssailed', 'campBurned', 'campDropped', 'campHoldsOut']
 
 const DONE = ['arrived', 'halted', 'hidden', 'checked', 'campPitched', 'campStruck']
 function ordersCarriedOut(battle, { side = null, events = null } = {}) {

@@ -283,7 +283,7 @@ function arrivalOf(game, side, event) {
   if (event.type === 'victory' || event.type === 'objective' || event.type === 'officerYielded' || event.type === 'nightfall') return event.turn
   // A camp battle's: the night, and what befalls his own camp or the whole
   // army for it, he knows at once ("you can see the flames rising").
-  if (event.type === 'nightPassed') return event.turn
+  if (event.type === 'nightPassed' || event.type === 'campHoldsOut') return event.turn
   if (CAMP_AT_ONCE.includes(event.type) && event.side === side) return event.turn
   if (event.side === side && event.type.startsWith('commander')) return event.turn
   if (event.type === 'riderBlocked' && event.side === side && word.blocked) {

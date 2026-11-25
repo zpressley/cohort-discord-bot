@@ -765,6 +765,11 @@ const CAMP = {
   noneOurs: 'Your camp is burned: there is none to go to. Name a place instead.',
   carriedBy: (who) => `Your camp is not pitched: ${who} are carrying it.`
 }
+// An army with no steady unit left holds out by its standing camp: what
+// is left to do, told to both sides.
+CAMP.holdsOut = (mine) => (mine
+  ? 'Your army is broken and shelters in your camp: if the camp falls, the field is the enemy\'s. Hold the camp, and your men may rally there and rest tonight'
+  : 'Their army is broken and shelters in its camp: take the camp and the field is yours')
 module.exports.CAMP = CAMP
 // The orders that work the camp, in the read-back's words (ORDER, above).
 ORDER.pitch = { say: 'pitch the camp', doing: 'pitching the camp', did: 'pitched the camp', to: 'at' }

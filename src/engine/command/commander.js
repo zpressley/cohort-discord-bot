@@ -124,9 +124,10 @@ function stepCommanders({ commanders, world, broken, fledUnits, events, mustered
     const gone = !unit || unit.strength <= 0
     let fallen = false
     // In a camp battle, among his own tents (sheltered: his unit inside its
-    // own pitched camp) he is not taken or killed while the camp stands:
-    // the enemy must take the camp first.
-    const inCamp = Boolean(sheltered && !gone && sheltered(unit))
+    // own pitched camp, even cut down there) he is not taken or killed
+    // while the camp stands: the enemy must take the camp first. He goes
+    // over to another of his units, as below.
+    const inCamp = Boolean(sheltered && unit && sheltered(unit))
     if (strikers.length > 0 && !inCamp) {
       const share = gone ? 0 : unit.strength / (mustered.get(c.unitId) || unit.strength)
       // Caught running (his unit broken and pursued) is as bad as overrun.

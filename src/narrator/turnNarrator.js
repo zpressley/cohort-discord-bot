@@ -87,7 +87,7 @@ function visibleEvents(events, { ownIds, seenEnemyIds, side = null }) {
   return events.filter(e => {
     if (UNTOLD.has(e.type)) return false
     if (e.type === 'victory' || e.type === 'objective' || e.type === 'nightfall') return true
-    if (e.type === 'nightPassed') return true
+    if (e.type === 'nightPassed' || e.type === 'campHoldsOut') return true
     if (CAMP_OWN.has(e.type) && side && e.side === side) return true
     if (PRIVATE.has(e.type)) return ownIds.has(e.unitId)
     if (e.type === 'revealed') {
@@ -359,7 +359,7 @@ function plainFact(map, event, howMany = countAll) {
     // A camp battle's, with no side to tell it to: as its own side would
     // hear it (toTheCamp).
     case 'nightPassed': case 'campPitched': case 'campStruck': case 'campDropped': case 'campFound':
-    case 'campAssailed': case 'campBurned': case 'campTiring': case 'campRest':
+    case 'campAssailed': case 'campBurned': case 'campTiring': case 'campRest': case 'campHoldsOut':
       return toTheCamp(map, event, event.side ?? null, null)
     default: return null
   }
@@ -387,7 +387,7 @@ const WEIGHT = {
   hidden: 5, hideFailed: 5, checked: 5, ambushHeld: 5, crowding: 6, arrived: 6, halted: 6, move: 7
 }
 Object.assign(WEIGHT, {
-  nightPassed: 0, campRest: 0, campBurned: 0, campAssailed: 1, campDropped: 1, campFound: 1,
+  nightPassed: 0, campRest: 0, campBurned: 0, campHoldsOut: 0, campAssailed: 1, campDropped: 1, campFound: 1,
   campPitched: 2, campStruck: 2, campTiring: 2
 })
 const weight = (event) => WEIGHT[event.type] ?? 5
@@ -569,6 +569,7 @@ function toTheCamp(map, event, side, ownIds) {
     case 'campBurned': return CAMP.burned(event.by, where, event.undefended, mine)
     case 'campTiring': return CAMP.tiring
     case 'campRest': return CAMP.rest[event.why] ?? CAMP.rest.burned
+    case 'campHoldsOut': return CAMP.holdsOut(mine)
     default: return null
   }
 }

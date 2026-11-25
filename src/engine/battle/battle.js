@@ -1430,7 +1430,7 @@ function stepTurn(state, sideOrders = {}, { sameTurn = false } = {}) {
     const fell = stepCommanders({
       commanders: state.commanders, world, broken, fledUnits,
       events: log.forTurn(turn), mustered: state.mustered, random: state.commanderRandom,
-      ...(state.camps ? { sheltered: (unit) => camps.inOwnCamp(state, unit) } : {})
+      ...(state.camps ? { sheltered: (unit) => camps.sheltered(state, unit) } : {})
     })
     for (const e of fell) log.emit(e.type, turn, e.fields)
     // A Commander who gets free brings out what he heard in the enemy's

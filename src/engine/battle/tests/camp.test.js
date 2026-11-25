@@ -268,3 +268,59 @@ test('a Commander among his own tents is not taken or killed while his camp stan
   assert.notEqual(run(null), 'free', 'outside the camp, as before')
   assert.equal(run(() => true), 'free')
 })
+
+test('a Commander whose army is broken and holds out by its camp is safe as if in it; the camp\'s fall ends the battle', () => {
+  const units = [unit({ id: 'red_a', position: { x: 20, y: 5 } }), unit({ id: 'blue_a', side: 'blue', position: { x: 35, y: 5 } })]
+  const state = createBattleState(spec(units, { camps: { red: { at: { x: 5, y: 5 } } } }), { seed: 1 })
+  assert.equal(camps.sheltered(state, units[0]), false)
+  state.broken.add('red_a')
+  assert.equal(camps.sheltered(state, state.world.units[0]), true)
+  state.camps.red.status = 'burned'
+  assert.equal(camps.sheltered(state, state.world.units[0]), false)
+})
+
+test('at first light a Commander riding with a unit fought down to half its men or fewer rides out with his strongest unit', () => {
+  const units = [unit({ id: 'red_a', strength: 30 }), unit({ id: 'red_b', position: { x: 5, y: 7 }, strength: 90 }), unit({ id: 'blue_a', side: 'blue', position: { x: 35, y: 5 } })]
+  const game = createGame(spec(units, { dayMinutes: 30, commanders: { red: { unitId: 'red_a' } }, camps: { red: { at: { x: 5, y: 5 } } } }), { seed: 1 })
+  game.battle.mustered.set('red_a', 100)
+  game.battle.mustered.set('red_b', 100)
+  for (let i = 0; i < 10 && game.day === 1; i++) {
+    submitOrders(game, 'red', [])
+    submitOrders(game, 'blue', [])
+  }
+  assert.equal(game.battle.commanders.red.unitId, 'red_b')
+  const rode = game.battle.log.ofType('commanderRode').at(-1)
+  assert.deepEqual([rode.from, rode.unitId, rode.atNight], ['red_a', 'red_b', true])
+})
+
+test('an army broken and sheltering in its standing camp is told so, and so is the enemy: "take the camp and the field is yours"', () => {
+  const units = [unit({ id: 'red_a', position: { x: 5, y: 5 } }), unit({ id: 'blue_a', side: 'blue', position: { x: 35, y: 5 } })]
+  const state = createBattleState(spec(units, { camps: { red: { at: { x: 5, y: 5 } }, blue: { at: { x: 36, y: 5 } } } }), { seed: 1 })
+  // Broken with no heart left: rallied there, it is still shaken.
+  state.broken.add('red_a')
+  state.resolver.shake(units[0], 90)
+  stepTurn(state, {})
+  stepTurn(state, {})
+  assert.equal(state.log.ofType('campHoldsOut').length, 1, 'told once a spell')
+  const { report } = require('../../../narrator/turnNarrator')
+  const events = state.log.all()
+  assert.match(report({ map: state.map, side: 'blue', ownIds: new Set(['blue_a']), seenEnemyIds: new Set(), events }).join('\n'), /Their army is broken and shelters in its camp: take the camp and the field is yours/)
+  assert.match(report({ map: state.map, side: 'red', ownIds: new Set(['red_a']), seenEnemyIds: new Set(), events }).join('\n'), /Your army is broken and shelters in your camp/)
+})
+
+test('the computer comes and takes the camp of an army with no steady unit left, so a battle cannot hang on it', () => {
+  const { planTurn } = require('../../../opponent/planner')
+  const units = [
+    unit({ id: 'red_a', position: { x: 5, y: 5 }, strength: 40 }),
+    unit({ id: 'blue_a', side: 'blue', position: { x: 30, y: 5 } }), unit({ id: 'blue_b', side: 'blue', position: { x: 30, y: 7 } })
+  ]
+  const game = createGame(spec(units, { camps: { red: { at: { x: 5, y: 5 } }, blue: { at: { x: 36, y: 5 } } } }), { seed: 1 })
+  game.battle.broken.add('red_a')
+  for (let i = 0; i < 300 && !game.outcome.decided; i++) {
+    submitOrders(game, 'red', [])
+    submitOrders(game, 'blue', planTurn(game, 'blue'))
+  }
+  assert.equal(game.outcome.winner, 'blue')
+  assert.equal(game.battle.camps.red.status, 'burned')
+  assert.equal(game.day, 1, 'the same day')
+})
