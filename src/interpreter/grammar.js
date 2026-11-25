@@ -162,6 +162,10 @@ function parseLine(line, options = {}) {
     if (/\bif\b/i.test(text)) return { kind: 'ask', unread: clean(line), question: `I don't follow "${clean(line)}".` }
   }
 
+  // A camp battle's camp: pitch it, move it, strike it, burn theirs.
+  const camp = readCamp(text)
+  if (camp) return { ...camp, ...extra }
+
   const stage3 = readStage3(text, extra)
   // (What he typed, for a question whose answers replace the whole line.)
   if (stage3 && (stage3.fire || stage3.said || stage3.skirmish)) stage3.said = clean(line)
@@ -349,6 +353,36 @@ function order(unitRef, action, place, then, extra = {}) {
   // (A verb left before the order's own, "go around the left", names no one.)
   const who = /^(?:go|move|march|head|ride|walk|run|get|swing|wheel|sweep|circle|come|and|then)$/i.test(clean(unitRef)) ? '' : clean(unitRef)
   return { kind: 'order', unitRef: who || 'everyone', action, place, then, ...extra }
+}
+
+// ── The camp (a camp battle's) ─────────────────────────
+//
+//   velites pitch the camp at the Long Down     pitch (there)
+//   pitch the camp here / make camp             pitch (where its carrier stands)
+//   move the camp to C5 / carry the camp to C5  pitch there (taken up first)
+//   strike the camp / pack up the camp          strike: take it up and carry it
+//   horse burn their camp / take the enemy camp attack the enemy's camp
+//   guard the camp / fall back to the camp      defend, withdraw: the camp is a
+//                                               place (resolve.js)
+// With no one named, who works the camp is the resolver's choice (the unit
+// carrying it, else the nearest): `camp: true` on the intent.
+const OUR_CAMP = '(?:(?:the|our|your|my)\\s+)?camp'
+const THEIR_CAMP = "(?:the\\s+enemy'?s?|their|the\\s+enemy|enemy)\\s+camp"
+const PITCH = new RegExp(`^(?:(.+?)\\s+)?(?:pitch|make|set up|put up|raise)\\s+${OUR_CAMP}(?:\\s+(?:at|on|in|by|near|beside)\\s+(.+?))?(?:\\s+(?:here|there|where (?:you|they) (?:are|stand)))?$`, 'i')
+const MOVE_CAMP = new RegExp(`^(?:(.+?)\\s+)?(?:move|carry|take|shift|bring|march)\\s+${OUR_CAMP}\\s+(?:to|towards|toward|over to|up to|back to)\\s+(.+)$`, 'i')
+const STRIKE = new RegExp(`^(?:(.+?)\\s+)?(?:strike|pack up|pack|take up|break|lift|pick up)\\s+${OUR_CAMP}(?:\\s+up)?$`, 'i')
+const RAID = new RegExp(`^(?:(.+?)\\s+)?(?:burn|fire|torch|sack|raid|loot|take|capture|seize|storm|attack|assault|go for|destroy|hit)\\s+${THEIR_CAMP}$`, 'i')
+
+function readCamp(text) {
+  let m = text.match(RAID)
+  if (m) return order(m[1], 'attack', 'their camp', null)
+  m = text.match(MOVE_CAMP)
+  if (m) return { ...order(m[1], 'pitch', clean(m[2]), null), camp: true }
+  m = text.match(PITCH)
+  if (m) return { ...order(m[1], 'pitch', m[2] ? clean(m[2]) : null, null), camp: true }
+  m = text.match(STRIKE)
+  if (m) return { ...order(m[1], 'strike', null, null), camp: true }
+  return null
 }
 
 // Ambush, hide, check and attack-a-place, or null for the older verbs.
