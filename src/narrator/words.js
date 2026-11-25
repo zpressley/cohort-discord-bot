@@ -721,3 +721,51 @@ const VERDICT = {
   note: 'Broke: units that broke and ran, whether they came back or not; of the enemy, only those your men saw.'
 }
 module.exports.VERDICT = VERDICT
+
+// ── Camps (ruled 2026-11-25) ───────────────────────────
+// A camp battle's words (engine/battle/camp.js). The camp: "your camp", the
+// enemy's "the enemy's camp" (in an enemy unit's own doing, "their camp").
+// Pitch, strike, carry: what is done with it. Burned: lost. Zach's own line
+// for a camp lost undefended is kept as near his words as plain grammar
+// lets it be ("Your camp lay undefended you can see the flames rising along
+// with knowledge that your men will have no rest tonight.").
+const CAMP = {
+  ours: 'your camp',
+  theirs: 'the enemy\'s camp',
+  // What is done with it, in the dispatch. `who` is the unit's name as the
+  // Commander knows it; `where` the place written out.
+  pitched: (who, where, mine) => (mine ? `${who} pitched your camp ${where}` : `${who} pitched their camp ${where}`),
+  struck: (who, mine) => (mine ? `${who} struck your camp and are carrying it` : `${who} struck their camp and are carrying it off`),
+  dropped: (who, where, mine) => (mine
+    ? (who ? `${who} broke and dropped your camp ${where}: it lies there for either side to take` : `the men carrying your camp are gone, and it lies ${where} for either side to take`)
+    : `the enemy dropped their camp ${where}`),
+  found: (who, where, status) => `${who} found the enemy's camp ${where}` + (status === 'dropped' ? ', lying where it was dropped' : ''),
+  assailed: (by, where, hits, of, mine) => (mine
+    ? `the enemy is in your camp ${where}: your men there are holding it, but it will not hold for ever (${hits} of ${of} assaults)`
+    : `${by} are in the enemy's camp ${where}, fighting its guard`),
+  burned: (by, where, undefended, mine) => (mine
+    ? (undefended
+      ? 'Your camp lay undefended: you can see the flames rising, and you know your men will have no rest tonight'
+      : 'Your camp has fallen: its guard could hold it no longer. You can see the flames rising, and you know your men will have no rest tonight')
+    : `${by} burned the enemy's camp ${where}: the smoke is rising over it, and his men will have no rest tonight`),
+  tiring: 'Your army is tiring while the camp is on the move: every hour it is carried costs your men wind, until it is pitched again',
+  // The night, told to each side of its own army.
+  rest: {
+    pitched: 'Night has fallen. Your men rested in camp, and will be fresh at first light',
+    carried: 'Night has fallen, and your camp is not pitched: your men have no rest tonight, and will be as tired at first light as they are now',
+    dropped: 'Night has fallen, and your camp lies where it was dropped: your men have no rest tonight, and will be as tired at first light as they are now',
+    burned: 'Night has fallen. Your camp is burned: your men have no rest tonight, and will be as tired at first light as they are now'
+  },
+  dawn: (day) => `Dawn: the ${DAYS[day] ?? `${day}th`} day of the battle begins`,
+  // After the last day the battle may run (combat/tables.js, CAMP.MAX_DAYS).
+  daysOut: (day) => `The ${DAYS[day] ?? `${day}th`} night has fallen with neither army beaten: the battle is over, and neither side has won`,
+  // Reading orders that name a camp.
+  notFound: 'Your men have not found the enemy\'s camp. Send them to look for it, or name a place.',
+  burnedTheirs: 'The enemy\'s camp is already burned.',
+  noneOurs: 'Your camp is burned: there is none to go to. Name a place instead.',
+  carriedBy: (who) => `Your camp is not pitched: ${who} are carrying it.`
+}
+module.exports.CAMP = CAMP
+// The orders that work the camp, in the read-back's words (ORDER, above).
+ORDER.pitch = { say: 'pitch the camp', doing: 'pitching the camp', did: 'pitched the camp', to: 'at' }
+ORDER.strike = { say: 'strike the camp and carry it', doing: 'carrying the camp', did: 'struck the camp' }

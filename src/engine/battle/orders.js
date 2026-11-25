@@ -47,6 +47,13 @@
 //             gone, or out of sight and not where it was last seen: the
 //             order becomes hold, and its side is told (followLost). It
 //             never finishes, as hold does not.
+//   pitch     a camp battle's (battle/camp.js): pitch the camp at target, or
+//             where the unit stands. The unit carrying it goes there and
+//             pitches it; another goes to the camp first (pitched or
+//             dropped), takes it up, and carries it there. Then hold.
+//   strike    a camp battle's: go to the camp and take it up, and carry it
+//             (then hold, with it). Neither does anything in a battle with
+//             no camps: the unit holds.
 //
 // Depth (November 2026, docs/design/officers-memory-delegation.md). An order
 // may hold more than one thing to do:
@@ -91,7 +98,7 @@
 const { toPosition, samePosition } = require('../map/labels')
 const { MAX_STEPS } = require('../command/officers')
 
-const ACTIONS = ['move', 'hold', 'defend', 'advance', 'attack', 'withdraw', 'hide', 'check', 'ambush', 'follow']
+const ACTIONS = ['move', 'hold', 'defend', 'advance', 'attack', 'withdraw', 'hide', 'check', 'ambush', 'follow', 'pitch', 'strike']
 const SEEKING = ['advance', 'attack']
 
 /**
@@ -237,6 +244,16 @@ function planUnit(unit, order, context) {
         return { move: { unitId: unit.id, target: 'hold' }, order: holding }
       }
       return { move: null, order: undefined }
+    }
+
+    case 'pitch':
+    case 'strike': {
+      // Where the camp work takes the unit this tick (battle/camp.js):
+      // the camp to take up, or the place to pitch it. The battle settles
+      // the taking up and the pitching at the tick's end.
+      const to = context.campWay?.(unit, order) ?? null
+      if (to && !samePosition(to, unit.position)) return { move: { unitId: unit.id, target: to }, order }
+      return { move: { unitId: unit.id, target: 'hold' }, order }
     }
 
     case 'follow': {

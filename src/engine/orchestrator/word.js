@@ -267,6 +267,9 @@ function heardAt(word, unitId, turn) {
 // The units an event is about (as the narrator reads them).
 const involved = (e) => [e.unitId, e.aId, e.bId, e.by, e.a?.unitId, e.b?.unitId].filter(Boolean)
 
+// What a camp battle's Commander knows at once of his own camp.
+const CAMP_AT_ONCE = ['campBurned', 'campAssailed', 'campDropped', 'campRest', 'campTiring']
+
 /**
  * When a piece of news reached a side's Commander: the battle turn, or
  * Infinity if it never did. The battle's end, ground changing hands and
@@ -278,6 +281,10 @@ function arrivalOf(game, side, event) {
   const word = game.word?.[side]
   if (!word) return event.turn
   if (event.type === 'victory' || event.type === 'objective' || event.type === 'officerYielded' || event.type === 'nightfall') return event.turn
+  // A camp battle's: the night, and what befalls his own camp or the whole
+  // army for it, he knows at once ("you can see the flames rising").
+  if (event.type === 'nightPassed') return event.turn
+  if (CAMP_AT_ONCE.includes(event.type) && event.side === side) return event.turn
   if (event.side === side && event.type.startsWith('commander')) return event.turn
   if (event.type === 'riderBlocked' && event.side === side && word.blocked) {
     const shut = word.blocked.find(b => b.unitId === event.unitId && b.sent === event.turn)

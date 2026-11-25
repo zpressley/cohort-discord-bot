@@ -64,6 +64,9 @@ function resolveSimultaneousMovement(world, orders, map, options = {}) {
   // movement.
   const engaged = options.engaged ?? new Set()
   const glue = options.glue ?? 0
+  // A unit carrying its camp (battle/camp.js) goes at a share of its pace.
+  // An order with no pace goes as before.
+  const paced = (order, budget) => (order.pace ? Math.round(budget * order.pace * 100) / 100 : budget)
   const withGlue = (unit, budget) =>
     engaged.has(unit.id) && glue > 0 ? Math.max(Math.min(1, budget), budget - glue) : budget
   if (!map) throw new Error('resolveSimultaneousMovement needs the map')
@@ -195,9 +198,9 @@ function resolveSimultaneousMovement(world, orders, map, options = {}) {
       steps: path.slice(1),            // path[0] is where the unit stands
       stepIndex: 0,
       // Careful (on guard) marches at half speed, after crowding.
-      budget: withGlue(unit, order.careful
+      budget: withGlue(unit, paced(order, order.careful
         ? Math.round(crowdedRange(unit, crowding.get(unit.id)) / 2 * 100) / 100
-        : crowdedRange(unit, crowding.get(unit.id))),
+        : crowdedRange(unit, crowding.get(unit.id)))),
       careful: Boolean(order.careful),
       // Looking for a fight (Stage 3): only such a unit stops when it meets
       // an enemy. Others walk on past, if the way is open. Callers that do

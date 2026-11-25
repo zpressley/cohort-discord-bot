@@ -19,6 +19,7 @@ const { PLACE } = require('./words')
 const { FOLLOW_WORDS } = require('./words')
 const { HELD_BACK } = require('./words')
 const { REPORT } = require('./words')
+const { CAMP } = require('./words')
 
 // Where a tile is, in words: the feature it is part of, or the nearest
 // feature with a name, or open ground near the nearest feature.
@@ -68,8 +69,13 @@ function involved(event) {
 // Events only the unit's own side knows of: its hiding, its search, an
 // ambush it held back, how packed its ranks are.
 const PRIVATE = new Set(['hidden', 'hideFailed', 'ambushHeld', 'checked', 'crowding', 'heartened', 'reacted', 'lostThread', 'commanderMoved', 'quarryGone', 'ownCommand', 'deserted', 'commanderRode', 'riderSent', 'riderBlocked', 'cutOff', 'inTouch', 'initiative', 'riderTaken', 'followLost', 'heldBack'])
+// (A camp battle's: the enemy's camp found is the finder's side's news.)
+PRIVATE.add('campFound')
 // The engine's own record of a roll, which no commander is told of.
 const UNTOLD = new Set(['grasp'])
+// A camp battle's: what befalls a side's own camp, or its whole army for
+// it, its own side knows at once, whoever is near (`side` on the event).
+const CAMP_OWN = new Set(['campBurned', 'campAssailed', 'campDropped', 'campRest', 'campTiring'])
 
 /**
  * The events one side could know about: everything involving its own units,
@@ -77,10 +83,12 @@ const UNTOLD = new Set(['grasp'])
  * verdict and objectives. Fog of war holds: an unseen enemy's doings are not
  * reported, and a side never hears of the other's hiding or held ambushes.
  */
-function visibleEvents(events, { ownIds, seenEnemyIds }) {
+function visibleEvents(events, { ownIds, seenEnemyIds, side = null }) {
   return events.filter(e => {
     if (UNTOLD.has(e.type)) return false
     if (e.type === 'victory' || e.type === 'objective' || e.type === 'nightfall') return true
+    if (e.type === 'nightPassed') return true
+    if (CAMP_OWN.has(e.type) && side && e.side === side) return true
     if (PRIVATE.has(e.type)) return ownIds.has(e.unitId)
     if (e.type === 'revealed') {
       return ownIds.has(e.unitId) || (e.by && ownIds.has(e.by)) || seenEnemyIds.has(e.unitId)
@@ -347,7 +355,12 @@ function plainFact(map, event, howMany = countAll) {
       : event.reason === 'noticed' ? `${event.unitId} ${was(event.unitId)} noticed, hidden close by`
       : `${event.unitId} came out of hiding`
     case 'victory': return event.winner === 'draw' ? `the battle ended with neither side the victor (${event.reason})` : `the battle is over: ${capital(event.winner)} won (${event.reason})`
-    case 'nightfall': return NIGHT.ended
+    case 'nightfall': return event.last ? CAMP.daysOut(event.day) : NIGHT.ended
+    // A camp battle's, with no side to tell it to: as its own side would
+    // hear it (toTheCamp).
+    case 'nightPassed': case 'campPitched': case 'campStruck': case 'campDropped': case 'campFound':
+    case 'campAssailed': case 'campBurned': case 'campTiring': case 'campRest':
+      return toTheCamp(map, event, event.side ?? null, null)
     default: return null
   }
 }
@@ -365,6 +378,7 @@ function ownCommandWords(event) {
 }
 
 // How much a commander needs to hear of each kind of event: lower is sooner.
+// (A camp battle's are added below it.)
 const WEIGHT = {
   victory: 0, nightfall: 0, commanderKilled: 0, commanderTaken: 0, commanderFreed: 0, commanderMoved: 1, destroyed: 1, rout: 1, fled: 1, rallied: 1, pursuit: 2, ambush: 1, surprise: 2, objective: 2,
   volley: 3, thrown: 3, lostThread: 1, reacted: 2, quarryGone: 2, followLost: 2, ownCommand: 1, initiative: 1, officerYielded: 0, deserted: 1, commanderRode: 1, riderBlocked: 2, riderSent: 6, cutOff: 1, inTouch: 3, riderTaken: 1,
@@ -372,6 +386,10 @@ const WEIGHT = {
   revealed: 3, exchange: 3, standoff: 3, push: 4, crush: 4, disengage: 4, gaveGround: 4, contact: 4,
   hidden: 5, hideFailed: 5, checked: 5, ambushHeld: 5, crowding: 6, arrived: 6, halted: 6, move: 7
 }
+Object.assign(WEIGHT, {
+  nightPassed: 0, campRest: 0, campBurned: 0, campAssailed: 1, campDropped: 1, campFound: 1,
+  campPitched: 2, campStruck: 2, campTiring: 2
+})
 const weight = (event) => WEIGHT[event.type] ?? 5
 // The most a dispatch is asked to carry.
 const MAX_FACTS = 14
@@ -533,11 +551,33 @@ function toTheSide(event, side, over = false, held = false, seen = null) {
   return GROUND.lost(event.name, event.was === side)
 }
 
+// A camp battle's news of a camp (engine/battle/camp.js), told to one side
+// as its own camp or the enemy's; null for any other event. With no side
+// (the hotseat's two players at one screen), as the side of the unit in it.
+function toTheCamp(map, event, side, ownIds) {
+  if (event.type === 'nightPassed') return CAMP.dawn(event.day)
+  if (event.type === 'nightfall' && event.last) return CAMP.daysOut(event.day)
+  if (!event.type.startsWith('camp')) return null
+  const mine = side ? event.side === side : Boolean(event.unitId && ownIds?.has(event.unitId))
+  const where = event.at ? whereAt(map, event.at) : ''
+  switch (event.type) {
+    case 'campPitched': return CAMP.pitched(event.unitId, where, mine)
+    case 'campStruck': return CAMP.struck(event.unitId, mine)
+    case 'campDropped': return CAMP.dropped(event.unitId, where, mine)
+    case 'campFound': return CAMP.found(event.unitId, where, event.status)
+    case 'campAssailed': return CAMP.assailed(event.by, where, event.hits, event.of, mine)
+    case 'campBurned': return CAMP.burned(event.by, where, event.undefended, mine)
+    case 'campTiring': return CAMP.tiring
+    case 'campRest': return CAMP.rest[event.why] ?? CAMP.rest.burned
+    default: return null
+  }
+}
+
 function report(turn) {
   const { map, ownIds, seenEnemyIds, events } = turn
   const nameOf = turn.nameOf ?? ((text) => text)
   const known = (id) => ownIds.has(id) || seenEnemyIds.has(id)
-  const told = summarise(visibleEvents(events, { ownIds, seenEnemyIds })).map(e => maskNames(e, known))
+  const told = summarise(visibleEvents(events, { ownIds, seenEnemyIds, side: turn.side ?? null })).map(e => maskNames(e, known))
 
   const fights = digest(told, { map, ownIds, whereIs: turn.whereIs })
   const rest = told.filter(e => !FIGHTING.has(e.type))
@@ -547,7 +587,7 @@ function report(turn) {
   const over = Boolean(turn.over) || told.some(e => e.type === 'victory')
   const others = rest
     .filter(e => !busy || weight(e) < 6)
-    .map(e => ({ weight: weight(e), text: toTheCommander(e, ownIds) ?? toTheSide(e, turn.side, over, Boolean(turn.held), turn.onGround) ?? plainFact(map, e, turn.howMany ?? countAll) }))
+    .map(e => ({ weight: weight(e), text: toTheCommander(e, ownIds) ?? toTheCamp(map, e, turn.side, ownIds) ?? toTheSide(e, turn.side, over, Boolean(turn.held), turn.onGround) ?? plainFact(map, e, turn.howMany ?? countAll) }))
     .filter(f => f.text)
 
   return [...fights, ...others]
@@ -653,4 +693,4 @@ async function narrateTurn(ai, turn) {
   return { text: reply.text.trim().replace(/\s*\n+\s*/g, ' ').replace(/[\u2010\u2011]/g, '-'), source: 'ai' }
 }
 
-module.exports = { narrateTurn, report, digest, visibleEvents, fromCaptivity, publicEvents, summarise, maskNames, placeName, fact, system, VOICES, PRIVATE }
+module.exports = { narrateTurn, report, digest, visibleEvents, fromCaptivity, publicEvents, summarise, maskNames, placeName, fact, system, VOICES, PRIVATE, toTheCamp }

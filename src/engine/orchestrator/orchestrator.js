@@ -46,7 +46,8 @@ const { createWord, updateWord, wordFromCaptivity, arrivalOf } = require('./word
 const { conditionOf } = require('./reports')
 const { evaluateVictory, objectiveController, objectiveArea, OBJECTIVE_HOLD_MINUTES } = require('./victory')
 const { bargainChips, commanderFate } = require('../command/commander')
-const { PARLEY, COMMAND, GROUND, FIRE_NEWS } = require('../combat/tables')
+const { PARLEY, COMMAND, GROUND, FIRE_NEWS, CAMP } = require('../combat/tables')
+const { nightRest, campsView, holdsOut } = require('../battle/camp')
 
 const MAX_TICKS_PER_TURN = 6   // one hour of battle time per decision
 const MINUTES_PER_TICK = 10    // locked decision 1
@@ -117,6 +118,8 @@ function createGame(spec, options = {}) {
   // everyone. How many times the battle has stopped for each side (his own
   // turns), and the battle turn it last did.
   game.wanted = sides(battle.world)
+  // A camp battle goes on day after day (nightPasses): the day it is.
+  if (battle.camps) game.day = 1
   game.calls = Object.fromEntries(game.wanted.map(s => [s, 0]))
   game.askedAt = Object.fromEntries(game.wanted.map(s => [s, 0]))
 
@@ -398,8 +401,13 @@ function processPlayerTurn(game) {
     game.outcome = evaluateVictory(victoryContext(game))
     // The end of the day, counted in battle time (the app's battles since
     // the riders rulings).
-    if (!game.outcome.decided && game.spec.dayMinutes && game.minutesElapsed >= game.spec.dayMinutes) {
-      nightFalls(game)
+    if (!game.outcome.decided && game.spec.dayMinutes && game.minutesElapsed >= nightAt(game)) {
+      // A camp battle does not end at night: the armies rest, or do not,
+      // and fight on in the morning (nightPasses).
+      if (battle.camps) {
+        nightPasses(game)
+        if (!game.outcome.decided) { interrupt = 'night'; break }
+      } else nightFalls(game)
     }
     if (game.outcome.decided) { interrupt = game.outcome.reason === 'night fell' ? 'night' : 'decided'; break }
     // A Commander taken or freed: both sides stop, for both know of it. (One
@@ -426,6 +434,8 @@ function processPlayerTurn(game) {
     if (turnRecord.volleys.length > 0) { interrupt = 'fire'; break }
     if (sightings.length > 0) { interrupt = 'sighting'; break }
     if (objectiveChanges) { interrupt = 'objective'; break }
+    // (A camp battle's: a camp found, fought in, burned or dropped.)
+    if (battle.camps && battle.log.forTurn(battle.turn).some(e => CAMP_NEWS.includes(e.type))) { interrupt = 'camp'; break }
     if (ordersCarriedOut(battle)) { interrupt = 'ready'; break }
     // A unit back in hand wants orders.
     if (battle.log.forTurn(battle.turn).some(e => e.type === 'rallied')) { interrupt = 'rallied'; break }
@@ -474,6 +484,34 @@ function nightFalls(game) {
   if (game.outcome.reason === 'night fell') game.battle.log.emit('nightfall', game.battle.turn, {})
 }
 
+// When night falls, in battle minutes: the day's end, and in a camp battle
+// the end of the day it is.
+const nightAt = (game) => game.battle.camps ? game.day * game.spec.dayMinutes : game.spec.dayMinutes
+
+// Night in a camp battle (ruled 2026-11-25: "Games go as long as they need
+// to multiple days"). Night does not end it: each army rests in its camp if
+// it has one pitched, or does not (battle/camp.js, nightRest), the fighting
+// stops (no one is still locked in a fight at first light), and the next
+// day begins with both armies where night found them. After CAMP.MAX_DAYS
+// days it ends as night ends any other battle, with no winner ('the days
+// ran out'), so that every battle ends. The log has the night
+// ('nightPassed', told to everyone) and each army's rest ('campRest', its
+// own side's).
+function nightPasses(game) {
+  const { battle } = game
+  if (game.day >= CAMP.MAX_DAYS) {
+    const night = evaluateVictory({ ...victoryContext(game), dayOver: true })
+    game.outcome = { ...night, reason: 'the days ran out' }
+    battle.log.emit('nightfall', battle.turn, { day: game.day, last: true })
+    return
+  }
+  const rest = nightRest(battle)
+  battle.previousEngagementKeys = new Set()
+  battle.log.emit('nightPassed', battle.turn, { day: game.day + 1 })
+  for (const side of Object.keys(rest)) battle.log.emit('campRest', battle.turn, { side, rested: rest[side].rested, why: rest[side].why, wind: rest[side].wind })
+  game.day += 1
+}
+
 // ── Asked when wanted ──────────────────────────────────
 //
 // Ruled 2026-11-23: "No the game keeps going. This is true for two human
@@ -511,7 +549,7 @@ function wantedNow(game, turnRecord, sightedBy, heard, objectiveChanges) {
   const quiet = (side) => battle.turn - (game.askedAt[side] ?? 0) >= COMMAND.QUIET
   const ofSide = (id, side) => [...battle.world.units, ...battle.fledUnits].some(u => u.id === id && u.side === side)
   const by = {}
-  const order = ['contact', 'fire', 'sighting', 'ready', 'rallied', 'riderTaken', 'rider', 'stalled', 'time']
+  const order = ['contact', 'fire', 'sighting', 'camp', 'ready', 'rallied', 'riderTaken', 'rider', 'stalled', 'time']
   for (const side of all) {
     const c = battle.commanders?.[side]
     const reasons = []
@@ -538,6 +576,7 @@ function wantedNow(game, turnRecord, sightedBy, heard, objectiveChanges) {
       if (sightedBy[side]?.length > 0) reasons.push('sighting')
       if (ordersCarriedOut(battle, { side })) reasons.push('ready')
       if (now.some(e => e.type === 'rallied' && ofSide(e.unitId, side))) reasons.push('rallied')
+      if (now.some(e => CAMP_NEWS.includes(e.type) && (e.side === side || e.of === side))) reasons.push('camp')
       if (nothingMoved(turnRecord)) reasons.push('stalled')
       if (quiet(side)) reasons.push('time')
     }
@@ -708,7 +747,10 @@ function victoryContext(game) {
     objectiveHoldMinutes: game.spec.objectiveHoldMinutes ?? OBJECTIVE_HOLD_MINUTES,
     minutesElapsed: game.minutesElapsed,
     timeLimitMinutes: game.spec.timeLimitMinutes ?? null,
-    fledStrength: game.battle.fledUnits.reduce((m, u) => ({ ...m, [u.side]: (m[u.side] ?? 0) + u.strength }), {})
+    fledStrength: game.battle.fledUnits.reduce((m, u) => ({ ...m, [u.side]: (m[u.side] ?? 0) + u.strength }), {}),
+    // A camp battle's: an army whose camp stands is not beaten while it
+    // has men to rally there (battle/camp.js, holdsOut).
+    ...(game.battle.camps ? { holdsOut: (side) => holdsOut(game.battle, side) } : {})
   }
 }
 
@@ -737,7 +779,7 @@ function byNews(game, turnRecord, sightedBy, heard, objectiveChanges) {
     reasons.push(...newsFor(game, side, recent, heard))
   }
   if (objectiveChanges) reasons.push('objective')
-  const order = ['contact', 'fire', 'sighting', 'objective', 'ready', 'rallied']
+  const order = ['contact', 'fire', 'sighting', 'camp', 'objective', 'ready', 'rallied']
   const why = order.find(r => reasons.includes(r))
   if (why) return why
   return nothingMoved(turnRecord) ? 'stalled' : null
@@ -766,10 +808,15 @@ function newsFor(game, side, recent, heard) {
   if (heard[side]?.sighted.length > 0) reasons.push('sighting')
   if (ordersCarriedOut(battle, { side, events: arrived })) reasons.push('ready')
   if (arrived.some(e => e.type === 'rallied')) reasons.push('rallied')
+  if (arrived.some(e => CAMP_NEWS.includes(e.type) && (e.side === side || e.of === side))) reasons.push('camp')
   return reasons
 }
 
-const DONE = ['arrived', 'halted', 'hidden', 'checked']
+// What befalls a camp that calls its side back (a camp battle's): found,
+// fought in, burned, dropped; its own pitched or taken up is 'ready'.
+const CAMP_NEWS = ['campFound', 'campAssailed', 'campBurned', 'campDropped']
+
+const DONE = ['arrived', 'halted', 'hidden', 'checked', 'campPitched', 'campStruck']
 function ordersCarriedOut(battle, { side = null, events = null } = {}) {
   // (A unit arriving at one step of a longer order has not finished.)
   const done = (events ?? battle.log.forTurn(battle.turn))
@@ -813,7 +860,10 @@ function sideView(game, side) {
     playerTurn: game.playerTurn,
     minutesElapsed: game.minutesElapsed,
     outcome: game.outcome,
-    ...fogSideView(game.battle.world, side, game.intel[side])
+    ...fogSideView(game.battle.world, side, game.intel[side]),
+    // A camp battle's: the day, his own camp, and the enemy's as his side
+    // has found it (battle/camp.js, campsView).
+    ...(game.battle.camps ? { day: game.day, camps: campsView(game.battle, side) } : {})
   }
 }
 

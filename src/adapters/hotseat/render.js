@@ -169,7 +169,7 @@ function renderTurnReport(game, turnEntry, viewer = null) {
       .filter(u => u.side === viewer).map(u => u.id))
     const seenEnemyIds = new Set(sideView(game, viewer).intel.filter(e => e.status === 'visible').map(e => e.id))
     const known = (id) => ownIds.has(id) || seenEnemyIds.has(id)
-    filter = (events) => visibleEvents(events, { ownIds, seenEnemyIds }).map(e => maskNames(e, known))
+    filter = (events) => visibleEvents(events, { ownIds, seenEnemyIds, side: viewer }).map(e => maskNames(e, known))
   }
 
   for (const tick of turnEntry.ticks) {
@@ -275,6 +275,16 @@ function wordEvent(event) {
         'stumbled on': `${event.by} stumbles onto ${event.unitId}, hidden there`,
         noticed: `${event.by} notices ${event.unitId} hidden close by`
       }[event.reason] ?? `${event.unitId} is seen`
+    // A camp battle's (engine/battle/camp.js), as a side's own camp.
+    case 'campPitched': return `${event.unitId} pitches ${event.side}'s camp at ${where(event.at)}`
+    case 'campStruck': return `${event.unitId} strikes ${event.side}'s camp and carries it`
+    case 'campDropped': return `${event.side}'s camp is dropped at ${where(event.at)}${event.unitId ? ` as ${event.unitId} breaks` : ''}`
+    case 'campFound': return `${event.unitId} finds ${event.of}'s camp at ${where(event.at)}`
+    case 'campAssailed': return `${event.by} is in ${event.side}'s camp, fighting its guard (${event.hits} of ${event.of})`
+    case 'campBurned': return `${event.by} burns ${event.side}'s camp${event.undefended ? ', which lay undefended' : ''}: no rest for ${event.side} tonight`
+    case 'campTiring': return `${event.side}'s army tires while its camp is carried`
+    case 'campRest': return event.rested ? `${event.side} rests in camp through the night` : `${event.side} has no camp to rest in tonight`
+    case 'nightPassed': return `── DAWN: DAY ${event.day} ──`
     case 'victory': return null // rendered as the banner instead
     case 'nightfall': return null // rendered as the banner instead
     default: return null

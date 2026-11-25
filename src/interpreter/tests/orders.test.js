@@ -235,8 +235,9 @@ test('the reply schema allows exactly the actions the engine knows', () => {
   const { ACTIONS } = require('../../engine/battle/orders')
   // The engine's actions, plus the two the reader turns into a hold for
   // missile troops (shooting, or holding fire). Not keeping by another
-  // unit (follow): the grammar reads it, and the AI was not taught it.
-  assert.deepEqual([...REPLY_SCHEMA.properties.orders.items.properties.action.enum].sort(), [...ACTIONS.filter(a => a !== 'follow'), 'shoot', 'hold_fire'].sort())
+  // unit (follow), nor working a camp (pitch, strike): the grammar reads
+  // them, and the AI was not taught them.
+  assert.deepEqual([...REPLY_SCHEMA.properties.orders.items.properties.action.enum].sort(), [...ACTIONS.filter(a => !['follow', 'pitch', 'strike'].includes(a)), 'shoot', 'hold_fire'].sort())
 })
 
 test('grammar: an order can name the ground to fight for: take it, occupy it, or hold it (to seize or storm it is to attack it)', () => {

@@ -94,7 +94,7 @@ function bargainChips(world, side) {
  *   random      seeded, a stream of its own
  * @returns {Array<{ type, fields }>} events to log
  */
-function stepCommanders({ commanders, world, broken, fledUnits, events, mustered, random }) {
+function stepCommanders({ commanders, world, broken, fledUnits, events, mustered, random, sheltered = null }) {
   const out = []
   const struckBy = new Map()   // unitId -> ids of the enemy units that struck it
   const strike = (id, by) => { if (!struckBy.has(id)) struckBy.set(id, new Set()); struckBy.get(id).add(by) }
@@ -123,7 +123,11 @@ function stepCommanders({ commanders, world, broken, fledUnits, events, mustered
     const strikers = [...(struckBy.get(c.unitId) ?? [])].sort()
     const gone = !unit || unit.strength <= 0
     let fallen = false
-    if (strikers.length > 0) {
+    // In a camp battle, among his own tents (sheltered: his unit inside its
+    // own pitched camp) he is not taken or killed while the camp stands:
+    // the enemy must take the camp first.
+    const inCamp = Boolean(sheltered && !gone && sheltered(unit))
+    if (strikers.length > 0 && !inCamp) {
       const share = gone ? 0 : unit.strength / (mustered.get(c.unitId) || unit.strength)
       // Caught running (his unit broken and pursued) is as bad as overrun.
       const caught = events.some(e => e.type === 'pursuit' && e.unitId === c.unitId)
