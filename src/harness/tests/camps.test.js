@@ -20,10 +20,12 @@ function fingerprint(text) {
   return h.toString(16)
 }
 
+// Retaken with follow-unchanged.test.js when the kinds of battle mended
+// ties between the sides (main at e9949dc); camps changed none of them.
 const BEFORE = {
-  'thornwood macedon parthia 3': '3c83cec6 25',
-  'ravenridge thrace sarmatia 4': '150f188e 16',
-  'greywater rome germania 5': '7675a063 11'
+  'thornwood macedon parthia 3': '192f4dc9 32',
+  'ravenridge thrace sarmatia 4': 'dcef9521 44',
+  'greywater rome germania 5': '24ae0710 16'
 }
 
 test('a battle without camps runs exactly as before camps, event for event', () => {

@@ -324,3 +324,14 @@ test('the computer comes and takes the camp of an army with no steady unit left,
   assert.equal(game.battle.camps.red.status, 'burned')
   assert.equal(game.day, 1, 'the same day')
 })
+
+test('a Commander whose own unit breaks, with his camp standing, rides back to it ahead of his men and is not caught running', () => {
+  const units = [unit({ id: 'red_a', position: { x: 20, y: 5 } }), unit({ id: 'red_b', position: { x: 20, y: 7 } }), unit({ id: 'blue_a', side: 'blue', position: { x: 35, y: 5 } })]
+  const state = createBattleState(spec(units, { camps: { red: { at: { x: 5, y: 5 } } } }), { seed: 1 })
+  state.broken.add('red_a')
+  assert.equal(camps.sheltered(state, state.world.units[0]), true, 'his men broken, the rest of the army steady')
+  assert.equal(camps.sheltered(state, state.world.units[1]), false)
+  state.camps.red.status = 'burned'
+  assert.equal(camps.sheltered(state, state.world.units[0]), false, 'with no camp, as in any battle')
+})
+

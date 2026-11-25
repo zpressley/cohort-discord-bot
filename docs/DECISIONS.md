@@ -6884,3 +6884,44 @@ battle ended, none by the days running out.
   6 runs alone or 2 full runs of the merged branches before camps; it
   plays a pitched battle, which nothing of camps touches. Not chased.
 
+**After the bias fix** (main at e9949dc: ties between the sides a seeded
+draw, kind-specific forming-up places). Greywater's battle of camps forms
+up where the field always has (`deploy`: 1.3 km apart, out of sight, each
+the other's twin), so it needs no `deployFor` entry of its own. Fingerprints
+in `camps.test.js` retaken with `follow-unchanged.test.js` (camps changed
+none of them). Measured again (`camps.js`, 240 battles unless said; a
+"pitched battle" is the same field and seeds with `kind: 'pitched'` and no
+camps, measured the same way):
+
+| | before the fix | after |
+|---|---|---|
+| Computer against itself, west's wins | 53% | 53% (pitched: 53%) |
+| Faction against faction; factions swapped | 60%; 58% | 55%; 54% |
+| The sides renamed (west called "blue"), west's wins (120) | 43% | 52% (pitched: 56%) |
+| Hours a battle (daylight); into a second day or more | 7.9; 9% | 8.4; 14% |
+| A camp burned (of battles); of them undefended | 51%; 54 of 61 | 50%; 108 of 119 |
+| Rallies, of them in camp | 2,586, 624 (120) | 5,224, 1,467 |
+| A Commander on the field: wins | 46% | 53% (pitched: 45%) |
+| ... taken or killed | 14.6% | 6% (pitched: 6%) |
+| Never pitching (120) | 28% | 27% |
+| Camp pitched where it formed up, from the start (120) | 48% | 50% |
+| Camp burned before a blow (120) | 38% | 33% |
+| Pitching where it stands, nothing more (120) | 5% | 7% |
+| No orders at all (120) | 0% | 0% |
+| Bold against steady; cautious against steady (120) | 57%; 47% | 53%; 58% |
+
+*Round 8: the Commander.* On the merged code he was taken in 12% of camp
+battles against 6% in a pitched battle on the same field. By where (the
+first fall in each battle, 240): caught running on the first day 13
+(pitched: 7), fighting 6 (7), on a later day 6, while either army held out
+by its camp 4. His men broken, they run for the camp and rally there, and
+break and run again, where in a pitched battle they run off the field and
+the battle ends: so he was caught running twice as often. Now, with his
+camp standing, a Commander whose own unit breaks rides back to the camp
+ahead of his men (`camp.js`, `sheltered`), as he would leave the field with
+them in a pitched battle; when they rally he is with them again. Taken or
+killed: 15 battles in 240 (6%), against 14 (6%) in a pitched battle. The
+rest is the second day's fighting, and as many first-day falls as before.
+No number was changed. The cautious Commander's 58% against steady is
+inside the noise of 120 battles (about 4.5 points either way) and was left.
+

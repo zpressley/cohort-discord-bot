@@ -375,11 +375,16 @@ function holdsOut(state, side) {
  * once his army has no steady unit left and holds out by its camp, for he
  * rides back to it ahead of his running men, as in a battle with no camp he
  * would leave the field with them (docs/DECISIONS.md, "How camps were
- * built", round 7). When the camp falls, the battle is lost.
+ * built", round 7); and once his own unit breaks, for the same reason
+ * (round 8). When the camp falls, the battle is lost.
  */
 function sheltered(state, unit) {
   if (inOwnCamp(state, unit)) return true
   if (!holdsOut(state, unit.side)) return false
+  // His own men broken, with the camp standing: he rides back to it ahead
+  // of them, as they run for it (round 8: he was caught running twice as
+  // often as in a pitched battle, where his men run off the field).
+  if (state.broken.has(unit.id)) return true
   return !unitsOnSide(state.world, unit.side).some(u => u.strength > 0 && !state.broken.has(u.id) && !state.isShaken(u))
 }
 

@@ -31,6 +31,7 @@
 //   --from N        the first seed (default 1)
 //   --swap          the factions of each pairing on the other sides
 //   --nocamps       no camps at all, the same field and seeds
+//   --pitched       a pitched battle (no camps), the same field and seeds
 //   --commander     the west a Commander on the field, his orders by rider
 //   --set NAME=v    try a CAMP rate (tables.CAMP), e.g. --set HITS=6
 //   --verbose       one line a battle
@@ -62,7 +63,10 @@ const VERBOSE = process.argv.includes('--verbose')
 // computer from its command post.
 const COMMANDER = process.argv.includes('--commander')
 // No camps at all, on the same field and seeds: to compare.
-const NO_CAMPS = process.argv.includes('--nocamps')
+const NO_CAMPS = process.argv.includes('--nocamps') || process.argv.includes('--pitched')
+// A pitched battle on the same field and seeds (kind 'pitched': night
+// decides by the men left), to compare a Commander's odds with.
+const PITCHED = process.argv.includes('--pitched')
 // Swap the two sides' factions (with --mode mixed).
 const SWAP = process.argv.includes('--swap')
 // The first seed (default 1).
@@ -80,7 +84,7 @@ function play(red, blue, seed, { mode = MODE, character = CHARACTER, against = A
     return { x: Math.round(units.reduce((s, u) => s + u.position.x, 0) / units.length), y: Math.round(units.reduce((s, u) => s + u.position.y, 0) / units.length) }
   }
   const camps = mode === 'stand' || mode === 'lost' ? { red: { at: formed('red') } } : true
-  spec = { ...spec, sides, standingOrders: {}, dayMinutes: T.DAY.MINUTES, ...(NO_CAMPS ? {} : { camps }) }
+  spec = { ...spec, sides, standingOrders: {}, dayMinutes: T.DAY.MINUTES, ...(NO_CAMPS ? {} : { kind: 'camps', camps }), ...(PITCHED ? { kind: 'pitched' } : {}) }
   if (COMMANDER) {
     const west = spec.units.filter(u => u.side === 'red')
     spec = { ...spec, commanders: { red: { unitId: west[leadUnit(west)].id } } }
