@@ -1310,3 +1310,10 @@ module.exports.PITCHED = { STAND_SHARE: 0.5 }
 // THERE tiles of the place (three), and the search begins as before.
 // Claude's value, measured with harness/first-battle.js.
 module.exports.ADVANCE = { THERE: 3 }
+
+// A searching unit that has got no nearer the place it set out to look at in
+// STUCK turns running gives the place up and looks elsewhere
+// (battle/battle.js; round two of the kinds of battle, docs/DECISIONS.md).
+// Three: half an hour of trying. Claude's value; the soak found a unit that
+// walked round a friend and back for five days.
+module.exports.SEARCH = { STUCK: 3 }

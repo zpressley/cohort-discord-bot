@@ -6145,3 +6145,165 @@ Commander's "line for line" no longer counts the captor's own late word
   likely mend; small moves on Thornwood swung the west's share from 45% to
   78%, so it needs a proper search, field by field.
 - The camps (the next work).
+
+#### Round two (Claude's choices, open to change)
+
+Asked for after the first round: the pitched battle, offered first, was not
+yet a fair fight. Five pieces, in order.
+
+**1. A side was ahead for its name.** Found by the camps work: the same
+armies on Greywater (its own mirror), the west won about 4 points more when
+called "red" than when called "blue". Reproduced (pitched, the computer on
+both sides, each faction against another, the same seeds, only the names
+swapped): Greywater 50 and 51% for a west called red, 42% called blue (300
+and 400 battles); Thornwood 61% and 55% (400). Where a tie between the two
+sides was settled by name, every turn:
+- *Who steps first* within a speed tier (`movement/initiative.js`): by unit
+  id, so every "blue_" unit before every "red_" one. The likeliest cause:
+  moving first, a unit came up beside the enemy and stopped; the one moving
+  after it chose where to meet it.
+- *Which fight is taken first* in a round (`combat/resolve.js`): sorted by
+  the first unit's id; a unit in two fights takes its second blow after its
+  first, and may break between them.
+- *Which volley and which throw land first* (`battle/battle.js`).
+Each is now ordered by a seeded draw of its own (`rng.js`, `tieBreak`: a
+hash of the battle's seed, the turn and the unit or fight, drawing nothing
+from any stream, so no other roll moves). Where no draw is given (the duel
+harness, the balance matrix) the order is by name as before. Measured
+after: Greywater 53% called red, 55% called blue (800 battles each);
+Thornwood 60% and 58% (400); the same army on each side of an empty field,
+both pressing, 52% and 49% for Rome, 47% and 49% for Macedon (800). Tested
+by name (`battle/tests/even-sides.test.js`). Not changed: ties within one
+side (which of his own units goes for which tile) are by name, and fall
+the same for both sides; ties between tiles (north before south, west
+before east) are by place, not by name, and showed no lean on the empty
+field. `npm run balance`: the last table unchanged (its duels use no draw).
+Fingerprints: every "unchanged" test retaken, old values in its header.
+
+**2. The pitched battle, field by field.** After the fix, two computer
+armies (same faction both sides, 80 battles a field): Crownhill 53%,
+Ashford 69%, Thornwood 74%, Raven Ridge 36%, Greywater 54%. What the swing
+was, from each battle's two plans (`opponent/planner.js`, `strongpoint`,
+`temperament`): with no ground, each side holds a crossing or hill ahead of
+where it formed up (two times in three), and the battle goes to whoever
+must cross into the other.
+- *Ashford*: the west held the Old Mill Bridge, the east the ford by the
+  southern marsh; the fight came to the bridge. Formed up three tiles
+  north, at (33, 22), the east holds the bridge's other end: 50, 55, 45%
+  at (33, 21), (33, 22), (33, 23).
+- *Thornwood*: both held the brook's ford, each on its own bank, and the
+  east crossed into the west's line under Thorn Knoll; with neither
+  holding they met at the knoll, on the west's bank. Moving the west a
+  tile at a time along the road changed nothing (69 to 74% from x 7 to 9);
+  from y 17 and north of it the share fell off a cliff (65% at (6, 17),
+  47% at (6, 16), 43 to 48% from (6, 13) to (6, 15) and a tile either
+  way). From the north field, at (6, 14), the west goes through the wood
+  to the knoll, not along the road to the ford.
+- *Raven Ridge*: the west held the southern ridge, off the road, the east
+  the Stone Ford on it. From (9, 19) the west holds the northern half
+  above the gap: 48 to 57% a tile either way.
+These are each field's places for a pitched battle (`deployFor.pitched`;
+the battle for ground keeps its own). After everything below (80 battles a
+field): Crownhill 53%, Ashford 53%, Thornwood 50%, Raven Ridge 48%,
+Greywater 54%. The battle for ground, the same way: Crownhill 49% (the
+east's place for the fords moved from (28, 17) to (27, 18), see 3),
+Ashford 55%, Thornwood 49%, Raven Ridge 53%, Greywater 46% (its east army
+a tile nearer for the battle for Elderby, at (64, 38): it had drifted to
+58% with the fix).
+
+**3. A new player's plain orders.**
+- *The fords.* "Everyone take the fords" alone won 8 to 10 battles in 40:
+  his army split in two and held still; the computer took the third ford
+  and brought half its army on one of his. "Everyone advance" won 33 in 40:
+  his whole army met the computer's halves one at a time. So the split
+  computer was beaten in detail, and beat in detail a split player. Mended
+  in the planner: a computer army shared out among the fords goes in
+  together, at the nearest enemy it sees, when a part of it is outnumbered
+  by the enemy close by (more of his men than its own:
+  `TUNING.OUTNUMBERED`), and shares itself out again when none is near.
+  Going in together whenever any enemy came near, it gave up the fords (two
+  computer armies took the field by them in 2 battles of 60, the west 33%);
+  at 0.9 times its own men, the west 62%. At 1: two computer armies 49%,
+  the fords deciding a third of battles; "everyone advance" alone 65 to 70%
+  (three runs of 40); "everyone take the fords" 20%. The first example on
+  the fords is now "everyone advance", "everyone take the fords" second.
+  Above the band asked for (40 to 60%); nearer it than any other plain
+  order measured ("everyone take Miller's Crossing": 28%).
+- *The pitched battle.* "Everyone advance" with no enemy known sent each
+  unit straight ahead along its own row to the far edge. Now (a pitched
+  battle only: `battle.js`, `marchOn`) the army marches on where the
+  enemy formed up, each unit keeping its place in the line, and searches
+  from there. Measured: 23 / 53 / 38 / 23% (Crownhill, Ashford, Thornwood,
+  Raven Ridge; it was 35 / 28 / 50 / 33% before round two, and 23 / 30 /
+  45 / 33% with the bias fix and the new places but the old advance).
+  **Not mended.** Why it loses, from the worst seeds (Raven Ridge, Rome,
+  seed 101): the computer holds the crossing in front of it; the
+  advancing army strings out on the road (its legionaries at the Stone
+  Ford eight tiles ahead of its hastati), and meets the computer's line a
+  unit at a time over the ford; men who rally with no heart then hold
+  where they are and are shot. Tried and dropped: a unit more than two
+  tiles (or one) ahead of its army's middle waiting for the rest, on the
+  march and closing on an enemy (23 / 40 / 40 / 23% and 30 / 28 / 28 /
+  35%: no better, and more battles ran to night); the computer not
+  holding good ground in a pitched battle (30 / 55 / 48 / 30%, and two
+  computer armies leaned as far again). His own stand-in, planning each
+  turn as the computer does, wins 40 / 55 / 58 / 38%: the plain order is
+  the weak part, not the field. What would mend it is an advance that
+  forms up short of a held crossing and goes in together, as the planner
+  does; not built.
+
+**4. The Commander's odds.** By the captive league's measure (the one the
+ruling was made on: 960 battles, a player who sends everyone in, no day):
+battles of no kind 1 in 21.3 (1 in 19.6 before round two), battles for
+ground 1 in 22.9, pitched battles 1 in 18.5. Within the ruled 1 in 19 to
+24, the pitched battle at its edge; not changed. (The new player's harness
+counts more, 1 in 11 in pitched battles, 1 in 13 for ground: his Commander
+rides with his best unit at the head of an advance, and that harness's 160
+battles a kind are few.)
+
+**5. The night**: as ruled, unchanged; the fords included.
+
+**The first browser test** ("alone, on a phone...") timed out waiting for a
+dispatch in 2 of 4 full runs on the camps branch. Looked for a fault in
+pitched battles first: 150 first turns of new players in pitched battles
+(30 a field, random seeds, "everyone advance") came back after 20 to 50
+minutes of battle (Greywater the longest) and in under a tenth of a second;
+60 whole battles of the test's own kind (Macedon against Rome on Crownhill)
+each asked him again within an hour of battle at every turn. In 3 of the
+60 his Commander was taken, at his sixth turn. Taken, he can send no
+orders: the page shows "Wait, and let them fight" and, after the turn,
+stays on the orders tab, so a test waiting for a dispatch to be shown
+waits for ever. So it was the test: it now presses whichever button is
+there, and waits for the page to finish sending, not for a dispatch.
+Five runs alone and the full suite pass.
+
+**A unit that searched for ever.** The soak found one battle that never
+ended (Crownhill, Han against Maurya, seed 8, a player who only advances;
+no day): the computer's bowmen, sent to look into a wood two tiles off,
+walked round a friend standing in the road and back to where they began,
+every ten minutes, for five days. (Not new: the tie draws only made this
+battle the one to show it.) A searching unit that gets no nearer its place
+in `T.SEARCH.STUCK` turns running (three) now gives the place up as looked
+over and looks elsewhere. That battle ends now; the fingerprints did not
+move.
+
+**Tests whose battles changed** (seeds found again, each test's meaning
+kept): the night test's man who ran (Thornwood seed 2, was 27), the
+verdict's horse that broke and rallied (seed 1, was 9), ground held and
+lost (Raven Ridge seed 3, was 1); two muster tests compare with armies
+formed up for the pitched battle, the kind offered first.
+
+| | before round two | after |
+|---|---|---|
+| Same armies, names swapped (west's share: called red / called blue) | Greywater 50 / 42%, Thornwood 61 / 55% | 53 / 55%, 60 / 58% |
+| Pitched, computer v computer (Crownhill / Ashford / Thornwood / Raven Ridge / Greywater) | 59 / 68 / 71 / 44 / 54% | 53 / 53 / 50 / 48 / 54% |
+| Ground, computer v computer | 50 / 44 / 53 / 49 / 58% | 49 / 55 / 49 / 53 / 46% |
+| Pitched, "everyone advance" alone | 35 / 28 / 50 / 33% | 23 / 53 / 38 / 23% |
+| Ground, "everyone advance" alone | 68 / 45 / 45 / 45% | 70 / 43 / 45 / 48% |
+| Ground, the ground's order alone ("take the fords" on Crownhill) | 23 / 55 / 60 / 55% | 20 / 53 / 58 / 43% |
+| The stand-in planner, ground / pitched | 43 / 58 / 63 / 60%, 40 / 68 / 53 / 40% | 50 / 50 / 55 / 45%, 40 / 55 / 58 / 38% |
+| Commander taken, captive league (none / ground / pitched) | 1 in 19.6 / – / – | 1 in 21.3 / 22.9 / 18.5 |
+| Characters, steady / bold / cautious (ground; pitched) | 51 / 48 / 51%; 52 / 48 / 50% | 49 / 54 / 48%; 52 / 50 / 48% |
+| Battles that come to nothing (ground; pitched; idle player) | 0; 0; 0 | 0; 0; 0 |
+| Battle minutes, computer v computer, Crownhill (ground; pitched) | 310; 199 | 341; 187 |
+| `npm run balance`, last table | | unchanged |

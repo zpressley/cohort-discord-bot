@@ -991,6 +991,27 @@ function stepTurn(state, sideOrders = {}, { sameTurn = false } = {}) {
   // instead let a caught column simply march on after one round.
   for (const id of sprung) state.orderBook.set(id, { action: 'advance', target: null, then: null })
 
+  // A searching unit that has got no nearer the place it is making for in
+  // T.SEARCH.STUCK turns running gives it up: it counts as looked over, and
+  // the unit looks somewhere else. (Bowmen two tiles from a wood they meant
+  // to look into, their way round a friend standing in the road, walked
+  // round and back to where they began, every turn, for five days: the
+  // soak, Crownhill, Han against Maurya, seed 8.)
+  for (const move of movement) {
+    const bound = state.searchFor.get(move.unitId)
+    if (!bound) continue
+    const unit = getUnit(world, move.unitId)
+    if (!unit || !samePosition(move.from ?? unit.position, unit.position) || samePosition(unit.position, bound)) { state.searchStuck?.delete(move.unitId); continue }
+    state.searchStuck ??= new Map()
+    const n = (state.searchStuck.get(move.unitId) ?? 0) + 1
+    state.searchStuck.set(move.unitId, n)
+    if (n < T.SEARCH.STUCK) continue
+    if (!state.searched.has(unit.side)) state.searched.set(unit.side, new Set())
+    state.searched.get(unit.side).add(positionKey(bound))
+    state.searchFor.delete(move.unitId)
+    state.searchStuck.delete(move.unitId)
+  }
+
   // Moving gives a hidden unit away, and so does being walked into.
   for (const move of movement) {
     if (move.tilesMoved > 0) reveal(move.unitId, 'moved')
