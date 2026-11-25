@@ -22,7 +22,9 @@ function groundOf(name) {
 // it (one with `ground`). A third kind (camps) is to come: a new id here,
 // what it puts in the spec in kindSpec, and its words in narrator/words.js
 // (KINDS).
-const KIND_IDS = ['pitched', 'ground']
+// The battle of camps (ruled 2026-11-25: engine/battle/camp.js) is the
+// third: offered where a field's `kinds` line names it.
+const KIND_IDS = ['pitched', 'ground', 'camps']
 
 // The kinds of battle a field offers, the one offered first first: its own
 // `kinds` line, else the pitched battle, and the battle for ground where it
@@ -38,6 +40,9 @@ function kindsOf(name) {
 // and for the battle for ground, the field's ground (groundOf) and, with
 // several, how many of them must be held (the map's `hold`).
 function kindSpec(name, kind) {
+  // A battle of camps: no ground to fight for; each army's camp starts
+  // packed up, carried by the unit least use in the line (camp.js).
+  if (kind === 'camps') return { kind, objectives: [], camps: true }
   if (kind !== 'ground') return { kind, objectives: [] }
   const hold = MAPS[name]?.hold
   return { kind, objectives: groundOf(name), ...(hold?.needed ? { objectivesNeeded: hold.needed, groundCalled: hold.called ?? null } : {}) }

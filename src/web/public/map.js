@@ -359,6 +359,37 @@ export function drawMap(view, { selectedId = null, zoom = 1 } = {}) {
       <text x="${x0 + w / 2}" y="${(y0 + h + 3 + 10 * k).toFixed(1)}" text-anchor="middle" font-size="${(LABEL_PX * k).toFixed(1)}" font-weight="600" style="fill: var(--objective); font-family: var(--font-display)">${esc(o.name + held)}</text></g>`)
   }
 
+  // A battle of camps: his camp, and the enemy's once found (the server
+  // sends no other). Pitched: its ground washed in its side's colour, with
+  // a tent; dropped: a tent where it lies; burned: a flame where it stood.
+  // Carried: a tent beside the unit carrying it (drawn after the units).
+  const camps = view.camps ?? null
+  const tent = (x, y, colour, size = 9) => `<path d="M${x - size} ${y + size * 0.7}L${x} ${y - size}L${x + size} ${y + size * 0.7}Z M${x} ${y - size}V${y + size * 0.7}" style="fill: var(--paper); stroke: ${colour}" stroke-width="2" stroke-linejoin="round"/>`
+  const flame = (x, y) => `<path d="M${x} ${y - 11}C${x + 7} ${y - 3} ${x + 7} ${y + 7} ${x} ${y + 8}C${x - 7} ${y + 7} ${x - 7} ${y - 3} ${x} ${y - 11}Z" style="fill: var(--flame, #c2410c); stroke: var(--ink)" stroke-width="1"/>`
+  const campLabels = []
+  const campName = (mine, status) => `${mine ? 'Your camp' : 'Enemy camp'}${status === 'burned' ? ' (burned)' : status === 'dropped' ? ' (dropped)' : ''}`
+  for (const [c, mine] of [[camps?.enemy, false], [camps?.own, true]]) {
+    if (!c || !c.at || c.status === 'carried') continue
+    const colour = `var(--side-${mine ? side : enemySide})`
+    if (c.status === 'pitched' && c.tiles) {
+      const xs = c.tiles.map(t => t.x)
+      const ys = c.tiles.map(t => t.y)
+      const x0 = MARGIN + Math.min(...xs) * TILE
+      const y0 = MARGIN + Math.min(...ys) * TILE
+      const w = (Math.max(...xs) - Math.min(...xs) + 1) * TILE
+      const h = (Math.max(...ys) - Math.min(...ys) + 1) * TILE
+      for (const t of c.tiles) parts.push(`<rect aria-hidden="true" x="${MARGIN + t.x * TILE}" y="${MARGIN + t.y * TILE}" width="${TILE}" height="${TILE}" style="fill: ${colour}" fill-opacity="0.16"/>`)
+      parts.push(`<rect aria-hidden="true" x="${x0}" y="${y0}" width="${w}" height="${h}" rx="3" fill="none" style="stroke: ${colour}" stroke-width="2" stroke-dasharray="3 3"/>`)
+      groundNames.push({ x0: x0 - TILE * 1.6 - 70 * k, x1: x0, y0: y0 + h / 2 - 8 * k, y1: y0 + h / 2 + 8 * k })
+    }
+    const x = cx(c.at.x)
+    const y = cy(c.at.y)
+    parts.push(`<g aria-hidden="true" class="camp">${c.status === 'burned' ? flame(x, y) : tent(x, y, colour)}</g>`)
+    // Its name to the left of it, over the units (drawn after them), so
+    // that men standing in the camp do not hide it.
+    campLabels.push(`<text x="${(x - TILE * 1.6).toFixed(1)}" y="${(y + 4 * k).toFixed(1)}" text-anchor="end" font-size="${(LABEL_PX * k).toFixed(1)}" font-weight="600" class="unit-name" style="fill: ${colour}; font-family: var(--font-display)">${esc(campName(mine, c.status))}</text>`)
+  }
+
   // Orders in force: dashed arrows from each unit to where it is going.
   for (const u of view.own) {
     if (!u.target || u.broken) continue
@@ -394,13 +425,19 @@ export function drawMap(view, { selectedId = null, zoom = 1 } = {}) {
   parts.push(drawUnits(sets[1].list, { side: enemySide, own: false, ghost: false, k }))
   parts.push(drawUnits(sets[2].list, { side, own: true, ghost: false, aged: true, selectedId, commanderId, k }))
   parts.push(drawUnits(sets[0].list, { side, own: true, ghost: false, selectedId, commanderId, k }))
+  // His camp on the march: a small tent beside the unit carrying it.
+  const carrier = camps?.own?.status === 'carried' ? view.own.find(u => u.id === camps.own.carrierId) : null
+  if (carrier) parts.push(`<g aria-hidden="true" class="camp">${tent(cx(carrier.position.x) + TILE * 0.8, cy(carrier.position.y) - TILE * 0.6, `var(--side-${side})`, 8)}</g>`)
+  parts.push(`<g aria-hidden="true">${campLabels.join('')}</g>`)
   // Labels: yours first, then the enemy in sight, those known by rider and
   // the enemy last seen; sharing one where they must.
   parts.push(labelText(sharedLabels(sets, k, groundNames)))
 
   const seen = (view.enemies ?? []).filter(e => e.status === 'visible').length
   const label = `Map of ${view.map.name}. Your ${view.own.length} units are shown; ${seen} enemy units in sight` +
-    `${(view.objectives ?? []).length ? `; objectives: ${view.objectives.map(o => o.name).join(', ')}` : ''}. The Army tab lists every unit in words.`
+    `${(view.objectives ?? []).length ? `; objectives: ${view.objectives.map(o => o.name).join(', ')}` : ''}` +
+    `${camps?.own ? `; ${camps.own.status === 'carried' ? 'your camp is carried' : `your camp at ${gridRef(camps.own.at.x, camps.own.at.y)}${camps.own.status === 'pitched' ? '' : ` (${camps.own.status})`}`}` : ''}` +
+    `${camps?.enemy ? `; the enemy's camp at ${gridRef(camps.enemy.at.x, camps.enemy.at.y)}${camps.enemy.status === 'pitched' ? '' : ` (${camps.enemy.status})`}` : ''}. The Army tab lists every unit in words.`
 
   return `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${W} ${H}" width="${W}" height="${H}" role="img" aria-label="${esc(label)}">${parts.join('')}
     <style>.unit-name { paint-order: stroke; stroke: var(--paper); stroke-width: 3px; stroke-linejoin: round; } .sym-fill { fill: currentColor; }</style>

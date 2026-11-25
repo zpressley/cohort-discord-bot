@@ -900,3 +900,28 @@ module.exports.CAMP = CAMP
 // The orders that work the camp, in the read-back's words (ORDER, above).
 ORDER.pitch = { say: 'pitch the camp', doing: 'pitching the camp', did: 'pitched the camp', to: 'at' }
 ORDER.strike = { say: 'strike the camp and carry it', doing: 'carrying the camp', did: 'struck the camp' }
+
+// The battle of camps as a kind of battle (data/maps, kindsOf): the
+// muster's card, and the tent's line under the map (web/battles.js,
+// campLine). `where` is a grid square.
+KINDS.camps = {
+  title: 'A battle of camps',
+  name: 'battle of camps',
+  said: () => 'Each army marches out with its camp packed up, and pitches it where you choose. Keep yours standing: your broken men run to it and rally there, and it gives your army its night\'s rest. Carried or burned, your men tire and get no rest. Break the enemy and burn his camp, and the field is yours. Night does not end it: it may run over several days.'
+}
+CAMP.tent = {
+  day: (day) => `Day ${day}.`,
+  pitched: (where, hits, of) => `Your camp is pitched at ${where}${hits ? `, and has taken ${hits} of the ${of} assaults it can` : ''}.`,
+  carried: (who) => `Your camp is packed up and carried by ${who ?? 'your men'}: your army tires while it is carried. Pitch it: "pitch the camp here".`,
+  dropped: (where) => `Your camp lies dropped at ${where}: send men to take it up and pitch it.`,
+  burned: 'Your camp is burned: your men tire, and will have no rest at night.',
+  notFound: 'The enemy\'s camp: not yet found.',
+  theirs: (where) => `The enemy's camp: at ${where}.`,
+  theirsCarried: (where) => `The enemy's camp: carried, last seen at ${where}.`,
+  theirsBurned: 'The enemy\'s camp: burned.'
+}
+// The Army tab, on the unit carrying the camp.
+CAMP.carrying = 'They march at half their pace and fight worse for it, and your whole army tires while the camp is carried. Order them to pitch it: "pitch the camp here".'
+// The verdict's reason, when the days ran out (combat/tables.js,
+// CAMP.MAX_DAYS).
+BATTLE_OVER.why['the days ran out'] = 'the days ran out with neither army beaten'

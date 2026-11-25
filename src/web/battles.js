@@ -48,6 +48,8 @@ const { orderWords, RIDER, NIGHT, REPORT, GROUND, ENEMY_COMMANDER, FIELD } = req
 const { BATTLE_OVER, kindWords } = require('../narrator/words')
 const { VERDICT } = require('../narrator/words')
 const { KINDS } = require('../narrator/words')
+const { CAMP: CAMP_WORDS } = require('../narrator/words')
+const { campTiles } = require('../engine/battle/camp')
 const { standShare } = require('../engine/orchestrator/victory')
 const { loadScenario, SCENARIOS, mapChoices } = require('../adapters/hotseat/scenarios')
 const { MAPS, groundOf, kindsOf, kindSpec } = require('../data/maps')
@@ -145,6 +147,7 @@ const calledOf = (game) => game.spec.groundCalled ?? 'pieces of ground'
 // clock. Null otherwise (each piece's own line, groundStatus).
 function battleLine(game, side) {
   if (game.spec.kind === 'pitched' && game.objectives.length === 0) return KINDS.pitched.tent(T.PITCHED.STAND_SHARE)
+  if (game.battle.camps) return campLine(game, side)
   const needed = neededOf(game)
   if (!needed) return null
   const holder = (o) => game.objectiveHolds[o.id]?.side ?? null
@@ -158,6 +161,59 @@ function battleLine(game, side) {
     left: f ? Math.max(0, length - (game.minutesElapsed - f.sinceMinute)) : null,
     held: game.battle.commanders?.[side]?.status === 'held'
   })
+}
+
+// ── A battle of camps (ruled 2026-11-25; engine/battle/camp.js) ──
+// What a side knows of the camps, for the tent: its own (status, place,
+// ground, who carries it, the assaults it has taken) and the enemy's only
+// once its men have found it (sideView's camps: fog of war on the server).
+// Null in a battle with no camps.
+function campView(game, side) {
+  if (!game.battle.camps) return null
+  const seen = sideView(game, side).camps
+  const map = game.battle.map
+  const name = (id) => {
+    const u = [...game.battle.world.units, ...game.battle.fledUnits].find(x => x.id === id)
+    return u ? unitName(u) : null
+  }
+  const own = seen.own
+  const enemy = seen.enemy
+  return {
+    day: game.day,
+    own: own ? {
+      status: own.status, at: own.at, tiles: own.tiles,
+      ...(own.status === 'carried' ? { carrierId: own.carrier, carrier: name(own.carrier) } : {}),
+      ...(own.at ? { square: gridLabel(own.at, { quarter: true }) } : {}),
+      hits: own.hits, of: own.of
+    } : null,
+    enemy: enemy?.at ? {
+      status: enemy.status, at: enemy.at,
+      ...(enemy.status === 'pitched' ? { tiles: campTiles(map, enemy.at) } : {}),
+      square: gridLabel(enemy.at, { quarter: true })
+    } : null,
+    // An army with no steady unit left holding out by its camp: told to
+    // both sides (camp.js, campHoldsOut).
+    holdingOut: Object.entries(game.battle.camps).filter(([, c]) => c.holdingOut).map(([s]) => (s === side ? 'own' : 'enemy')),
+    // The Army tab, on the unit carrying it.
+    carryingSaid: CAMP_WORDS.carrying
+  }
+}
+
+// The tent's line under the map in a battle of camps: how it is won, where
+// each camp stands as he knows it, and, when an army is broken and holds
+// out by its camp, what is left to do.
+function campLine(game, side) {
+  const v = campView(game, side)
+  if (!v) return null
+  const where = (c) => `${c.square}`
+  const own = v.own
+  const mine = !own ? '' : own.status === 'pitched' ? CAMP_WORDS.tent.pitched(where(own), own.hits, own.of)
+    : own.status === 'carried' ? CAMP_WORDS.tent.carried(own.carrier)
+      : own.status === 'dropped' ? CAMP_WORDS.tent.dropped(where(own)) : CAMP_WORDS.tent.burned
+  const theirs = !v.enemy ? CAMP_WORDS.tent.notFound : v.enemy.status === 'burned' ? CAMP_WORDS.tent.theirsBurned
+    : v.enemy.status === 'carried' ? CAMP_WORDS.tent.theirsCarried(where(v.enemy)) : CAMP_WORDS.tent.theirs(where(v.enemy))
+  const holding = v.holdingOut.map(w => CAMP_WORDS.holdsOut(w === 'own'))
+  return [...holding, `${CAMP_WORDS.tent.day(v.day)} ${mine} ${theirs}`].join('. ').replace(/\.\./g, '.')
 }
 
 // The battle's end as the verdict says it, for the endings that need more
@@ -174,6 +230,7 @@ function endSaid(game, side) {
     return GROUND.some.won(held, mine, length, needed, game.objectives.length, calledOf(game))
   }
   const share = T.PITCHED.STAND_SHARE
+  if (o.reason === 'the days ran out') return CAMP_WORDS.daysOut(game.day)
   if (o.reason === 'field held at nightfall') return KINDS.pitched.held(mine, share)
   if (o.reason === 'night fell' && game.spec.kind === 'pitched') {
     const all = Object.keys(game.startingStrength)
@@ -555,6 +612,8 @@ function createBattleStore({ dir = null, storage = null, ai = null, now = () => 
     // (Ground named by the API with no kind, a testing aid: no kind in the
     // spec, and the battle ends as battles did before the kinds.)
     if (kind) spec = { ...spec, kind }
+    // A battle of camps (kindSpec): each army's camp, packed up.
+    if (made.camps) spec = { ...spec, camps: true }
     if (objectives.length) spec = { ...spec, objectives }
     if (objectives.length && needed && needed < objectives.length) spec = { ...spec, objectivesNeeded: needed, ...(m.groundCalled ?? made.groundCalled ? { groundCalled: m.groundCalled ?? made.groundCalled } : {}) }
 
@@ -1051,7 +1110,7 @@ function createBattleStore({ dir = null, storage = null, ai = null, now = () => 
       outcome: game.outcome.decided ? { decided: true, winner: game.outcome.winner, reason: game.outcome.reason, ...(game.outcome.reason === 'night fell' ? { title: NIGHT.title, said: endSaid(game, side) ?? NIGHT.ended, listed: NIGHT.listed } : {}),
         // The ground decided it, or night a pitched battle: the verdict
         // names it.
-        ...(['objectives held', 'field held at nightfall'].includes(game.outcome.reason) ? { said: endSaid(game, side) } : {}) } : null,
+        ...(['objectives held', 'field held at nightfall', 'the days ran out'].includes(game.outcome.reason) ? { said: endSaid(game, side) } : {}) } : null,
       // The kind of battle (ruled 2026-11-25), in words.
       kind: kindOfBattle(game.spec),
       kindTitle: KINDS[kindOfBattle(game.spec)]?.title ?? null,
@@ -1118,6 +1177,9 @@ function createBattleStore({ dir = null, storage = null, ai = null, now = () => 
       ground: game.battle.ground ?? [],
       // Some of several to hold: "take the fords" goes for that many.
       groundNeeded: neededOf(game),
+      // A battle of camps: his own camp, and the enemy's once found
+      // ("guard the camp", "burn their camp", "pitch the camp here").
+      ...(game.battle.camps ? { camps: sideView(game, side).camps } : {}),
       lyingInWait: lyingInWait(game.battle, side),
       // For counsel: the units that would break at the first blow.
       shaken: game.battle.world.units.filter(u => u.side === side && game.battle.isShaken(u)).map(u => u.id),
@@ -1224,6 +1286,8 @@ function createBattleStore({ dir = null, storage = null, ai = null, now = () => 
         mounted: Boolean(u.mounted),
         // Raised for the day on a big field (engine/army/secondLine.js).
         ...(game.spec.units.find(s => s.id === u.id)?.secondLine ? { secondLine: true } : {}),
+        // Carrying the camp (a battle of camps).
+        ...(battle.camps?.[side]?.status === 'carried' && battle.camps[side].carrier === u.id ? { carriesCamp: true } : {}),
         position: { ...now.position },
         at: where(now.position),
         strength: now.strength,
@@ -1292,8 +1356,8 @@ function createBattleStore({ dir = null, storage = null, ai = null, now = () => 
     const line = summary(token)
     return {
       battle: atGame
-        ? { ...line, turn: game.playerTurn + 1, minutes: game.minutesElapsed, sides: sides(battle.world), timeLimitMinutes: game.spec.timeLimitMinutes ?? null, turnLimit: game.spec.turnLimit ?? null, dayMinutes: game.spec.dayMinutes ?? null }
-        : { ...line, sides: sides(battle.world), timeLimitMinutes: game.spec.timeLimitMinutes ?? null, turnLimit: game.spec.turnLimit ?? null, dayMinutes: game.spec.dayMinutes ?? null },
+        ? { ...line, turn: game.playerTurn + 1, minutes: game.minutesElapsed, sides: sides(battle.world), timeLimitMinutes: game.spec.timeLimitMinutes ?? null, turnLimit: game.spec.turnLimit ?? null, dayMinutes: game.spec.dayMinutes ?? null, ...(game.day ? { day: game.day } : {}) }
+        : { ...line, sides: sides(battle.world), timeLimitMinutes: game.spec.timeLimitMinutes ?? null, turnLimit: game.spec.turnLimit ?? null, dayMinutes: game.spec.dayMinutes ?? null, ...(game.day ? { day: game.day } : {}) },
       map: { name: map.name, width: map.width, height: map.height, squareTiles: 4, terrain, landmarks },
       own,
       fallen,
@@ -1302,6 +1366,8 @@ function createBattleStore({ dir = null, storage = null, ai = null, now = () => 
       // One line under the map for the whole battle, where it says it
       // better: a pitched battle's rule; some of several grounds to hold.
       groundLine: battleLine(game, side),
+      // A battle of camps: the camps as this side knows them, and the day.
+      ...(battle.camps ? { camps: campView(game, side) } : {}),
       // Some of several grounds to hold: how many, and what they are called
       // together ("fords"), for the first turn's example orders.
       ...(neededOf(game) ? { groundHold: { needed: neededOf(game), called: calledOf(game) } } : {}),

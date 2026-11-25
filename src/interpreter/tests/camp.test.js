@@ -42,7 +42,7 @@ test('"pitch the camp" with no one named is for the unit carrying it, and the re
   assert.match(out.understood[0], /^velites: pitch the camp at the Long Down/)
   const here = interpretLines(['pitch the camp here'], context(CARRIED))
   assert.deepEqual(here.orders[0].target, { x: 14, y: 41 })
-  assert.match(here.understood[0], /where velites stand/)
+  assert.match(here.understood[0], /^velites: pitch the camp where they stand/)
 })
 
 test('"move the camp" with the camp pitched sends the unit nearest it to take it up and carry it there', () => {
@@ -68,4 +68,17 @@ test('with no camps in the battle, "the camp" is no place the grammar invents', 
   const out = interpretLines(['hastati guard the camp'], context(undefined))
   assert.equal(out.orders.length, 0)
   assert.equal(out.questions.length, 1)
+})
+
+test('"everyone advance" beside an order to pitch the camp leaves the unit carrying it to its camp work', () => {
+  const out = interpretLines(['pitch the camp here', 'everyone advance'], context(CARRIED))
+  assert.deepEqual(out.orders.filter(o => o.unitRef === 'velites').map(o => o.action), ['pitch'])
+  assert.ok(out.orders.some(o => o.unitRef === 'hastati' && o.action === 'advance'))
+  assert.doesNotMatch(out.understood[1], /velites/)
+})
+
+test('"pitch the camp here, everyone guard the camp": the camp to guard is where it is being pitched', () => {
+  const out = interpretLines(['pitch the camp here', 'hastati guard the camp'], context(CARRIED))
+  assert.deepEqual(out.questions, [])
+  assert.deepEqual(out.orders.find(o => o.unitRef === 'hastati').target, { x: 14, y: 41 })
 })

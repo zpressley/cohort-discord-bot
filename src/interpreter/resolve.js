@@ -319,10 +319,10 @@ function resolveCampWork(intent, units, context, known) {
     where = `${place.description} (${gridLabel(target, { quarter: true })})`
   } else if (intent.action === 'pitch') {
     target = { ...unit.position }
-    where = `where ${unit.id} stand (${gridLabel(target, { quarter: true })})`
+    where = `where they stand (${gridLabel(target, { quarter: true })})`
   }
   const order = { unitRef: unit.id, action: intent.action, ...(target ? { target: { ...target } } : {}) }
-  return { order, understood: `${unit.id}: ${orderWords('say', { action: intent.action }, where)}` }
+  return { order, understood: `${unit.id}: ${orderWords('say', { action: intent.action }, where, { relative: !intent.place })}` }
 }
 
 /**
@@ -361,7 +361,19 @@ function resolveIntents(intents, context) {
   const named = namedIn(intents, units, context.named)
   // What places may be said by: his own edge, the ground to fight for, his
   // own units.
-  const known = { homeEdge: context.homeEdge, ground: context.ground, groundNeeded: context.groundNeeded ?? null, units: context.allOwn ?? units, ...(context.camps ? { camps: context.camps } : {}) }
+  let known = { homeEdge: context.homeEdge, ground: context.ground, groundNeeded: context.groundNeeded ?? null, units: context.allOwn ?? units, ...(context.camps ? { camps: context.camps } : {}) }
+
+  // The units working the camp in these orders (pitch, strike): "everyone"
+  // in another line does not take them off it.
+  const campWork = known.camps ? intents.filter(i => i.kind === 'order' && (i.action === 'pitch' || i.action === 'strike'))
+    .map(i => resolveCampWork(i, units, context, known).order).filter(Boolean) : []
+  const campWorkers = new Set(campWork.map(o => o.unitRef))
+  // ... and where it is being pitched is "the camp" for the other lines:
+  // "pitch the camp here, everyone guard the camp".
+  const pitching = campWork.find(o => o.action === 'pitch' && o.target)
+  const campKnown = pitching ? { ...known, camps: { ...known.camps, own: { ...known.camps.own, status: 'pitched', at: { ...pitching.target } } } } : known
+  const campBase = known
+  known = campKnown
 
   for (let intent of intents) {
     if (intent.kind === 'surrender') { surrender = true; continue }
@@ -389,7 +401,7 @@ function resolveIntents(intents, context) {
     // Pitching or striking the camp: one unit, the resolver's choice when
     // no one is named (resolveCampWork).
     if (intent.action === 'pitch' || intent.action === 'strike') {
-      const work = resolveCampWork(intent, units, context, known)
+      const work = resolveCampWork(intent, units, context, campBase)
       if (work.question) {
         questions.push(work.question)
         if (work.choice) choices.push(work.choice)
@@ -417,6 +429,7 @@ function resolveIntents(intents, context) {
         continue
       }
     }
+    if (campWorkers.size && /^everyone/.test(intent.unitRef ?? '') && !intent.unitIds) match = { ...match, units: match.units.filter(u => !campWorkers.has(u.id)) }
     if (match.units.length === 0) {
       questions.push(`Who do you mean by "${match.unknown ?? intent.unitRef}"? Your units: ${units.map(u => u.id).join(', ')}.`)
       continue
