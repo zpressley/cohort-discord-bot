@@ -237,6 +237,12 @@ async function createPostgresStorage(databaseUrl, { table = 'documents', log = c
     updated_at timestamptz not null default now(),
     primary key (kind, id)
   )`)
+  // Closed to everyone but this server. A host such as Supabase offers every
+  // table of the public schema over its own web API unless row level
+  // security is on; with it on and no policy, nothing is offered. The table's
+  // owner (the role in DATABASE_URL) is not bound by it, so the game reads
+  // and writes as before. Seats' and Commanders' tokens are kept here.
+  await pool.query(`alter table ${table} enable row level security`)
   const loaded = new Map()
   const { rows } = await pool.query(`select kind, id, data::text as data from ${table}`)
   for (const row of rows) {

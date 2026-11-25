@@ -18,7 +18,7 @@
     "soak": "node src/harness/soak.js",
     "web": "node src/web/server.js",
     "ai:bench": "node src/harness/ai-bench.js",
-    "test:browser": "node --test src/web/browser/battle.browser.js"
+    "test:browser": "node --test src/web/browser/battle.browser.js src/web/browser/discord.browser.js"
   },
   "keywords": [
     "strategy",

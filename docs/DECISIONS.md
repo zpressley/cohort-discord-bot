@@ -5923,6 +5923,175 @@ Where the database and the server are hosted is not decided yet.
 - Hosted Postgres was not tried (no account here): TLS was tested only by
   the URL parsing tests, not against a real certificate.
 
+### How Discord sign-in, your-move messages and battle threads were built (Claude's choices, open to change)
+
+Built from the rulings above ("I like their OAuth", "an easy chat
+feature", "I have a discord server", the old bot's application reused).
+Zach asked not to be brought small questions: these are the details
+decided, each open to change.
+
+**What was built.**
+- **Off unless configured.** Settings by name from the environment
+  (`src/discord/config.js`; `docs/HOSTING.md`, "Connecting Discord"). With
+  none set there is no sign-in button, no `/auth/...` route, nothing sent,
+  nothing remembered on a battle; every test from before passes unchanged.
+  Sign-in and the bot each work without the other.
+- **No Discord library, no gateway.** Node's own `fetch` against Discord's
+  HTTP API (`src/discord/client.js`): the authorization-code sign-in, and
+  four bot calls (open a direct message, send a message, make a thread,
+  give a role). The API's address is a setting, so the tests use a local
+  stand-in (`src/web/tests/fixtures/discord-standin.js`); no test reaches
+  Discord.
+- **Sign-in** (`src/web/signin.js`, `session.js`): scope `identify` only; a
+  random state in a 10-minute cookie (HttpOnly, SameSite=Lax, path
+  `/auth`) that must match what Discord sends back; the page to go back to
+  is always one of this game's own. The session is a cookie signed with
+  `SESSION_SECRET` (HMAC-SHA256) holding only his Discord id and when it
+  runs out: **30 days**, HttpOnly, SameSite=Lax, Secure when `PUBLIC_URL`
+  is https. A forged or run-out cookie is no one. His Discord access token
+  is used once, to ask who he is, and thrown away.
+- **The account** (`src/web/accounts.js`): a document of kind `account`
+  keyed by his Discord id: his Discord name and avatar, his Commanders'
+  tokens and his seats' tokens (200 of each at most). The browser sends
+  the links it holds (`POST /api/me/keep`) on each page load while signed
+  in, and a moment after it keeps a new one; the server keeps only links
+  that are real, and answers with all the account holds, which the
+  browser adds to its own. Links are only ever added, never taken out of
+  an account. Mustering, joining, a next day and making a Commander while
+  signed in add his link on the server as well.
+- **Where it shows**: "Sign in with Discord", with a line saying he need
+  not, at the top of making a Commander (where a new browser lands) and at
+  the foot of Your officers; once signed in, "Signed in as <name>" and
+  "Sign out" there instead. With Discord off, `GET /api/me` answers
+  `{ signedIn: false }` with nothing to offer, so the page shows nothing
+  (a 404 there would be an error in every page's console). The battle's
+  thread is a button at the end of the tent's Army tab. Words in
+  `words.js`, `DISCORD`.
+- **What the bot sends** (`src/discord/notices.js`), only in a battle
+  between two players, only to a player with an account, by direct
+  message: "a friend has joined your battle" (with "Your orders are
+  wanted" when they are), "your orders are wanted", "the enemy has called
+  you out for a second day. Your orders are wanted.", and "the battle is
+  over, and you have won / lost" (or "neither side has won", or "night
+  fell, and neither side has won"), each as "<title>: ..." and then
+  "Your tent: <PUBLIC_URL>/b/<his seat>".
+- **The thread**: made in `DISCORD_BATTLES_CHANNEL_ID` when the friend
+  joins, a public thread named for the battle ("Crownhill: Rome against
+  Parthia"), archived by Discord after a week quiet (a post wakes it). Its
+  first post names both players (a mention for one signed in; "Commander
+  <name>" or "a friend" for one who is not) and says it is for talking.
+  Later posts: "Night fell. <A> has called <B> out for a second day." and
+  "The battle is over. <B> won." (or neither won, or night fell). A next
+  day goes on in the same thread. No tent's link is ever posted there.
+- **Once per event.** What was sent is remembered on the battle's own
+  saved document (`discord`: events sent, the wait for each side, the
+  thread's id), so a poll sends nothing and a restart sends nothing again.
+  An event is marked when it is queued, not when Discord takes it: at most
+  once, never twice; one dropped after failing is not tried again later.
+- **Reminders**: the server looks the battles over every 10 minutes (and
+  5 s after start). A side whose orders have been wanted for 24 hours is
+  reminded ("your orders are still wanted. The battle waits on you."),
+  then once a day at most, three times in all for that wait. The server's
+  clock is used for this; the engine never sees it.
+- **Roles**: a signed-in player who makes a Commander, or whose
+  Commanders come into his account when he signs in, is given the role of
+  each one's kind in the server, from the old bot's mapping, now
+  `src/data/discordRoles.js` (`gate` is `threshold`). If the bot may not,
+  nothing happens but a log line.
+- **Sending never holds up play.** Every call goes through one queue, one
+  at a time, after the turn's answer is on its way. A call is tried 4
+  times, 1, 2 and 4 s apart; on "slow down" (429) it waits as long as
+  Discord says (up to 60 s); a call not answered in 10 s counts as failed.
+  Then it is dropped with one plain line ("Discord: a direct message not
+  sent (Discord answered 503); dropped."). `/healthz` does not look at
+  Discord. Never logged: a secret, a token, a message (it carries a tent's
+  link).
+- **Battles from before** (a battle with nothing remembered that was not
+  mustered with the bot on) are taken as told: their state is marked and
+  nothing is sent, so switching Discord on does not send a flood about old
+  battles.
+- `battles.js` changed only by two small hooks: the `discord` memory kept
+  on its saved document, and `allBattles()` / `remember()` for the
+  notices. `server.js` calls the hooks; the engine is untouched.
+
+**Guesses, and the other reading.**
+- **Signing in is offered, never required** (the task's guess at Zach's
+  wish). The other reading: sign-in required to keep a Commander or to
+  play a friend. Everything here works either way; requiring it would be
+  a few lines on the page.
+- **Signing out takes his Commanders and battles off this browser** (every
+  `cohort.` key but "hide how to play"), as the safer for a phone that is
+  shared; they stay with his account and come back when he signs in. The
+  other reading: leave the browser as it was before he signed in. The page
+  says what signing out does.
+- **The player whose own request changed the battle is not messaged about
+  it**: he is looking at the page. Red's orders run the turn, and only
+  Blue is told his orders are wanted; the one who yields is not told he
+  lost. The other reading: message both every time. If he then walks
+  away, the reminder after a day still reaches him.
+- **The thread never says whose orders are wanted in the middle of a
+  day.** The task listed it among the thread's posts, but the ruling of
+  2026-11-23 ("both would only be notified when there are commands to give
+  or things happen to them") means a Commander is not told that the battle
+  stands for the other; a post where both read would tell him. So the
+  thread says only what both are told anyway. For the same reason, a
+  player Discord will not message (he has left the server, or takes no
+  direct messages) is named in the thread instead only for what both know:
+  the day's first orders ("<A>, your orders are wanted.", when the friend
+  joins, or he is called out to a next day). A refused mid-day message is
+  dropped. The other reading: post every "your orders are wanted" in the
+  thread, which would let each player see when the battle waits on the
+  other.
+- **Three reminders for each wait**, not for the whole battle: a friend
+  who answers and later goes quiet again is reminded again. The other
+  reading: three in all for the battle.
+- **The thread is made even if neither player has signed in**, as long as
+  the battles channel is set: the tent links to it and either may join.
+  The other reading: only for players with accounts.
+- **Night is told to both** as "night fell, and neither side has won",
+  without saying a next day may be called (a side with no one left able to
+  fight has none; the tent says which).
+- `PUBLIC_URL` is needed by the bot as well as by sign-in: every message
+  carries the link to his tent.
+
+**What was measured.**
+- `src/web/tests/discord.test.js` (15 tests, against the stand-in): the
+  sign-in round trip and its state check; forged and expired sessions;
+  an account gathering a browser's Commanders and battles and giving them
+  to another browser after a restart; nothing of it when not configured;
+  "your move" once, not again after five polls of each kind or a restart
+  and a look-over; nothing for a battle against the computer; reminders at
+  24 h 30 min, once a day, three in all; the thread made once with both
+  named; a refused message named in the thread; fog of war over everything
+  sent in a whole battle (two days, nightfall, a next day called, a
+  yield): no line of any dispatch of either side, no unit's name, no
+  other side's link, no link at all in the thread; the same battle played
+  with Discord down, slowing us down and refusing gives the same views,
+  turn for turn, as with no Discord; a turn answered while Discord does
+  not answer at all; no secret or access token in any log line or answer.
+  Postgres: an account saved and read back (runs when
+  `TEST_DATABASE_URL` is set).
+- `src/web/browser/discord.browser.js`, 390 px: the button where a new
+  browser lands (44 px tall, no sideways scroll), signing in from Your
+  officers, "Signed in as Aulus", his Commander and battle on a second
+  phone after signing in there, the thread's button in the tent, signing
+  out (the links gone from that phone, still on the first); and with no
+  Discord settings, no sign-in anywhere.
+
+**Left undone.**
+- Nothing was tried against the real Discord (no keys here): the
+  sign-in's consent page, a real direct message, a real thread, a real
+  role, and Discord's real rate limits are untested.
+- The avatar is in `/api/me` but not shown on the page (it would load an
+  image from Discord's servers on every page).
+- D3 (a friend who goes quiet) is helped, not settled: there is still no
+  way to let the battle go on without him, and a player who has not signed
+  in gets no reminder.
+- No way to leave Discord: an account cannot be deleted from the page,
+  and a link once in an account stays there.
+- Unit names and Commander names are still not moderated; a Commander's
+  name can reach the thread, with Discord's own markup taken out.
+
 ## Rulings, November 25, 2026 (camps)
 
 The camp battle itself ("The other option is a point capture situation

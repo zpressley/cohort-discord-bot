@@ -38,6 +38,7 @@ function saveSeat(seat) {
     list.unshift(seat)
     localStorage.setItem(SEATS_KEY, JSON.stringify(list.slice(0, 50)))
   } catch { /* private browsing: the link itself still works */ }
+  keepSoon()
 }
 function loadDraft(token) {
   try { return localStorage.getItem(`cohort.draft.${token}`) ?? '' } catch { return '' }
@@ -76,6 +77,7 @@ function commanderTokens() {
 }
 function saveCommanders(tokens) {
   try { localStorage.setItem(COMMANDERS_KEY, JSON.stringify(tokens)); localStorage.removeItem('cohort.commander') } catch { /* private browsing: this battle only */ }
+  keepSoon()
 }
 // Your Commanders as the server knows them; one it has no record of is dropped.
 async function loadCommanders() {
@@ -103,6 +105,68 @@ async function api(method, url, body) {
   const data = await res.json().catch(() => ({}))
   if (!res.ok) throw Object.assign(new Error(data.error ?? 'Something went wrong'), { status: res.status })
   return data
+}
+
+// ── Signing in with Discord (only when the server offers it) ──
+// Signed in, the links this browser holds are added to his account, and
+// his account's are given to this browser: his Commanders follow him. Not
+// signed in, he plays by link as before. The words are the server's.
+let meAsked = null
+function whoAmI() {
+  meAsked = meAsked ?? api('GET', '/api/me').catch(() => ({ off: true }))
+  return meAsked
+}
+// His account and this browser's links, made one (once a page load, and
+// again a moment after this browser keeps a new link).
+async function keepWithAccount() {
+  const me = await whoAmI()
+  if (!me.signedIn) return
+  try {
+    const held = await api('POST', '/api/me/keep', { commanders: commanderTokens(), seats: loadSeats().map(s => s.token) })
+    const mine = commanderTokens()
+    localStorage.setItem(COMMANDERS_KEY, JSON.stringify([...mine, ...held.commanders.filter(t => !mine.includes(t))]))
+    const seats = loadSeats()
+    const known = new Set(seats.map(s => s.token))
+    localStorage.setItem(SEATS_KEY, JSON.stringify([...seats, ...held.seats.filter(s => !known.has(s.token))].slice(0, 50)))
+  } catch { /* the next page load tries again */ }
+}
+let keepTimer = null
+function keepSoon() {
+  if (!meAsked) return
+  clearTimeout(keepTimer)
+  keepTimer = setTimeout(keepWithAccount, 300)
+}
+let keptOnce = null
+const keptWithAccount = () => (keptOnce = keptOnce ?? keepWithAccount())
+// The sign-in, or who is signed in, for a page: nothing when Discord is off.
+async function signInBlock() {
+  const me = await whoAmI()
+  if (me.off || !me.words) return ''
+  if (me.signedIn) {
+    return `<section class="signin" aria-label="Discord">
+      <p class="note" id="signed-in"><strong>${esc(me.said)}</strong></p>
+      <button class="btn btn-quiet btn-wide" type="button" id="sign-out">${esc(me.words.signOut)}</button>
+      <p class="note">${esc(me.words.signOutNote)}</p>
+    </section>`
+  }
+  const back = location.pathname + location.search
+  return `<section class="signin" aria-label="Discord">
+      <a class="btn btn-wide" id="sign-in" href="/auth/discord?then=${encodeURIComponent(back)}">${esc(me.words.signIn)}</a>
+      <p class="note">${esc(me.words.signInNote)}</p>
+    </section>`
+}
+// Signing out takes his links off this browser (a phone may be shared);
+// they stay with his account.
+function wireSignOut() {
+  document.getElementById('sign-out')?.addEventListener('click', async () => {
+    try { await api('POST', '/auth/signout') } catch { /* the cookie goes anyway when it runs out */ }
+    try {
+      for (const key of Object.keys(localStorage)) if (key.startsWith('cohort.') && key !== 'cohort.hideHowTo') localStorage.removeItem(key)
+    } catch { /* fine */ }
+    meAsked = null
+    keptOnce = null
+    go('/', { replace: true })
+  })
 }
 
 // ── Words ──────────────────────────────────────────────
@@ -191,6 +255,8 @@ async function route() {
   const armyOf = path.match(/^\/army\/([A-Za-z0-9_-]{8,})$/)
   const commanderOf = path.match(/^\/commander\/([A-Za-z0-9_-]{8,})$/)
   try {
+    // Signed in with Discord: his account's links are here before any page.
+    await keptWithAccount()
     if (path === '/commander/new') return await makeCommander()
     if (commanderOf) return await commanderPage(commanderOf[1])
     if (seat) return await tent(seat[1])
@@ -274,7 +340,7 @@ const veteranOf = (v) => {
 }
 const FATE_WORDS = { killed: 'killed', captured: 'taken by the enemy', 'given up': 'given to the enemy for your freedom', left: 'left you when the battle left you a commander of none' }
 async function officers(note = null) {
-  const commanders = await loadCommanders()
+  const [commanders, signIn] = await Promise.all([loadCommanders(), signInBlock()])
   const battleLine = (r) => `<li><strong>${esc(r.title)}</strong>, ${esc(RESULT_WORDS[r.result] ?? r.result)}${
     r.fate === 'wounded' ? `; wounded${r.how ? ` (${esc(r.how)})` : ''}` : ''}${r.fate === 'given up' ? '; given up, with his men, in a deal for your freedom' : ''}.${r.deeds ? ` His men ${esc(r.deeds)}.` : ''}${r.named ? ' Here he came forward to lead them.' : ''}${r.loyalty > 0 ? ' He thought the better of you for it.' : r.loyalty < 0 ? ' He thought the worse of you for it.' : ''}</li>`
   // Moving an officer to other men (between battles only): to a unit with
@@ -330,7 +396,9 @@ async function officers(note = null) {
       ${note ? `<p class="note" role="status" id="officers-note">${esc(note)}</p>` : ''}
       ${commanders.map(company).join('')}
       <a class="btn btn-main btn-wide" href="/muster" data-link>Muster a new battle</a>
+      ${signIn}
     </main>`
+  wireSignOut()
   for (const b of app.querySelectorAll('[data-move]')) {
     b.addEventListener('click', () => {
       const list = document.getElementById(`move-${b.dataset.move}`)
@@ -363,7 +431,7 @@ async function officers(note = null) {
 // `?then=` is where he goes next (the muster, or a battle's "Who leads?");
 // `&buy=1` goes by his army first; `&faction=` is the faction chosen first.
 async function makeCommander() {
-  const [asked, factions] = await Promise.all([api('GET', '/api/commanders/new'), api('GET', '/api/factions')])
+  const [asked, factions, signIn] = await Promise.all([api('GET', '/api/commanders/new'), api('GET', '/api/factions'), signInBlock()])
   const params = new URLSearchParams(location.search)
   const wanted = params.get('then') ?? ''
   const then = wanted === '/muster' || /^\/b\/[A-Za-z0-9_-]{8,}$/.test(wanted) ? wanted : '/muster'
@@ -374,6 +442,7 @@ async function makeCommander() {
   app.innerHTML = `
     <header class="bar"><a href="${then === '/muster' ? '/battles' : esc(then)}" data-link>${then === '/muster' ? 'Your battles' : 'Back'}</a><strong style="font-family: var(--font-display); font-size: 18px">A new Commander</strong><span></span></header>
     <main class="page">
+      ${signIn}
       <form id="make" class="page" style="padding: 0">
         <p class="note">You are the Commander. Two questions make you, once and for life.</p>
         <fieldset>
@@ -399,6 +468,7 @@ async function makeCommander() {
         <div id="make-error"></div>
       </form>
     </main>`
+  wireSignOut()
   const form = document.getElementById('make')
   const nameBox = form.querySelector('input[name="name"]')
   const factionBox = form.querySelector('select[name="faction"]')
@@ -1502,7 +1572,10 @@ async function tent(token) {
     const seen = v.enemies.length
       ? `<p class="label-caps">${v.commander?.status === 'held' ? 'The enemy, as you can see it from where you are held' : 'The enemy, as you know it'}</p>${them}${v.enemies.map(e => `<p class="note">${esc(/^enemy\b/i.test(e.name) ? e.name : `Enemy ${String(e.name).toLowerCase()}`)} at ${esc(e.at)}: ${esc(e.said)}</p>`).join('')}`
       : `${them}<p class="note">No enemy in sight.</p>`
-    body.innerHTML = `${units || '<p class="note">No units standing.</p>'}${fallen}${seen}`
+    // A battle between two players has its own thread on Discord, to talk in.
+    const thread = /^https:\/\/discord\.com\//.test(state.view.discord?.thread ?? '')
+      ? `<a class="btn btn-quiet btn-wide" id="thread" href="${esc(state.view.discord.thread)}" target="_blank" rel="noopener">${esc(state.view.discord.said)}</a>` : ''
+    body.innerHTML = `${units || '<p class="note">No units standing.</p>'}${fallen}${seen}${thread}`
     body.querySelectorAll('[data-pick]').forEach(b => b.addEventListener('click', () => {
       state.picked = state.picked === b.dataset.pick ? null : b.dataset.pick
       renderMap(); renderHint(); renderPanel()
