@@ -381,6 +381,9 @@ function createBattleStore({ dir = null, storage = null, ai = null, now = () => 
       ...(entry.next ? { next: entry.next } : {}),
       // The side that called the next day, for the other's notice.
       ...(entry.calledBy ? { calledBy: entry.calledBy } : {}),
+      // What Discord has been told of it, so nothing is sent twice
+      // (src/discord/notices.js).
+      ...(entry.discord ? { discord: entry.discord } : {}),
       // Played with orders and news by rider (a battle saved before them
       // plays back without: engine/command/messengers.js).
       riders: entry.game.spec.messengers !== false,
@@ -2001,7 +2004,17 @@ function createBattleStore({ dir = null, storage = null, ai = null, now = () => 
     setArmy,
     transfer,
     nameUnit,
-    appraise: (faction, body) => appraise(faction, body)
+    appraise: (faction, body) => appraise(faction, body),
+    // For Discord (src/discord/notices.js): every battle, to look over; and
+    // what it has told of one, kept on the battle's own document. Neither
+    // changes the battle.
+    allBattles: () => [...battles.values()],
+    remember: (id, told) => {
+      const entry = battles.get(id)
+      if (!entry) return
+      entry.discord = told
+      save(entry)
+    }
   }
 }
 

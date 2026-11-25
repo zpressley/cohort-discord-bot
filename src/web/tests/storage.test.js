@@ -221,6 +221,27 @@ test('postgres: a failed write is tried again, ordered writes keep the last, and
   }
 })
 
+test('postgres: the table is closed to everyone but the server (row level security on, no policy), and the server still reads and writes', { skip: NO_DB }, async () => {
+  const table = `documents_test_${process.pid}_closed`
+  const { Pool } = require('pg')
+  const pool = new Pool(poolSettings(DB))
+  try {
+    const storage = await openStorage({ databaseUrl: DB, table, log: quiet })
+    await storage.put('battle', 'one', { v: 1 })
+    await storage.close()
+    const { rows } = await pool.query('select relrowsecurity from pg_class where relname = $1', [table])
+    assert.equal(rows[0].relrowsecurity, true, 'row level security is on')
+    const policies = await pool.query('select count(*)::int as n from pg_policies where tablename = $1', [table])
+    assert.equal(policies.rows[0].n, 0, 'and no policy lets anyone else in')
+    const again = await openStorage({ databaseUrl: DB, table, log: quiet })
+    assert.deepEqual(again.all('battle'), [{ v: 1 }])
+    await again.close()
+  } finally {
+    await pool.query(`drop table if exists ${table}`)
+    await pool.end()
+  }
+})
+
 test('postgres: battles and Commanders saved as files are copied in, and copying twice copies nothing more', { skip: NO_DB }, async () => {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'cohort-import-'))
   const table = `documents_test_${process.pid}_import`

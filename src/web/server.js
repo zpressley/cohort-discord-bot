@@ -73,6 +73,11 @@
 //                                           choice for the draft unit with the
 //                                           builder's reason for any refused
 //
+//   GET  /api/me                            who is signed in with Discord (or no one)
+//   GET  /auth/discord, /auth/discord/callback, POST /auth/signout,
+//   POST /api/me/keep                       signing in with Discord: only when
+//                                           it is configured (signin.js)
+//
 // A seat's token is its secret link. Every answer about a battle is that
 // seat's side's view only (fog of war is held on the server).
 
@@ -146,7 +151,9 @@ const NOT_SAVED = 'The game could not be saved just now, so nothing new can be p
 // A list of unit names from the browser, or null if none was sent.
 const names = (list) => (Array.isArray(list) ? list.slice(0, 60).map(n => String(n).slice(0, 40)) : null)
 
-function createServer(store) {
+// `discord`: signing in and the bot (signin.js), or null when Discord is
+// not configured.
+function createServer(store, { discord = null } = {}) {
   const storage = store.storage ?? createFileStorage(null)
   return http.createServer(async (req, res) => {
     // A POST is answered once what it changed is saved; if that save has
@@ -156,6 +163,8 @@ function createServer(store) {
       const url = new URL(req.url, 'http://localhost')
       const parts = url.pathname.split('/').filter(Boolean)
       const send = req.method !== 'POST' ? sendNow : async (res, status, body, type) => {
+        // Discord is told of the change (queued: the answer never waits on it).
+        discord?.afterPost(req, parts, status, body)
         try { await storage.flush() } catch { return sendNow(res, 503, { error: NOT_SAVED }) }
         return sendNow(res, status, body, type)
       }
@@ -165,6 +174,11 @@ function createServer(store) {
         const health = storage.health()
         return sendNow(res, health.ok ? 200 : 503, health)
       }
+
+      // Signing in with Discord, and who is signed in (only when configured).
+      if (discord && (parts[0] === 'auth' || (parts[0] === 'api' && parts[1] === 'me')) && await discord.route(req, res, url, readBody)) return
+      // Without it, the page asks and is told: no one, and nothing to offer.
+      if (req.method === 'GET' && url.pathname === '/api/me') return sendNow(res, 200, { signedIn: false })
 
       // ── The API ─────────────────────────────────
       if (parts[0] === 'api') {
@@ -240,7 +254,7 @@ function createServer(store) {
         if (parts[1] === 'seat' && parts[2]) {
           const token = parts[2]
           if (!store.seatOf(token)) return send(res, 404, { error: 'no such battle' })
-          if (req.method === 'GET' && parts.length === 3) return send(res, 200, store.view(token))
+          if (req.method === 'GET' && parts.length === 3) return send(res, 200, discord ? { ...store.view(token), ...discord.seatExtras(token) } : store.view(token))
           if (req.method === 'GET' && parts[3] === 'summary') return send(res, 200, store.summary(token))
           if (req.method === 'GET' && parts[3] === 'replay') {
             const shown = store.replay(token, url.searchParams.get('turn'))
@@ -316,8 +330,12 @@ async function main(env = process.env) {
   const store = createBattleStore({ storage, ai: aiClientFromEnv() })
   console.log(`Saving to ${storage.where === 'postgres' ? 'Postgres (DATABASE_URL)' : `files in ${dir}`}; read in at start in ${Date.now() - started} ms.`)
   const port = Number(env.PORT ?? 3000)
-  const server = createServer(store)
+  // Discord: signing in, "your move", battle threads (off unless configured).
+  const discord = require('./signin').discordFromEnv(env, { store })
+  console.log(discord ? discord.describe() : 'Discord: not connected.')
+  const server = createServer(store, { discord })
   await new Promise(resolve => server.listen(port, resolve))
+  discord?.start()
   console.log(`Cohort is up: http://localhost:${port}`)
 
   let stopping = false
@@ -325,6 +343,7 @@ async function main(env = process.env) {
     if (stopping) return
     stopping = true
     console.log(`${signal}: stopping. Finishing requests and saving.`)
+    discord?.stop()
     const closed = new Promise(resolve => server.close(resolve))
     server.closeIdleConnections()
     await Promise.race([closed, new Promise(resolve => setTimeout(resolve, 10000).unref())])
