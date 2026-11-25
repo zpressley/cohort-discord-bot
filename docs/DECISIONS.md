@@ -6646,7 +6646,79 @@ other reading tells only what each side sees. The camp's place is still
 told only to those who have found it. Measured (240 battles, the
 computer against itself): in every battle the beaten army held out by
 its camp before the end, for 3.9 hours on average and 21 hours at the
-longest (over a night, after which
-its men rested and fought on); every battle ended, none by the days
-running out.
+longest (over a night, after which its men rested and fought on); every
+battle ended, none by the days running out.
+
+**Phase 2: the battle of camps in the app** (after the kinds of battle).
+- *At the muster*: a third kind, `camps` (`data/maps`, `KIND_IDS`,
+  `kindSpec`: `{ kind: 'camps', objectives: [], camps: true }`), offered
+  on Greywater only (its `kinds` line), third, as a card: "A battle of
+  camps. Each army marches out with its camp packed up, and pitches it
+  where you choose. Keep yours standing: your broken men run to it and
+  rally there, and it gives your army its night's rest. Carried or burned,
+  your men tire and get no rest. Break the enemy and burn his camp, and the
+  field is yours. Night does not end it: it may run over several days."
+  (`KINDS.camps`). Guessed: Greywater only, as the brief said; the 1 km
+  fields put the armies in each other's sight from the start, which leaves
+  no march to choose a place on. The other reading is every field.
+- *Who carries it*: the default carrier (the unit least use in the line);
+  the muster does not ask. The Army tab marks it ("They carry your camp.
+  They march at half their pace and fight worse for it, and your whole
+  army tires while the camp is carried. Order them to pitch it: "pitch
+  the camp here"."), and the tent's line names it. Guessed: asking at
+  the muster is one more choice before a new player has seen the field;
+  the other reading is a pick at the muster (the spec already takes
+  `camps.side.carrier`).
+- *The tent's line* (`campLine`, in place of the ground's): "Day 1. Your
+  camp is packed up and carried by Second velites: your army tires while
+  it is carried. Pitch it: "pitch the camp here". The enemy's camp: not
+  yet found." Then "Your camp is pitched at D10-SE[, and has taken 1 of
+  the 3 assaults it can]", "lies dropped at ...", or "is burned"; "The
+  enemy's camp: at P10-SW / carried, last seen at ... / burned". When an
+  army is broken and holds out by its camp, its line leads: "Their army is
+  broken and shelters in its camp: take the camp and the field is yours."
+- *The map* (`map.js`): his camp pitched, its nine tiles washed in his
+  colour inside a dotted square, a tent, "Your camp" beside it (drawn over
+  the units, so men standing in it do not hide it); dropped, a tent;
+  burned, a flame. Carried, a small tent beside the unit carrying it. The
+  enemy's the same in his colour, only once found: the server sends the
+  enemy camp's place only from `sideView(...).camps` (fog of war held on
+  the server; tested, the enemy carrier's name appears nowhere in the
+  view). The map's spoken label says where each is.
+- *The bar*: "day 1, first light · night in 12 h", "day 2, 3 h 10 min ·
+  night in 8 h 50 min" (`dayClock`), in place of "night falls at 12 h".
+- *The night*: the stop is "night fell" for everyone; its dispatch says
+  "Night has fallen. Your men rested in camp, and will be fresh at first
+  light" (or the no-rest line) and "Dawn: the second day of the battle
+  begins". No verdict, no "Fight again the next day": a battle of camps
+  never ends in `'night fell'`, so `again` refuses it (409, tested) and the
+  verdict offers no next day. When the days run out the verdict says "The
+  seventh night has fallen with neither army beaten: the battle is over,
+  and neither side has won".
+- *The first turn's examples*: "pitch the camp here" and "Second velites
+  pitch the camp at C11-SE" (three squares toward the nearer edge) first.
+- *Orders*: the order reader in `web/battles.js` is given the camps. An
+  order to "everyone" beside one to pitch or strike the camp leaves the
+  unit doing it to its camp work, and "the camp" in the same orders is
+  where it is being pitched ("pitch the camp here, everyone guard the
+  camp" reads whole).
+- *Discord*: "your move" goes, as before, when his orders are wanted. The
+  night stops the battle for both sides (the day changed, and each army
+  rested or did not), so each player is asked once at each dawn; the
+  battle never stops for the night when it does not want his orders. Not
+  tested with a live Discord; `discord.test.js` passes.
+- *The soak*: a section plays the battle of camps on every field that
+  offers it, every faction once, red a Commander played by the three kinds
+  of commander (one of whom never pitches his camp): 20 of 20 ended, 1.3
+  days on average, the longest 2, 9 camps burned, none ran out of days.
+- *Measured once on the merged branches* (camps.js, 120 battles): the
+  computer against itself 53% west, 7.9 h, 9% into a second day; a
+  Commander on the field 44%, taken 13%. To be measured again once the bias
+  toward the side named red is mended (the kinds work's second round).
+- *Screenshots* at 390 px (looked at): the muster's three cards, the tent
+  with the camp carried and pitched, the Army tab, the dawn.
+- *Found*: the first browser test ("alone, on a phone ...", a random seed)
+  timed out waiting for a dispatch in 2 of 4 full runs here and in none of
+  6 runs alone or 2 full runs of the merged branches before camps; it
+  plays a pitched battle, which nothing of camps touches. Not chased.
 
