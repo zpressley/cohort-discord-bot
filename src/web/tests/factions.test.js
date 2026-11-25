@@ -133,14 +133,15 @@ test('a muster with no Commander and no faction is unchanged: the scenario\'s ow
     const made = (await app.api('POST', '/api/battles', { opponent: 'standing', side: 'red', seed: 3, scenario: 'legions-vs-celts', map: 'ashford' })).body
     assert.equal(made.title, 'Ashford Vale: Legions and Celts')
     const spec = store.seatOf(made.seats.red).entry.game.spec
-    const scenario = loadScenario('legions-vs-celts', { map: 'ashford', deploy: true })
+    // (Formed up for the kind offered first, the pitched battle.)
+    const scenario = loadScenario('legions-vs-celts', { map: 'ashford', deploy: true, kind: 'pitched' })
     assert.deepEqual(spec.units.map(u => [u.id, u.position]), scenario.units.map(u => [u.id, u.position]))
     assert.equal(spec.commanders, undefined, 'no Commander on the field')
     assert.ok(spec.units.every(u => !u.faction))
     // With factions named and no Commander, each side brings its faction's usual army, as before.
     const named = (await app.api('POST', '/api/battles', { opponent: 'standing', side: 'red', seed: 3, map: 'ashford', faction: 'han', enemyFaction: 'macedon' })).body
     const fielded = store.seatOf(named.seats.red).entry.game.spec
-    const usual = fieldFactions(loadScenario('meeting-battle', { map: 'ashford', deploy: true }), { red: 'han', blue: 'macedon' })
+    const usual = fieldFactions(loadScenario('meeting-battle', { map: 'ashford', deploy: true, kind: 'pitched' }), { red: 'han', blue: 'macedon' })
     assert.deepEqual(fielded.units.map(u => [u.id, u.position]), usual.units.map(u => [u.id, u.position]))
     assert.equal(fielded.commanders, undefined)
   } finally { await app.close() }

@@ -34,7 +34,7 @@ async function start(store = createBattleStore({})) {
 test('against the computer the player is told the name of the enemy\'s Commander and what is said of him: in his first dispatch, and in his tent', async () => {
   const app = await start()
   try {
-    const seat = (await app.api('POST', '/api/battles', { opponent: 'standing', side: 'red', seed: 5, map: 'ashford', faction: 'carthage', enemyFaction: 'carthage' })).body.seats.red
+    const seat = (await app.api('POST', '/api/battles', { opponent: 'standing', side: 'red', seed: 5, map: 'ashford', faction: 'carthage', enemyFaction: 'carthage', kind: 'ground' })).body.seats.red
     const spec = app.store.seatOf(seat).entry.game.spec
     const { commanderName: name, character } = spec.sides.blue
     assert.ok(['bold', 'steady', 'cautious'].includes(character))

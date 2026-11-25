@@ -109,7 +109,11 @@ const PLAIN_ORDERS = [
   { say: 'hastati defend the hill', want: [{ who: [H], action: 'defend', place: 'kind:hill' }] },
   { say: 'occupy the hill', want: [{ who: '*', action: 'defend', place: 'kind:hill' }] },
   { say: 'everyone take the hill', want: [{ who: '*', action: 'defend', place: 'kind:hill' }] },
-  { say: 'everyone take the hill', want: [{ who: '*', action: 'defend', place: 'ground' }], maps: ['crownhill', 'thornwood'] },
+  { say: 'everyone take the hill', want: [{ who: '*', action: 'defend', place: 'ground' }], maps: ['thornwood'] },
+  // Crownhill's ground is its three fords (ruled 2026-11-25): "the fords"
+  // is all of them, shared out.
+  { say: 'everyone take the fords', want: [{ who: '*', action: 'defend', place: 'ground' }], maps: ['crownhill'] },
+  { say: 'everyone take the ground', want: [{ who: '*', action: 'defend', place: 'ground' }], maps: ['crownhill'] },
   { say: 'take the bridge', want: [{ who: '*', action: 'defend', place: 'ground' }], maps: ['ashford', 'greywater'] },
   { say: 'everyone seize the bridge', want: [{ who: '*', action: ['defend', 'attack'], place: 'ground' }], maps: ['ashford', 'greywater'] },
   { say: 'legionaries hold the crossing', want: [{ who: [L], action: 'defend', place: 'any' }] },
@@ -306,13 +310,13 @@ const PLAIN_ORDERS = [
   { say: 'elephants advance', want: 'ask' },
 
   // ── Each field's own places ───────────────────────────
-  { say: 'everyone take the crownhill', maps: ['crownhill'], want: [{ who: '*', action: 'defend', place: 'ground' }] },
+  { say: 'everyone take the crownhill', maps: ['crownhill'], want: [{ who: '*', action: 'defend', place: 'name:The Crownhill' }] },
   { say: 'legionaries to the crownhill', maps: ['crownhill'], want: [{ who: [L], action: 'move', place: 'name:The Crownhill' }] },
   { say: 'velites to millers crossing', maps: ['crownhill'], want: [{ who: [V], action: 'move', place: "name:Miller's Crossing" }] },
   { say: 'hastati to harrow bridge', maps: ['crownhill'], want: [{ who: [H], action: 'move', place: 'name:Harrow Bridge' }] },
   { say: 'legionaries to the north ford', maps: ['crownhill'], want: [{ who: [L], action: 'move', place: 'name:North Ford' }] },
   { say: 'hold shepherds ridge', maps: ['crownhill'], want: [{ who: '*', action: 'defend', place: "name:Shepherd's Ridge" }] },
-  { say: 'everyone take the crown hill', maps: ['crownhill'], want: [{ who: '*', action: 'defend', place: 'ground' }] },
+  { say: 'everyone take the crown hill', maps: ['crownhill'], want: [{ who: '*', action: 'defend', place: 'name:The Crownhill' }] },
   { say: 'take the old mill bridge', maps: ['ashford'], want: [{ who: '*', action: 'defend', place: 'ground' }] },
   { say: 'legionaries to old mill bridge', maps: ['ashford'], want: [{ who: [L], action: 'move', place: 'name:Old Mill Bridge' }] },
   { say: 'velites to ash ford', maps: ['ashford'], want: [{ who: [V], action: 'move', place: 'name:Ash Ford' }] },

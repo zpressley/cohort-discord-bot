@@ -72,14 +72,20 @@ const SCENARIOS = {
 // north-west corner: the quick fight the engine's tests were written on),
 // unless `deploy` asks for the map's own deployment: either side of the
 // river, with an approach march, as on every other map.
-function loadScenario(name, { map = null, deploy = false } = {}) {
+// `kind`: the kind of battle (src/data/maps, kindsOf), for a map that forms
+// its armies up elsewhere for it (a map's `deployFor`: Crownhill's fords).
+function loadScenario(name, { map = null, deploy = false, kind = null } = {}) {
   const factory = SCENARIOS[name]
   if (!factory) return null
   const spec = factory()
   if ((!map || map === 'crownhill') && !deploy) return spec
   map = map ?? 'crownhill'
   if (!MAPS[map]) return null
-  return { ...spec, map, units: deployArmies(resolveMap(map), spec.units, spec.sides) }
+  const resolved = resolveMap(map)
+  // (Kept in the spec, so that armies called out for it form up there too:
+  // army/factions.js, standard.js, secondLine.js.)
+  const elsewhere = MAPS[map].deployFor?.[kind] ?? null
+  return { ...spec, map, units: deployArmies(resolved, spec.units, spec.sides, elsewhere ?? resolved.deploy ?? {}), ...(elsewhere ? { deploy: elsewhere } : {}) }
 }
 
 // The maps a battle can be fought on, for choosing, each with its size in

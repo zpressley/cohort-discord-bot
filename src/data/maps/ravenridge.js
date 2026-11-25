@@ -94,8 +94,19 @@ module.exports = {
   // docs/DECISIONS.md, "How the first battle, being asked, and forming up
   // were built" (combined with the planner's change).
   deploy: { west: { x: 9, y: 22 }, east: { x: 31, y: 22 } },
+  // For a pitched battle, the west army three tiles north, at (9, 19).
+  // From (9, 22) the computer against itself gave the west 36%: the west
+  // held the southern half of the ridge, off the road, and the east the
+  // Stone Ford on it; whoever went looking met the other at the gap. From
+  // here 48 to 57% a tile either way (53% at (9, 19); 60 battles each).
+  // docs/DECISIONS.md, as above.
+  deployFor: { pitched: { west: { x: 9, y: 19 }, east: { x: 31, y: 22 } } },
   // The ground to fight for (engine/orchestrator/victory.js, objectiveArea):
   // the saddle where the road goes through the ridge, held from on it (the
   // open ground between the two halves of the ridge, not the whole road).
-  ground: [{ name: 'Raven Gap', tiles: GAP }]
+  ground: [{ name: 'Raven Gap', tiles: GAP }],
+  // The kinds of battle fought here, the first offered first at the muster
+  // (docs/DECISIONS.md, "How the kinds of battle were built"): the gap is a
+  // choke point, made for a battle for ground.
+  kinds: ['pitched', 'ground']
 }

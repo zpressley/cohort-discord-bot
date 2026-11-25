@@ -200,6 +200,7 @@ function createServer(store, { discord = null } = {}) {
           return send(res, 201, store.muster({
             scenario: body.scenario, map: body.map, opponent: body.opponent, side: body.side,
             timeLimitMinutes: body.timeLimitMinutes, objectives: Array.isArray(body.objectives) ? body.objectives.map(String) : undefined,
+            kind: typeof body.kind === 'string' ? body.kind : undefined,
             seed: Number.isInteger(body.seed) ? body.seed : undefined,
             turnLimit: Number.isInteger(body.turnLimit) ? body.turnLimit : undefined,
             dayMinutes: Number.isInteger(body.dayMinutes) ? body.dayMinutes : undefined,

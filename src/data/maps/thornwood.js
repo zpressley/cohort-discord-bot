@@ -89,9 +89,26 @@ module.exports = {
   // battles); now the west wins 51%. docs/DECISIONS.md, "How columns, wavering under fire and
   // flight were mended".
   deploy: { west: { x: 6, y: 20 }, east: { x: 35, y: 20 } },
+  // For a pitched battle (no ground to fight for), the west army forms up
+  // in the north field, at (6, 14). From the road at (6, 20) the computer
+  // against itself gave the west 70 to 74% (and 65% from (6, 17) or (7, 16)):
+  // both armies hold the ford, each on its own bank, and the east, losing
+  // patience first as often as not, must cross it a unit at a time into the
+  // west's line under Thorn Knoll; and with neither holding, they meet at
+  // the knoll, on the west's bank. From the north field the west makes for
+  // the knoll through the wood, not the ford, and the share is 43 to 48% a
+  // tile either way (60 battles each; 47% at (6, 16)). docs/DECISIONS.md,
+  // "How the kinds of battle were built", round two.
+  deployFor: { pitched: { west: { x: 6, y: 14 }, east: { x: 35, y: 20 } } },
   // The ground to fight for (engine/orchestrator/victory.js, objectiveArea):
   // the bald rise in the heart of the wood, held from on it or beside it
   // (the brook cuts its eastern foot: held from on it alone, the west army
   // won 63 battles in 100).
-  ground: [{ feature: 'Thorn Knoll', name: 'Thorn Knoll', reach: 1 }]
+  ground: [{ feature: 'Thorn Knoll', name: 'Thorn Knoll', reach: 1 }],
+  // The kinds of battle fought here, the first offered first at the muster
+  // (docs/DECISIONS.md, "How the kinds of battle were built"). The knoll is
+  // the king of the hill (ruled 2026-11-25: "need a king of the hill style
+  // one"): one rise in the heart of the wood, and its muster line says so.
+  kinds: ['pitched', 'ground'],
+  kingOfTheHill: true
 }

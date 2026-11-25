@@ -521,6 +521,13 @@ function toTheSide(event, side, over = false, held = false, seen = null) {
   // Once the battle is over, holding the ground decides nothing: no "hold
   // it alone and the field is yours" after "the battle is over".
   const words = held ? GROUND.held : GROUND
+  // Some of several to hold (event.needed): how many each side holds.
+  if (event.needed) {
+    const some = held ? GROUND.some.held : GROUND.some
+    const called = event.called ?? 'pieces of ground'
+    if (event.close) return over ? '' : some.close(event.names ?? [event.name], event.side === side, event.close)
+    if (event.side && !over) return some.took(event.name, event.side === side, event.holding?.[event.side] ?? 1, event.needed, event.of, called)
+  }
   if (event.close) return over ? '' : words.close(event.name, event.side === side, event.close)
   if (event.side) return over ? (held && event.side === side ? GROUND.held.tookAtTheEnd(event.name) : GROUND.tookAtTheEnd(event.name, event.side === side)) : words.took(event.name, event.side === side)
   // Who is on it now he may already know: an enemy reported there, or his

@@ -46,7 +46,7 @@ async function start(store = createBattleStore({})) {
 // 2 until Crownhill's east army formed up further north.)
 async function takenInBattle(app) {
   const red = (await app.api('POST', '/api/commanders', { faction: 'persia' })).body
-  const seats = (await app.api('POST', '/api/battles', { opponent: 'friend', side: 'red', seed: 11, commander: red.token, faction: 'persia' })).body.seats
+  const seats = (await app.api('POST', '/api/battles', { opponent: 'friend', side: 'red', seed: 11, commander: red.token, faction: 'persia', kind: 'ground' })).body.seats
   // Blue brings a Commander of Rome, so that both armies are fixed and the
   // battle is the same one whatever faction the lot would have given him.
   const blue = (await app.api('POST', '/api/commanders', { faction: 'rome' })).body
@@ -150,7 +150,10 @@ test('fog of war, held: his map holds only what can be seen from where he is hel
     // what reaches the captors about him at once, before a rider takes it
     // to their own Commander (since the east army forms up further south
     // on Crownhill, November 24, this battle has one such line).
-    assert.ok(dispatch.lines.length - 1 >= theirs.lines.length, 'line for line, after the heading')
+    // (Not their word come late by rider, "Word from 10 min ago: ...": he
+    // heard that as it came in to the captors, in an earlier dispatch. With
+    // Crownhill's three fords, November 25, this battle has such lines.)
+    assert.ok(dispatch.lines.length - 1 >= theirs.lines.filter(l => !/^Word from /.test(l)).length, 'line for line, after the heading')
     assert.ok(dispatch.lines.slice(1).some(l => /^Enemy /.test(l)), 'their units are "enemy" to him still')
     // His far unit, which no enemy can see, is in neither.
     const blueSees = new Set(sideView(game, 'blue').intel.filter(e => e.status === 'visible').map(e => e.id))

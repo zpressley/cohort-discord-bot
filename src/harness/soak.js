@@ -179,35 +179,41 @@ for (const field of fields) for (const [i, key] of Object.keys(FACTIONS).entries
   }
 }
 
-// The app's battles fight for each map's own ground (src/data/maps,
-// `ground`) in a day of twelve hours: every faction's army on every map, as
-// above, red played by the three kinds of commander. Every one must end; and
-// how many the ground decided, and how long they ran, are told.
-const { groundOf } = require('../data/maps')
+// The app's battles, in a day of twelve hours, of every kind each field
+// offers (ruled 2026-11-25; src/data/maps, kindsOf): the battle for each
+// map's own ground (`ground`, as many of it to hold as the map says), and
+// the pitched battle, with none. Every faction's army on every map, as
+// above, red played by the three kinds of commander. Every one must end;
+// and how many the ground decided, how many night ended, and how long they
+// ran, are told, kind by kind.
+const { kindsOf, kindSpec } = require('../data/maps')
 const T = require('../engine/combat/tables')
 const { waitingOn } = require('../engine/orchestrator')
 const ground = { games: 0, finished: 0, minutes: 0, byGround: 0, night: 0, stuck: [] }
-fields.forEach((field, m) => factionKeys.forEach((red, i) => {
+const pitched = { games: 0, finished: 0, minutes: 0, byGround: 0, night: 0, heldAtNight: 0, stuck: [] }
+fields.forEach((field, m) => factionKeys.forEach((red, i) => kindsOf(field).forEach(kind => {
+  const ground_ = kind === 'pitched' ? pitched : ground
   for (const [foe, orders] of Object.entries(FOES)) {
     const blue = factionKeys[(i + 3 + m * 5) % factionKeys.length]
     const seed = 1 + i + factionKeys.length * m
-    const spec = fieldFactions(loadScenario('meeting-battle', { map: field, deploy: true }), { red, blue })
+    const spec = fieldFactions(loadScenario('meeting-battle', { map: field, deploy: true, kind }), { red, blue })
     const mine = spec.units.filter(u => u.side === 'red')
-    const game = createGame({ ...spec, standingOrders: {}, dayMinutes: T.DAY.MINUTES, objectives: groundOf(field), commanders: { red: { unitId: mine[leadUnit(mine)].id } } }, { seed })
+    const game = createGame({ ...spec, standingOrders: {}, dayMinutes: T.DAY.MINUTES, ...kindSpec(field, kind), commanders: { red: { unitId: mine[leadUnit(mine)].id } } }, { seed })
     let turns = 0
     while (!game.outcome.decided && turns < 4 * MAX_PLAYER_TURNS) {
       if (waitingOn(game).includes('red')) submitOrders(game, 'red', orders(game))
       if (!game.outcome.decided && waitingOn(game).includes('blue')) submitOrders(game, 'blue', byCommandPost(planTurn(game, 'blue')))
       turns++
     }
-    ground.games++
-    if (!game.outcome.decided) { ground.stuck.push(`${field} ${red} v ${blue}, red a commander who ${foe}, seed ${seed}`); continue }
-    ground.finished++
-    ground.minutes += game.minutesElapsed
-    if (game.outcome.reason === 'objectives held') ground.byGround++
-    if (game.outcome.reason === 'night fell') ground.night++
+    ground_.games++
+    if (!game.outcome.decided) { ground_.stuck.push(`${field} ${kind} ${red} v ${blue}, red a commander who ${foe}, seed ${seed}`); continue }
+    ground_.finished++
+    ground_.minutes += game.minutesElapsed
+    if (game.outcome.reason === 'objectives held') ground_.byGround++
+    if (game.outcome.reason === 'night fell') ground_.night++
+    if (game.outcome.reason === 'field held at nightfall') ground_.heldAtNight = (ground_.heldAtNight ?? 0) + 1
   }
-}))
+})))
 
 // The big fields (2 km, src/data/maps; mapChoices with big): half the
 // factions' armies, each with its second line (engine/army/secondLine.js),
@@ -218,14 +224,17 @@ fields.forEach((field, m) => factionKeys.forEach((red, i) => {
 const { withSecondLine } = require('../engine/army/secondLine')
 const bigFields = mapChoices().filter(m => !fields.includes(m.id)).map(m => m.id)
 const big = { games: 0, finished: 0, minutes: 0, byGround: 0, night: 0, stuck: [] }
+// (Each kind the field offers: the battle for ground with every faction
+// that came up before, the pitched battle with the other half.)
 bigFields.forEach((field, m) => factionKeys.forEach((red, i) => {
-  if (i % 2) return
+  const kind = i % 2 ? 'pitched' : 'ground'
+  if (!kindsOf(field).includes(kind)) return
   for (const [foe, orders] of Object.entries(FOES)) {
     const blue = factionKeys[(i + 5 + m * 3) % factionKeys.length]
     const seed = 7 + i + factionKeys.length * m
-    const spec = withSecondLine(fieldFactions(loadScenario('meeting-battle', { map: field, deploy: true }), { red, blue }), { red, blue })
+    const spec = withSecondLine(fieldFactions(loadScenario('meeting-battle', { map: field, deploy: true, kind }), { red, blue }), { red, blue })
     const mine = spec.units.filter(u => u.side === 'red')
-    const game = createGame({ ...spec, standingOrders: {}, dayMinutes: T.DAY.MINUTES, objectives: groundOf(field), commanders: { red: { unitId: mine[leadUnit(mine)].id } } }, { seed })
+    const game = createGame({ ...spec, standingOrders: {}, dayMinutes: T.DAY.MINUTES, ...kindSpec(field, kind), commanders: { red: { unitId: mine[leadUnit(mine)].id } } }, { seed })
     let turns = 0
     while (!game.outcome.decided && turns < 4 * MAX_PLAYER_TURNS) {
       if (waitingOn(game).includes('red')) submitOrders(game, 'red', orders(game))
@@ -233,11 +242,11 @@ bigFields.forEach((field, m) => factionKeys.forEach((red, i) => {
       turns++
     }
     big.games++
-    if (!game.outcome.decided) { big.stuck.push(`${field} ${red} v ${blue}, red a commander who ${foe}, seed ${seed}`); continue }
+    if (!game.outcome.decided) { big.stuck.push(`${field} ${kind} ${red} v ${blue}, red a commander who ${foe}, seed ${seed}`); continue }
     big.finished++
     big.minutes += game.minutesElapsed
     if (game.outcome.reason === 'objectives held') big.byGround++
-    if (game.outcome.reason === 'night fell') big.night++
+    if (game.outcome.reason === 'night fell' || game.outcome.reason === 'field held at nightfall') big.night++
   }
 }))
 const bigHotseat = { games: 0, finished: 0, stuck: [] }
@@ -261,20 +270,22 @@ for (const field of bigFields) for (const name of Object.keys(SCENARIOS)) {
 
 // Every battle comes to grips (harness/no-fight.js): two armies led by the
 // computer, and the computer against a player who gives no orders, on
-// every map, with the map's ground to fight for and without, under each of
+// every map, in a battle for the map's ground and in a pitched battle (none
+// to fight for, and night decides by the men left), under each of
 // the computer's three characters, usual and bought armies (a fifth of the
 // study's battles). None may come to nothing: end by night or the turn
 // limit with neither side having lost a tenth of its men.
 const noFight = require('./no-fight')
 const grips = { games: 0, nothing: [], night: 0, quiet: 0 }
-for (const redPlays of ['computer', 'idle']) for (const none of [false, true]) {
+for (const redPlays of ['computer', 'idle']) for (const battleKind of ['ground', 'pitched']) {
+  const none = false
   const all = noFight.battles({ maps: mapChoices().map(m => m.id), rounds: 1, redPlays })
   for (const b of all.filter((_, i) => i % 5 === 0)) {
-    const r = noFight.play({ ...b, redPlays, none })
+    const r = noFight.play({ ...b, redPlays, none, battleKind })
     grips.games++
     if (r.night) grips.night++
     if (r.quiet >= noFight.QUIET_MINUTES) grips.quiet++
-    if (r.nothing) grips.nothing.push(`${b.map} ${b.red}${b.bought ? ` (${b.kind})` : ''} v ${b.blue} led by a ${b.character} Commander, red ${redPlays === 'idle' ? 'a commander who gives no orders' : `the computer (${b.redCharacter})`}, ${none ? 'no ground' : 'the ground'}, seed ${b.seed}`)
+    if (r.nothing) grips.nothing.push(`${b.map} ${b.red}${b.bought ? ` (${b.kind})` : ''} v ${b.blue} led by a ${b.character} Commander, red ${redPlays === 'idle' ? 'a commander who gives no orders' : `the computer (${b.redCharacter})`}, ${battleKind === 'pitched' ? 'a pitched battle' : 'the ground'}, seed ${b.seed}`)
   }
 }
 
@@ -302,6 +313,9 @@ for (const stuck of bought.stuck.slice(0, 10)) console.log(`  stuck: ${stuck}`)
 console.log(`the map's ground: ${ground.finished} of ${ground.games} finished, ${ground.byGround} decided by the ground, ` +
   `${ground.night} ended by night, ${Math.round(ground.minutes / Math.max(1, ground.finished))} battle minutes on average`)
 for (const stuck of ground.stuck.slice(0, 10)) console.log(`  stuck: ${stuck}`)
+console.log(`the pitched battle: ${pitched.finished} of ${pitched.games} finished, ${pitched.heldAtNight} won at nightfall, ` +
+  `${pitched.night} ended by night with no winner, ${Math.round(pitched.minutes / Math.max(1, pitched.finished))} battle minutes on average`)
+for (const stuck of pitched.stuck.slice(0, 10)) console.log(`  stuck: ${stuck}`)
 console.log(`the big fields (${bigFields.join(', ')}): ${big.finished} of ${big.games} finished, ${big.byGround} decided by the ground, ` +
   `${big.night} ended by night, ${Math.round(big.minutes / Math.max(1, big.finished))} battle minutes on average; hotseat ${bigHotseat.finished} of ${bigHotseat.games}`)
 for (const stuck of [...big.stuck, ...bigHotseat.stuck].slice(0, 10)) console.log(`  stuck: ${stuck}`)
@@ -310,4 +324,4 @@ for (const nothing of grips.nothing.slice(0, 10)) console.log(`  came to nothing
 console.log(`meeting battle: a verdict in ${decided} of 50, ` +
   `${(meetingTurns / Math.max(1, decided)).toFixed(1)} battle turns on average`)
 
-if (result.stuck.length > 0 || thinking.stuck.length > 0 || armies.stuck.length > 0 || characters.stuck.length > 0 || bought.stuck.length > 0 || ground.stuck.length > 0 || big.stuck.length > 0 || bigHotseat.stuck.length > 0 || grips.nothing.length > 0 || decided < 50 || result.unread > 0) process.exitCode = 1
+if (result.stuck.length > 0 || thinking.stuck.length > 0 || armies.stuck.length > 0 || characters.stuck.length > 0 || bought.stuck.length > 0 || ground.stuck.length > 0 || pitched.stuck.length > 0 || big.stuck.length > 0 || bigHotseat.stuck.length > 0 || grips.nothing.length > 0 || decided < 50 || result.unread > 0) process.exitCode = 1

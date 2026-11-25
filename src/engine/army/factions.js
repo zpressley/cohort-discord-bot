@@ -129,7 +129,9 @@ function fieldFactions(spec, factions) {
   const map = resolveMap(spec.map ?? 'crownhill')
   let units = spec.units
   for (const [side, key] of Object.entries(factions)) {
-    const army = deployArmies(map, factionUnits(key, side, spec.sides?.[side]?.homeEdge), { [side]: spec.sides?.[side] ?? {} })
+    // (Where the spec says this battle's armies form up, if it says: a kind
+    // of battle a field forms up for elsewhere, src/data/maps deployFor.)
+    const army = deployArmies(map, factionUnits(key, side, spec.sides?.[side]?.homeEdge), { [side]: spec.sides?.[side] ?? {} }, spec.deploy ?? map.deploy ?? {})
     const at = units.findIndex(u => u.side === side)
     const rest = units.filter(u => u.side !== side)
     units = at < 0 ? [...rest, ...army] : [...rest.slice(0, at), ...army, ...rest.slice(at)]

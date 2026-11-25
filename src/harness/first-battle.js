@@ -9,7 +9,11 @@
 //
 // He plays one of three ways:
 //   --play advance   "everyone advance" on his first turn, nothing after
-//   --play take      "everyone take <the field's ground>" on his first turn
+//   --play take      the first turn's first example order for the kind of
+//                    battle, on his first turn: "everyone take <the field's
+//                    ground>" ("everyone take the fords" on Crownhill); in a
+//                    pitched battle, with no ground, "everyone advance"
+//   --play order     the words of --order on his first turn, nothing after
 //   --play hold      "everyone hold" on his first turn, nothing after (to
 //                    count how often a Commander whose men hold is asked)
 //   --play planner   he plans as the computer does (opponent/planner.js),
@@ -21,6 +25,8 @@
 //
 //   node src/harness/first-battle.js --play advance --battles 40
 //   --map crownhill   one field only
+//   --kind pitched    the kind of battle (default ground; src/data/maps,
+//                     kindsOf)
 
 const arg = (name, fallback) => { const i = process.argv.indexOf(name); return i > -1 ? process.argv[i + 1] : fallback }
 const { createBattleStore } = require('../web/battles')
@@ -29,24 +35,28 @@ const { planTurn } = require('../opponent/planner')
 const { byCommandPost } = require('../engine/command/messengers')
 const { mapChoices } = require('../adapters/hotseat/scenarios')
 const { FACTIONS } = require('../engine/army/factions')
-const { groundOf } = require('../data/maps')
+const { groundOf, MAPS } = require('../data/maps')
 
 const MAX_TURNS = 300
+// --play order --order "<words>": that order on his first turn, nothing after.
+const ORDER = arg('--order', 'everyone advance')
 
 function menOf(game, side) {
   return [...game.battle.world.units, ...game.battle.fledUnits].filter(u => u.side === side).reduce((n, u) => n + Math.max(0, u.strength), 0)
 }
 
-async function play({ map, faction, seed, how }) {
+async function play({ map, faction, seed, how, kind = 'ground' }) {
   const store = createBattleStore({})
   const commander = store.commanders.create({ faction })
-  const { seats } = store.muster({ map, side: 'red', seed, commander: commander.token, faction })
+  const { seats } = store.muster({ map, side: 'red', seed, commander: commander.token, faction, kind })
   const token = seats.red
   const entry = store.seatOf(token).entry
   const game = entry.game
   const start = { red: menOf(game, 'red'), blue: menOf(game, 'blue') }
   const ground = groundOf(map).map(g => g.name)[0]
-  const first = how === 'advance' ? 'everyone advance' : how === 'hold' ? 'everyone hold' : `everyone take the ${ground.replace(/^the /i, '')}`
+  const several = MAPS[map]?.hold?.called
+  const take = kind === 'pitched' ? 'everyone advance' : several ? `everyone take the ${several}` : `everyone take the ${ground.replace(/^the /i, '')}`
+  const first = how === 'advance' ? 'everyone advance' : how === 'hold' ? 'everyone hold' : how === 'order' ? ORDER : take
   let turns = 0
   for (; turns < MAX_TURNS && !game.outcome.decided; turns++) {
     if (how === 'planner') {
@@ -88,6 +98,8 @@ async function play({ map, faction, seed, how }) {
     minutes: game.minutesElapsed, turns: game.calls.red, firstAsked,
     lostRed: lost('red'), lostBlue: lost('blue'), blows: lost('red') + lost('blue') > 0,
     heldAt, askedWhileHeld, askedInLastHold,
+    // His Commander taken (riding with his best unit).
+    taken: game.battle.log.ofType('commanderTaken').some(e => e.side === 'red'),
     crowded: game.battle.log.all().filter(e => e.type === 'crowding' && e.tier !== 'organized').length,
     // Packed together on the ground to fight for itself (not on the road there).
     packed: game.battle.log.all().filter(e => e.type === 'crowding' && e.tier !== 'organized' && e.unitId.startsWith('red') && game.objectives.some(o => o.tiles.some(t => Math.abs(t.x - e.at.x) <= 1 && Math.abs(t.y - e.at.y) <= 1))).length,
@@ -95,17 +107,17 @@ async function play({ map, faction, seed, how }) {
   }
 }
 
-async function league({ battles = 40, how = 'advance', only = null } = {}) {
+async function league({ battles = 40, how = 'advance', only = null, kind = 'ground' } = {}) {
   const factions = Object.keys(FACTIONS)
   const rows = []
   for (const { id: map } of mapChoices({ big: false }).filter(m => !only || m.id === only)) {
-    const r = { map, n: 0, won: 0, lost: 0, night: 0, reasons: {}, lostRed: 0, lostBlue: 0, noBlows: 0, firstAsked: [], turns: 0, minutes: 0, groundLostUnasked: 0, lastHoldUnasked: 0, asked: 0, crowded: 0, packed: 0, why: {} }
+    const r = { map, n: 0, won: 0, lost: 0, night: 0, reasons: {}, lostRed: 0, lostBlue: 0, noBlows: 0, firstAsked: [], turns: 0, minutes: 0, groundLostUnasked: 0, lastHoldUnasked: 0, asked: 0, crowded: 0, packed: 0, why: {}, taken: 0 }
     for (let i = 0; i < battles; i++) {
-      const out = await play({ map, faction: factions[i % factions.length], seed: 101 + i * 977, how })
+      const out = await play({ map, faction: factions[i % factions.length], seed: 101 + i * 977, how, kind })
       r.n++
       if (out.winner === 'red') r.won++
       else if (out.winner === 'blue') r.lost++
-      if (out.reason === 'night fell') r.night++
+      if (out.reason === 'night fell' || out.reason === 'field held at nightfall') r.night++
       const key = !out.decided ? 'not ended' : out.winner === 'draw' ? out.reason : `${out.reason} (${out.winner === 'red' ? 'his' : 'the computer\'s'})`
       r.reasons[key] = (r.reasons[key] ?? 0) + 1
       r.lostRed += out.lostRed
@@ -113,6 +125,7 @@ async function league({ battles = 40, how = 'advance', only = null } = {}) {
       if (!out.blows) r.noBlows++
       if (out.firstAsked !== null) r.firstAsked.push(out.firstAsked)
       r.turns += out.turns
+      if (out.taken) r.taken++
       r.minutes += out.minutes
       r.crowded += out.crowded
       r.packed += out.packed
@@ -127,7 +140,7 @@ async function league({ battles = 40, how = 'advance', only = null } = {}) {
 
 if (require.main === module) {
   const how = arg('--play', 'advance')
-  league({ battles: Number(arg('--battles', 40)), how, only: arg('--map', null) }).then(rows => {
+  league({ battles: Number(arg('--battles', 40)), how, only: arg('--map', null), kind: arg('--kind', 'ground') }).then(rows => {
     const pct = (a, b) => `${Math.round(100 * a / Math.max(1, b))}%`
     for (const r of rows) {
       const f = [...r.firstAsked].sort((a, b) => a - b)
@@ -135,6 +148,7 @@ if (require.main === module) {
         `no blow struck in ${r.noBlows}; men lost a battle: his ${Math.round(r.lostRed / r.n)}, the computer's ${Math.round(r.lostBlue / r.n)}`)
       console.log(`            first asked again after ${f[0] ?? '-'} to ${f.at(-1) ?? '-'} min (median ${f[Math.floor(f.length / 2)] ?? '-'}); ` +
         `${(r.turns / r.n).toFixed(1)} turns, ${Math.round(r.minutes / r.n)} min a battle; lost by the ground without being asked while the enemy held it: ${r.groundLostUnasked} (in the hold that won it: ${r.lastHoldUnasked}); ${(r.turns / Math.max(1, r.minutes / 60)).toFixed(1)} asked an hour; times units packed together ${r.crowded} (${r.packed} his, on or beside the ground)`)
+      console.log(`            his Commander taken in ${r.taken} (${r.taken ? `1 in ${(r.n / r.taken).toFixed(0)}` : 'none'})`)
       console.log(`            ${Object.entries(r.reasons).sort((a, b) => b[1] - a[1]).map(([k, v]) => `${k} ${v}`).join(', ')}`)
       console.log(`            asked for: ${Object.entries(r.why).sort((a, b) => b[1] - a[1]).map(([k, v]) => `${k} ${v}`).join(', ')}`)
     }

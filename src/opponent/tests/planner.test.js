@@ -70,10 +70,17 @@ test('a side that holds takes good ground: foot abreast, archers behind, no one 
 test('a side that does not hold goes to find the enemy; one that holds loses patience in the end', () => {
   // (Not by the engine's search at once, as before: first where the enemy
   // would hold, the crossing opposite: opponent/tests/grips.test.js.)
-  const seeker = onTheMap('crownhill', false)
-  const first = planTurn(seeker, 'blue')
-  const theirs = theirGround(seeker, 'blue', { x: -1, y: 0 }, { x: 0, y: -1 })
-  assert.ok(first.every(o => o.action === 'move' && tileDistance(o.target, theirs) <= 6), 'no enemy known: it goes to look where he would hold')
+  // (On Crownhill with its ground off to a side, as it was with the hill
+  // until November 25: no meeting place, so it looks where he would hold.)
+  const { MAPS } = require('../../data/maps')
+  const was = MAPS.crownhill.ground
+  MAPS.crownhill.ground = [{ feature: 'The Crownhill', name: 'the Crownhill' }]
+  try {
+    const seeker = onTheMap('crownhill', false)
+    const first = planTurn(seeker, 'blue')
+    const theirs = theirGround(seeker, 'blue', { x: -1, y: 0 }, { x: 0, y: -1 })
+    assert.ok(first.every(o => o.action === 'move' && tileDistance(o.target, theirs) <= 6), 'no enemy known: it goes to look where he would hold')
+  } finally { MAPS.crownhill.ground = was }
 
   const holder = onTheMap('crownhill', true)
   assert.ok(planTurn(holder, 'blue').some(o => o.action === 'defend'))
@@ -153,7 +160,9 @@ test('it plays every map to a verdict against a commander who only holds, and ag
 
 test('it goes for the map\'s ground to fight for: a bridge from its own end, a hill or a pass from on it', () => {
   const { groundOf } = require('../../data/maps')
-  for (const { id: map } of mapChoices()) {
+  // (A field with several grounds, some of them to hold, shares its army
+  // out among them instead: opponent/tests/battle-kinds.test.js.)
+  for (const { id: map } of mapChoices().filter(m => groundOf(m.id).length === 1)) {
     const spec = { ...loadScenario('meeting-battle', { map, deploy: true }), standingOrders: {}, objectives: groundOf(map) }
     const game = createGame(spec, { seed: 1 })
     const ground = game.objectives[0]

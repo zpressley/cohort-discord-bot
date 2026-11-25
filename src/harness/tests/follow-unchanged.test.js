@@ -14,6 +14,14 @@
 // Thornwood's west a tile nearer, and a Commander caught running may be
 // taken (docs/DECISIONS.md, "How columns,
 // wavering under fire and flight were mended"). They were 1d9ca512 26, 9d62f154 15, 3d0c58e3 12.
+//
+// Retaken when ties of who steps first, which fight is taken first and
+// which volley lands first were made a seeded draw of their own instead of
+// the units' names, so that a side called "red" is no longer ahead of one
+// called "blue" (docs/DECISIONS.md, "How the kinds of battle were built",
+// round two). They were 7675a063 11 (greywater rome germania 5), 150f188e
+// 16 (ravenridge thrace sarmatia 4), 3c83cec6 25 (thornwood macedon
+// parthia 3).
 
 const { test } = require('node:test')
 const assert = require('node:assert/strict')
@@ -37,9 +45,9 @@ const BATTLES = [
 ]
 
 const BEFORE = {
-  'thornwood macedon parthia 3': '3c83cec6 25',
-  'ravenridge thrace sarmatia 4': '150f188e 16',
-  'greywater rome germania 5': '7675a063 11'
+  'thornwood macedon parthia 3': '192f4dc9 32',
+  'ravenridge thrace sarmatia 4': 'dcef9521 44',
+  'greywater rome germania 5': '24ae0710 16'
 }
 
 function fight([field, red, blue, seed]) {

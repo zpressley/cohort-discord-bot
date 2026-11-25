@@ -12,15 +12,15 @@ const { createBattleState, stepTurn } = require('../../engine/battle/battle')
 const { objectiveArea } = require('../../engine/orchestrator/victory')
 const { loadScenario } = require('../../adapters/hotseat/scenarios')
 const { fieldFactions, FACTIONS } = require('../../engine/army/factions')
-const { groundOf } = require('../../data/maps')
+const { groundOf, MAPS } = require('../../data/maps')
 
 // Minutes until the first of a side's units, marching alone, sets foot on
-// the map's ground to fight for.
-function firstOn(map, side, faction) {
-  const all = fieldFactions(loadScenario('meeting-battle', { map, deploy: true }), { red: faction, blue: faction })
+// (or within reach of) a piece of the map's ground to fight for.
+function firstOn(map, side, faction, ground = groundOf(map)[0]) {
+  const all = fieldFactions(loadScenario('meeting-battle', { map, deploy: true, kind: 'ground' }), { red: faction, blue: faction })
   const spec = { ...all, standingOrders: {}, units: all.units.filter(u => u.side === side) }
   const state = createBattleState(spec, { seed: 1 })
-  const area = objectiveArea(state.map, groundOf(map)[0])
+  const area = objectiveArea(state.map, ground)
   // Every unit sent to the tile of the ground nearest its middle.
   const tiles = area.tiles.filter(t => state.map.passable(t))
   const mid = tiles.reduce((a, t) => ({ x: a.x + t.x / tiles.length, y: a.y + t.y / tiles.length }), { x: 0, y: 0 })
@@ -28,18 +28,25 @@ function firstOn(map, side, faction) {
   const reach = area.reach ?? 0
   for (let t = 1; t <= 40; t++) {
     stepTurn(state, t === 1 ? { [side]: spec.units.map(u => ({ unitRef: u.id, action: 'move', target: centre })) } : {})
-    if (state.world.units.some(u => area.tiles.some(a => Math.abs(a.x - u.position.x) <= reach && Math.abs(a.y - u.position.y) <= reach))) return t * 10
+    if (state.world.units.some(u => area.tiles.some(a => Math.abs(a.x - u.position.x) + Math.abs(a.y - u.position.y) <= reach))) return t * 10
   }
   return Infinity
 }
 
+// With several pieces of ground and some of them to hold (Crownhill's two
+// of three fords, ruled 2026-11-25): as long marching to as many as must
+// be held, each side's nearest (the first to the nearest, and the first
+// to the second nearest: measured, west 18 and 37 minutes, east 10 and 44,
+// from where they form up for it since (Crownhill's deployFor); with the
+// east army where it forms up for a pitched battle, its second took 60).
 test('on every 1 km field the two armies are as long marching to the ground to fight for: on average over every faction, within ten minutes of each other', () => {
   const factions = Object.keys(FACTIONS)
   for (const map of ['crownhill', 'ashford', 'thornwood', 'ravenridge']) {
-    const mean = (side) => factions.reduce((n, f) => n + firstOn(map, side, f), 0) / factions.length
-    const west = mean('red')
-    const east = mean('blue')
-    assert.ok(Math.abs(west - east) <= 10, `${map}: west ${west} min, east ${east} min`)
+    const needed = MAPS[map].hold?.needed ?? 1
+    const times = (side) => groundOf(map).map(g => factions.reduce((n, f) => n + firstOn(map, side, f, g), 0) / factions.length).sort((a, b) => a - b)
+    const west = times('red')
+    const east = times('blue')
+    for (let i = 0; i < needed; i++) assert.ok(Math.abs(west[i] - east[i]) <= 10, `${map}, ground ${i + 1} of ${needed}: west ${west[i]} min, east ${east[i]} min`)
   }
 })
 

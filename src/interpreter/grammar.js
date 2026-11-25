@@ -499,6 +499,9 @@ const VOCABULARY = [
 VOCABULARY.push('ahead', 'backward', 'backwards', 'onward', 'onwards', 'alone', 'together', 'instead', 'already',
   'enough', 'long', 'short', 'soon', 'later', 'first', 'last', 'next', 'away', 'again', 'outside', 'beside',
   'between', 'among', 'under', 'above', 'below', 'against', 'upon', 'onto', 'quick', 'hurry', 'rush', 'slowly')
+// Several pieces of ground at once ("take the fords": ruled 2026-11-25,
+// three fords): not "put right" into one.
+VOCABULARY.push('fords', 'crossings', 'bridges', 'hills', 'grounds')
 const KNOWN = new Set(VOCABULARY)
 // What a typo is put right to: the words an order turns on.
 const TARGETS = [...VERB_WORDS, 'everyone', 'everybody', 'north', 'south', 'east', 'west', 'woods', 'forest', 'bridge',

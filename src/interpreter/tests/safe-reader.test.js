@@ -85,28 +85,30 @@ test('riding with a unit and an order to it on one line are read as the two orde
   assert.deepEqual(intents.map(i => i.kind === 'ride' ? ['ride', i.unitRef] : [i.unitRef, i.action]), [['ride', 'velites'], ['velites', 'advance']])
 })
 
+// (On Thornwood, whose ground to fight for is a hill: Crownhill's is its
+// three fords since November 25.)
 test('"the enemy on the hill" is the enemy his side has seen on it (S3)', async () => {
-  const ctx = field('crownhill')
+  const ctx = field('thornwood')
   const hill = ctx.ground[0].tiles[Math.floor(ctx.ground[0].tiles.length / 2)]
   const seen = { ...ctx, enemies: [
     { id: 'blue_one', name: 'troops', position: { ...hill }, status: 'visible', seenOnTurn: 3 },
     { id: 'blue_far', name: 'troops', position: { x: 2, y: ctx.map.height - 2 }, status: 'visible', seenOnTurn: 3 }
   ] }
-  for (const said of ['the legion charges the enemy on the hill', 'legionaries attack the enemy at the Crownhill', 'legionaries attack the enemy near the hill']) {
+  for (const said of ['the legion charges the enemy on the hill', 'legionaries attack the enemy at Thorn Knoll', 'legionaries attack the enemy near the hill']) {
     const r = await read(said, seen)
     assert.deepEqual(r.orders.map(o => [o.unitRef, o.action, o.enemy]), [['red_legionaries', 'attack', 'blue_one']], said)
   }
 })
 
 test('"attack the enemy on the hill" with no enemy seen there sends the men to the hill to fight whoever they find, and says so (S3, S12)', async () => {
-  const ctx = field('crownhill')
+  const ctx = field('thornwood')
   for (const enemies of [[], [{ id: 'blue_far', name: 'troops', position: { x: 2, y: ctx.map.height - 2 }, status: 'visible', seenOnTurn: 3 }]]) {
     const r = await read('legionaries attack the enemy on the hill', { ...ctx, enemies })
     assert.equal(r.questions.length, 0, r.questions.join(' '))
     assert.equal(r.orders.length, 1)
     assert.equal(r.orders[0].action, 'attack')
-    assert.ok(ctx.ground[0].tiles.some(t => Math.max(Math.abs(t.x - r.orders[0].target.x), Math.abs(t.y - r.orders[0].target.y)) <= 1), 'to the Crownhill')
-    assert.match(r.understood[0], /attack the Crownhill.*fight whoever they find there: you have seen no enemy on it/)
+    assert.ok(ctx.ground[0].tiles.some(t => Math.max(Math.abs(t.x - r.orders[0].target.x), Math.abs(t.y - r.orders[0].target.y)) <= 1), 'to Thorn Knoll')
+    assert.match(r.understood[0], /attack Thorn Knoll.*fight whoever they find there: you have seen no enemy on it/)
   }
 })
 

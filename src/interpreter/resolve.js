@@ -22,7 +22,7 @@ const { gradeOf, MAX_STEPS, loyaltyBand } = require('../engine/command/officers'
 const { findPlace, DIRECTIONS, TILE_METRES } = require('../engine/map/places')
 const { isGridRef, gridTarget, gridLabel } = require('../engine/map/grid')
 const { coverFor } = require('../engine/battle/hiding')
-const { ORDERS_READ, PLACE, KIT, FOLLOW_WORDS } = require('../narrator/words')
+const { ORDERS_READ, PLACE, KIT, FOLLOW_WORDS, GROUND } = require('../narrator/words')
 const { lettersApart } = require('./grammar')
 const { detectFeatures } = require('../engine/map/features')
 const { compassWord, KIND_WORDS: GROUND_KIND_WORDS } = require('../engine/map/places')
@@ -302,7 +302,7 @@ function resolveIntents(intents, context) {
   const named = namedIn(intents, units, context.named)
   // What places may be said by: his own edge, the ground to fight for, his
   // own units.
-  const known = { homeEdge: context.homeEdge, ground: context.ground, units: context.allOwn ?? units }
+  const known = { homeEdge: context.homeEdge, ground: context.ground, groundNeeded: context.groundNeeded ?? null, units: context.allOwn ?? units }
 
   for (let intent of intents) {
     if (intent.kind === 'surrender') { surrender = true; continue }
@@ -451,6 +451,20 @@ function resolveIntents(intents, context) {
     let perUnit = null
     if (intent.place) {
       const place = resolvePlace(map, groupOrigin(match.units), intent.place, known)
+      // Several pieces of ground at once ("everyone take the fords"): the
+      // units shared out among them, each part told where it goes.
+      if (place.spread && !intent.steps && !intent.when) {
+        const share = shareOut(match.units, place.spread)
+        const extras = {}
+        for (const key of EXTRAS) if (intent[key] !== undefined && intent[key] !== null && intent[key] !== false) extras[key] = intent[key]
+        const parts = place.spread.map((p, i) => ({ p, units: match.units.filter(u => share.get(u.id) === i) })).filter(x => x.units.length > 0)
+        for (const { p, units: part } of parts) {
+          for (const unit of part) orders.push({ unitRef: unit.id, action: intent.action, target: { ...p.position }, ...(intent.then ? { then: intent.then } : {}), ...extras })
+        }
+        understood.push(GROUND.some.shared(parts.map(({ p, units: part }) => `${part.map(u => u.id).join(', ')}: ${orderWords('say', { ...intent, careful: extras.careful }, `${p.description} (${gridLabel(p.position, { quarter: true })})`)}`)) + carried(match.units.map(u => u.id)))
+        counsel.push(...counselFor(match.units, units, { clauses: 0, action: intent.action, plain: '', shaken: context.shaken ?? [] }))
+        continue
+      }
       if (place.relative && match.units.length > 1) {
         perUnit = new Map(match.units.map(u => [u.id,
           nearestPassable(map, { x: u.position.x + place.relative.dx, y: u.position.y + place.relative.dy }) ?? u.position]))
@@ -895,6 +909,53 @@ function groundPoint(map, origin, ground) {
   return best ? { ...best } : null
 }
 
+// Several pieces of the ground to fight for at once ("take the fords"):
+// each with where to go to hold it, nearest first: as many as must be held
+// (`needed`, when the battle says: two of Crownhill's three fords), else
+// all. (All three, an army of four split three ways, won 11 battles of 40
+// for a new player against the computer; the nearest two, see
+// docs/DECISIONS.md, "How the kinds of battle were built".) The first is
+// the place; resolveIntents shares the units out among them (shareOut).
+function spreadOver(map, origin, grounds, needed = null) {
+  const spread = grounds.map(g => {
+    const position = groundPoint(map, origin, g)
+    if (!position) return null
+    const tiles = Math.max(Math.abs(position.x - origin.x), Math.abs(position.y - origin.y))
+    const way = tiles === 0 ? '(here)' : `${tiles * TILE_METRES} m ${compassWord(origin, position)}`
+    return { position, ground: g, description: `${PLACE.name(g.name)}, ${ORDERS_READ.ground}, ${way}`, tiles }
+  }).filter(Boolean).sort((a, b) => a.tiles - b.tiles || a.ground.name.localeCompare(b.ground.name)).slice(0, needed && needed < grounds.length ? needed : grounds.length)
+  if (spread.length === 0) return null
+  return { position: spread[0].position, description: spread[0].description, spread }
+}
+
+// What several pieces of ground are, all together, as an order says it:
+// "fords" when all are fords (the kind of feature on each), else "ground".
+function groupWord(map, grounds) {
+  const features = detectFeatures(map)
+  const kinds = grounds.map(g => new Set(features.filter(f => f.tiles.some(t => g.tiles.some(x => x.x === t.x && x.y === t.y))).map(f => f.kind)))
+  const common = [...(kinds[0] ?? [])].find(k => kinds.every(set => set.has(k)))
+  return common ? `${common}s` : 'ground'
+}
+
+// Units shared out among several places (spreadOver): as evenly as they
+// go, each to the nearest of those with fewest so far; the first place
+// first when the count does not come out even. Map: unit id -> index.
+function shareOut(units, spread) {
+  const given = spread.map(() => 0)
+  const out = new Map()
+  const byId = [...units].sort((a, b) => a.id.localeCompare(b.id))
+  for (const u of byId) {
+    let best = 0
+    for (let i = 1; i < spread.length; i++) {
+      const d = (j) => Math.max(Math.abs(spread[j].position.x - u.position.x), Math.abs(spread[j].position.y - u.position.y))
+      if (given[i] < given[best] || (given[i] === given[best] && d(i) < d(best))) best = i
+    }
+    given[best] += 1
+    out.set(u.id, best)
+  }
+  return out
+}
+
 function wordsFor(word) {
   const w = word.toLowerCase()
   const listed = GROUND_KIND_WORDS.find(([k]) => k === w) ?? KIND_TOO.find(([k]) => k === w)
@@ -913,12 +974,34 @@ function widePlace(map, origin, text, known) {
   let ground = null
   if (GROUND_WORDS.test(text) || GROUND_WORDS.test(bare)) {
     if (grounds.length === 0) return { question: 'There is no ground to fight for on this field. Name a place or a grid square: "to C5".' }
+    // Several to fight for (ruled 2026-11-25: three fords): all of them,
+    // shared out among the units sent.
+    if (grounds.length > 1) return spreadOver(map, origin, grounds, known.groundNeeded)
     ground = grounds[0]
   }
   if (!ground) ground = grounds.find(g => squash(g.name) === squash(text) || lettersApart(squash(g.name), squash(text), 2) <= slackOf(squash(g.name)))
   if (!ground) {
-    const kinds = wordsFor(bare)
-    if (kinds) ground = grounds.find(g => { const has = groundKinds(map, g); return kinds.some(k => has.has(k)) })
+    // By its kind: "the ford". With several of that kind, "the fords" is
+    // all of them, shared out; "the ford" asks which (never a guess). "The
+    // nearest ford" is for places.js, as before.
+    const word = bare.split(' ')
+    const plural = word.length === 1 && /[^s]s$/.test(bare) ? wordsFor(bare.replace(/s$/, '')) : null
+    const kinds = plural ?? wordsFor(bare)
+    const ofKind = kinds ? grounds.filter(g => { const has = groundKinds(map, g); return kinds.some(k => has.has(k)) }) : []
+    if (ofKind.length > 1 && plural) return spreadOver(map, origin, ofKind, known.groundNeeded)
+    if (ofKind.length > 1) {
+      const question = GROUND.some.which(bare, ofKind.map(g => PLACE.name(g.name)))
+      return {
+        question,
+        options: ofKind.map(g => {
+          const at = groundPoint(map, origin, g)
+          const tiles = at ? Math.max(Math.abs(at.x - origin.x), Math.abs(at.y - origin.y)) : 0
+          const way = !at ? '' : tiles === 0 ? ' (here)' : ` ${tiles * TILE_METRES} m ${compassWord(origin, at)}`
+          return { label: `${PLACE.name(g.name)}${way}`, square: at ? gridLabel(at, { quarter: true }) : '', text: g.name.replace(/^the\s+/i, '') }
+        })
+      }
+    }
+    if (ofKind.length === 1) ground = ofKind[0]
   }
   if (ground) {
     const position = groundPoint(map, origin, ground)
@@ -1127,7 +1210,8 @@ function examples(unit, context) {
   const square = gridLabel(nearestPassable(map, { x: unit.position.x + toward, y: unit.position.y }) ?? unit.position)
   const ground = (context.ground ?? [])[0]
   return [
-    ...(ground ? [`everyone take ${PLACE.name(ground.name)}`] : []),
+    // (Several to fight for: all of them, shared out.)
+    ...(ground ? [(context.ground ?? []).length > 1 ? `everyone take the ${groupWord(map, context.ground)}` : `everyone take ${PLACE.name(ground.name)}`] : []),
     `${name} advance`,
     `${name} to ${square}`,
     `${name} go north 200 m`,

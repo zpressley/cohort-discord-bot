@@ -59,6 +59,12 @@ const MINUTES_PER_TICK = 10    // locked decision 1
  *   objectiveHoldMinutes: battle time all objectives must be held to win
  *                        (default 60)
  *   objectiveTurnsToWin: if set, consecutive player turns instead
+ *   objectivesNeeded:    with several objectives, how many a side must hold
+ *                        (each alone) for the hour; all of them if unset
+ *   kind:                'pitched' (no ground: at nightfall a side still
+ *                        standing with PITCHED.STAND_SHARE of its men, when
+ *                        the other is not, wins) or 'ground'; unset, as
+ *                        before the kinds of battle (ruled 2026-11-25)
  *   turnLimit:           player turns after which night falls (a testing
  *                        aid): the battle ends with no winner
  *   timeLimitMinutes:    battle time after which the side that lost the
@@ -639,6 +645,12 @@ function rememberHeart(game, side) {
 function updateObjectiveHolds(game) {
   const objectives = game.objectives
   let changed = false
+  // With some of several grounds to hold, each change of hands says how
+  // many each side holds after this tick (`holding`, `needed`): emitted
+  // once all are counted.
+  const some = neededOf(game)
+  const changes = []
+  const emit = (fields) => (some ? changes.push(fields) : game.battle.log.emit('objective', game.battle.turn, fields))
 
   for (const objective of objectives) {
     const controller = objectiveController(game.battle.world, game.battle.broken, objective)
@@ -649,7 +661,7 @@ function updateObjectiveHolds(game) {
       if (hold) {
         delete game.objectiveHolds[objective.id]
         changed = true
-        game.battle.log.emit('objective', game.battle.turn, { objectiveId: objective.id, name: objective.name, side: null, was })
+        emit({ objectiveId: objective.id, name: objective.name, side: null, was })
       }
       continue
     }
@@ -658,8 +670,21 @@ function updateObjectiveHolds(game) {
         side: controller, turns: 0, sincePlayerTurn: game.playerTurn, sinceMinute: game.minutesElapsed
       }
       changed = true
-      game.battle.log.emit('objective', game.battle.turn, { objectiveId: objective.id, name: objective.name, side: controller, was })
+      emit({ objectiveId: objective.id, name: objective.name, side: controller, was })
     }
+  }
+
+  // Some of several grounds to hold (spec.objectivesNeeded): the hour runs
+  // while one side holds as many, each alone, and the 30 minutes' notice is
+  // one event naming the grounds he holds.
+  if (some) {
+    const holding = {}
+    for (const o of objectives) {
+      const s = game.objectiveHolds[o.id]?.side
+      if (s) holding[s] = (holding[s] ?? 0) + 1
+    }
+    for (const fields of changes) game.battle.log.emit('objective', game.battle.turn, { ...fields, holding, needed: some, of: objectives.length, called: game.spec.groundCalled ?? null })
+    return someHeld(game, some) || changed
   }
 
   // A side holding all the ground, close to taking the field by it: every
@@ -683,6 +708,38 @@ function updateObjectiveHolds(game) {
   return changed
 }
 
+// How many of several grounds must be held, when it is fewer than all of
+// them (spec.objectivesNeeded); else null, and all must be, as before.
+function neededOf(game) {
+  const n = game.spec.objectivesNeeded
+  return Number.isInteger(n) && n > 0 && n < game.objectives.length ? n : null
+}
+
+// Keep game.fieldHold, { side, sinceMinute, close? }: the side holding at
+// least `needed` of the grounds alone, and since when; none if no side
+// does (or, where `needed` is half of them or fewer, both do). Every side
+// is told, once a hold, when the holder is GROUND.CLOSE_MINUTES from
+// taking the field. Returns whether it told anyone.
+function someHeld(game, needed) {
+  const count = {}
+  for (const o of game.objectives) {
+    const s = game.objectiveHolds[o.id]?.side
+    if (s) count[s] = (count[s] ?? 0) + 1
+  }
+  const enough = Object.keys(count).filter(s => count[s] >= needed)
+  const holder = enough.length === 1 ? enough[0] : null
+  if (!holder) { delete game.fieldHold; return false }
+  if (game.fieldHold?.side !== holder) game.fieldHold = { side: holder, sinceMinute: game.minutesElapsed }
+  const length = game.spec.objectiveHoldMinutes ?? OBJECTIVE_HOLD_MINUTES
+  const warn = length - GROUND.CLOSE_MINUTES
+  const hold = game.fieldHold
+  if (warn <= 0 || hold.close || game.minutesElapsed - hold.sinceMinute < warn) return false
+  hold.close = true
+  const names = game.objectives.filter(o => game.objectiveHolds[o.id]?.side === holder).map(o => o.name)
+  game.battle.log.emit('objective', game.battle.turn, { objectiveId: 'field', name: names.join(', '), names, side: holder, was: holder, close: length - (game.minutesElapsed - hold.sinceMinute), needed, of: game.objectives.length, called: game.spec.groundCalled ?? null })
+  return true
+}
+
 function victoryContext(game) {
   // Advance hold counts for objectives still controlled this player turn.
   for (const hold of Object.values(game.objectiveHolds)) {
@@ -704,6 +761,10 @@ function victoryContext(game) {
     startingStrength: game.startingStrength,
     objectiveHolds: game.objectiveHolds,
     objectiveCount: game.objectives.length,
+    // Some of several grounds to hold, and since when a side has held as
+    // many (spec.objectivesNeeded; game.fieldHold). The kind of battle.
+    ...(neededOf(game) ? { objectivesNeeded: neededOf(game), fieldHold: game.fieldHold ?? null } : {}),
+    ...(game.spec.kind ? { kind: game.spec.kind } : {}),
     objectiveTurnsToWin: game.spec.objectiveTurnsToWin ?? null,
     objectiveHoldMinutes: game.spec.objectiveHoldMinutes ?? OBJECTIVE_HOLD_MINUTES,
     minutesElapsed: game.minutesElapsed,

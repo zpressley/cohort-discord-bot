@@ -218,7 +218,9 @@ function resolveSimultaneousMovement(world, orders, map, options = {}) {
   // ── Tick loop ───────────────────────────────────────
   // Initiative order is computed once per turn, not per tick: a unit's speed
   // class does not change mid-move.
-  const moveOrder = inInitiativeOrder([...plans.values()].map(p => p.unit))
+  // (Within a tier, by the battle's tie-break when it gives one: by name,
+  // one side's units always stepped first.)
+  const moveOrder = inInitiativeOrder([...plans.values()].map(p => p.unit), options.tieKey ?? null)
 
   let anyoneMoving = true
   const halts = () => [...plans.values()].filter(p => p.stopped).length
