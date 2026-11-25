@@ -235,3 +235,7 @@ table.losses th:first-child, table.losses td:first-child { text-align: left; }
 .move-list[hidden] { display: none; }
 .perks { margin: 0; padding: 0 0 0 18px; font-size: 14px; display: flex; flex-direction: column; gap: 4px; }
 .perks .drawback { color: var(--ink-soft); }
+/* Signing in with Discord (only when the server offers it). */
+.signin { display: flex; flex-direction: column; gap: 6px; }
+.signin .note { margin: 0; }
+#thread { margin-top: 12px; }

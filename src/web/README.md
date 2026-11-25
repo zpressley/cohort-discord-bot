@@ -11,6 +11,9 @@ DATABASE_URL=postgres://...    saved in Postgres instead (docs/HOSTING.md)
 GROQ_API_KEY=...               orders read and turns narrated by the AI
                                (without it: the fixed grammar, plain reports;
                                model and costs in docs/ai/MODELS.md)
+PUBLIC_URL, DISCORD_...        sign in with Discord, "your move" messages
+                               and battle threads (docs/HOSTING.md,
+                               "Connecting Discord"); off when not set
 npm run test:browser           a full battle in Chromium (needs Playwright)
 ```
 
@@ -145,4 +148,33 @@ they reach other players' screens, always through `esc()`.
 roster.js      the roster: who marches and what it costs, units taken from
                the enemy (AVENUES: where other ways of gaining a unit go),
                the rules for a unit's name
+```
+
+## Discord
+
+Only when configured (docs/HOSTING.md, "Connecting Discord"); with no
+settings there is no button and nothing is sent.
+
+"Sign in with Discord" is offered on making a Commander (where a new
+browser lands) and on Your officers; it is never required. Signed in, the
+Commanders and battles this browser holds go into his account, and his
+account's come to this browser, so they follow him to another phone. What
+he makes while signed in goes in as well. "Sign out" takes them off this
+browser (a phone may be shared); they stay with the account.
+
+In a battle between two players, the bot sends a player who has signed in
+a direct message when his orders are wanted, when a friend joins his
+battle, when the other side calls the next day, and when it is over; and a
+reminder after a day unanswered (once a day, three in all). Each such
+battle has its own thread in the battles channel, made when the friend
+joins; the tent links to it at the end of the Army tab. Nothing from a
+dispatch, and nothing of the other side's doings, goes to Discord.
+
+```
+signin.js      sign-in routes (/auth/discord, its callback, /auth/signout,
+               /api/me, /api/me/keep), and the hooks where battles change
+session.js     the signed session cookie, and the sign-in's state
+accounts.js    accounts (kind "account"): his Discord name, his links
+../discord/    Discord's HTTP API (client.js), what is sent and when
+               (notices.js), which parts are on (config.js)
 ```

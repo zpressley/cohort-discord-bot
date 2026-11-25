@@ -32,6 +32,7 @@ things simple, and prefer cheap and good enough over amazing and expensive.
 | `src/narrator` | Events to words: the plain account, the AI dispatch, the vocabulary. |
 | `src/opponent` | The computer's side: a planner, no AI. |
 | `src/web` | The server and the browser app. |
+| `src/discord` | Discord's HTTP API: "your move" messages and battle threads (sign-in's routes are in `src/web`). Off unless configured. |
 | `src/adapters/hotseat` | Two players at one terminal; used by the soak. |
 | `src/llm` | The AI client (Groq). |
 | `src/harness` | Soak, balance matrix, AI benchmark. |
