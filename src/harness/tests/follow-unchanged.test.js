@@ -10,7 +10,8 @@
 // Retaken when armies marched in column, a ford took one unit at a time,
 // broken units ran round the enemy, skirmishers stood with their backs
 // to the edge, and Ashford's east army formed up a tile further back and
-// Thornwood's west two tiles nearer (docs/DECISIONS.md, "How columns,
+// Thornwood's west a tile nearer, and a Commander caught running may be
+// taken (docs/DECISIONS.md, "How columns,
 // wavering under fire and flight were mended"). They were 1d9ca512 26, 9d62f154 15, 3d0c58e3 12.
 
 const { test } = require('node:test')
@@ -35,7 +36,7 @@ const BATTLES = [
 ]
 
 const BEFORE = {
-  'thornwood macedon parthia 3': '56f41436 25',
+  'thornwood macedon parthia 3': '3c83cec6 25',
   'ravenridge thrace sarmatia 4': '150f188e 16',
   'greywater rome germania 5': 'bfaa5b8d 20'
 }

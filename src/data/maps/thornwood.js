@@ -84,11 +84,11 @@ module.exports = {
   cells: CELLS,
   terrain: map.terrain(),
   // The armies form up in the fields on either side of the wood. The west
-  // at (7, 20) since armies march in column (it was (5, 20)): the east,
-  // nearer Thorn Knoll, then won 64% between two computer armies; now the
-  // west wins 54% (400 battles). docs/DECISIONS.md, "How columns, wavering under fire and
+  // a tile on, (6, 20), since armies march in column (it was (5, 20)): the
+  // east, nearer Thorn Knoll, then won 59% between two computer armies (400
+  // battles); now the west wins 51%. docs/DECISIONS.md, "How columns, wavering under fire and
   // flight were mended".
-  deploy: { west: { x: 7, y: 20 }, east: { x: 35, y: 20 } },
+  deploy: { west: { x: 6, y: 20 }, east: { x: 35, y: 20 } },
   // The ground to fight for (engine/orchestrator/victory.js, objectiveArea):
   // the bald rise in the heart of the wood, held from on it or beside it
   // (the brook cuts its eastern foot: held from on it alone, the west army

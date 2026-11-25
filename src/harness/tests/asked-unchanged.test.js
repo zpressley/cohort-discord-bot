@@ -64,7 +64,8 @@
 // Retaken when armies marched in column, a ford took one unit at a time,
 // broken units ran round the enemy, skirmishers stood with their backs
 // to the edge, and Ashford's east army formed up a tile further back and
-// Thornwood's west two tiles nearer (docs/DECISIONS.md, "How columns,
+// Thornwood's west a tile nearer, and a Commander caught running may be
+// taken (docs/DECISIONS.md, "How columns,
 // wavering under fire and flight were mended"). The battles were 48be1b7d 26, 630cf9be 32,
 // b73254c7 12, c80e8547 23 (everyone asked) and b01c713a 25, 39ecf1e5 26,
 // 15f2219b 13, 842dd7c2 23 (no Commander).

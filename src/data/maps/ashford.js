@@ -104,7 +104,7 @@ module.exports = {
   // Where each side's army forms up when a scenario is fought here. The
   // east at (33, 25) since armies march in column and the bridge takes one
   // unit at a time (it was (32, 25)): there the computer against itself
-  // gave the west 70%; here 53% (400 battles). docs/DECISIONS.md, "How
+  // gave the west 70%; here 51% (400 battles). docs/DECISIONS.md, "How
   // columns, wavering under fire and flight were mended".
   deploy: { west: { x: 8, y: 25 }, east: { x: 33, y: 25 } },
   // The ground to fight for (engine/orchestrator/victory.js, objectiveArea):

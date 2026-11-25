@@ -40,7 +40,8 @@
 // Retaken when armies marched in column, a ford took one unit at a time,
 // broken units ran round the enemy, skirmishers stood with their backs
 // to the edge, and Ashford's east army formed up a tile further back and
-// Thornwood's west two tiles nearer (docs/DECISIONS.md, "How columns,
+// Thornwood's west a tile nearer, and a Commander caught running may be
+// taken (docs/DECISIONS.md, "How columns,
 // wavering under fire and flight were mended"). They were d6b78ab1, fc0d511e, 7ceeb2cc, a9616de5,
 // df860211, ade1ebaa, 29c7796a.
 
@@ -63,8 +64,8 @@ function fingerprint(text) {
 const BEFORE = {
   'crownhill 1': '5378c566',
   'crownhill 2': '72acd97d',
-  'thornwood 1': '27ac8e10',
-  'thornwood 2': '4d0abf5a',
+  'thornwood 1': '1f044c71',
+  'thornwood 2': '3bd40f16',
   'meeting 1': 'b3d6f42f',
   'meeting 2': 'cfde19ad',
   'meeting 3': 'aa331d26'
