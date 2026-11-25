@@ -493,8 +493,8 @@ function toTheCommander(event, ownIds) {
   const mine = event.type === 'commanderFreed' ? !ownIds.has(event.by) : ownIds.has(event.unitId)
   switch (event.type) {
     case 'commanderTaken': return mine
-      ? `You were taken by ${event.by}. You can send no orders; each of your officers now leads his own unit as he sees fit`
-      : `${event.by} took the enemy Commander`
+      ? `You were taken by ${event.by}${event.running ? ' as your men ran' : ''}. You can send no orders; each of your officers now leads his own unit as he sees fit`
+      : `${event.by} took the enemy Commander${event.running ? ' as his men ran' : ''}`
     case 'commanderKilled': return mine ? `You were killed in the fight with ${event.by}` : `${event.by} killed the enemy Commander`
     case 'commanderFreed': return mine
       ? `${event.by} broke, and you got free and reached ${event.unitId}`

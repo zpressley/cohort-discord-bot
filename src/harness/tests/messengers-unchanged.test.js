@@ -53,7 +53,8 @@
 //
 // Retaken when armies marched in column, a ford took one unit at a time,
 // broken units ran round the enemy, skirmishers stood with their backs
-// to the edge, and Ashford's east army formed up a tile further back and
+// to the edge, Ashford's east army formed up a tile further back,
+// Crownhill's five tiles north, Elderby's bridge was made four abreast,
 // Thornwood's west a tile nearer, and a Commander caught running may be
 // taken (docs/DECISIONS.md, "How columns,
 // wavering under fire and flight were mended"). The battles were b01c713a 25, 39ecf1e5 26,
@@ -75,8 +76,8 @@ function fingerprint(text) {
 }
 
 const BEFORE = {
-  'crownhill 1': 'f15578bb 16',
-  'crownhill 2': '3749bac6 18',
+  'crownhill 1': 'e9cfed6f 17',
+  'crownhill 2': '86491ec2 19',
   'ashford 1': 'ccfaaf84 14',
   'ashford 2': '7e232cf6 17'
 }

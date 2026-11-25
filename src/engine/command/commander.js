@@ -139,7 +139,8 @@ function stepCommanders({ commanders, world, broken, fledUnits, events, mustered
           out.push({ type: 'commanderKilled', fields: { side, unitId: c.unitId, by: strikers[0] } })
         } else {
           Object.assign(c, { status: 'held', heldBy: strikers[0] })
-          out.push({ type: 'commanderTaken', fields: { side, unitId: c.unitId, by: strikers[0] } })
+          // (Caught as his men ran: the dispatch says so.)
+          out.push({ type: 'commanderTaken', fields: { side, unitId: c.unitId, by: strikers[0], ...(caught && broken.has(c.unitId) ? { running: true } : {}) } })
         }
       }
     }

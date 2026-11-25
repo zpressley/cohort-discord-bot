@@ -254,8 +254,8 @@ test('caught running, his unit broken and pursued, he may be taken whatever its 
   const fresh = () => ({ red: { unitId: 'guard', status: 'free', heldBy: null } })
   const rolls = (list) => { let i = 0; return () => list[i++] }
   let commanders = fresh()
-  assert.deepEqual(tick({ commanders, world: world(units), events: [pursued], random: rolls([COMMANDER.CAUGHT - 0.001, COMMANDER.KILLED_SHARE]) }),
-    [{ type: 'commanderTaken', fields: { side: 'red', unitId: 'guard', by: 'foe' } }])
+  assert.deepEqual(tick({ commanders, world: world(units), broken: new Set(['guard']), events: [pursued], random: rolls([COMMANDER.CAUGHT - 0.001, COMMANDER.KILLED_SHARE]) }),
+    [{ type: 'commanderTaken', fields: { side: 'red', unitId: 'guard', by: 'foe', running: true } }], 'and the dispatch will say he was taken as his men ran')
   commanders = fresh()
   assert.deepEqual(tick({ commanders, world: world(units), events: [pursued], random: () => COMMANDER.CAUGHT }), [], 'the roll came up high')
   commanders = fresh()

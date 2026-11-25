@@ -42,10 +42,11 @@ async function start(store = createBattleStore({})) {
 // the battle as good as over. 1477 is the first found since in which he is
 // taken, his army fights on, and both sides' dispatches line up.)
 // (Seed 1477 until armies marched in column, November 24: he was no longer
-// taken there. 2 is the first found since that passes these tests.)
+// taken there. 11 is the first found since that passes these tests; it was
+// 2 until Crownhill's east army formed up further north.)
 async function takenInBattle(app) {
   const red = (await app.api('POST', '/api/commanders', { faction: 'persia' })).body
-  const seats = (await app.api('POST', '/api/battles', { opponent: 'friend', side: 'red', seed: 2, commander: red.token, faction: 'persia' })).body.seats
+  const seats = (await app.api('POST', '/api/battles', { opponent: 'friend', side: 'red', seed: 11, commander: red.token, faction: 'persia' })).body.seats
   // Blue brings a Commander of Rome, so that both armies are fixed and the
   // battle is the same one whatever faction the lot would have given him.
   const blue = (await app.api('POST', '/api/commanders', { faction: 'rome' })).body
