@@ -36,7 +36,7 @@ const { unitsOf } = require('../engine/command/company')
 const { matchedVeterancy } = require('../engine/veterans/veterancy')
 const { bargainChips, canRide, heldSight, sightFrom } = require('../engine/command/commander')
 const { orderDelays, byCommandPost } = require('../engine/command/messengers')
-const { knownEnemies, newsBetween } = require('../engine/orchestrator/word')
+const { knownEnemies, newsBetween, arrivalOf } = require('../engine/orchestrator/word')
 const { aboutHowMany } = require('../engine/orchestrator/reports')
 const { captorAnswer } = require('../opponent/captor')
 const { createCommanderStore } = require('./commanders')
@@ -46,6 +46,7 @@ const T = require('../engine/combat/tables')
 const { narrateTurn, report } = require('../narrator/turnNarrator')
 const { orderWords, RIDER, NIGHT, REPORT, GROUND, ENEMY_COMMANDER, FIELD } = require('../narrator/words')
 const { BATTLE_OVER, kindWords } = require('../narrator/words')
+const { VERDICT } = require('../narrator/words')
 const { loadScenario, SCENARIOS, mapChoices } = require('../adapters/hotseat/scenarios')
 const { MAPS, groundOf } = require('../data/maps')
 const { FACTIONS, factionChoices } = require('../engine/army/factions')
@@ -100,7 +101,30 @@ function groundStatus(game, objective, side) {
   const length = game.spec.objectiveHoldMinutes ?? T.GROUND.HOLD_MINUTES
   const all = !game.outcome.decided && !game.spec.objectiveTurnsToWin && holder && holds.every(h => h?.side === holder)
   const left = all ? Math.max(0, length - Math.min(...holds.map(h => game.minutesElapsed - h.sinceMinute))) : null
-  return GROUND.status(objective.name, holder === null ? null : holder === side, left)
+  // Held by the enemy, he can send no orders: his army is told of (S11).
+  const words = game.battle.commanders?.[side]?.status === 'held' ? GROUND.held : GROUND
+  // Held before and no one's alone now: both may be on it, or neither (S12).
+  if (holder === null && game.battle.log.all().some(e => e.type === 'objective' && e.objectiveId === objective.id)) return GROUND.noOnesAlone(objective.name)
+  return words.status(objective.name, holder === null ? null : holder === side, left)
+}
+
+// Who a side knows to be on a piece of the ground to fight for now, by
+// name (S12: "You no longer hold the Crownhill" said nothing of who was on
+// it): an enemy unit of his reports last placed on it, and his own men by
+// their word (or, with no word, where they are). Within the ground's reach,
+// as engine/orchestrator/victory.js counts it.
+function knownOnGround(game, side, groundName) {
+  const o = (game.objectives ?? []).find(g => g.name === groundName)
+  if (!o) return {}
+  const tiles = o.tiles ?? [o.coord]
+  const reach = o.reach ?? (o.single === false ? 0 : 1)
+  const on = (p) => Boolean(p) && tiles.some(t => Math.abs(p.x - t.x) + Math.abs(p.y - t.y) <= reach)
+  const word = game.word?.[side] ?? null
+  const own = word
+    ? Object.values(word.units).some(u => !u.gone && !u.broken && on(u.position))
+    : game.battle.world.units.some(u => u.side === side && u.strength > 0 && !game.battle.broken.has(u.id) && on(u.position))
+  const enemy = Object.values(enemyKnowledge(game, side)).some(e => e.status !== 'gone' && on(e.position))
+  return { own, enemy }
 }
 
 // Text for one side with unit ids swapped for names: its own units by name
@@ -217,17 +241,47 @@ function enemyForOrders(e) {
     : { ...base, name: REPORT.troops }
 }
 
-// Men standing, fled and fallen for each side: shown once the battle is
-// over, when nothing is hidden any more.
-function tally(game) {
+// Men standing, fled and fallen for each side, and the units that broke:
+// shown once the battle is over. The men are counted on the field when it
+// is over, for both sides, as before. The units that broke (S9: "Fled 0"
+// in every verdict, when his dispatches told of units that broke and fled)
+// are, of his own, every one, with what became of it; of the enemy, only
+// those his side saw break (with his men, or by a report that reached
+// him), named as he knows them, and nothing of what became of them.
+function tally(game, viewer = null) {
   const out = {}
+  const events = game.battle.log.all()
+  const name = viewer ? namer(game, viewer) : (id) => id
+  const word = viewer ? game.word?.[viewer] ?? null : null
+  const known = viewer ? enemyKnowledge(game, viewer) : {}
+  const unitOf = (id) => game.battle.world.units.find(u => u.id === id) ?? game.battle.fledUnits.find(u => u.id === id)
   for (const side of Object.keys(game.spec.sides)) {
     const start = game.startingStrength[side] ?? 0
     const standing = game.battle.world.units.filter(u => u.side === side).reduce((n, u) => n + Math.max(0, u.strength), 0)
     const fled = game.battle.fledUnits.filter(u => u.side === side).reduce((n, u) => n + u.strength, 0)
-    out[side] = { standing, fled, fallen: Math.max(0, start - standing - fled) }
+    const mine = !viewer || side === viewer
+    // Breaks his side could know of.
+    const ours = (id) => unitOf(id)?.side === viewer
+    const sawIt = (e) => mine || ours(e.by) || (word ? arrivalOf(game, viewer, e) !== Infinity : Boolean(known[e.unitId]))
+    const breaks = new Map()
+    for (const e of events) {
+      if (e.type !== 'rout' || unitOf(e.unitId)?.side !== side || !sawIt(e)) continue
+      breaks.set(e.unitId, (breaks.get(e.unitId) ?? 0) + 1)
+    }
+    const broke = [...breaks].map(([id, n]) => {
+      const unit = unitOf(id)
+      const times = VERDICT.times(n)
+      const gone = game.battle.fledUnits.some(u => u.id === id)
+      const fate = !mine ? VERDICT.fate.seen(times)
+        : gone ? VERDICT.fate.fled(times, unit.strength === 1 ? '1 man' : `${unit.strength} men`)
+          : (unit?.strength ?? 0) <= 0 ? VERDICT.fate.destroyed(times)
+            : game.battle.broken?.has?.(id) || unit?.broken ? VERDICT.fate.fleeing(times)
+              : VERDICT.fate.rallied(times)
+      return { name: capitalise(name(id)), said: fate }
+    })
+    out[side] = { start, standing, standingSaid: VERDICT.standing(standing, start), fled, fallen: Math.max(0, start - standing - fled), broke }
   }
-  return { sides: out }
+  return { sides: out, head: VERDICT.head, note: VERDICT.note, yours: VERDICT.yours, theirs: VERDICT.theirs }
 }
 
 // What became of each unit's captain, once the battle is over (ruled
@@ -1187,7 +1241,7 @@ function createBattleStore({ dir = null, ai = null, now = () => Date.now() } = {
       captive: captiveView(game, side, atGame),
       dispatches: [...entry.dispatches[side]].reverse(),
       verdict: game.outcome.decided && !atGame
-        ? { ...tally(game), replayTo: game.playerTurn, officers: officerFates(game, side), company: Boolean(entry.commanders?.[side]), commander: commanderEnd(game, side), ...nightOf(entry, side) }
+        ? { ...tally(game, side), replayTo: game.playerTurn, officers: officerFates(game, side), company: Boolean(entry.commanders?.[side]), commander: commanderEnd(game, side), ...nightOf(entry, side) }
         : null
     }
   }
@@ -1813,7 +1867,11 @@ function createBattleStore({ dir = null, ai = null, now = () => Date.now() } = {
         // Where each unit of the side told of stands now, to say where it fought.
         whereIs: (id) => (captivity ? theirs : own).find(u => u.id === id)?.position ?? null,
         // The battle ended in this stretch: the ground no longer decides it.
-        over: Boolean(game.outcome.decided)
+        over: Boolean(game.outcome.decided),
+        // In the enemy's hands as the stretch ends: his army is told of (S11).
+        held: game.battle.commanders?.[side]?.status === 'held',
+        // Who he knows to be on a piece of the ground now (S12).
+        onGround: (groundName) => knownOnGround(game, side, groundName)
       }
       // The plain account: what this side could know, most important first,
       // the fighting told unit by unit.

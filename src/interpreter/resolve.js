@@ -39,10 +39,14 @@ const EXTRAS = ['careful', 'against', 'letPass', 'regardless', 'holdFire']
 // words mean. Only those: an enemy never seen cannot be named, and the true
 // field is never looked at. "archers at E5" picks the one seen nearest E5.
 
-const AT_SQUARE = /\s+(?:at|in|near|by)\s+(\S+)$/i
+const AT_SQUARE = /\s+(?:at|in|on|near|by)\s+(\S+)$/i
 // "the enemy at the bridge", "troops by the Old Mill": a place by name or
 // by the ground, for an enemy whose kind he has not been told.
-const AT_PLACE = /(?:^|\s+)(?:at|in|near|by)\s+(.+)$/i
+const AT_PLACE = /(?:^|\s+)(?:at|in|on|upon|near|by)\s+(.+)$/i
+// "The enemy on the hill" is an enemy he has seen within this many tiles
+// (150 m) of the place; with none there, his men go to the place and fight
+// whoever they find (docs/REVIEW-2026-11.md, S3 and S12).
+const THERE_TILES = 6
 const sansSide = (id) => String(id).replace(/^(?:red|blue)_/, '').replace(/_/g, ' ')
 // What he may call a seen enemy: its kind's name, or what the reports of it
 // let him call it (`name`: "troops", when no report told its kind).
@@ -66,10 +70,13 @@ function seenWhere(enemy) {
  * @param {Array} enemies  his side's intel
  * @returns {{ enemy } | { question, choice? }}
  */
-function resolveEnemy(words, enemies, map) {
+function resolveEnemy(words, enemies, map, placeOf = null) {
   const seen = (enemies ?? []).filter(e => e.position && (e.strength === undefined || e.strength > 0))
   let ref = String(words).trim()
   let near = null
+  // The place, as his own orders would find it ("the hill" is the ground to
+  // fight for), when the caller can say: { position, description, words }.
+  let placeAt = null
   const at = ref.match(AT_SQUARE)
   if (at && isGridRef(at[1])) {
     const square = gridTarget(map, at[1])
@@ -77,9 +84,11 @@ function resolveEnemy(words, enemies, map) {
     ref = ref.slice(0, at.index).trim()
   } else if (map) {
     const there = ref.match(AT_PLACE)
+    const own = there && placeOf ? placeOf(there[1]) : null
+    if (own?.position) placeAt = { ...own, words: clean(there[1]) }
     // (The ground nearest the enemy he has seen: "the woods" they are in.)
     const mid = seen.length ? { x: Math.round(seen.reduce((n, e) => n + e.position.x, 0) / seen.length), y: Math.round(seen.reduce((n, e) => n + e.position.y, 0) / seen.length) } : { x: Math.floor(map.width / 2), y: Math.floor(map.height / 2) }
-    const place = there ? findPlace(map, mid, there[1]) : null
+    const place = placeAt ?? (there ? findPlace(map, mid, there[1]) : null)
     if (place?.position) {
       near = place.position
       ref = ref.slice(0, there.index).trim()
@@ -101,8 +110,14 @@ function resolveEnemy(words, enemies, map) {
     const found = resolveUnitReference(ref, seen.map(e => ({ ...e, aliases: [calledBy(e)] }))).units
     return found.length > 0 ? found : byStem()
   }
-  const matches = shown ?? (kind ? seen.filter(e => looksLike(e, kind)) : bare && near ? seen : anyone ? [] : named())
+  let matches = shown ?? (kind ? seen.filter(e => looksLike(e, kind)) : bare && near ? seen : anyone ? [] : named())
   if (bare && near && ref === '') ref = 'enemy'
+  // "The enemy on the hill": those he has seen there. With none, the place
+  // itself, to go and fight whoever holds it.
+  if (bare && placeAt) {
+    matches = matches.filter(e => Math.max(Math.abs(e.position.x - placeAt.position.x), Math.abs(e.position.y - placeAt.position.y)) <= THERE_TILES)
+    if (matches.length === 0) return { place: placeAt }
+  }
   if (matches.length === 0) {
     if (seen.length === 0) return { question: `You have seen no enemy to attack. To go and find them, say "advance".` }
     return {
@@ -292,6 +307,8 @@ function resolveIntents(intents, context) {
   for (let intent of intents) {
     if (intent.kind === 'surrender') { surrender = true; continue }
     if (intent.kind === 'ask') {
+      // Too long or tangled to read at all (grammar.js, MAX_DEPTH).
+      if (intent.tangled) { questions.push(ORDERS_READ.tangled(examples((context.units ?? [])[0], context))); continue }
       if (intent.unread) {
         const said = notRead(intent.unread, context)
         questions.push(said.question)
@@ -386,20 +403,25 @@ function resolveIntents(intents, context) {
       continue
     }
 
+    // A place as his orders find it, from where these units stand.
+    const placeFor = (words) => resolvePlace(map, groupOrigin(match.units), words, known)
     // "charge the crossbows": a place that is no place, but an enemy he has
     // seen by name.
     if (intent.action === 'attack' && intent.place && !intent.enemyRef && !intent.steps && !intent.when) {
       const asPlace = resolvePlace(map, groupOrigin(match.units), intent.place, known)
       const bare = String(intent.place).replace(/^(?:the|their|enemy|those)\s+/i, '')
       if (asPlace.question && !asPlace.options && (context.enemies ?? []).length) {
-        const asEnemy = resolveEnemy(bare, context.enemies, map)
+        const asEnemy = resolveEnemy(bare, context.enemies, map, placeFor)
         if (asEnemy.enemy || asEnemy.choice) intent = { ...intent, place: null, enemyRef: bare }
       }
     }
 
     // "horse attack their archers": an enemy this side has seen.
+    const found = intent.action === 'attack' && intent.enemyRef ? resolveEnemy(intent.enemyRef, context.enemies, map, placeFor) : null
+    // "attack the enemy on the hill" with no enemy seen there: the hill,
+    // to fight whoever they find on it, as the read-back says.
+    if (found?.place) intent = { ...intent, enemyRef: null, place: found.place.words, whoever: true }
     if (intent.action === 'attack' && intent.enemyRef) {
-      const found = resolveEnemy(intent.enemyRef, context.enemies, map)
       if (found.question) {
         questions.push(found.question)
         if (found.choice) choices.push(found.choice)
@@ -481,6 +503,7 @@ function resolveIntents(intents, context) {
       line += ` — ${coverWords(map, match.units[0], target ?? match.units[0].position)}`
     }
     if (intent.action === 'ambush') line += `; ${ambushTerms(intent)}`
+    if (intent.whoever) line += `, ${ORDERS_READ.whoever}`
     line += deep.words
     line += carried(match.units.map(u => u.id))
     understood.push(line)

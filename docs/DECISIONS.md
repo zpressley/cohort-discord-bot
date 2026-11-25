@@ -5354,3 +5354,232 @@ engine, the planner or the interpreter was touched.
 - **A new unit's number fills a gap** where its fellows are numbered from
   1 ("Horse archers 1, 2, 3"); where the first is unnumbered the next is 2,
   as before.
+
+### How the order reader was made safe (Claude's choices, open to change)
+
+From the second playthrough (`docs/REVIEW-2026-11.md`, S1 to S4, and the
+paragraph on the AI benchmark). Zach: decide, keep it simple, record it.
+
+**What broke.** "I want the legionaries to stay put, but if the hastati
+break, pull the legionaries back" sent the grammar round for ever and the
+player read "something went wrong". The cause was smaller than the order:
+any line that ends on "if" or "then", or is only "if" or "then", had no
+condition and no step to take apart, so the grammar read its first piece,
+which was the whole line again (`grammar.js`, `readDeep`). The long order
+came to that shape when the line was tried cut in pieces ("... but if").
+Typing "then" alone did it too.
+
+**What was built** (`grammar.js`, `orders.js`, `resolve.js`; words in
+`words.js`, `ORDERS_READ.tangled` and `ORDERS_READ.whoever`):
+- *The loop.* A line with no condition and no second step is not read
+  again as deep. A word left hanging at the end ("hold then", "advance
+  and") is dropped.
+- *A bound on everything.* A piece of a deep order is read one level down,
+  and a line deeper than 4 levels or longer than 600 letters is answered
+  "I could not follow that: it is too long or too tangled for your
+  officers to carry. Give it as shorter orders, one to a line. Orders read
+  like: ..." with five orders in his own units' names. Cutting a line into
+  several orders weighs each piece once, and is not tried on a line over
+  600 letters. Under all of it, a net: if any rule of the reader throws,
+  that line (or, last of all, the whole set) gets the same answer, never
+  an error. Measured: 2,500 mangled orders on the five fields (words of
+  the game, his units' names and the fields' places, joined by "if",
+  "then", "but", "and", "unless", commas or nothing, then cut short,
+  doubled, run together), all answered, none thrown, the slowest about
+  0.1 s; built long lines of names, the slowest about 0.6 s
+  (`tests/fixtures/mangled.js`, `tests/safe-reader.test.js`).
+- *S1, read rightly.* The engine has "if another unit breaks"
+  (`when.type: 'breaks'`), so the order is read: "red_legionaries: hold;
+  if red_hastati break, fall back". "Pull the legionaries back", "bring
+  the horse back" are a fall back; "the legionaries" and "legionaries"
+  are one unit's name inside a deep order. A condition the grammar cannot
+  take apart is no longer read as a plain order with the "if" swallowed
+  into a place: it goes to the AI, or with no AI is "I don't follow".
+- *S2.* "Ride with the velites, velites advance": riding reads up to the
+  comma, and a ride is a whole order when a line is cut, so it is two.
+- *S3.* "The enemy on (at, by, near, in) the hill" finds the place as his
+  own orders would ("the hill" on the Crownhill is the ground to fight
+  for), then the enemy his side has seen within 150 m of it (6 tiles), the
+  nearest to it if several. With none seen there, or none seen at all,
+  his men attack the place, and the read-back says: "attack the Crownhill,
+  the ground to fight for, 550 m north (E1-NE), and fight whoever they find
+  there: you have seen no enemy on it". This is S12's case too: the ground
+  just lost and no word yet of who took it.
+- *S4.* I chose the card. Its example is now a whole line, "Legionaries
+  advance, everyone else hold" (his own first unit's name;
+  `web/public/app.js`, that text only). "Everyone else" alone is still a
+  question that says it needs another order named. The other way, reading
+  it alone as everyone, would send units a player meant to name next.
+- *The benchmark's five, and its looping order.* "Archers, hold your
+  ground. If anyone attacks you, get back to the bridge": hold; if
+  attacked, fall back to the bridge ("get back to", "go back to" are fall
+  back to). "Send the spears to the bridge, hide the archers in the
+  woods, and keep the horse back": three orders ("hide the archers in
+  ...", "keep the horse back" put the unit first, and a piece may begin
+  so when a line is cut). "Spears and swords advance carefully while the
+  archers hold" and "Have the archers loose at their cavalry while the
+  spears stand fast": "while" cuts a line as "and" does, and a unit's name
+  cut out of a line may not hold "while", "if", "their", "enemy" and the
+  like ("their cavalry while the spears" had become an order to his own
+  horse). "It is over. We yield": a surrender, and only such lines ("we
+  yield", "I surrender", "it's over, we give up"); a line that also gives
+  an order is not one.
+
+**Measured.**
+
+| | Before | After |
+|---|---|---|
+| Plain-orders fixture (1,808 readings), right | 1,705 (94%) | 1,705 (94%) |
+| ... a fair "which do you mean?" | 103 | 103 |
+| ... wrong, not read | 0, 0 | 0, 0 |
+| The benchmark's 52 orders, read right by the grammar alone (its own judge, no AI) | 30, one threw | 37, none threw |
+| The benchmark's orders the grammar reads whole and wrongly | 5 (and the looping one) | 1 (below) |
+
+Nothing that was right became wrong. The paid benchmark was not run; its
+order list loads and every order in it gets an answer from the grammar
+step in a test (`safe-reader.test.js`).
+
+**Guessed, and the other reading.**
+- *150 m* for "on the hill": the other reading is the place's own ground
+  only; a hill is bigger than a tile, and reports place a unit by its
+  tile, so a little room was given.
+- *With two enemies on the place*, the nearest to it is attacked, as
+  "the enemy at the bridge" did before; the other reading is a "which do
+  you mean?".
+- *Depth 4 and 600 letters*: no order in the fixture or the benchmark
+  comes near either (the longest is under 130 letters).
+- *"Keep the horse back"* is hold where they stand, as "stay back" was
+  read (D4).
+
+**Left.** "The heavy infantry advance" in the benchmark's own little army
+reads both its spears and its swords: those units carry no kit, so the
+Army tab's kinds cannot tell them apart; in a mustered army it reads
+right. The benchmark's world was not changed (another agent's file, and
+it would change what the benchmark measures).
+
+### How the verdict, the ground's lines and the map's labels were mended (Claude's choices, open to change)
+
+From the second playthrough (docs/REVIEW-2026-11.md, S9, S11 to S14, and
+the part of D8 left). Zach asked for no small questions: these were
+decided and are recorded here.
+
+- **The verdict's table** (S9; `battles.js`, `tally`; words in
+  `VERDICT`, `words.js`). The old "Fled" column counted only men of units
+  that left the field, which is rare (a broken unit usually rallies or is
+  cut down), so it read 0 while the dispatches told of units that broke
+  and fled. The columns are now **Standing** ("364 of 400": the men on
+  the field at the end, of those the side went in with), **Fallen**, and
+  **Broke** (how many units broke). Under the table, each of his units
+  that broke, with what became of it in the dispatch's own words: "broke,
+  and rallied", "broke twice, and rallied", "broke, and left the field
+  with 40 men", "broke, and were destroyed", "broke, and were still
+  fleeing when the battle ended"; then the enemy's units his men saw
+  break, by the names he knows them by ("Enemy horse: broke"), and
+  nothing of what became of them. Men who left the field with their unit
+  are told in that line, so standing, fallen and those add up to the men
+  he went in with (tested). His own side's row comes first.
+  - *What his side could know of the enemy.* An enemy unit is in the
+    list if one of his units broke it, or word of its breaking reached
+    him (`arrivalOf`, the same rule as his dispatches; with no word kept,
+    if it is among the enemy he knows of). **Guessed**: the enemy's men
+    standing and fallen are still the count at the battle's end, as the
+    verdict has told them since it was built ("the verdict tells all",
+    and the next day's note leans on that table). The other reading of
+    "the enemy's row shows only what his side could know" is to show only
+    the enemy dead his men saw fall, and "not known" for those standing;
+    that would change what the verdict has always told, so it was not
+    done. Say if it should be.
+  - Measured: 12 battles (the meeting battle, seeds 1 to 12, "everyone
+    advance"): before, Fled 0 in all 12; after, every one names at least
+    one unit that broke (his horse in all 12, his archers in one; the
+    enemy's horse seen to break in 5).
+- **The ground's lines for a Commander in the enemy's hands** (S11;
+  `GROUND.held`, `toTheSide`'s `held`, `groundStatus`). He can send no
+  orders, so the lines speak of his army: "the enemy took the Crownhill:
+  unless your army takes it from him, the field is his"; "the enemy has
+  held the Crownhill long: unless your army takes it from him within 30
+  min, the field is his"; "your army took the Crownhill: if it holds it
+  alone, the field is yours"; "your army has held the Crownhill long: 30
+  min more and the field is yours"; at the battle's end "your army took
+  the Crownhill". Under the map, "Your army holds ..." and "unless your
+  army takes it within 30 min". Held is read as the stretch ends (the
+  turn he is taken, the lines are already his army's).
+- **Ground lost, said as far as he knows** (S12; `GROUND.lost`,
+  `GROUND.contested`, `knownOnGround` in `battles.js`, `turn.onGround`).
+  Every side knows at once that the ground is no longer held by one side
+  alone (ruled), not who is on it. So: "your men no longer hold the
+  Crownhill alone: no word yet of who is on it" (and "the enemy no longer
+  holds it alone: no word yet of who is on it"). When he already knows,
+  he is told: an enemy unit his reports last placed on it gives "the
+  enemy is on the Crownhill with your men: you no longer hold it alone"
+  (or, with none of his own known to be there, "you no longer hold the
+  Crownhill: the enemy is on it"); his own men there, by their word, when
+  it was the enemy's, give "your men are on the Crownhill with the
+  enemy's: he no longer holds it alone". Under the map, ground held once
+  and no one's alone now is "held by neither side alone" (before it was
+  "held by no one", which the map could contradict); before anyone has
+  held it, "held by no one" as before. The other ground lines were
+  checked against the map at the same moment: "took" and "close" agree
+  with the line under the map and the ground's label ("held by you",
+  "held by the enemy"), which change at once for every side. "Won back"
+  has no line of its own: the event does not say who held it before it
+  was contested, and "you took the Crownhill" is true. The AI dispatch
+  has one instruction more: "no word yet of who is on it" means he does
+  not know, so it may not say who is.
+  - Measured: Crownhill, seeds 5 and 6, Rome against Rome, "everyone
+    take the Crownhill": the enemy's hastati, reported on the hill at 2 h,
+    came up beside his at 2 h 10; the dispatch said "The enemy is on the
+    Crownhill with your men: you no longer hold it alone" and the line
+    under the map "held by neither side alone".
+- **Grammar and places in the plain account** (S13; `plainFact`,
+  `digest`, `placeName`). A unit is men, and plural: "Hastati were
+  pinned", "enemy troops arrived ... and hold it", "Spears are wavering",
+  "were shot at", "were driven back", "were destroyed", "are hidden",
+  "and hold firm", "unseen until they struck", "saw the enemy they were
+  warned of", "they will not stand long without a success near them".
+  The one exception is "an unseen enemy", which is one. Every count of
+  men goes through `men()` ("1 man"); the enemy's losses in a fight are a
+  bare number, as before. A place is named by the grid quarter it is told
+  with (2 x 2 tiles): the most particular named feature touching that
+  quarter, the one of fewest tiles (a ford before the road through it,
+  a bridge before the river), whichever of the four tiles a unit stands
+  on; with none named, the tile's own ground as before. So a fight on the
+  road beside Brook Ford is "at Brook Ford (F6-NW)" to both sides.
+  **Guessed**: a named road counts as a named feature, so a unit on
+  Crownhill's road far from any ford is now "on the Merchant Road", not
+  "on the road" (and an order taken from a rider can read "attack the
+  Merchant Road (C6-NE)"); the other reading keeps roads unnamed. The AI
+  instructions' example lines were made plural too.
+- **The map on a phone** (S14 and D8; `app.js`, `openingZoom`,
+  `openMap`, `markGround`; `map.js`, `LABEL_PX`, `sharedLabels`).
+  - *Opening.* The map opens with his army and the ground both in view
+    when a zoom of at least 12 px a tile shows them in the window less
+    what the buttons and the hint cover (130 px); else as before (about
+    15 px a tile on a phone, the window's width on a desktop), on his
+    army, with a mark at the edge the ground lies beyond: a button, 44 px
+    high, "↑ the Crownhill", that brings the ground into view and goes
+    while the ground is in the window. Measured: Crownhill at 390 x 844
+    needs about 7 px a tile for both (the map's window is 354 px high), so
+    a phone opens on the army with the mark; at 1366 x 900 both are in
+    view at the usual zoom. **Guessed**: 12 px a tile as "readable" (a
+    counter is then about 19 px across); 11 px was tried and showed the
+    army under the hint and the hill under the buttons.
+  - *Labels.* The map is drawn for its zoom: unit labels, the picked
+    unit's name, the ground's name and the landmarks are 11 px on the
+    screen at any zoom (they were 10 SVG units: 6 px on a phone at 15 px a
+    tile). After a pinch, a button or the wheel, once no finger is on the
+    map, it is drawn again for the new zoom (250 ms). Every cluster's
+    label (yours, the enemy in sight, yours known by rider, the enemy
+    last seen) is laid as before; where the map is shown small (a phone:
+    labels scaled by more than 1.2), labels that would lie on each other
+    where they hang are merged at once into one, "7 of yours, 6 enemy",
+    or "4 units", "3 enemy units"; at full size only those that cannot be
+    moved clear are merged. A tap on the map with no unit picked now names,
+    in the hint, every unit within a tile of the tap ("F7-NE · open field ·
+    Hastati, enemy pikes (last seen)"); a tap on a stack of his own still
+    asks which. Measured: Greywater, Rome against Macedon, seed 7, at a
+    fight at 1 h 20 at 390 px: before, 7 labels 6 px high, several touching
+    one another; after, 2 labels at 11 px ("7 of yours, 6 enemy" and one
+    enemy unit's name), none touching.
+- Also: the Army tab's list of units lost said "fled the field"; it says
+  "left the field", the vocabulary's words.
