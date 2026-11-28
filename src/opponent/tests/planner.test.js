@@ -212,3 +212,21 @@ test('a holding side\'s missile troops on foot press a near enemy, so as to shoo
   assert.notEqual(order(orders, 'blue_h')?.action, 'advance', 'horse archers keep to the horse')
   assert.equal(order(orders, 'blue_m').action, 'advance', 'crossbowmen in mail too: no kit makes a man slower')
 })
+
+// The soak, November 28 (units passing through one another): four worn
+// units stood while one band of slingers searched the field alone.
+test('a worn unit stays out of the fight only while a steadier one that will close with the enemy is there: bowmen alone do not count', () => {
+  const plan = (steadier) => {
+    const game = onThePlain([
+      unit({ id: 'blue_a', side: 'blue', position: { x: 16, y: 12 } }),
+      steadier,
+      unit({ id: 'red_a', position: { x: 9, y: 12 } })
+    ])
+    submitOrders(game, 'red', [])
+    submitOrders(game, 'blue', [])
+    game.battle.resolver.shake(game.battle.world.units.find(u => u.id === 'blue_a'), 80)
+    return order(planTurn(game, 'blue'), 'blue_a')
+  }
+  assert.equal(plan(unit({ id: 'blue_b', side: 'blue', position: { x: 16, y: 14 } })).action, 'hold', 'with foot to fight in its place, it stays out')
+  assert.notEqual(plan(archers({ id: 'blue_b', side: 'blue', position: { x: 16, y: 14 } })).action, 'hold', 'with only bowmen, it goes in')
+})

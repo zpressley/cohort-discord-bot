@@ -66,6 +66,11 @@
 // called "blue" (docs/DECISIONS.md, "How the kinds of battle were built",
 // round two). They were ccfaaf84 14 (ashford 1), 7e232cf6 17 (ashford 2),
 // e9cfed6f 17 (crownhill 1), 86491ec2 19 (crownhill 2).
+//
+// Retaken when units of one side were let share a tile and pass through
+// one another again, the marching in column withdrawn (ruled November 28;
+// docs/DECISIONS.md, "How sharing a tile and passing through were
+// restored"). They were f4b9ff0f 22 (crownhill 1), 8ae0423b 22 (crownhill 2), 5ec857e2 13 (ashford 1), 61de1d55 16 (ashford 2).
 
 const { test } = require('node:test')
 const assert = require('node:assert/strict')
@@ -83,10 +88,10 @@ function fingerprint(text) {
 }
 
 const BEFORE = {
-  'crownhill 1': 'f4b9ff0f 22',
-  'crownhill 2': '8ae0423b 22',
-  'ashford 1': '5ec857e2 13',
-  'ashford 2': '61de1d55 16'
+  'crownhill 1': 'bcf8f64c 23',
+  'crownhill 2': '8c2de55a 23',
+  'ashford 1': '314de46b 20',
+  'ashford 2': '758c7e07 18'
 }
 
 test('a battle with no Commander on the field runs exactly as before riders, event for event', () => {

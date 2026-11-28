@@ -991,9 +991,6 @@ function stepTurn(state, sideOrders = {}, { sameTurn = false } = {}) {
   const movement = resolveSimultaneousMovement(world, orders, map, {
     hidden: new Set(state.hidden.keys()), ambushers, ambush: decideAmbush,
     engaged: new Set(engagedAtStart.keys()), glue: T.DISENGAGE.MOVE_COST,
-    // Units on the march keep a tile apart: in column, round or waiting
-    // (tables.MARCH).
-    keepApart: true,
     // Who steps first within a speed tier: a seeded draw each turn, not the
     // units' names (rng.js, tieBreak).
     tieKey: (u) => tieBreak(state.seed, turn, u.id)
@@ -1100,9 +1097,6 @@ function stepTurn(state, sideOrders = {}, { sameTurn = false } = {}) {
     if (!['move', 'defend', 'withdraw'].includes(order.action)) continue
     const stuck = move.failed || (!move.held && !move.skipped && move.tilesMoved === 0)
     if (!stuck || move.failed === 'already there') continue
-    // Waiting its turn behind its own men, who are on the move or fighting
-    // (a column at a ford): it keeps its order and goes on when they do.
-    if (move.queued?.busy) continue
 
     const then = order.then === 'hold' ? 'hold' : 'standing'
     if (then === 'hold') state.orderBook.set(move.unitId, { action: 'hold', target: null, then: null })

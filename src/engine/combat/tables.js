@@ -1255,25 +1255,6 @@ module.exports.GROUND_FIGHT = {
   ORDERS: ['move', 'defend']
 }
 
-// Marching in column (the second playthrough of November 24, S5 and S8:
-// every Thornwood battle opened with 300 men packed onto one spot of the
-// road, and the army fought at the ford two or three units to a tile). In
-// a battle a unit on the march does not step onto a tile a unit of its own
-// side stands on: it waits while that unit moves on (a column), goes round
-// it if the way round costs at most ROUND movement more, passes through if
-// it can clear the tile in the same ten minutes, else waits behind men in a
-// fight or on their way, and goes in among men only standing there.
-// It still goes onto a friend's tile that is the very place it was sent,
-// or beside an enemy it is going at (joining a fight); never onto a
-// crossing (CROSSINGS) a friend holds: a ford or bridge passes one unit at
-// a time. Units may still share ground (ruled 2026-10-21) when sent there,
-// pushed or running. Claude's values, open to change (docs/DECISIONS.md,
-// "How columns, wavering under fire and flight were mended").
-module.exports.MARCH = {
-  ROUND: 3,                       // movement more a way round may cost (three tiles of open ground; a wood's tile is 2)
-  CROSSINGS: ['ford', 'bridge']   // ground that takes one unit at a time
-}
-
 // A broken unit runs for its own edge by the cheapest open way: through no
 // enemy, round its own men where it can (FRIENDS more a tile), and wide of
 // formed enemies (BESIDE_ENEMY more a tile beside one). With no way to its

@@ -198,6 +198,9 @@ module.exports = {
   // first in 335 battles of 400 and won 62% between two computer armies;
   // from here 53%. docs/DECISIONS.md, "How columns, wavering under fire and
   // flight were mended".
+  // (That marching rule was withdrawn on November 28: units share a tile
+  // and pass through one another. The pitched battle is fair from here
+  // still: 48%, 800 battles.)
   deploy: { west: { x: 11, y: 23 }, east: { x: 30, y: 24 } },
   // Where they form up for a battle for the three fords, two to hold
   // (November 25; engine/map/deploy.js, through the scenario's `kind`): the
@@ -211,7 +214,13 @@ module.exports = {
   // steps first were made a seeded draw (round two), when that place gave
   // the west 59%. (The pitched battle keeps (30, 24): 53%.)
   // docs/DECISIONS.md, "How the kinds of battle were built".
-  deployFor: { ground: { west: { x: 11, y: 23 }, east: { x: 27, y: 18 } } },
+  // Since units pass through one another (November 28), the west a tile
+  // on, at (12, 23), and the east a tile north, at (27, 17): from (11, 23)
+  // and (27, 18) the west won 41% (800 battles, the sides named both
+  // ways); from here 48%, and 48 to 55% a tile either way but one: the
+  // west a tile south, at (12, 24), 36%. ((26, 17), 50%, is a tile too near
+  // Miller's Crossing: an army starts six tiles or more from any ground.) docs/DECISIONS.md, "How sharing a tile and passing through were restored".
+  deployFor: { ground: { west: { x: 12, y: 23 }, east: { x: 27, y: 17 } } },
   // The ground to fight for (engine/orchestrator/victory.js, objectiveArea):
   // the three fords, each held from on it or at either end; hold two of
   // them (ruled 2026-11-25: "Crown hill was actually meant to be 3 fords

@@ -106,6 +106,10 @@ module.exports = {
   // unit at a time (it was (32, 25)): there the computer against itself
   // gave the west 70%; here 51% (400 battles). docs/DECISIONS.md, "How
   // columns, wavering under fire and flight were mended".
+  // (That marching rule was withdrawn on November 28: units share a tile
+  // and pass through one another. Kept for the pitched battle and battles
+  // of no kind, which are fair from here; the battle for ground has its
+  // own places, below.)
   deploy: { west: { x: 8, y: 25 }, east: { x: 33, y: 25 } },
   // For a pitched battle, the east army three tiles north, at (33, 22).
   // From (33, 25) the computer against itself gave the west 69%: the west
@@ -113,7 +117,12 @@ module.exports = {
   // ford by the southern marsh, and the battle came to the bridge. From
   // here both hold the bridge's own ends: 50, 55 and 45% at (33, 21), (33,
   // 22) and (33, 23) (60 battles each). docs/DECISIONS.md, as above.
-  deployFor: { pitched: { west: { x: 8, y: 25 }, east: { x: 33, y: 22 } } },
+  // For the battle for the Old Mill Bridge, since units pass through one
+  // another (November 28), the west army in the fields under the Low
+  // Downs, at (6, 27): from (8, 25) the computer against itself gave the
+  // west 71% (800 battles, the sides named both ways); from here 49%, and
+  // 44 to 52% a tile either way for either army (400 each). docs/DECISIONS.md, "How sharing a tile and passing through were restored".
+  deployFor: { pitched: { west: { x: 8, y: 25 }, east: { x: 33, y: 22 } }, ground: { west: { x: 6, y: 27 }, east: { x: 33, y: 25 } } },
   // The ground to fight for (engine/orchestrator/victory.js, objectiveArea):
   // the bridge mid-field and the mill at its west end, held from on them.
   // (The bridge alone, held from either end, was tried first: the east army
