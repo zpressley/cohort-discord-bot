@@ -18,6 +18,7 @@
 // server already cut to your side's view.
 
 import { drawMap, attachGestures, gridRef, terrainWords, TILE } from './map.js'
+import { moveBetween, reducedMotion } from './motion.js'
 
 const app = document.getElementById('app')
 const esc = (s) => String(s ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]))
@@ -308,9 +309,13 @@ window.addEventListener('popstate', () => {
   route()
 })
 
+// Listeners a page puts on the whole document are taken off when it goes.
+let pageGone = new AbortController()
 async function route() {
   stopPolling()
   stopPolling = () => {}
+  pageGone.abort()
+  pageGone = new AbortController()
   const path = location.pathname
   const seat = path.match(/^\/b\/([A-Za-z0-9_-]{8,})$/)
   const armyOf = path.match(/^\/army\/([A-Za-z0-9_-]{8,})$/)
@@ -398,7 +403,7 @@ async function menu() {
       <a class="btn ${going.length ? '' : 'btn-main '}btn-wide" href="/muster" data-link id="new-battle">A new battle</a>
       <a class="btn btn-wide menu-entry" href="/officers" data-link id="to-officers"><span>Your Commanders and officers</span>${names.length ? `<span class="note">${esc(names.join(', '))}</span>` : ''}</a>
       ${over.length ? `<p class="label-caps">Battles that are over</p>${over.slice(0, OVER_SHOWN).map(overCard).join('')}
-        ${over.length > OVER_SHOWN ? `<details class="more-over"><summary>All ${over.length} battles that are over</summary>${over.slice(OVER_SHOWN).map(overCard).join('')}</details>` : ''}` : ''}
+        ${over.length > OVER_SHOWN ? `<details class="more-over"><summary>Show ${over.length - OVER_SHOWN} more ${over.length - OVER_SHOWN === 1 ? 'battle' : 'battles'} that are over</summary>${over.slice(OVER_SHOWN).map(overCard).join('')}</details>` : ''}` : ''}
       <p class="note">A battle's link brings it here too.</p>
       ${signIn}
     </main>`
@@ -1246,6 +1251,7 @@ async function whoLeads(token, view) {
 
 // ── The Command Tent ───────────────────────────────────
 async function tent(token) {
+  const leftTent = pageGone.signal
   const state = {
     token,
     view: null,
@@ -1306,6 +1312,26 @@ async function tent(token) {
       </aside>
     </div>`
   const scroll = document.getElementById('map-scroll')
+  // The movement between turns, while it runs; and whether the tap that
+  // finished it is to do nothing more.
+  let motion = null
+  let skipTap = false
+  // A tap (not a drag or a pinch) anywhere finishes the movement at once;
+  // on the map, that tap does nothing else. Panning and zooming leave it
+  // running.
+  let tapFrom = null
+  document.addEventListener('pointerdown', (event) => { tapFrom = { x: event.clientX, y: event.clientY }; skipTap = false }, { capture: true, signal: leftTent })
+  document.addEventListener('pointerup', (event) => {
+    if (!motion?.running || !tapFrom || Math.hypot(event.clientX - tapFrom.x, event.clientY - tapFrom.y) > 12) return
+    motion.finish()
+    skipTap = scroll.contains(event.target)
+  }, { capture: true, signal: leftTent })
+  // A turn's new view: the map moves from the one before (renderMap).
+  const moveIfTurned = (before) => {
+    const a = before?.battle
+    const b = state.view.battle
+    if (a && (a.minutes !== b.minutes || a.turn !== b.turn || a.status !== b.status)) state.moveFrom = before
+  }
 
   function renderBar() {
     const b = state.view.battle
@@ -1320,6 +1346,14 @@ async function tent(token) {
     const left = scroll.scrollLeft
     const top = scroll.scrollTop
     const showing = state.shown ?? state.view
+    // The movement between turns (motion.js): from the map as it was drawn,
+    // when a new turn's view (or the replay's next step) has come in. One
+    // still running is finished first.
+    motion?.finish()
+    motion = null
+    const from = state.moveFrom
+    state.moveFrom = null
+    const leaving = from && !reducedMotion() ? [...scroll.querySelectorAll('svg .mover')] : []
     // The map is drawn for its zoom, so that its words read at a readable
     // size (map.js, LABEL_PX); the first time, at the zoom it opens at.
     if (state.zoom === null) {
@@ -1334,16 +1368,19 @@ async function tent(token) {
     svg.style.height = 'auto'
     // (Put back as it was: not a move of his own.)
     if (keepScroll) placed = { left, top }
+    if (from && !reducedMotion()) motion = moveBetween(svg, onMap(from), onMap(showing), leaving, { k: Math.max(1, 1 / state.zoom) })
     if (state.shown) { if (keepScroll) { scroll.scrollLeft = left; scroll.scrollTop = top } return }
+    // (A tap that finished the movement does nothing more: skipTap.)
+    const unlessSkipped = (fn) => (...args) => { if (skipTap) { skipTap = false; return } fn(...args) }
     attachGestures(svg, onMap(state.view), () => state.picked, {
-      onPick: (id) => { state.picked = id; state.stack = null; state.place = null; state.flash = null; renderMap(); renderHint(); if (state.tab === 'army') renderPanel() },
-      onStack: (units) => { state.stack = units.map(u => u.id); state.place = null; state.flash = null; renderHint() },
+      onPick: unlessSkipped((id) => { state.picked = id; state.stack = null; state.place = null; state.flash = null; renderMap(); renderHint(); if (state.tab === 'army') renderPanel() }),
+      onStack: unlessSkipped((units) => { state.stack = units.map(u => u.id); state.place = null; state.flash = null; renderHint() }),
       onPinch: (factor, x, y) => zoomBy(factor, { x, y }),
       // A mouse dragged across the map (not from a unit) moves it, as a
       // finger does.
       onPan: (dx, dy) => { scroll.scrollLeft -= dx; scroll.scrollTop -= dy },
-      onOrder: (unit, x, y) => addLine(`${unit.name} to ${gridRef(x, y)}`),
-      onPlace: (x, y) => { state.place = { x, y }; state.flash = null; renderHint() }
+      onOrder: unlessSkipped((unit, x, y) => addLine(`${unit.name} to ${gridRef(x, y)}`)),
+      onPlace: unlessSkipped((x, y) => { state.place = { x, y }; state.flash = null; renderHint() })
     })
     if (keepScroll) { scroll.scrollLeft = left; scroll.scrollTop = top }
     markGround()
@@ -1505,6 +1542,8 @@ async function tent(token) {
     clearTimeout(relabelTimer)
     relabelTimer = setTimeout(() => {
       if (fingers > 0 || drawnAt === null || Math.abs(state.zoom - drawnAt) < 0.01) return
+      // (Not while the map is moving: once it has.)
+      if (motion?.running) { motion.done.then(relabel); return }
       renderMap()
     }, 250)
   }
@@ -1816,7 +1855,7 @@ async function tent(token) {
       try {
         await api('POST', `/api/seat/${token}/answer`, { offer: k.offer.id, ...body })
         state.asking = null
-        await load()
+        { const before = state.view; await load(); moveIfTurned(before) }
       } catch (error) { state.readback = { understood: [], questions: [], error: error.message } }
       renderAll()
     }
@@ -1885,7 +1924,7 @@ async function tent(token) {
           await call()
           state.readback = null
           state.offering = null
-          await load()
+          { const before = state.view; await load(); moveIfTurned(before) }
           state.tab = state.view.battle.status === 'waiting' ? 'orders' : 'dispatches'
           if (state.view.battle.status === 'finished' || state.view.commander?.status === 'held') state.tab = 'orders'
         } catch (error) { state.readback = { understood: [], questions: [], error: error.message } }
@@ -1977,7 +2016,7 @@ async function tent(token) {
         saveDraft(token, '')
         state.readback = null
         state.editing = false
-        await load()
+        { const before = state.view; await load(); moveIfTurned(before) }
         if (result.status === 'turn-ran') state.tab = 'dispatches'
         renderAll()
         afterTurn()
@@ -2056,7 +2095,10 @@ async function tent(token) {
     slider.addEventListener('change', async () => {
       const turn = Number(slider.value)
       const last = replayLast()
+      // The map moves from the step shown to the next, as between turns.
+      const before = state.shown ?? state.view
       state.shown = turn >= last ? null : await api('GET', `/api/seat/${token}/replay?turn=${turn}`)
+      state.moveFrom = before
       document.getElementById('replay-note').textContent = state.shown ? replayWords(state.shown) : 'The field as the battle ended.'
       renderMap()
     })
@@ -2130,14 +2172,14 @@ async function tent(token) {
           if (s.nextDay.calledOut && document.visibilityState === 'hidden' && 'Notification' in window && Notification.permission === 'granted') {
             try { new Notification(s.nextDay.title, { body: s.nextDay.calledOut }) } catch { /* the page shows it */ }
           }
-          await load()
+          { const before = state.view; await load(); moveIfTurned(before) }
           renderAll()
           return watch()
         }
         if (night) return
         if (s.status !== state.view.battle.status || s.turn !== state.view.battle.turn || (s.table ?? null) !== (state.view.battle.table ?? null)) {
           const turned = s.turn !== state.view.battle.turn
-          await load()
+          { const before = state.view; await load(); moveIfTurned(before) }
           if (s.status === 'your-orders' && turned) state.tab = 'dispatches'
           renderAll()
           if (turned) afterTurn()

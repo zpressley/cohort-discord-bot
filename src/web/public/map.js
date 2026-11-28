@@ -238,7 +238,9 @@ function sharedText(group) {
   return `${mine.length} of yours, ${theirs.length} enemy`
 }
 
-// The counters (their labels are sharedLabels').
+// The counters (their labels are sharedLabels'). Each in a wrapper that
+// names it (`mover`: whose, which, whether seen, and where), for the
+// movement between turns (motion.js): only what this view already holds.
 function drawUnits(list, opts) {
   const byTile = new Map()
   for (const u of list) {
@@ -250,7 +252,8 @@ function drawUnits(list, opts) {
   for (const group of byTile.values()) {
     group.forEach((u, i) => {
       const selected = opts.selectedId === u.id
-      out.push(counter(u, { ...opts, ghost: opts.ghost, commander: opts.commanderId === u.id, selected, nameAbove: selected && !opts.ghost ? u.name : null, shift: i * 5, k: opts.k ?? 1 }))
+      out.push(`<g class="mover" data-side="${opts.own ? 'own' : 'enemy'}" data-unit="${esc(u.id)}" data-seen="${opts.ghost ? 0 : 1}" data-x="${u.position.x}" data-y="${u.position.y}">` +
+        counter(u, { ...opts, ghost: opts.ghost, commander: opts.commanderId === u.id, selected, nameAbove: selected && !opts.ghost ? u.name : null, shift: i * 5, k: opts.k ?? 1 }) + '</g>')
     })
   }
   return out.join('')
@@ -391,11 +394,13 @@ export function drawMap(view, { selectedId = null, zoom = 1 } = {}) {
   }
 
   // Orders in force: dashed arrows from each unit to where it is going.
+  parts.push('<g class="map-orders">')
   for (const u of view.own) {
     if (!u.target || u.broken) continue
     if (u.target.x === u.position.x && u.target.y === u.position.y) continue
     parts.push(`<path d="M${cx(u.position.x)} ${cy(u.position.y)}L${cx(u.target.x)} ${cy(u.target.y)}" fill="none" style="stroke: var(--order-arrow)" stroke-width="1.6" stroke-dasharray="5 4" marker-end="url(#arrow)" opacity="0.8"/>`)
   }
+  parts.push('</g>')
 
   // The Commander's immediate range: within it his orders arrive at once
   // and he sees for himself; beyond it, by rider.
@@ -428,10 +433,10 @@ export function drawMap(view, { selectedId = null, zoom = 1 } = {}) {
   // His camp on the march: a small tent beside the unit carrying it.
   const carrier = camps?.own?.status === 'carried' ? view.own.find(u => u.id === camps.own.carrierId) : null
   if (carrier) parts.push(`<g aria-hidden="true" class="camp">${tent(cx(carrier.position.x) + TILE * 0.8, cy(carrier.position.y) - TILE * 0.6, `var(--side-${side})`, 8)}</g>`)
-  parts.push(`<g aria-hidden="true">${campLabels.join('')}</g>`)
+  parts.push(`<g aria-hidden="true" class="map-labels">${campLabels.join('')}</g>`)
   // Labels: yours first, then the enemy in sight, those known by rider and
   // the enemy last seen; sharing one where they must.
-  parts.push(labelText(sharedLabels(sets, k, groundNames)))
+  parts.push(`<g class="map-labels">${labelText(sharedLabels(sets, k, groundNames))}</g>`)
 
   const seen = (view.enemies ?? []).filter(e => e.status === 'visible').length
   const label = `Map of ${view.map.name}. Your ${view.own.length} units are shown; ${seen} enemy units in sight` +

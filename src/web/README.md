@@ -27,7 +27,8 @@ storage.js     where battles and Commanders are kept: files, or Postgres
                when DATABASE_URL is set; writes queued, in order, retried
 import-files.js  copies battles saved as files into Postgres (safe twice)
 public/        the browser app: index.html, app.js (screens), map.js (the
-               map and its gestures), app.css (layout)
+               map and its gestures), motion.js (the map's movement
+               between turns), app.css (layout)
 themes/        one folder per theme; parchment is the only one so far. A
                theme is its theme.css variables and its assets (ASSETS.md)
 browser/       the Playwright test
@@ -162,6 +163,21 @@ done); where there is no room for each its own, as at a fight on a phone,
 units share one ("7 of yours, 6 enemy"), and a tap there names them in the
 hint under the map. The enemy's read "enemy spears", and his counters
 carry a cut corner as well as his colour.
+
+When a turn's new view comes in, the map moves (ruled 2026-11-28;
+`public/motion.js`), all at once, over two seconds, while the dispatch is
+already there to read and the orders can be written: each unit you could
+see before and still see slides in a straight line from where your map
+showed it to where it shows it now; a unit new to your map fades in; one
+lost from sight fades out while its "last seen" mark fades in; your units
+that broke, were destroyed or left the field say so there for a moment; a
+short ring pulses where your men, or an enemy unit you saw in both, lost
+men; the labels, the orders' arrows and the camps come back at the end. A
+tap finishes it at once (and does nothing else); panning and zooming do
+not stop it. With reduced motion asked for in the browser, the map changes
+at once, as before. The verdict's replay slider moves the same way between
+its steps. It is drawing only, and only between two views your side was
+given: nothing more is asked of the server.
 
 The verdict's table: for each side, men standing of those it went in with
 ("364 of 400"), men fallen, and how many units broke; under it, each of

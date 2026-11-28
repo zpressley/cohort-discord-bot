@@ -7075,3 +7075,69 @@ until a key was pressed, and now does. A test shows them there through
 Back, the menu and a reload, and gone once sent. The tent's foot says "The
 battle is saved as you go, and your orders not yet sent: leave when you
 like, and come back from the menu."
+
+*Movement between turns* (`src/web/public/motion.js`; the map's counters
+carry what they are in `map.js`: whose, which, whether seen, where). When a
+turn's new view comes in (orders sent and the turn run, or the page finding
+the turn ran while it waited), the map is drawn as before and then moved
+from the map as it was:
+- Everything moves together over 2 seconds (`MOVE_MS`), easing in and out.
+  "A couple of seconds" read as two; the other reading is three. The
+  dispatch tab is shown at once, as before, and the orders can be written
+  while it moves: nothing waits for it.
+- *Fog of war decides what moves.* Only the two views his side was given
+  are used, and nothing more is asked of the server. A unit slides only
+  when it is in both views as the same kind of mark: his own (as he knows
+  them, by rider or by sight), an enemy in sight in both, or an enemy last
+  seen in both. The slide is a straight line between the two places his
+  map showed; no path is drawn through ground he did not see.
+- An enemy newly seen fades in where it is seen. One lost from sight: the
+  counter fades out where it was seen, and the "last seen" mark fades in
+  where it was last seen. A unit gone from his map fades out where it was.
+  An enemy unit whose kind he learns this turn is known by a new name (the
+  server's stand-in id gives way to its own), so it fades in rather than
+  slides: drawing it as the same unit would be the browser deciding
+  something the server did not tell it. The other reading: slide it, as
+  the eye expects.
+- His own units that broke this turn, and those destroyed or that left the
+  field (the view's `fallen`), say so where they were, in the vocabulary's
+  words ("broke", "destroyed", "left the field"), for about two seconds.
+  The enemy's breaking is not shown on the map: the view says it only in
+  words (`holding`), and the dispatch tells it.
+- *A fight* is a short ring, pulsing once near the end of the movement,
+  where one of his units lost men, or where an enemy unit he saw in both
+  views lost men he could count. The view has no place for "a fight" as
+  such; this is the plainest sign the two views already hold. The other
+  reading (a mark at every place blows were struck, from the dispatch's
+  events) would need the server to send places it does not now send.
+- The labels, the orders' arrows, his range for orders at once and the
+  camps fade in over the last third, as the units arrive (the camp a unit
+  carries moves with nothing, so it is better faded than left behind).
+- A tap anywhere finishes it at once, and on the map that tap does nothing
+  else (it would otherwise pick a unit or name a place). Dragging and
+  zooming leave it running; the map is drawn again for a new zoom only once
+  it has finished.
+- *Reduced motion*: with the browser's "reduce motion" set, none of it; the
+  map changes at once, as before.
+- *Smooth on a phone*: each counter moves by a CSS transform through the
+  Web Animations API; nothing is laid out again while it runs. Measured in
+  Chromium at 390 px, three times the pixels, the processor slowed four
+  times, on Greywater (2 km), 11 to 14 units on the map: 60 frames a
+  second, the 95th worst frame 16.8 ms, over six turns. Twenty-odd units
+  was not reached in that battle; the work grows by one transform a unit.
+  Not measured on a real phone.
+- The replay slider on the verdict moves the same way between its steps.
+- Turns in their ten-minute steps: left undone. It is not cheap. The
+  server builds a side's view once, after the turn has run; the steps
+  between are not kept. To play them, the server would have to keep (or
+  rebuild, by replaying the order log a step at a time) the side's view
+  after each ten-minute step, cut by the same fog code as the view
+  (`view` in `battles.js`, what his riders had brought him by then, not
+  what was true), send them with the turn, and the fog-of-war test would
+  have to cover every step. Then the browser would play them as it now
+  plays one step.
+- Tested in Chromium: units end exactly where the view puts them (each
+  counter's square measured on the screen against the view's square); with
+  reduced motion they jump as before; a tap finishes it and picks nothing.
+  The other browser tests run with reduced motion set, since they look at
+  where things end up.

@@ -43,8 +43,10 @@ async function withApp(run, storeOptions = {}) {
   assert.deepEqual(errors, [], 'no errors in the page')
 }
 
-async function page(browser, errors, viewport) {
-  const context = await browser.newContext({ viewport })
+// (With reduced motion asked for, unless a test is about the map's movement
+// between turns: the others look at where things end up.)
+async function page(browser, errors, viewport, { motion = false } = {}) {
+  const context = await browser.newContext({ viewport, reducedMotion: motion ? 'no-preference' : 'reduce' })
   const p = await context.newPage()
   p.on('pageerror', e => errors.push(e.message))
   p.on('console', m => { if (m.type() === 'error') errors.push(m.text()) })
@@ -1494,5 +1496,98 @@ test('the swipe guard is set on the tent: a sideways swipe moves the map, and th
     assert.equal(await p.evaluate(() => document.querySelector('#map-scroll svg').style.width), zoom, 'and did not zoom')
     assert.equal(p.url(), seat, 'and the page stayed')
     await menuShot(p, 'tent-desktop', false)
+  })
+})
+
+// The map moves between turns (ruled 2026-11-28: "can we have transition
+// movement between turns").
+// Where each of your units' counters is on the screen, and where the view
+// says it is: its square's middle, mapped as the map draws it.
+const counterPlaces = (p) => p.evaluate(() => {
+  const svg = document.querySelector('#map-scroll svg')
+  const m = svg.getScreenCTM()
+  return [...svg.querySelectorAll('.mover[data-side="own"]')].map(g => {
+    const r = g.querySelector('rect[width="20"][height="14"]').getBoundingClientRect()
+    const x = 26 + Number(g.dataset.x) * 24 + 12
+    const y = 26 + Number(g.dataset.y) * 24 + 12
+    return { id: g.dataset.unit, tile: `${g.dataset.x},${g.dataset.y}`, at: { x: r.x + r.width / 2, y: r.y + r.height / 2 }, view: { x: m.a * x + m.e, y: m.d * y + m.f } }
+  })
+})
+async function soloTent(p, base, faction = 'rome') {
+  await toMuster(p, base, { faction })
+  await p.click('button[type="submit"]')
+  await p.waitForSelector('#orders')
+  return new URL(p.url()).pathname.slice(3)
+}
+
+test('after a turn your units slide from where they were to where the view puts them, and end exactly there', { skip }, async () => {
+  await withApp(async ({ base, browser, errors }) => {
+    const p = await page(browser, errors, { width: 390, height: 844 }, { motion: true })
+    const seat = await soloTent(p, base)
+    const before = await counterPlaces(p)
+    await p.fill('#orders', 'everyone advance')
+    await p.click('#send')
+    await p.waitForSelector('.dispatch')
+    // Moving: some counter is not yet where the view puts it.
+    const mid = await counterPlaces(p)
+    assert.ok(await p.evaluate(() => document.getAnimations().length > 0), 'the map is moving')
+    assert.ok(mid.some(c => Math.hypot(c.at.x - c.view.x, c.at.y - c.view.y) > 2), 'a unit is on its way')
+    if (process.env.MENU_SHOTS) {
+      for (let i = 0; i < 4; i++) {
+        await p.locator('.map-wrap').screenshot({ path: path.join(process.env.MENU_SHOTS, `move-${i}.png`) })
+        await p.waitForTimeout(450)
+      }
+    }
+    await p.waitForFunction(() => document.getAnimations().length === 0, null, { timeout: 6000 })
+    // Ended: every counter where the view puts it, and the view is the server's.
+    const view = await p.evaluate((t) => fetch(`/api/seat/${t}`).then(r => r.json()), seat)
+    const after = await counterPlaces(p)
+    for (const c of after) {
+      const u = view.own.find(x => x.id === c.id)
+      assert.equal(c.tile, `${u.position.x},${u.position.y}`, `${c.id} is drawn where the view has it`)
+      // (Units sharing a square cascade a little.)
+      const shared = after.filter(o => o.tile === c.tile).length > 1
+      if (!shared) assert.ok(Math.hypot(c.at.x - c.view.x, c.at.y - c.view.y) < 1.5, `${c.id} ends exactly on its square`)
+    }
+    assert.ok(after.some(c => before.find(b => b.id === c.id)?.tile !== c.tile), 'and some of them moved')
+    assert.equal(await p.locator('#map-scroll .leaving, #map-scroll .fight-pulse, #map-scroll .fate-mark').count(), 0, 'nothing of the movement is left behind')
+  })
+})
+
+test('with reduced motion asked for, the units jump to their places after a turn, as before', { skip }, async () => {
+  await withApp(async ({ base, browser, errors }) => {
+    const p = await page(browser, errors, { width: 390, height: 844 })
+    await soloTent(p, base)
+    await p.fill('#orders', 'everyone advance')
+    await p.click('#send')
+    await p.waitForSelector('.dispatch')
+    assert.equal(await p.evaluate(() => document.getAnimations().length), 0, 'nothing moves')
+    for (const c of await counterPlaces(p)) {
+      if ((await counterPlaces(p)).filter(o => o.tile === c.tile).length > 1) continue
+      assert.ok(Math.hypot(c.at.x - c.view.x, c.at.y - c.view.y) < 1.5, `${c.id} is on its square at once`)
+    }
+  })
+})
+
+test('a tap skips the movement: the units are in their places at once, and the tap does nothing else', { skip }, async () => {
+  await withApp(async ({ base, browser, errors }) => {
+    const p = await page(browser, errors, { width: 390, height: 844 }, { motion: true })
+    await soloTent(p, base)
+    await p.fill('#orders', 'everyone advance')
+    await p.click('#send')
+    await p.waitForSelector('.dispatch')
+    assert.ok(await p.evaluate(() => document.getAnimations().length > 0), 'the map is moving')
+    const hint = await p.textContent('#map-hint')
+    const box = await p.locator('#map-scroll').boundingBox()
+    await p.locator('#map-scroll').click({ position: { x: box.width / 2, y: box.height / 2 } })
+    await p.waitForFunction(() => document.getAnimations().length === 0, null, { timeout: 500 })
+    for (const c of await counterPlaces(p)) {
+      if ((await counterPlaces(p)).filter(o => o.tile === c.tile).length > 1) continue
+      assert.ok(Math.hypot(c.at.x - c.view.x, c.at.y - c.view.y) < 1.5, `${c.id} is on its square`)
+    }
+    assert.equal(await p.textContent('#map-hint'), hint, 'the tap picked nothing and named no place')
+    // The next tap is the map's again.
+    await p.locator('#map-scroll').click({ position: { x: box.width / 2, y: box.height / 2 } })
+    await p.waitForFunction((h) => document.getElementById('map-hint').textContent !== h, hint)
   })
 })
