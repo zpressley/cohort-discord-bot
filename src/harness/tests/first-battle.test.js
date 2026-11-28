@@ -39,14 +39,20 @@ function firstOn(map, side, faction, ground = groundOf(map)[0]) {
 // to the second nearest: measured, west 18 and 37 minutes, east 10 and 44,
 // from where they form up for it since (Crownhill's deployFor); with the
 // east army where it forms up for a pitched battle, its second took 60).
-test('on every 1 km field the two armies are as long marching to the ground to fight for: on average over every faction, within ten minutes of each other', () => {
+test('on every 1 km field the two armies are as long marching to the ground to fight for: on average over every faction, within ten minutes of each other (a quarter hour on Ashford)', () => {
   const factions = Object.keys(FACTIONS)
   for (const map of ['crownhill', 'ashford', 'thornwood', 'ravenridge']) {
     const needed = MAPS[map].hold?.needed ?? 1
     const times = (side) => groundOf(map).map(g => factions.reduce((n, f) => n + firstOn(map, side, f, g), 0) / factions.length).sort((a, b) => a - b)
     const west = times('red')
     const east = times('blue')
-    for (let i = 0; i < needed; i++) assert.ok(Math.abs(west[i] - east[i]) <= 10, `${map}, ground ${i + 1} of ${needed}: west ${west[i]} min, east ${east[i]} min`)
+    // Ashford's west forms up for the bridge 11.5 minutes further off, for
+    // an even field since units pass through one another (November 28:
+    // from as near as the east, the computer against itself gave the west
+    // 71%): within a quarter hour there. docs/DECISIONS.md, "How sharing a
+    // tile and passing through were restored".
+    const within = map === 'ashford' ? 15 : 10
+    for (let i = 0; i < needed; i++) assert.ok(Math.abs(west[i] - east[i]) <= within, `${map}, ground ${i + 1} of ${needed}: west ${west[i]} min, east ${east[i]} min`)
   }
 })
 

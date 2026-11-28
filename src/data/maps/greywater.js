@@ -61,6 +61,10 @@ map.set(40, 39, 'bridge')
 // village street meets every lane of it from either bank. Two abreast,
 // "everyone take Elderby" won 27 battles in 100 (46 before columns); four
 // abreast, 45, and the computer against itself is even (51% west).
+// (That rule was withdrawn on November 28: units share a tile and pass
+// through one another. The bridge is kept as drawn: with it, every kind of
+// battle here is even between two computer armies. docs/DECISIONS.md,
+// "How sharing a tile and passing through were restored".)
 map.set(39, 38, 'bridge')
 map.set(40, 38, 'bridge')
 for (let x = 41; x <= 44; x++) map.set(x, 38, 'road')
@@ -177,7 +181,12 @@ module.exports = {
   // battles) and 64% (60); from here 44%, and 44, 55 and 50% a tile north,
   // south and further west (60 each). docs/DECISIONS.md, "How the kinds of
   // battle were built", round two.
-  deployFor: { ground: { west: { x: 14, y: 41 }, east: { x: 64, y: 38 } } },
+  // Since units pass through one another (November 28), the west a tile
+  // back, at (13, 41), and the east two tiles back, at (66, 38): from (14,
+  // 41) and (64, 38) the west won 42% (800 battles, the sides named both
+  // ways); from here 49%, and 41 to 53% a tile either way but one: the
+  // east a tile south, at (66, 39), 59%. docs/DECISIONS.md, "How sharing a tile and passing through were restored".
+  deployFor: { ground: { west: { x: 13, y: 41 }, east: { x: 66, y: 38 } } },
   ground: [{ name: 'Elderby', tiles: ELDERBY }],
   // The kinds of battle fought here, the first offered first at the muster
   // (docs/DECISIONS.md, "How the kinds of battle were built").

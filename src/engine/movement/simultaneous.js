@@ -32,10 +32,9 @@
 const { findPath } = require('./pathfinding')
 const { toPosition, samePosition, positionKey } = require('../map/labels')
 const { inInitiativeOrder, tierName } = require('./initiative')
-const { buildOccupancy, canEnter, moveUnit, crowdingByUnit, crowdedRange } = require('./occupancy')
+const { buildOccupancy, canEnter, moveUnit, crowdingByUnit, crowdedRange, crowdingOnEntering, crowdedStep } = require('./occupancy')
 const { getUnit, isAlive } = require('../world')
 const { moveCost } = require('../combat/perks')
-const { MARCH } = require('../combat/tables')
 
 // A unit blocked this many ticks in a row gives up for the turn.
 const BLOCKED_TICKS_TO_STOP = 2
@@ -70,93 +69,10 @@ function resolveSimultaneousMovement(world, orders, map, options = {}) {
   const withGlue = (unit, budget) =>
     engaged.has(unit.id) && glue > 0 ? Math.max(Math.min(1, budget), budget - glue) : budget
   if (!map) throw new Error('resolveSimultaneousMovement needs the map')
-  // In a battle, units on the march keep a tile apart (tables.MARCH): a
-  // friend's tile is gone round or waited for (makeWay). Off for the
-  // resolver's own tests and the scripted scenarios, where friends share
-  // ground as they always did.
-  const keepApart = Boolean(options.keepApart)
   const occupancy = buildOccupancy(world)
   const crowding = crowdingByUnit(world)
   const plans = new Map()
   const results = new Map()
-  const onTheMove = (u, plan) => {
-    const p = plans.get(u.id)
-    return Boolean(p) && p !== plan && !p.stopped && p.stepIndex < p.steps.length
-  }
-  const enemyBeside = (tile, unit) => [tile, ...map.neighbors(tile)].some(n =>
-    (occupancy.get(positionKey(n)) ?? []).some(u => u.side !== unit.side && !hidden.has(u.id)))
-  const costOf = (unit, steps) => steps.reduce((n, p) => n + moveCost(unit, map.terrainAt(p), map.moveCost(p)), 0)
-  // A unit on the march about to step onto a tile its own men stand on:
-  //   'enter'  the place it was sent, or beside an enemy it is going at
-  //            (it joins the fight there), and not a ford or bridge;
-  //   'wait'   the men there are moving on this tick (it follows them in
-  //            column), or, when it can neither go round nor clear the
-  //            tile, they are in a fight or still on their way: it waits
-  //            behind them, keeping its order (men only standing there it
-  //            goes in among, 'enter');
-  //   'round'  a way round them that costs at most MARCH.ROUND more
-  //            (looked for once a tick): its steps are changed;
-  //   'pass'   through them, clearing the tile in the same ten minutes.
-  const makeWay = (plan, next, cost) => {
-    const unit = plan.unit
-    const friends = (occupancy.get(positionKey(next)) ?? []).filter(u => u !== unit && u.side === unit.side)
-    const crossing = MARCH.CROSSINGS.includes(map.terrainAt(next))
-    if (!crossing && samePosition(next, plan.target)) return 'enter'
-    const wait = (friend, busy = onTheMove(friend, plan) || engaged.has(friend.id)) => {
-      plan.queuedBehind = { by: friend.id, busy }
-      plan.blockedBy = friend.id
-      return 'wait'
-    }
-    // Is that friend waiting, at the end of a line of waiting men, on this
-    // unit? Then neither would ever move: it is not waited for.
-    const waitsOnMe = (friend) => {
-      const seen = new Set()
-      for (let p = plans.get(friend.id); p?.queuedBehind && !seen.has(p); p = plans.get(p.queuedBehind.by)) {
-        if (p.queuedBehind.by === unit.id) return true
-        seen.add(p)
-      }
-      return false
-    }
-    // A way round the men standing in its way to where it is going; for one
-    // going into a fight (intoFight), only a way that brings it beside the
-    // enemy within this ten minutes' march.
-    const goRound = (intoFight = false) => {
-      if (plan.wentRound) return false
-      plan.wentRound = true
-      const avoid = new Set([...occupancy.entries()]
-        .filter(([, units]) => units.some(u => u !== unit && (u.side !== unit.side || !onTheMove(u, plan))))
-        .map(([key]) => key))
-      const round = findPath(map, unit.position, plan.target, { avoid })
-      if (!round || round.length < 2 || samePosition(round[1], next)) return false
-      const steps = round.slice(1)
-      if (intoFight) {
-        const beside = steps.findIndex(p => enemyBeside(p, unit))
-        if (beside < 0 || costOf(unit, steps.slice(0, beside + 1)) > plan.budget) return false
-      } else if (costOf(unit, steps) > costOf(unit, plan.steps.slice(plan.stepIndex)) + MARCH.ROUND) return false
-      plan.steps = steps
-      plan.stepIndex = 0
-      return true
-    }
-    // Going at an enemy beside that tile: to a tile of its own beside him if
-    // it can reach one now, else in beside its friends (it joins the fight).
-    if (!crossing && plan.seeking && enemyBeside(next, unit)) return goRound(true) ? 'round' : 'enter'
-    const moving = friends.find(f => onTheMove(f, plan) && !waitsOnMe(f))
-    if (moving) return wait(moving)
-    if (goRound()) return 'round'
-    const beyond = plan.steps[plan.stepIndex + 1]
-    const clears = beyond && plan.budget - cost >= moveCost(unit, map.terrainAt(beyond), map.moveCost(beyond)) &&
-      !(plan.seeking && enemyBeside(next, unit)) &&
-      (occupancy.get(positionKey(beyond)) ?? []).every(u => u.side === unit.side && onTheMove(u, plan))
-    if (clears) return 'pass'
-    // Men in a fight there, or on their way and halted for these ten
-    // minutes: it waits its turn behind them. Men only standing there, with
-    // no way round: it goes in among them, as friends always could (a unit
-    // holding on a road through a wood would else stop its own army for
-    // good: Thornwood, the soak's meeting battle, seed 4).
-    const goingOn = (f) => { const p = plans.get(f.id); return Boolean(p) && p.stepIndex < p.steps.length }
-    if (friends.some(f => engaged.has(f.id) || (goingOn(f) && !waitsOnMe(f)))) return wait(friends[0], true)
-    return 'enter'
-  }
 
   // ── Plan ────────────────────────────────────────────
   for (const order of orders) {
@@ -226,12 +142,8 @@ function resolveSimultaneousMovement(world, orders, map, options = {}) {
   const moveOrder = inInitiativeOrder([...plans.values()].map(p => p.unit), options.tieKey ?? null)
 
   let anyoneMoving = true
-  const halts = () => [...plans.values()].filter(p => p.stopped).length
   while (anyoneMoving) {
     anyoneMoving = false
-    // Keeping apart, a unit halting is news to those waiting behind it:
-    // they look again (go round, or wait on).
-    const haltedBefore = keepApart ? halts() : 0
 
     for (const unit of moveOrder) {
       const plan = plans.get(unit.id)
@@ -255,7 +167,10 @@ function resolveSimultaneousMovement(world, orders, map, options = {}) {
       const terrain = map.terrainAt(nextCoord)
       // (Its people may cross woods or marsh at a cost of their own:
       // combat/perks.js.)
-      const cost = moveCost(unit, terrain, map.moveCost(nextCoord))
+      // Through or onto a tile its own men stand on, it pays for the
+      // crowding there, the men on it and its own counted (tables.CROWDING,
+      // move): friends pass through one another, slowed only by the press.
+      const cost = crowdedStep(moveCost(unit, terrain, map.moveCost(nextCoord)), crowdingOnEntering(occupancy, unit, nextCoord))
 
       // A unit can always make one tile of ground in a turn, however slow
       // it is and however rough the tile: without this, a careful or
@@ -268,22 +183,14 @@ function resolveSimultaneousMovement(world, orders, map, options = {}) {
       }
 
       const entry = canEnter(occupancy, unit, nextCoord)
-      // Friends on the next tile, in a battle (options.keepApart): march in
-      // column, or go round, or wait (makeWay, below).
-      if (keepApart && entry.ok && entry.shared && !plan.fleeing) {
-        const way = makeWay(plan, nextCoord, cost)
-        if (way === 'wait') continue
-        if (way === 'round') { anyoneMoving = true; continue }
-      }
       // A full tile of friends in the way: once per turn, look for a way
       // around the tiles this unit cannot enter. Paths are planned over an
       // empty field, so without this a broken unit wedged in a packed line
       // can block both armies for good. An enemy in the way is contact, and
       // stops the move (below).
-      // Running, in a battle, and an enemy stepped into its way (two broken
-      // units of either side, each running past the other): once a tick,
-      // round him.
-      if (keepApart && !entry.ok && entry.reason === 'enemy' && plan.fleeing && !plan.detoured) {
+      // Running, and an enemy stepped into its way (two broken units of
+      // either side, each running past the other): once a tick, round him.
+      if (!entry.ok && entry.reason === 'enemy' && plan.fleeing && !plan.detoured) {
         plan.detoured = true
         const avoid = new Set([...occupancy.entries()]
           .filter(([, units]) => units.some(u => u.side !== unit.side))
@@ -328,7 +235,6 @@ function resolveSimultaneousMovement(world, orders, map, options = {}) {
       plan.tilesTraversed.push({ coord: nextCoord, terrain })
       plan.blockedTicks = 0
       plan.blockedBy = null
-      plan.queuedBehind = null
       anyoneMoving = true
 
       // An ambush within reach may spring on this unit, and catch it here.
@@ -361,7 +267,6 @@ function resolveSimultaneousMovement(world, orders, map, options = {}) {
         }
       }
     }
-    if (keepApart && halts() > haltedBefore) anyoneMoving = true
   }
 
   // ── Report ──────────────────────────────────────────
@@ -380,9 +285,6 @@ function resolveSimultaneousMovement(world, orders, map, options = {}) {
       blockedBy: plan.blockedBy,
       ...(plan.stumbledOn ? { stumbledOn: plan.stumbledOn } : {}),
       ...(plan.ambushedBy ? { ambushedBy: plan.ambushedBy } : {}),
-      // Waiting behind its own men (makeWay) as the ten minutes ended; busy:
-      // they were on the move or in a fight.
-      ...(plan.queuedBehind ? { queued: plan.queuedBehind } : {}),
       terrain: map.terrainAt(plan.unit.position)
     })
   }

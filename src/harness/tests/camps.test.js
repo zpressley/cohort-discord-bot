@@ -22,10 +22,13 @@ function fingerprint(text) {
 
 // Retaken with follow-unchanged.test.js when the kinds of battle mended
 // ties between the sides (main at e9949dc); camps changed none of them.
+// Retaken again when units of one side were let share a tile and pass
+// through one another (ruled November 28; docs/DECISIONS.md, "How sharing
+// a tile and passing through were restored"). They were 24ae0710 16 (greywater rome germania 5), dcef9521 44 (ravenridge thrace sarmatia 4), 192f4dc9 32 (thornwood macedon parthia 3).
 const BEFORE = {
-  'thornwood macedon parthia 3': '192f4dc9 32',
-  'ravenridge thrace sarmatia 4': 'dcef9521 44',
-  'greywater rome germania 5': '24ae0710 16'
+  'thornwood macedon parthia 3': '118333b6 24',
+  'ravenridge thrace sarmatia 4': '535e7ced 15',
+  'greywater rome germania 5': '7f743ff6 12'
 }
 
 test('a battle without camps runs exactly as before camps, event for event', () => {

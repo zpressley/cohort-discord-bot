@@ -79,6 +79,11 @@
 // 988f2b16 17 (crownhill 1), 4a3dd2e5 19 (crownhill 2), ccfaaf84 14
 // (ashford 1), 7e232cf6 17 (ashford 2), e9cfed6f 17 (crownhill 1),
 // 86491ec2 19 (crownhill 2).
+//
+// Retaken when units of one side were let share a tile and pass through
+// one another again, the marching in column withdrawn (ruled November 28;
+// docs/DECISIONS.md, "How sharing a tile and passing through were
+// restored"). They were 489f46c2 22 (crownhill 1), 7f9c450e 32 (crownhill 2), be804a7d 12 (ashford 1), 50d4109e 15 (ashford 2) (everyone asked) and f4b9ff0f 22 (crownhill 1), 8ae0423b 22 (crownhill 2), 5ec857e2 13 (ashford 1), 61de1d55 16 (ashford 2) (no Commander).
 
 const { test } = require('node:test')
 const assert = require('node:assert/strict')
@@ -117,18 +122,18 @@ function play(extra, { commander }) {
 
 test('a battle saved before the riders rulings (marked everyoneAsked) plays back exactly as it was played, event for event', () => {
   assert.deepEqual(play({ everyoneAsked: true }, { commander: true }), {
-    'crownhill 1': '489f46c2 22',
-    'crownhill 2': '7f9c450e 32',
-    'ashford 1': 'be804a7d 12',
-    'ashford 2': '50d4109e 15'
+    'crownhill 1': '7b6461aa 23',
+    'crownhill 2': '16c062d5 34',
+    'ashford 1': '63511cd9 18',
+    'ashford 2': '147112cc 17'
   })
 })
 
 test('a battle with no Commander on the field runs exactly as before the riders rulings, event for event', () => {
   assert.deepEqual(play({}, { commander: false }), {
-    'crownhill 1': 'f4b9ff0f 22',
-    'crownhill 2': '8ae0423b 22',
-    'ashford 1': '5ec857e2 13',
-    'ashford 2': '61de1d55 16'
+    'crownhill 1': 'bcf8f64c 23',
+    'crownhill 2': '8c2de55a 23',
+    'ashford 1': '314de46b 20',
+    'ashford 2': '758c7e07 18'
   })
 })

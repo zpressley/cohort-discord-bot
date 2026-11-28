@@ -88,6 +88,9 @@ module.exports = {
   // east, nearer Thorn Knoll, then won 59% between two computer armies (400
   // battles); now the west wins 51%. docs/DECISIONS.md, "How columns, wavering under fire and
   // flight were mended".
+  // (That marching rule was withdrawn on November 28: units share a tile
+  // and pass through one another. Kept for battles of no kind; the pitched
+  // battle and the battle for the knoll have their own places, below.)
   deploy: { west: { x: 6, y: 20 }, east: { x: 35, y: 20 } },
   // For a pitched battle (no ground to fight for), the west army forms up
   // in the north field, at (6, 14). From the road at (6, 20) the computer
@@ -99,7 +102,15 @@ module.exports = {
   // the knoll through the wood, not the ford, and the share is 43 to 48% a
   // tile either way (60 battles each; 47% at (6, 16)). docs/DECISIONS.md,
   // "How the kinds of battle were built", round two.
-  deployFor: { pitched: { west: { x: 6, y: 14 }, east: { x: 35, y: 20 } } },
+  // For the battle for Thorn Knoll, since units pass through one another
+  // (November 28), the west a tile south of the road, at (6, 21), and the
+  // east a tile on and south, at (34, 21): from (6, 20) and (35, 20) the
+  // west won 41% (800 battles, the sides named both ways); from here 49%,
+  // and 40 to 55% a tile either way but one: the east a tile further on,
+  // at (33, 21), 62%. Who reaches the knoll first decides most of these
+  // battles, and a tile on the road through the wood is often the
+  // difference. docs/DECISIONS.md, "How sharing a tile and passing through were restored".
+  deployFor: { pitched: { west: { x: 6, y: 14 }, east: { x: 35, y: 20 } }, ground: { west: { x: 6, y: 21 }, east: { x: 34, y: 21 } } },
   // The ground to fight for (engine/orchestrator/victory.js, objectiveArea):
   // the bald rise in the heart of the wood, held from on it or beside it
   // (the brook cuts its eastern foot: held from on it alone, the west army
