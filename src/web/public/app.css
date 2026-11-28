@@ -7,6 +7,11 @@
 
 *, *::before, *::after { box-sizing: border-box; }
 html, body { margin: 0; height: 100%; }
+/* A sideways swipe (two fingers on a trackpad, or a thumb) scrolls what is
+ * under it and goes no further: it does not take the page Back (ruled
+ * 2026-11-28: "some of the trackpad actions make the page go back"). The
+ * Back button itself still works. Up and down are left as they were. */
+html, body { overscroll-behavior-x: none; }
 body {
   background: var(--ground);
   color: var(--ink);
@@ -58,7 +63,7 @@ a { color: var(--accent); }
 /* ── The tent ────────────────────────────────────── */
 .tent { flex: 1; display: flex; flex-wrap: wrap; align-content: flex-start; min-height: 0; }
 .map-wrap { position: relative; flex: 999 1 560px; min-width: 0; background: var(--paper); display: flex; flex-direction: column; }
-.map-scroll { flex: 0 0 auto; overflow: auto; height: 42vh; min-height: 300px; touch-action: pan-x pan-y; -webkit-overflow-scrolling: touch; }
+.map-scroll { flex: 0 0 auto; overflow: auto; height: 42vh; min-height: 300px; touch-action: pan-x pan-y; -webkit-overflow-scrolling: touch; overscroll-behavior: contain; }
 .map-scroll svg { display: block; user-select: none; -webkit-user-select: none; }
 .map-tools { position: absolute; right: 10px; top: 10px; display: flex; flex-direction: column; gap: 6px; }
 .map-wrap.tall .map-scroll { height: 75vh; }
@@ -166,6 +171,14 @@ a { color: var(--accent); }
 .officer ul { margin: 0; padding-left: 18px; display: flex; flex-direction: column; gap: 6px; }
 .battle-link strong { font-family: var(--font-display); font-size: 18px; }
 .battle-link span { font-size: 14px; color: var(--ink-soft); }
+/* The main menu (ruled 2026-11-28). */
+.menu-title { font-family: var(--font-display); font-size: 22px; }
+.battle-link.going .stands { font-size: 15px; font-weight: 600; color: var(--ink); }
+.menu-entry { flex-direction: column; gap: 2px; padding: 8px 16px; text-align: center; }
+.menu-entry .note { font-size: 13px; }
+.more-over { display: flex; flex-direction: column; gap: 14px; }
+.more-over summary { min-height: 44px; display: flex; align-items: center; cursor: pointer; font-size: 15px; }
+.more-over[open] summary { margin-bottom: 14px; }
 .field { display: flex; flex-direction: column; gap: 6px; font-size: 14px; font-weight: 600; }
 .field select, .field input[type="text"] { min-height: 44px; padding: 0 10px; font: inherit; font-weight: normal; font-size: 15px; background: var(--panel-raised); color: var(--ink); border: 1px solid var(--ink-soft); }
 .choice { display: flex; align-items: center; gap: 10px; min-height: 44px; padding: 0 12px; background: var(--panel-raised); border: 1px solid var(--rule); font-weight: normal; }

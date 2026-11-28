@@ -41,12 +41,49 @@ A friend who opens their link to a two-player battle first sees "Who
 leads?": their Commanders whose armies are free, a new Commander, or none.
 Their orders wait on that choice; once the first turn has run it is closed.
 
+## The main menu, and going back
+
+The front address (`/`; `/battles` is the same page) is the main menu
+(ruled 2026-11-28), the one place everything hangs from. In order: your
+battles going on, the one you opened last first, each with one line of
+where it stands ("Your orders are wanted", "Your orders are with the
+army", "Night has fallen. You can fight again the next day", or the call
+to a next day) and one tap back into it; "A new battle" (the muster);
+"Your Commanders and officers"; the battles that are over (the last three,
+the rest behind "All N battles that are over"); signing in with Discord
+when it is offered. A browser with nothing yet is sent to make its
+Commander, and comes back to the menu. Every other screen has "Menu" in
+its top bar.
+
+The browser's Back never lands on a form that has done its work:
+
+| From | Back goes to |
+|---|---|
+| a battle (the tent) | the main menu, that battle at the top |
+| a battle opened by its link (Discord, a bookmark) | the main menu |
+| the muster, Your officers | the main menu |
+| making a Commander (from the muster or a friend's battle) | the main menu |
+| your army, opened from the muster | the muster |
+| a Commander's page | Your officers |
+| the next day's battle | the main menu |
+
+The app keeps the browser's history shallow (`go` in `app.js`): the menu
+at its foot, a page opened by its link has the menu put under it, a form
+that has done its work is replaced by where it leads, and the muster and
+Your officers sit straight on the menu.
+
+A sideways swipe (two fingers on a trackpad, a thumb on a phone) does not
+take the page Back: `overscroll-behavior-x: none` on the page,
+`overscroll-behavior: contain` on the map, and on the map a sideways swipe
+moves it sideways (up and down still zoom). Orders written and not sent are
+kept for that battle in this browser, and cleared once sent.
+
 ## Making a Commander
 
 "A new Commander" (`/commander/new?then=...`) is one screen: what kind of
 commander you are (ten), what you fight for (glory or survival), your
 faction for life, and your name (a plain one offered). Every answer is
-already chosen; "Take command" makes him and goes on to the muster, or,
+already chosen; "Take command" makes him and goes on to the muster (on a first visit, the main menu), or,
 from a friend's link, straight into that battle with him leading. A browser with no Commander free to lead is sent there
 from the muster. His own page (`/commander/<his link>`, "Your record" on
 Your officers) shows his answers, his title, his battles and how he fell.
