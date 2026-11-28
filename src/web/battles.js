@@ -1114,6 +1114,9 @@ function createBattleStore({ dir = null, storage = null, ai = null, now = () => 
       // The kind of battle (ruled 2026-11-25), in words.
       kind: kindOfBattle(game.spec),
       kindTitle: KINDS[kindOfBattle(game.spec)]?.title ?? null,
+      // Night fell, there is no next day yet, and both sides have men to
+      // fight it: the main menu lists the battle as going on.
+      ...(game.outcome.reason === 'night fell' && !entry.next && !Object.values(nightArmies(entry).left).some(n => n === 0) ? { fightOn: NIGHT.fightOn } : {}),
       updatedAt: entry.updatedAt,
       sentAt: entry.pending[side]?.at ?? null,
       // How the table between a held Commander and his captors stands, as

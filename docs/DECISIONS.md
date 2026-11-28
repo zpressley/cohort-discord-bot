@@ -6954,3 +6954,190 @@ What follows from it:
   held crossing and goes in together; branch
   `worktree-agent-a94af84bcb93a711c`, commit 1ff7ec6) is not merged: it
   did not change the outcome, and its purpose is withdrawn.
+
+
+## Rulings, November 28, 2026 (the main menu, going back, movement between turns)
+
+Zach's first play of the hosted game, on a laptop with a trackpad:
+
+- "If you back out of the battle page you go right back to the army select
+  screen. That can't work that way because you lose your progress. Need a
+  dedicated main menu and a new screen. some of the trackpad actions make
+  the page go back so it happened a few times by accident."
+- "Battles look good but what is possible with animation, can we have
+  transition movement between turns."
+
+What follows from it:
+
+- The front address is a main menu, the one place everything hangs from.
+  It replaces the ruling of 2026-10-30 that the front page opens the
+  battle waiting on you: a battle is one tap from the menu, and a link to a
+  battle (a Discord message) still goes straight into it.
+- The browser's Back never loses his place, and never lands on a form that
+  has done its work.
+- The map moves between turns. It is drawing only: nothing about a
+  battle's outcome or what is told changes.
+
+### How the main menu, going back and movement between turns were built (Claude's choices, open to change)
+
+*The main menu* (`menu` in `src/web/public/app.js`), at `/` (and `/battles`,
+the old "Your battles", now the same page). Titled "Cohort", "The main
+menu" beside it. In order:
+- "Your battles going on": every battle not over, and a battle night ended
+  while a next day can still be fought (`fightOn` in the battle's line,
+  `NIGHT.fightOn`: "Night has fallen. You can fight again the next day").
+  The one he opened last is first (this browser already kept its battles in
+  that order). Each says where it stands in one bold line: "Your orders are
+  wanted", "Your orders are with the army: sent 5 min ago", the night's
+  line, or the call to a next day; then the kind, his side, against whom,
+  the turn and the time. One tap opens it.
+  Guessed: the brief's example "waiting on your friend" is not used. The
+  ruling of November 23 ("Two players") took "Waiting on the enemy" away,
+  because it tells him the other side was asked; "Your orders are with
+  the army" is the line the tent already uses. The other reading: Zach
+  wants it said plainly against a friend, which would undo that ruling.
+- Under them, "Every battle is saved as you go. Leave one when you like:
+  it is here to come back to."
+- "A new battle" (the muster): the main button when nothing is going on,
+  a plain one when something is (the battles are what he came back for).
+- "Your Commanders and officers", with their names under it ("Niall (army
+  in the field)").
+- "Battles that are over": the last three, the rest behind one tap ("All
+  7 battles that are over"). Three is a guess at "many".
+- Signing in with Discord, when it is offered (as on Your officers).
+- A browser with nothing (no battle, no Commander) is sent to make its
+  Commander, and comes back to the menu, not the muster. Guessed: the
+  other reading is that a first visit should go on to the muster; the
+  menu is one tap from it, and he learns where home is.
+- Every other screen has "Menu" in its top bar (the tent, the muster, Your
+  officers, "Who leads?"; the army screen and a Commander's page keep
+  their own way back on the left and have "Menu" on the right); the
+  verdict's "Your battles" button is "The main menu".
+
+*Going back.* The browser's history is kept shallow, with the menu at its
+foot (`go` in `app.js`). Each entry the app makes carries how far above the
+menu it is and the page it was opened from:
+- a page opened by its link (a Discord message, a bookmark, a new tab) has
+  the menu put under it, so Back from it lands on the menu;
+- a form that has done its work is replaced by where it leads: the muster
+  by the tent, making a Commander by the muster, the menu or the battle,
+  "Who leads?" by making a Commander, the army screen by the muster or the
+  battle, a verdict by the next day's battle;
+- the muster and Your officers sit straight on the menu: opened from a
+  deeper page, the history is walked back to the first page above the menu
+  and that page becomes them;
+- a link back to the page this one was opened from (the army screen's
+  "Muster", "Menu" from the tent) is the browser's own Back, so nothing
+  piles up.
+Back is not trapped: nothing stops it or asks first. Guessed: going back
+to the page the muster was opened from (Your officers) was the other
+reading of "Back from a battle"; he asked for the menu, so it is the menu
+from every battle.
+
+What Back did, before and after (each step the page Back lands on):
+
+| Path | Before | After |
+|---|---|---|
+| front page, a battle waiting | (went straight into it) Back left the game | the menu; Back leaves the game |
+| menu, A new battle, muster, the battle | Back: the muster's form | Back: the menu, the battle at the top |
+| first visit: making a Commander, then the muster, then a battle | battle: the muster; muster: making a Commander | battle: the menu; menu: leaves the game |
+| muster, Buy your own army, kept | Back: the army screen, then the muster | Back: the menu (the army screen gave way to the muster) |
+| a friend's link, Who leads?, a new Commander, the battle | battle: making a Commander; then Who leads? | battle: the menu |
+| a battle opened from Discord in a new tab | Back left the game | the menu |
+| the verdict, Fight again the next day | Back: the old verdict | the menu |
+| Your officers, Your record | Your officers | Your officers (unchanged) |
+| Your officers, Muster a new battle, the battle | battle: the muster; muster: Your officers | battle: the menu |
+
+*Accidental swipes.* `overscroll-behavior-x: none` on the page (`html`,
+`body`): a sideways swipe that reaches the page's edge goes no further, and
+in Chromium on a Mac (Chrome, Edge, Brave) that is what stops the
+two-finger swipe from going Back. `overscroll-behavior: contain` on the
+map, so its own scrolling never hands the swipe on to the page. On the map
+a sideways two-finger swipe now moves the map sideways (the wheel handler
+took every wheel event to zoom, and a sideways one zoomed by nothing);
+up and down, and a mouse's wheel, zoom as before. Pinch-zoom and the map's
+own pan are untouched. Tested in Chromium (a test checks the styles, and
+that a sideways wheel on the map moves it and leaves the page where it
+was). Not tested: Safari and Firefox. Safari (16 and later) honours
+`overscroll-behavior`, but its two-finger swipe Back on a Mac is the
+system's and is not stopped by it; on the map, the wheel handler takes the
+swipe first, so there it should hold. Firefox on a Mac is meant to honour
+`overscroll-behavior-x: none` for its swipe Back in its recent versions;
+not checked.
+An iPhone's swipe from the screen's edge, and Android's system Back
+gesture, cannot be stopped by a page; they now land on the menu, which
+is safe.
+
+*Orders not yet sent* were already kept for each battle in this browser
+(`cohort.draft.<seat>`) as they were typed, and cleared once sent; the
+"Give an order" button on the Army tab did not keep what it put in the box
+until a key was pressed, and now does. A test shows them there through
+Back, the menu and a reload, and gone once sent. The tent's foot says "The
+battle is saved as you go, and your orders not yet sent: leave when you
+like, and come back from the menu."
+
+*Movement between turns* (`src/web/public/motion.js`; the map's counters
+carry what they are in `map.js`: whose, which, whether seen, where). When a
+turn's new view comes in (orders sent and the turn run, or the page finding
+the turn ran while it waited), the map is drawn as before and then moved
+from the map as it was:
+- Everything moves together over 2 seconds (`MOVE_MS`), easing in and out.
+  "A couple of seconds" read as two; the other reading is three. The
+  dispatch tab is shown at once, as before, and the orders can be written
+  while it moves: nothing waits for it.
+- *Fog of war decides what moves.* Only the two views his side was given
+  are used, and nothing more is asked of the server. A unit slides only
+  when it is in both views as the same kind of mark: his own (as he knows
+  them, by rider or by sight), an enemy in sight in both, or an enemy last
+  seen in both. The slide is a straight line between the two places his
+  map showed; no path is drawn through ground he did not see.
+- An enemy newly seen fades in where it is seen. One lost from sight: the
+  counter fades out where it was seen, and the "last seen" mark fades in
+  where it was last seen. A unit gone from his map fades out where it was.
+  An enemy unit whose kind he learns this turn is known by a new name (the
+  server's stand-in id gives way to its own), so it fades in rather than
+  slides: drawing it as the same unit would be the browser deciding
+  something the server did not tell it. The other reading: slide it, as
+  the eye expects.
+- His own units that broke this turn, and those destroyed or that left the
+  field (the view's `fallen`), say so where they were, in the vocabulary's
+  words ("broke", "destroyed", "left the field"), for about two seconds.
+  The enemy's breaking is not shown on the map: the view says it only in
+  words (`holding`), and the dispatch tells it.
+- *A fight* is a short ring, pulsing once near the end of the movement,
+  where one of his units lost men, or where an enemy unit he saw in both
+  views lost men he could count. The view has no place for "a fight" as
+  such; this is the plainest sign the two views already hold. The other
+  reading (a mark at every place blows were struck, from the dispatch's
+  events) would need the server to send places it does not now send.
+- The labels, the orders' arrows, his range for orders at once and the
+  camps fade in over the last third, as the units arrive (the camp a unit
+  carries moves with nothing, so it is better faded than left behind).
+- A tap anywhere finishes it at once, and on the map that tap does nothing
+  else (it would otherwise pick a unit or name a place). Dragging and
+  zooming leave it running; the map is drawn again for a new zoom only once
+  it has finished.
+- *Reduced motion*: with the browser's "reduce motion" set, none of it; the
+  map changes at once, as before.
+- *Smooth on a phone*: each counter moves by a CSS transform through the
+  Web Animations API; nothing is laid out again while it runs. Measured in
+  Chromium at 390 px, three times the pixels, the processor slowed four
+  times, on Greywater (2 km), 11 to 14 units on the map: 60 frames a
+  second, the 95th worst frame 16.8 ms, over six turns. Twenty-odd units
+  was not reached in that battle; the work grows by one transform a unit.
+  Not measured on a real phone.
+- The replay slider on the verdict moves the same way between its steps.
+- Turns in their ten-minute steps: left undone. It is not cheap. The
+  server builds a side's view once, after the turn has run; the steps
+  between are not kept. To play them, the server would have to keep (or
+  rebuild, by replaying the order log a step at a time) the side's view
+  after each ten-minute step, cut by the same fog code as the view
+  (`view` in `battles.js`, what his riders had brought him by then, not
+  what was true), send them with the turn, and the fog-of-war test would
+  have to cover every step. Then the browser would play them as it now
+  plays one step.
+- Tested in Chromium: units end exactly where the view puts them (each
+  counter's square measured on the screen against the view's square); with
+  reduced motion they jump as before; a tap finishes it and picks nothing.
+  The other browser tests run with reduced motion set, since they look at
+  where things end up.

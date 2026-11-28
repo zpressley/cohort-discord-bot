@@ -43,8 +43,10 @@ async function withApp(run, storeOptions = {}) {
   assert.deepEqual(errors, [], 'no errors in the page')
 }
 
-async function page(browser, errors, viewport) {
-  const context = await browser.newContext({ viewport })
+// (With reduced motion asked for, unless a test is about the map's movement
+// between turns: the others look at where things end up.)
+async function page(browser, errors, viewport, { motion = false } = {}) {
+  const context = await browser.newContext({ viewport, reducedMotion: motion ? 'no-preference' : 'reduce' })
   const p = await context.newPage()
   p.on('pageerror', e => errors.push(e.message))
   p.on('console', m => { if (m.type() === 'error') errors.push(m.text()) })
@@ -68,12 +70,15 @@ test('alone, on a phone: muster, an order written on the map, turns to a verdict
     const p = await page(browser, errors, { width: 390, height: 844 })
     await p.goto(base + '/')
     await p.waitForSelector('form#make')
-    assert.match(p.url(), /\/commander\/new\?then=\/muster$/, 'a new browser makes its Commander first')
+    assert.match(p.url(), /\/commander\/new\?then=\/$/, 'a new browser makes its Commander first')
     // A new Commander chooses his faction; the enemy's is drawn by lot
     // unless chosen.
     await p.selectOption('select[name="faction"]', 'macedon')
     assert.match(await p.textContent('#faction-note'), /Silver shields, comes free/)
     await p.click('#make button[type="submit"]')
+    // Made, he sees the main menu, and goes from there to a new battle.
+    await p.waitForSelector('#menu')
+    await p.click('#new-battle')
     await p.waitForSelector('form#muster')
     assert.match(await p.textContent('#faction-note'), /you fight for Macedon/)
     await p.selectOption('select[name="enemyFaction"]', 'rome')
@@ -170,10 +175,10 @@ test('alone, on a phone: muster, an order written on the map, turns to a verdict
     await p.dispatchEvent('#replay', 'change')
     await p.waitForFunction(() => /before the first orders/.test(document.getElementById('replay-note').textContent))
 
-    // Coming back: the home page lists the finished battle.
+    // Coming back: the main menu lists the finished battle.
     await p.goto(base + '/')
     await p.waitForSelector('.battle-link')
-    assert.match(p.url(), /\/battles$/, 'nothing waiting, so home is your battles')
+    assert.match(p.url(), /\/$/, 'the front address is the main menu')
 
     // Your officers: those who lived, with the battle in their record.
     await p.click('a[href="/officers"]')
@@ -1352,5 +1357,237 @@ test('on a phone: in a battle of camps the night passes plainly: the dispatch te
     assert.match(told, /Dawn: the second day of the battle begins/)
     assert.ok(await p.evaluate(() => document.documentElement.scrollWidth <= 390), 'no sideways scroll')
     await shot(p, 'tent-dawn', false)
+  })
+})
+
+// The main menu, and going back (ruled 2026-11-28: "If you back out of the
+// battle page you go right back to the army select screen. That can't work
+// that way because you lose your progress. Need a dedicated main menu").
+// MENU_SHOTS: a folder for their screenshots.
+const menuShot = (p, name, full = true) => process.env.MENU_SHOTS ? p.screenshot({ path: path.join(process.env.MENU_SHOTS, `${name}.png`), fullPage: full }) : null
+
+test('the main menu lists a battle under way, where it stands, and one tap takes you back into it', { skip }, async () => {
+  await withApp(async ({ base, browser, errors }) => {
+    const p = await page(browser, errors, { width: 390, height: 844 })
+    await toMuster(p, base, { faction: 'rome' })
+    await p.click('button[type="submit"]')
+    await p.waitForSelector('#map-scroll svg')
+    const seat = new URL(p.url()).pathname
+    await p.click('#to-menu')
+    await p.waitForSelector('#menu')
+    assert.equal(new URL(p.url()).pathname, '/')
+    const first = p.locator('.battle-link.going').first()
+    assert.equal(await first.getAttribute('href'), seat, 'the battle just left is at the top')
+    assert.match(await first.textContent(), /Your orders are wanted\./)
+    assert.match(await first.textContent(), /Rome against/)
+    assert.ok((await first.boundingBox()).height >= 44)
+    // In order: the battles going on, a new battle, your officers.
+    const order = await p.evaluate(() => [...document.querySelectorAll('#menu > *')].map(e => e.id || e.className))
+    assert.ok(order.indexOf('new-battle') > order.findIndex(x => /going/.test(x)), `a new battle after the battles going on: ${order}`)
+    assert.ok(order.indexOf('to-officers') > order.indexOf('new-battle'))
+    assert.ok(await p.evaluate(() => document.documentElement.scrollWidth <= 390), 'no sideways scroll')
+    await menuShot(p, 'menu-phone')
+    await first.click()
+    await p.waitForSelector('#map-scroll svg')
+    assert.equal(new URL(p.url()).pathname, seat)
+  })
+})
+
+test('Back from the tent lands on the main menu, not the muster, with that battle at the top; and so from a battle opened by its link', { skip }, async () => {
+  await withApp(async ({ base, browser, errors }) => {
+    const p = await page(browser, errors, { width: 390, height: 844 })
+    // A first visit: make the Commander, see the menu, muster from it.
+    await p.goto(base + '/')
+    await p.waitForSelector('form#make')
+    await p.click('#make button[type="submit"]')
+    await p.waitForSelector('#menu')
+    await p.click('#new-battle')
+    await p.waitForSelector('form#muster')
+    await p.click('button[type="submit"]')
+    await p.waitForSelector('#map-scroll svg')
+    const seat = new URL(p.url()).pathname
+    await p.goBack()
+    await p.waitForSelector('#menu')
+    assert.equal(new URL(p.url()).pathname, '/', 'Back from the battle is the menu')
+    assert.equal(await p.locator('form#muster, form#make').count(), 0)
+    assert.equal(await p.locator('.battle-link.going').first().getAttribute('href'), seat)
+    // Forward again, and Back: still the menu.
+    await p.goForward()
+    await p.waitForSelector('#map-scroll svg')
+    await p.goBack()
+    await p.waitForSelector('#menu')
+    // A new battle left unused (his army in the field, he is asked to make
+    // another Commander first): its Back is the menu.
+    await p.click('#new-battle')
+    await p.waitForSelector('form#make')
+    await p.goBack()
+    await p.waitForSelector('#menu')
+    // And so from Your officers, then a Commander's page, then a new battle.
+    await p.click('#to-officers')
+    await p.waitForSelector('.commander')
+    await p.click('a[href^="/commander/"]')
+    await p.waitForSelector('#commander-page')
+    await p.goBack()
+    await p.waitForSelector('.commander')
+    await p.click('main a[href="/muster"]')
+    await p.waitForSelector('form#make')
+    await p.goBack()
+    await p.waitForSelector('#menu')
+
+    // A battle opened by its link, in a new tab: Back is the menu too.
+    const q = await p.context().newPage()
+    q.on('pageerror', e => errors.push(e.message))
+    await q.goto(base + seat)
+    await q.waitForSelector('#map-scroll svg')
+    await q.goBack()
+    await q.waitForSelector('#menu')
+    assert.equal(new URL(q.url()).pathname, '/')
+    await q.close()
+  })
+})
+
+test('orders written and not sent are there when you come back to the battle, and gone once sent', { skip }, async () => {
+  await withApp(async ({ base, browser, errors }) => {
+    const p = await page(browser, errors, { width: 390, height: 844 })
+    await toMuster(p, base, { faction: 'rome' })
+    await p.click('button[type="submit"]')
+    await p.waitForSelector('#orders')
+    const seat = new URL(p.url()).pathname
+    await p.fill('#orders', 'everyone hold')
+    await p.goBack()
+    await p.waitForSelector('#menu')
+    await p.click(`.battle-link[href="${seat}"]`)
+    await p.waitForSelector('#orders')
+    assert.equal(await p.inputValue('#orders'), 'everyone hold', 'kept through Back and the menu')
+    await p.reload()
+    await p.waitForSelector('#orders')
+    assert.equal(await p.inputValue('#orders'), 'everyone hold', 'and through a reload')
+    assert.match(await p.textContent('#panel-foot'), /The battle is saved as you go/)
+    await p.click('#send')
+    await p.waitForSelector('.dispatch')
+    await p.click('[data-tab="orders"]')
+    await p.waitForSelector('#orders')
+    assert.equal(await p.inputValue('#orders'), '', 'sent, they are cleared')
+    assert.equal(await p.evaluate((t) => localStorage.getItem(`cohort.draft.${t}`), seat.slice(3)), null)
+  })
+})
+
+test('the swipe guard is set on the tent: a sideways swipe moves the map, and the page does not go back', { skip }, async () => {
+  await withApp(async ({ base, browser, errors }) => {
+    const p = await page(browser, errors, { width: 1280, height: 800 })
+    await toMuster(p, base, { faction: 'rome' })
+    await p.selectOption('select[name="map"]', 'greywater')
+    await p.click('button[type="submit"]')
+    await p.waitForSelector('#map-scroll svg')
+    const seat = p.url()
+    const guard = await p.evaluate(() => ({
+      root: getComputedStyle(document.documentElement).overscrollBehaviorX,
+      body: getComputedStyle(document.body).overscrollBehaviorX,
+      map: getComputedStyle(document.getElementById('map-scroll')).overscrollBehaviorX
+    }))
+    assert.deepEqual(guard, { root: 'none', body: 'none', map: 'contain' })
+    const box = await p.locator('#map-scroll').boundingBox()
+    await p.mouse.move(box.x + box.width / 2, box.y + box.height / 2)
+    const before = await p.evaluate(() => document.getElementById('map-scroll').scrollLeft)
+    const zoom = await p.evaluate(() => document.querySelector('#map-scroll svg').style.width)
+    await p.mouse.wheel(200, 0)
+    await p.waitForTimeout(200)
+    assert.notEqual(await p.evaluate(() => document.getElementById('map-scroll').scrollLeft), before, 'the map moved sideways')
+    assert.equal(await p.evaluate(() => document.querySelector('#map-scroll svg').style.width), zoom, 'and did not zoom')
+    assert.equal(p.url(), seat, 'and the page stayed')
+    await menuShot(p, 'tent-desktop', false)
+  })
+})
+
+// The map moves between turns (ruled 2026-11-28: "can we have transition
+// movement between turns").
+// Where each of your units' counters is on the screen, and where the view
+// says it is: its square's middle, mapped as the map draws it.
+const counterPlaces = (p) => p.evaluate(() => {
+  const svg = document.querySelector('#map-scroll svg')
+  const m = svg.getScreenCTM()
+  return [...svg.querySelectorAll('.mover[data-side="own"]')].map(g => {
+    const r = g.querySelector('rect[width="20"][height="14"]').getBoundingClientRect()
+    const x = 26 + Number(g.dataset.x) * 24 + 12
+    const y = 26 + Number(g.dataset.y) * 24 + 12
+    return { id: g.dataset.unit, tile: `${g.dataset.x},${g.dataset.y}`, at: { x: r.x + r.width / 2, y: r.y + r.height / 2 }, view: { x: m.a * x + m.e, y: m.d * y + m.f } }
+  })
+})
+async function soloTent(p, base, faction = 'rome') {
+  await toMuster(p, base, { faction })
+  await p.click('button[type="submit"]')
+  await p.waitForSelector('#orders')
+  return new URL(p.url()).pathname.slice(3)
+}
+
+test('after a turn your units slide from where they were to where the view puts them, and end exactly there', { skip }, async () => {
+  await withApp(async ({ base, browser, errors }) => {
+    const p = await page(browser, errors, { width: 390, height: 844 }, { motion: true })
+    const seat = await soloTent(p, base)
+    const before = await counterPlaces(p)
+    await p.fill('#orders', 'everyone advance')
+    await p.click('#send')
+    await p.waitForSelector('.dispatch')
+    // Moving: some counter is not yet where the view puts it.
+    const mid = await counterPlaces(p)
+    assert.ok(await p.evaluate(() => document.getAnimations().length > 0), 'the map is moving')
+    assert.ok(mid.some(c => Math.hypot(c.at.x - c.view.x, c.at.y - c.view.y) > 2), 'a unit is on its way')
+    if (process.env.MENU_SHOTS) {
+      for (let i = 0; i < 4; i++) {
+        await p.locator('.map-wrap').screenshot({ path: path.join(process.env.MENU_SHOTS, `move-${i}.png`) })
+        await p.waitForTimeout(450)
+      }
+    }
+    await p.waitForFunction(() => document.getAnimations().length === 0, null, { timeout: 6000 })
+    // Ended: every counter where the view puts it, and the view is the server's.
+    const view = await p.evaluate((t) => fetch(`/api/seat/${t}`).then(r => r.json()), seat)
+    const after = await counterPlaces(p)
+    for (const c of after) {
+      const u = view.own.find(x => x.id === c.id)
+      assert.equal(c.tile, `${u.position.x},${u.position.y}`, `${c.id} is drawn where the view has it`)
+      // (Units sharing a square cascade a little.)
+      const shared = after.filter(o => o.tile === c.tile).length > 1
+      if (!shared) assert.ok(Math.hypot(c.at.x - c.view.x, c.at.y - c.view.y) < 1.5, `${c.id} ends exactly on its square`)
+    }
+    assert.ok(after.some(c => before.find(b => b.id === c.id)?.tile !== c.tile), 'and some of them moved')
+    assert.equal(await p.locator('#map-scroll .leaving, #map-scroll .fight-pulse, #map-scroll .fate-mark').count(), 0, 'nothing of the movement is left behind')
+  })
+})
+
+test('with reduced motion asked for, the units jump to their places after a turn, as before', { skip }, async () => {
+  await withApp(async ({ base, browser, errors }) => {
+    const p = await page(browser, errors, { width: 390, height: 844 })
+    await soloTent(p, base)
+    await p.fill('#orders', 'everyone advance')
+    await p.click('#send')
+    await p.waitForSelector('.dispatch')
+    assert.equal(await p.evaluate(() => document.getAnimations().length), 0, 'nothing moves')
+    for (const c of await counterPlaces(p)) {
+      if ((await counterPlaces(p)).filter(o => o.tile === c.tile).length > 1) continue
+      assert.ok(Math.hypot(c.at.x - c.view.x, c.at.y - c.view.y) < 1.5, `${c.id} is on its square at once`)
+    }
+  })
+})
+
+test('a tap skips the movement: the units are in their places at once, and the tap does nothing else', { skip }, async () => {
+  await withApp(async ({ base, browser, errors }) => {
+    const p = await page(browser, errors, { width: 390, height: 844 }, { motion: true })
+    await soloTent(p, base)
+    await p.fill('#orders', 'everyone advance')
+    await p.click('#send')
+    await p.waitForSelector('.dispatch')
+    assert.ok(await p.evaluate(() => document.getAnimations().length > 0), 'the map is moving')
+    const hint = await p.textContent('#map-hint')
+    const box = await p.locator('#map-scroll').boundingBox()
+    await p.locator('#map-scroll').click({ position: { x: box.width / 2, y: box.height / 2 } })
+    await p.waitForFunction(() => document.getAnimations().length === 0, null, { timeout: 500 })
+    for (const c of await counterPlaces(p)) {
+      if ((await counterPlaces(p)).filter(o => o.tile === c.tile).length > 1) continue
+      assert.ok(Math.hypot(c.at.x - c.view.x, c.at.y - c.view.y) < 1.5, `${c.id} is on its square`)
+    }
+    assert.equal(await p.textContent('#map-hint'), hint, 'the tap picked nothing and named no place')
+    // The next tap is the map's again.
+    await p.locator('#map-scroll').click({ position: { x: box.width / 2, y: box.height / 2 } })
+    await p.waitForFunction((h) => document.getElementById('map-hint').textContent !== h, hint)
   })
 })

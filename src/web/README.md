@@ -27,7 +27,8 @@ storage.js     where battles and Commanders are kept: files, or Postgres
                when DATABASE_URL is set; writes queued, in order, retried
 import-files.js  copies battles saved as files into Postgres (safe twice)
 public/        the browser app: index.html, app.js (screens), map.js (the
-               map and its gestures), app.css (layout)
+               map and its gestures), motion.js (the map's movement
+               between turns), app.css (layout)
 themes/        one folder per theme; parchment is the only one so far. A
                theme is its theme.css variables and its assets (ASSETS.md)
 browser/       the Playwright test
@@ -41,12 +42,49 @@ A friend who opens their link to a two-player battle first sees "Who
 leads?": their Commanders whose armies are free, a new Commander, or none.
 Their orders wait on that choice; once the first turn has run it is closed.
 
+## The main menu, and going back
+
+The front address (`/`; `/battles` is the same page) is the main menu
+(ruled 2026-11-28), the one place everything hangs from. In order: your
+battles going on, the one you opened last first, each with one line of
+where it stands ("Your orders are wanted", "Your orders are with the
+army", "Night has fallen. You can fight again the next day", or the call
+to a next day) and one tap back into it; "A new battle" (the muster);
+"Your Commanders and officers"; the battles that are over (the last three,
+the rest behind "All N battles that are over"); signing in with Discord
+when it is offered. A browser with nothing yet is sent to make its
+Commander, and comes back to the menu. Every other screen has "Menu" in
+its top bar.
+
+The browser's Back never lands on a form that has done its work:
+
+| From | Back goes to |
+|---|---|
+| a battle (the tent) | the main menu, that battle at the top |
+| a battle opened by its link (Discord, a bookmark) | the main menu |
+| the muster, Your officers | the main menu |
+| making a Commander (from the muster or a friend's battle) | the main menu |
+| your army, opened from the muster | the muster |
+| a Commander's page | Your officers |
+| the next day's battle | the main menu |
+
+The app keeps the browser's history shallow (`go` in `app.js`): the menu
+at its foot, a page opened by its link has the menu put under it, a form
+that has done its work is replaced by where it leads, and the muster and
+Your officers sit straight on the menu.
+
+A sideways swipe (two fingers on a trackpad, a thumb on a phone) does not
+take the page Back: `overscroll-behavior-x: none` on the page,
+`overscroll-behavior: contain` on the map, and on the map a sideways swipe
+moves it sideways (up and down still zoom). Orders written and not sent are
+kept for that battle in this browser, and cleared once sent.
+
 ## Making a Commander
 
 "A new Commander" (`/commander/new?then=...`) is one screen: what kind of
 commander you are (ten), what you fight for (glory or survival), your
 faction for life, and your name (a plain one offered). Every answer is
-already chosen; "Take command" makes him and goes on to the muster, or,
+already chosen; "Take command" makes him and goes on to the muster (on a first visit, the main menu), or,
 from a friend's link, straight into that battle with him leading. A browser with no Commander free to lead is sent there
 from the muster. His own page (`/commander/<his link>`, "Your record" on
 Your officers) shows his answers, his title, his battles and how he fell.
@@ -125,6 +163,21 @@ done); where there is no room for each its own, as at a fight on a phone,
 units share one ("7 of yours, 6 enemy"), and a tap there names them in the
 hint under the map. The enemy's read "enemy spears", and his counters
 carry a cut corner as well as his colour.
+
+When a turn's new view comes in, the map moves (ruled 2026-11-28;
+`public/motion.js`), all at once, over two seconds, while the dispatch is
+already there to read and the orders can be written: each unit you could
+see before and still see slides in a straight line from where your map
+showed it to where it shows it now; a unit new to your map fades in; one
+lost from sight fades out while its "last seen" mark fades in; your units
+that broke, were destroyed or left the field say so there for a moment; a
+short ring pulses where your men, or an enemy unit you saw in both, lost
+men; the labels, the orders' arrows and the camps come back at the end. A
+tap finishes it at once (and does nothing else); panning and zooming do
+not stop it. With reduced motion asked for in the browser, the map changes
+at once, as before. The verdict's replay slider moves the same way between
+its steps. It is drawing only, and only between two views your side was
+given: nothing more is asked of the server.
 
 The verdict's table: for each side, men standing of those it went in with
 ("364 of 400"), men fallen, and how many units broke; under it, each of

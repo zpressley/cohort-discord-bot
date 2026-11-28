@@ -219,6 +219,9 @@ const NIGHT = {
   calledOut: (day) => `The enemy has called you out for a ${DAYS[day] ?? `${day}th`} day. Your orders are wanted.`,
   // One side has no one left able to fight.
   noNextDay: 'There is no next day: one side has no one left able to take the field.',
+  // The main menu's line for a battle night ended, while a next day may be
+  // fought (ruled 2026-11-28: a main menu).
+  fightOn: 'Night has fallen. You can fight again the next day',
   // Notices from the browser, when the page is open in the background.
   tellMe: 'Tell me here if the enemy calls a next day',
   toldYou: 'This browser will tell you while the page is open.'

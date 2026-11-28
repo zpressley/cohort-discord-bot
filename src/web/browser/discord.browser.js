@@ -65,7 +65,7 @@ test('on a phone: sign in with Discord, your Commander in a second browser, the 
     // He makes his Commander without signing in, as today.
     const name = await first.inputValue('#make input[name="name"]')
     await first.click('#make button[type="submit"]')
-    await first.waitForSelector('form#muster')
+    await first.waitForSelector('#menu')
 
     // On his officers page he signs in; Discord sends him back there.
     standin.user = { id: '100000000000000001', username: 'aulus', global_name: 'Aulus' }
@@ -140,7 +140,7 @@ test('on a phone, with no Discord settings: no sign-in anywhere', { skip }, asyn
     await p.goto(base + '/')
     await p.waitForSelector('form#make')
     await p.click('#make button[type="submit"]')
-    await p.waitForSelector('form#muster')
+    await p.waitForSelector('#menu')
     await p.goto(base + '/officers')
     await p.waitForSelector('.commander')
     assert.equal(await p.locator('#sign-in, #signed-in, .signin').count(), 0)

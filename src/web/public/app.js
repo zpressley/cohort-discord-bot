@@ -2,9 +2,9 @@
 //
 // The browser app: one page, four screens (docs/stage-4/UX.md).
 //
-//   /            opens the battle waiting on you (ruled 2026-10-30), else
-//                your battles, else the muster
-//   /battles     your battles
+//   /            the main menu (ruled 2026-11-28): your battles going on,
+//                a new battle, your officers, the battles that are over
+//   /battles     the main menu, as "your battles" was before
 //   /muster      muster a new battle
 //   /officers    your officers: who they are and what they have been through
 //   /commander/new         making a Commander: two questions and a name
@@ -18,6 +18,7 @@
 // server already cut to your side's view.
 
 import { drawMap, attachGestures, gridRef, terrainWords, TILE } from './map.js'
+import { moveBetween, reducedMotion } from './motion.js'
 
 const app = document.getElementById('app')
 const esc = (s) => String(s ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]))
@@ -244,22 +245,77 @@ function verdictWords(battle) {
 }
 
 // ── Routing ────────────────────────────────────────────
+// Going back never loses his place (ruled 2026-11-28: "If you back out of
+// the battle page you go right back to the army select screen... Need a
+// dedicated main menu"). The browser's history is kept shallow, with the
+// main menu at its foot:
+//   - every entry the app makes carries { cohort, depth, from }: how far
+//     above the menu it is, and the page it was opened from;
+//   - a page opened by its link (a Discord message, a bookmark) has the
+//     menu put under it, so Back from it lands on the menu;
+//   - a form that has done its work (the muster, making a Commander,
+//     buying an army, "Who leads?") is replaced by where it leads, never
+//     left as the page before it;
+//   - the muster and Your officers sit straight on the menu: opened from
+//     deeper, the way back from them is to the menu;
+//   - a way back to the page this one was opened from is the browser's Back.
 let stopPolling = () => {}
+const here = () => location.pathname + location.search
+const TOP = new Set(['/muster', '/officers'])
+let onArrival = null
 function go(path, { replace = false } = {}) {
-  replace ? history.replaceState({}, '', path) : history.pushState({}, '', path)
+  const at = history.state ?? {}
+  const depth = at.depth ?? 0
+  // Back to the page this one was opened from: the browser's own Back.
+  if (at.from === path) return history.back()
+  // To the menu from deeper: down the history to it.
+  if (path === '/' && depth > 0) return backTo(0, null)
+  // To a page that sits on the menu, from deeper: down to the first page
+  // above the menu, and that page becomes it.
+  const top = TOP.has(path.split('?')[0])
+  if (top && depth > 1) return backTo(1, path)
+  if (path === '/') history.replaceState({ cohort: 1, depth: 0, from: null }, '', path)
+  else if (top && depth === 1) history.replaceState({ cohort: 1, depth: 1, from: '/' }, '', path)
+  else if (replace) history.replaceState({ cohort: 1, depth, from: at.from ?? null }, '', path)
+  else history.pushState({ cohort: 1, depth: depth + 1, from: here() }, '', path)
   route()
+}
+// Down the history to `depth`, and there show `path` in place of what was
+// (null: what was there).
+function backTo(depth, path) {
+  onArrival = { path }
+  history.go(depth - (history.state?.depth ?? 0))
+}
+// A page opened by its link, or the first of a visit: the menu goes under
+// it, so that Back from it lands on the menu.
+if (!history.state?.cohort) {
+  const first = here()
+  if (location.pathname === '/' || location.pathname === '/battles') history.replaceState({ cohort: 1, depth: 0, from: null }, '', '/')
+  else {
+    history.replaceState({ cohort: 1, depth: 0, from: null }, '', '/')
+    history.pushState({ cohort: 1, depth: 1, from: '/' }, '', first)
+  }
 }
 document.addEventListener('click', (event) => {
   const a = event.target.closest('a[data-link]')
   if (!a || event.metaKey || event.ctrlKey) return
   event.preventDefault()
-  go(a.getAttribute('href'))
+  go(a.getAttribute('href'), { replace: a.hasAttribute('data-replace') })
 })
-window.addEventListener('popstate', route)
+window.addEventListener('popstate', () => {
+  const arrival = onArrival
+  onArrival = null
+  if (arrival?.path) history.replaceState({ cohort: 1, depth: history.state?.depth ?? 0, from: history.state?.from ?? null }, '', arrival.path)
+  route()
+})
 
+// Listeners a page puts on the whole document are taken off when it goes.
+let pageGone = new AbortController()
 async function route() {
   stopPolling()
   stopPolling = () => {}
+  pageGone.abort()
+  pageGone = new AbortController()
   const path = location.pathname
   const seat = path.match(/^\/b\/([A-Za-z0-9_-]{8,})$/)
   const armyOf = path.match(/^\/army\/([A-Za-z0-9_-]{8,})$/)
@@ -271,12 +327,12 @@ async function route() {
     if (commanderOf) return await commanderPage(commanderOf[1])
     if (seat) return await tent(seat[1])
     if (armyOf) return await armyScreen(armyOf[1])
-    if (path === '/battles') return await battles()
     if (path === '/muster') return await muster()
     if (path === '/officers') return await officers()
-    return await home()
+    // (Your battles, as it was, is the main menu now.)
+    return await menu()
   } catch (error) {
-    app.innerHTML = `<main class="page"><h1>Cohort</h1><p class="error">${esc(error.status === 404 ? 'There is no battle at this link.' : error.message)}</p><a href="/battles" data-link>Your battles</a></main>`
+    app.innerHTML = `<main class="page"><h1>Cohort</h1><p class="error">${esc(error.status === 404 ? 'There is no battle at this link.' : error.message)}</p><a class="btn btn-wide" href="/" data-link>The main menu</a></main>`
   }
 }
 
@@ -294,47 +350,65 @@ async function seatLines(seats) {
   return [...more, ...lines]
 }
 
-// ── Home: straight to the battle waiting on you ────────
-async function home() {
+// ── The main menu ──────────────────────────────────────
+// The one place everything hangs from (ruled 2026-11-28: "Need a dedicated
+// main menu"), and where Back from a battle lands. In this order: his
+// battles still going, the one he last opened first, each with a line on
+// where it stands and one tap back into it; a new battle; his Commanders
+// and officers; the battles that are over (the last few, the rest behind
+// one tap); signing in with Discord, when it is offered. A browser with
+// nothing yet makes its Commander first, and comes here after.
+const OVER_SHOWN = 3
+async function menu() {
   const seats = loadSeats()
-  if (seats.length === 0) return go('/muster', { replace: true })
-  const lines = await seatLines(seats)
-  const waiting = lines.filter(l => l.status === 'your-orders').sort((a, b) => b.updatedAt - a.updatedAt)
-  if (waiting.length > 0) return go(`/b/${waiting[0].token}`, { replace: true })
-  return go('/battles', { replace: true })
-}
-
-// ── Your battles ───────────────────────────────────────
-async function battles() {
+  if (seats.length === 0 && commanderTokens().length === 0) return go('/commander/new?then=/', { replace: true })
+  const [all, commanders, signIn] = await Promise.all([seatLines(seats), loadCommanders().catch(() => []), signInBlock()])
   // A battle fought on the next day is one battle: the day before is not
   // listed once there is a next day in the list.
-  const all = await seatLines(loadSeats())
   const listed = new Set(all.map(l => l.token))
+  // The one he opened last first (this browser keeps them in that order).
+  const order = new Map(loadSeats().map((s, i) => [s.token, i]))
   const lines = all.filter(l => !(l.nextDay?.token && listed.has(l.nextDay.token)))
-  const group = (status) => lines.filter(l => l.status === status)
-  const card = (l) => {
+    .sort((a, b) => (order.get(a.token) ?? 99) - (order.get(b.token) ?? 99))
+  const going = lines.filter(l => l.status !== 'finished' || l.fightOn)
+  const over = lines.filter(l => l.status === 'finished' && !l.fightOn)
+  const opponentOf = (l) => (l.opponent === 'standing' ? 'against the computer' : 'against a friend')
+  // Where a battle stands, in a line: what is wanted of him, if anything.
+  const standing = (l) => l.calledOut ?? (l.fightOn ? l.fightOn
+    : l.status === 'your-orders' ? 'Your orders are wanted'
+      : `Your orders are with the army${l.sentAt ? `: sent ${ago(l.sentAt)}` : ''}`)
+  const goingCard = (l) => `<a class="battle-link going${l.status === 'your-orders' || l.calledOut ? ' mine' : ''}" href="/b/${esc(l.token)}" data-link data-seat="${esc(l.token)}">
+      <strong>${esc(l.title)}</strong>
+      <span class="stands">${esc(standing(l))}.</span>
+      <span>${l.kindTitle ? `${esc(l.kindTitle)}, ` : ''}${esc(sideName(l.side))}, ${opponentOf(l)} · turn ${l.turn} · ${esc(clock(l.minutes))}</span>
+    </a>`
+  const overCard = (l) => {
     const verdict = verdictWords(l)
-    const opponent = l.opponent === 'standing' ? 'against the computer' : 'against a friend'
-    const when = l.status === 'waiting' && l.sentAt ? `your orders went ${ago(l.sentAt)}` : `turn ${l.turn} · ${clock(l.minutes)}`
-    const over = l.status === 'finished' && l.overDays
-    return `<a class="battle-link${l.status === 'your-orders' ? ' mine' : ''}" href="/b/${esc(l.token)}" data-link>
-      <strong>${esc(over ? l.firstTitle : l.title)}</strong>
-      <span>${l.kindTitle ? `${esc(l.kindTitle)}, ` : ''}${esc(sideName(l.side))}, ${opponent}${over ? `, ${esc(l.overDays)}` : ''}</span>
-      <span>${esc(verdict ? (l.outcome?.listed ?? `${verdict.title}: ${verdict.reason}`) : when)}</span>
-      ${l.calledOut ? `<span class="called-out">${esc(l.calledOut)}</span>` : ''}
+    const days = l.overDays
+    return `<a class="battle-link" href="/b/${esc(l.token)}" data-link data-seat="${esc(l.token)}">
+      <strong>${esc(days ? l.firstTitle : l.title)}</strong>
+      <span>${esc(verdict ? (l.outcome?.listed ?? `${verdict.title}: ${verdict.reason}`) : '')}</span>
+      <span>${l.kindTitle ? `${esc(l.kindTitle)}, ` : ''}${esc(sideName(l.side))}, ${opponentOf(l)}${days ? `, ${esc(days)}` : ''}</span>
     </a>`
   }
-  const section = (title, list) => list.length ? `<p class="label-caps">${title}</p>${list.map(card).join('')}` : ''
+  const living = commanders.filter(c => !c.ended)
+  const names = living.map(c => `${c.name}${c.title ? ` ${c.title}` : ''}${c.battle ? ' (army in the field)' : ''}`)
   app.innerHTML = `
-    <header class="bar"><strong style="font-family: var(--font-display); font-size: 22px">Cohort</strong><span class="note">Your battles</span></header>
-    <main class="page">
-      ${lines.length === 0 ? '<p class="note">No battles yet in this browser. A battle\'s link brings it here too.</p>' : ''}
-      ${section('Waiting on you', group('your-orders'))}
-      ${section('Your orders are with the army', group('waiting'))}
-      ${section('Finished', group('finished'))}
-      <a class="btn btn-main btn-wide" href="/muster" data-link>Muster a new battle</a>
-      <a class="btn btn-wide" href="/officers" data-link>Your officers</a>
+    <header class="bar menu-bar"><strong class="menu-title">Cohort</strong><span class="note">The main menu</span></header>
+    <main class="page" id="menu">
+      ${going.length
+        ? `<p class="label-caps">Your battles going on</p>${going.map(goingCard).join('')}
+           <p class="note">Every battle is saved as you go. Leave one when you like: it is here to come back to.</p>`
+        : `<p class="note">${over.length ? 'No battle going on.' : 'No battles yet.'} Muster one: against the computer, or against a friend by link.</p>`}
+      <a class="btn ${going.length ? '' : 'btn-main '}btn-wide" href="/muster" data-link id="new-battle">A new battle</a>
+      <a class="btn btn-wide menu-entry" href="/officers" data-link id="to-officers"><span>Your Commanders and officers</span>${names.length ? `<span class="note">${esc(names.join(', '))}</span>` : ''}</a>
+      ${over.length ? `<p class="label-caps">Battles that are over</p>${over.slice(0, OVER_SHOWN).map(overCard).join('')}
+        ${over.length > OVER_SHOWN ? `<details class="more-over"><summary>Show ${over.length - OVER_SHOWN} more ${over.length - OVER_SHOWN === 1 ? 'battle' : 'battles'} that are over</summary>${over.slice(OVER_SHOWN).map(overCard).join('')}</details>` : ''}` : ''}
+      <p class="note">A battle's link brings it here too.</p>
+      ${signIn}
     </main>`
+  document.title = 'Cohort'
+  wireSignOut()
 }
 
 // ── Your officers ──────────────────────────────────────
@@ -398,7 +472,7 @@ async function officers(note = null) {
       ${(c.unled ?? []).map(u => `<p class="note">The ${esc(u.kind)} have no officer${u.battles >= c.earnedAt ? ': one of their own will step up after their next battle' : ` yet: ${u.battles} battle${u.battles === 1 ? '' : 's'} come through. One comes forward after ${c.earnedAt}`}. ${menLine(c, u.kind, 'Their men')}</p>`).join('')}
       ${c.fallen.length ? `<p class="label-caps">Lost</p>${c.fallen.map(fallen).join('')}` : ''}`
   app.innerHTML = `
-    <header class="bar"><a href="/battles" data-link>Your battles</a><strong style="font-family: var(--font-display); font-size: 18px">Your officers</strong><span></span></header>
+    <header class="bar"><a href="/" data-link>Menu</a><strong style="font-family: var(--font-display); font-size: 18px">Your officers</strong><span></span></header>
     <main class="page">
       ${commanders.length === 0
         ? '<p class="note">No officers yet. You start with one, a veteran, with your best unit. The rest are earned: a unit that comes through enough battles finds an officer in its own ranks.</p>'
@@ -444,13 +518,17 @@ async function makeCommander() {
   const [asked, factions, signIn] = await Promise.all([api('GET', '/api/commanders/new'), api('GET', '/api/factions'), signInBlock()])
   const params = new URLSearchParams(location.search)
   const wanted = params.get('then') ?? ''
-  const then = wanted === '/muster' || /^\/b\/[A-Za-z0-9_-]{8,}$/.test(wanted) ? wanted : '/muster'
+  const then = wanted === '/muster' || wanted === '/' || /^\/b\/[A-Za-z0-9_-]{8,}$/.test(wanted) ? wanted : '/muster'
   const firstFaction = factions.find(f => f.id === params.get('faction'))?.id ?? factions[0]?.id
   const state = { kind: asked.kinds[0].id, holds: asked.holds[0].id }
   const cap = (s) => String(s).charAt(0).toUpperCase() + String(s).slice(1)
   const pick = (attr, list, on) => list.map(x => `<button class="opt" type="button" data-${attr}="${esc(x.id)}" aria-pressed="${x.id === on}">${esc(cap(x.title))}</button>`).join('')
+  // The way back: to the battle that asked for him, or the menu (none for a
+  // first visit, which has nothing on the menu yet).
+  const first = then === '/' && commanderTokens().length === 0 && loadSeats().length === 0
+  const way = first ? '<span></span>' : then.startsWith('/b/') ? `<a href="${esc(then)}" data-link data-replace>Back</a>` : '<a href="/" data-link>Menu</a>'
   app.innerHTML = `
-    <header class="bar"><a href="${then === '/muster' ? '/battles' : esc(then)}" data-link>${then === '/muster' ? 'Your battles' : 'Back'}</a><strong style="font-family: var(--font-display); font-size: 18px">A new Commander</strong><span></span></header>
+    <header class="bar">${way}<strong style="font-family: var(--font-display); font-size: 18px">A new Commander</strong><span></span></header>
     <main class="page">
       ${signIn}
       <form id="make" class="page" style="padding: 0">
@@ -511,7 +589,7 @@ async function makeCommander() {
       // Made to lead a friend's battle: he leads it, with no second tap on
       // "Who leads?" (whoLeads takes him straight on).
       if (then.startsWith('/b/')) { try { localStorage.setItem(`cohort.leads.${then.slice(3)}`, token) } catch { /* he chooses again */ } }
-      go(params.get('buy') === '1' ? `/army/${token}?then=${then}` : then)
+      go(params.get('buy') === '1' ? `/army/${token}?then=${then}` : then, { replace: true })
     } catch (error) {
       button.disabled = false
       document.getElementById('make-error').innerHTML = `<p class="error" role="alert">${esc(error.message)}</p>`
@@ -540,7 +618,7 @@ async function commanderPage(token) {
   const battleLine = (r) => `<li><strong>${esc(r.title)}</strong>, ${esc(RESULT_WORDS[r.result] ?? r.result)}${r.fate ? `; ${esc(HIS_FATE[r.fate] ?? r.fate)}` : ''}.${r.when ? ` <span class="note">${esc(dayOf(r.when))}</span>` : ''}</li>`
   const lost = (f) => `<li>${esc(f.name)}, who led the ${esc(f.led)}: ${esc(FATE_WORDS[f.fate] ?? f.fate)} at ${esc(f.at)}.</li>`
   app.innerHTML = `
-    <header class="bar"><a href="/officers" data-link>Your officers</a><strong style="font-family: var(--font-display); font-size: 18px">Your Commander</strong><span></span></header>
+    <header class="bar"><a href="/officers" data-link>Your officers</a><strong style="font-family: var(--font-display); font-size: 18px">Your Commander</strong><a href="/" data-link>Menu</a></header>
     <main class="page" id="commander-page">
       <h1 class="commander">Commander ${esc(c.name)}${c.title ? ` ${esc(c.title)}` : ''}</h1>
       <p class="note">${c.factionTitle ? `Of ${esc(c.factionTitle)}. ` : ''}${c.createdAt ? `Took command on ${esc(dayOf(c.createdAt))}.` : ''}</p>
@@ -578,7 +656,7 @@ async function muster() {
     c.battle ? ' (army in the field)' : `, ${c.battles} battle${c.battles === 1 ? '' : 's'} fought`}</option>`
   const factionOption = (f) => `<option value="${esc(f.id)}">${esc(f.title)}</option>`
   app.innerHTML = `
-    <header class="bar"><a href="/battles" data-link>Your battles</a><strong style="font-family: var(--font-display); font-size: 18px">Muster a battle</strong><span></span></header>
+    <header class="bar"><a href="/" data-link>Menu</a><strong style="font-family: var(--font-display); font-size: 18px">Muster a battle</strong><span></span></header>
     <main class="page">
       <form id="muster" class="page" style="padding: 0">
         <p class="note">A battle to the end. It is won when the other side yields the field, its army breaks or is destroyed, or its Commander is killed; in a battle for ground, by holding the field's ground to fight for. ${esc(day.said)}</p>
@@ -720,7 +798,7 @@ async function muster() {
   pickMap.addEventListener('change', showGround)
   showGround()
   // A new Commander is made on his own screen, and comes back here.
-  pickCommander?.addEventListener('change', () => (pickCommander.value ? showFaction() : go('/commander/new?then=/muster')))
+  pickCommander?.addEventListener('change', () => (pickCommander.value ? showFaction() : go('/commander/new?then=/muster', { replace: true })))
   pickFaction.addEventListener('change', showFaction)
   document.querySelectorAll('input[name="opponent"]').forEach(r => r.addEventListener('change', showEnemy))
   showFaction()
@@ -747,7 +825,7 @@ async function muster() {
       const mine = result.seats[side]
       saveSeat({ token: mine, title: result.title, side })
       const friendSide = Object.keys(result.seats).find(s => s !== side)
-      if (opponent !== 'friend' || !friendSide) return go(`/b/${mine}`)
+      if (opponent !== 'friend' || !friendSide) return go(`/b/${mine}`, { replace: true })
       const link = `${location.origin}/b/${result.seats[friendSide]}`
       event.target.hidden = true
       document.getElementById('shared').innerHTML = `
@@ -757,7 +835,7 @@ async function muster() {
           <code id="friend-link">${esc(link)}</code>
           <button class="btn" type="button" id="copy">Copy the link</button>
         </div>
-        <a class="btn btn-main btn-wide" href="/b/${esc(mine)}" data-link>To your Command Tent</a>`
+        <a class="btn btn-main btn-wide" href="/b/${esc(mine)}" data-link data-replace>To your Command Tent</a>`
       document.getElementById('copy').addEventListener('click', async () => {
         try { await navigator.clipboard.writeText(link); document.getElementById('copy').textContent = 'Copied' } catch { /* select by hand */ }
       })
@@ -902,7 +980,7 @@ async function armyScreen(token) {
     if (state.draft) return renderDraft(s)
     const room = s.left >= s.cheapest
     app.innerHTML = `
-      <header class="bar">${back}<strong style="font-family: var(--font-display); font-size: 18px">Your army</strong><span></span></header>
+      <header class="bar">${back}<strong style="font-family: var(--font-display); font-size: 18px">Your army</strong><a href="/" data-link>Menu</a></header>
       <main class="page" id="army-screen">
         <h1>${esc(commander.name)}'s army</h1>
         ${budget(s.spent, s.budget)}
@@ -1006,7 +1084,7 @@ async function armyScreen(token) {
       state.saving = false
       rebase()
       saveArmyDraft(token, null)
-      if (then) return go(then)
+      if (then) return go(then, { replace: true })
       state.note = 'Your army is kept. It goes with you to your next battle.'
       appraise().then(render)
     }
@@ -1137,7 +1215,7 @@ async function whoLeads(token, view) {
   const titleOf = (id) => factions.find(f => f.id === id)?.title ?? ''
   const choice = (c, i) => `<button class="btn btn-wide${i === 0 ? ' btn-main' : ''}" type="button" data-lead="${esc(c.token)}">${esc(c.name)}${c.title ? ` ${esc(c.title)}` : ''}, ${c.battles} battle${c.battles === 1 ? '' : 's'} fought${c.faction && view.faction ? ` (${esc(titleOf(c.faction))})` : ''}</button>`
   app.innerHTML = `
-    <header class="bar"><a href="/battles" data-link>Battles</a><div class="bar-title"><strong>${esc(b.title)}</strong><span>${esc(sideName(b.side))} · against a friend</span></div><span></span></header>
+    <header class="bar"><a href="/" data-link>Menu</a><div class="bar-title"><strong>${esc(b.title)}</strong><span>${esc(sideName(b.side))} · against a friend</span></div><span></span></header>
     <main class="page" id="who-leads">
       <h1>Who leads?</h1>
       <p class="note">You command ${esc(sideName(b.side))}${view.faction ? ', with your own army: the one you bought, or your faction\'s usual one' : ''}. You ride with your best unit, and your officers lead your units. What befalls you and them here goes with you to the next battle.</p>
@@ -1156,7 +1234,7 @@ async function whoLeads(token, view) {
         if (lead === 'new' || lead === 'new-buy') {
           // His faction is asked there, for life: the army the muster gave this side first.
           const faction = view.faction || ''
-          return go(`/commander/new?then=/b/${token}${faction ? `&faction=${encodeURIComponent(faction)}` : ''}${lead === 'new-buy' ? '&buy=1' : ''}`)
+          return go(`/commander/new?then=/b/${token}${faction ? `&faction=${encodeURIComponent(faction)}` : ''}${lead === 'new-buy' ? '&buy=1' : ''}`, { replace: true })
         }
         await api('POST', `/api/seat/${token}/join`, { commander: lead || null, faction: null })
         route()
@@ -1173,6 +1251,7 @@ async function whoLeads(token, view) {
 
 // ── The Command Tent ───────────────────────────────────
 async function tent(token) {
+  const leftTent = pageGone.signal
   const state = {
     token,
     view: null,
@@ -1233,12 +1312,32 @@ async function tent(token) {
       </aside>
     </div>`
   const scroll = document.getElementById('map-scroll')
+  // The movement between turns, while it runs; and whether the tap that
+  // finished it is to do nothing more.
+  let motion = null
+  let skipTap = false
+  // A tap (not a drag or a pinch) anywhere finishes the movement at once;
+  // on the map, that tap does nothing else. Panning and zooming leave it
+  // running.
+  let tapFrom = null
+  document.addEventListener('pointerdown', (event) => { tapFrom = { x: event.clientX, y: event.clientY }; skipTap = false }, { capture: true, signal: leftTent })
+  document.addEventListener('pointerup', (event) => {
+    if (!motion?.running || !tapFrom || Math.hypot(event.clientX - tapFrom.x, event.clientY - tapFrom.y) > 12) return
+    motion.finish()
+    skipTap = scroll.contains(event.target)
+  }, { capture: true, signal: leftTent })
+  // A turn's new view: the map moves from the one before (renderMap).
+  const moveIfTurned = (before) => {
+    const a = before?.battle
+    const b = state.view.battle
+    if (a && (a.minutes !== b.minutes || a.turn !== b.turn || a.status !== b.status)) state.moveFrom = before
+  }
 
   function renderBar() {
     const b = state.view.battle
     const chip = b.status === 'your-orders' ? '<span class="chip chip-dark">Your orders</span>' : `<span class="chip">${esc(STATUS[b.status])}</span>`
     document.getElementById('bar').innerHTML = `
-      <a href="/battles" data-link>Battles</a>
+      <a href="/" data-link id="to-menu">Menu</a>
       <div class="bar-title"><strong>${esc(b.title)}</strong><span>${esc(sideName(b.side))} · turn ${b.turn}${b.turnLimit ? ` of ${b.turnLimit}` : ''} · ${b.day ? dayClock(b) : `${esc(clock(b.minutes))}${b.dayMinutes ? ` · night falls at ${esc(clock(b.dayMinutes).replace(/ of battle$/, ''))}` : ''}`}</span></div>
       ${chip}`
   }
@@ -1247,6 +1346,14 @@ async function tent(token) {
     const left = scroll.scrollLeft
     const top = scroll.scrollTop
     const showing = state.shown ?? state.view
+    // The movement between turns (motion.js): from the map as it was drawn,
+    // when a new turn's view (or the replay's next step) has come in. One
+    // still running is finished first.
+    motion?.finish()
+    motion = null
+    const from = state.moveFrom
+    state.moveFrom = null
+    const leaving = from && !reducedMotion() ? [...scroll.querySelectorAll('svg .mover')] : []
     // The map is drawn for its zoom, so that its words read at a readable
     // size (map.js, LABEL_PX); the first time, at the zoom it opens at.
     if (state.zoom === null) {
@@ -1261,16 +1368,19 @@ async function tent(token) {
     svg.style.height = 'auto'
     // (Put back as it was: not a move of his own.)
     if (keepScroll) placed = { left, top }
+    if (from && !reducedMotion()) motion = moveBetween(svg, onMap(from), onMap(showing), leaving, { k: Math.max(1, 1 / state.zoom) })
     if (state.shown) { if (keepScroll) { scroll.scrollLeft = left; scroll.scrollTop = top } return }
+    // (A tap that finished the movement does nothing more: skipTap.)
+    const unlessSkipped = (fn) => (...args) => { if (skipTap) { skipTap = false; return } fn(...args) }
     attachGestures(svg, onMap(state.view), () => state.picked, {
-      onPick: (id) => { state.picked = id; state.stack = null; state.place = null; state.flash = null; renderMap(); renderHint(); if (state.tab === 'army') renderPanel() },
-      onStack: (units) => { state.stack = units.map(u => u.id); state.place = null; state.flash = null; renderHint() },
+      onPick: unlessSkipped((id) => { state.picked = id; state.stack = null; state.place = null; state.flash = null; renderMap(); renderHint(); if (state.tab === 'army') renderPanel() }),
+      onStack: unlessSkipped((units) => { state.stack = units.map(u => u.id); state.place = null; state.flash = null; renderHint() }),
       onPinch: (factor, x, y) => zoomBy(factor, { x, y }),
       // A mouse dragged across the map (not from a unit) moves it, as a
       // finger does.
       onPan: (dx, dy) => { scroll.scrollLeft -= dx; scroll.scrollTop -= dy },
-      onOrder: (unit, x, y) => addLine(`${unit.name} to ${gridRef(x, y)}`),
-      onPlace: (x, y) => { state.place = { x, y }; state.flash = null; renderHint() }
+      onOrder: unlessSkipped((unit, x, y) => addLine(`${unit.name} to ${gridRef(x, y)}`)),
+      onPlace: unlessSkipped((x, y) => { state.place = { x, y }; state.flash = null; renderHint() })
     })
     if (keepScroll) { scroll.scrollLeft = left; scroll.scrollTop = top }
     markGround()
@@ -1432,6 +1542,8 @@ async function tent(token) {
     clearTimeout(relabelTimer)
     relabelTimer = setTimeout(() => {
       if (fingers > 0 || drawnAt === null || Math.abs(state.zoom - drawnAt) < 0.01) return
+      // (Not while the map is moving: once it has.)
+      if (motion?.running) { motion.done.then(relabel); return }
       renderMap()
     }, 250)
   }
@@ -1477,6 +1589,10 @@ async function tent(token) {
   scroll.addEventListener('wheel', (event) => {
     if (!scroll.querySelector('svg')) return
     event.preventDefault()
+    // A sideways swipe of two fingers on a trackpad moves the map sideways
+    // (and so never takes the page Back); up and down, and the mouse's
+    // wheel, zoom as before.
+    if (Math.abs(event.deltaX) > Math.abs(event.deltaY)) { scroll.scrollLeft += event.deltaMode === 1 ? event.deltaX * 16 : event.deltaX; return }
     zoomBy(Math.exp(-event.deltaY * (event.deltaMode === 1 ? 0.05 : 0.0015)), { x: event.clientX, y: event.clientY })
   }, { passive: false })
 
@@ -1623,6 +1739,7 @@ async function tent(token) {
     }))
     body.querySelectorAll('[data-order]').forEach(b => b.addEventListener('click', () => {
       state.draft = state.draft ? `${state.draft.replace(/\s+$/, '')}\n${b.dataset.order} ` : `${b.dataset.order} `
+      saveDraft(token, state.draft)
       state.editing = true
       state.tab = 'orders'
       renderPanel()
@@ -1738,7 +1855,7 @@ async function tent(token) {
       try {
         await api('POST', `/api/seat/${token}/answer`, { offer: k.offer.id, ...body })
         state.asking = null
-        await load()
+        { const before = state.view; await load(); moveIfTurned(before) }
       } catch (error) { state.readback = { understood: [], questions: [], error: error.message } }
       renderAll()
     }
@@ -1807,7 +1924,7 @@ async function tent(token) {
           await call()
           state.readback = null
           state.offering = null
-          await load()
+          { const before = state.view; await load(); moveIfTurned(before) }
           state.tab = state.view.battle.status === 'waiting' ? 'orders' : 'dispatches'
           if (state.view.battle.status === 'finished' || state.view.commander?.status === 'held') state.tab = 'orders'
         } catch (error) { state.readback = { understood: [], questions: [], error: error.message } }
@@ -1851,7 +1968,8 @@ async function tent(token) {
         ${rb.error ? `<p class="error">${esc(rb.error)}</p>` : ''}` : ''}`
     foot.innerHTML = `
       <button class="btn btn-main btn-wide" type="button" id="send"${state.sending ? ' disabled' : ''}>${state.sending ? 'Sending…' : 'Send the orders'}</button>
-      <p class="note" style="text-align: center">Units you give no order keep their last one. Units hold until ordered.</p>`
+      <p class="note" style="text-align: center">Units you give no order keep their last one. Units hold until ordered.</p>
+      <p class="note saved-note" style="text-align: center">The battle is saved as you go, and your orders not yet sent: leave when you like, and come back from the menu.</p>`
 
     wireCaptive()
     body.querySelectorAll('[data-example]').forEach(b => b.addEventListener('click', () => {
@@ -1898,7 +2016,7 @@ async function tent(token) {
         saveDraft(token, '')
         state.readback = null
         state.editing = false
-        await load()
+        { const before = state.view; await load(); moveIfTurned(before) }
         if (result.status === 'turn-ran') state.tab = 'dispatches'
         renderAll()
         afterTurn()
@@ -1955,13 +2073,13 @@ async function tent(token) {
       </label>
       <p class="note" id="replay-note">${state.shown ? replayWords(state.shown) : 'The field as the battle ended.'}</p>
       ${v?.company ? '<a class="btn btn-wide" href="/officers" data-link>Your officers</a>' : ''}
-      <a class="btn btn-wide" href="/battles" data-link>Your battles</a>`
+      <a class="btn btn-wide" href="/" data-link>The main menu</a>`
     document.getElementById('again')?.addEventListener('click', async (event) => {
       event.target.disabled = true
       try {
         const next = await api('POST', `/api/seat/${token}/again`)
         saveSeat({ token: next.token, title: next.title, side: state.view.battle.side })
-        go(`/b/${next.token}`)
+        go(`/b/${next.token}`, { replace: true })
       } catch (error) {
         event.target.disabled = false
         event.target.insertAdjacentHTML('afterend', `<p class="error">${esc(error.message)}</p>`)
@@ -1977,7 +2095,10 @@ async function tent(token) {
     slider.addEventListener('change', async () => {
       const turn = Number(slider.value)
       const last = replayLast()
+      // The map moves from the step shown to the next, as between turns.
+      const before = state.shown ?? state.view
       state.shown = turn >= last ? null : await api('GET', `/api/seat/${token}/replay?turn=${turn}`)
+      state.moveFrom = before
       document.getElementById('replay-note').textContent = state.shown ? replayWords(state.shown) : 'The field as the battle ended.'
       renderMap()
     })
@@ -2051,14 +2172,14 @@ async function tent(token) {
           if (s.nextDay.calledOut && document.visibilityState === 'hidden' && 'Notification' in window && Notification.permission === 'granted') {
             try { new Notification(s.nextDay.title, { body: s.nextDay.calledOut }) } catch { /* the page shows it */ }
           }
-          await load()
+          { const before = state.view; await load(); moveIfTurned(before) }
           renderAll()
           return watch()
         }
         if (night) return
         if (s.status !== state.view.battle.status || s.turn !== state.view.battle.turn || (s.table ?? null) !== (state.view.battle.table ?? null)) {
           const turned = s.turn !== state.view.battle.turn
-          await load()
+          { const before = state.view; await load(); moveIfTurned(before) }
           if (s.status === 'your-orders' && turned) state.tab = 'dispatches'
           renderAll()
           if (turned) afterTurn()
