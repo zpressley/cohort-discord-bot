@@ -314,7 +314,13 @@ function planTurn(game, side) {
   // as there is a steadier unit to fight in its place. When there is none,
   // the worn fight on: an army does not stand and watch.
   const fit = (unit) => !battle.isShaken(unit) && morale(unit) > ch.pullOut
-  const anyFit = mine.some(fit)
+  // (A steadier unit that will close with the enemy: not one that only
+  // shoots. Left standing behind slingers or horse archers alone, the worn
+  // watched them search the whole field for days, or whittle the enemy at
+  // a distance for more: the soak, Crownhill, Kush against Berbers and
+  // against Sarmatia, seed 5, once units passed through one another,
+  // November 28.)
+  const anyFit = mine.some(u => fit(u) && !(missileRange(u) > 0))
   const spent = (unit) => anyFit && !fighting.has(unit.id) && morale(unit) <= ch.pullOut
 
   // ── The fight ───────────────────────────────────────

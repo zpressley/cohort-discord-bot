@@ -53,6 +53,11 @@
 // round two). They were b0797f8 (crownhill 1), b5d0c64d (crownhill 2),
 // b3d6f42f (meeting 1), cfde19ad (meeting 2), aa331d26 (meeting 3),
 // 1f044c71 (thornwood 1), 3bd40f16 (thornwood 2).
+//
+// Retaken when units of one side were let share a tile and pass through
+// one another again, the marching in column withdrawn (ruled November 28;
+// docs/DECISIONS.md, "How sharing a tile and passing through were
+// restored"). They were 65cab3c9 (crownhill 1), 63d711d6 (crownhill 2), 89bf4221 (meeting 1), b86fbee6 (meeting 2), 679d6476 (meeting 3), 4a76f0d0 (thornwood 1), b2674223 (thornwood 2).
 
 const { test } = require('node:test')
 const assert = require('node:assert/strict')
@@ -71,13 +76,13 @@ function fingerprint(text) {
 }
 
 const BEFORE = {
-  'crownhill 1': '65cab3c9',
-  'crownhill 2': '63d711d6',
-  'thornwood 1': '4a76f0d0',
-  'thornwood 2': 'b2674223',
-  'meeting 1': '89bf4221',
-  'meeting 2': 'b86fbee6',
-  'meeting 3': '679d6476'
+  'crownhill 1': 'd43b338b',
+  'crownhill 2': 'e2f6d64b',
+  'thornwood 1': 'eb3733c9',
+  'thornwood 2': 'ad3ccb48',
+  'meeting 1': '905b30e2',
+  'meeting 2': '8956c833',
+  'meeting 3': 'd3acbab9'
 }
 
 test('a battle in which no unit is told to attack a named enemy runs exactly as before', () => {

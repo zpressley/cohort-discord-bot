@@ -18,7 +18,10 @@ test('"velites stay with the legionaries" is shown on the Army tab, and a saved 
     const store = createBattleStore({ dir })
     const token = store.muster({ map: 'crownhill', opponent: 'computer', side: 'red', faction: 'rome', enemyFaction: 'han', seed: 11, kind: 'ground' }).seats.red
     await store.submit(token, 'velites stay with the legionaries\nlegionaries go east 400 m')
-    for (let t = 0; t < 3; t++) await store.submit(token, '')
+    // (Two turns more, not three, since units of one side pass through one
+    // another, November 28: the enemy is at the ford sooner, and by the
+    // fourth the velites have met him there and broken.)
+    for (let t = 0; t < 2; t++) await store.submit(token, '')
     const view = store.view(token)
     const velites = view.own.find(u => u.id === 'red_velites')
     const legionaries = view.own.find(u => u.id === 'red_legionaries')

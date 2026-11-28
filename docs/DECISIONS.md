@@ -5586,6 +5586,10 @@ decided and are recorded here.
 
 ### How columns, wavering under fire and flight were mended (Claude's choices, open to change)
 
+(Its marching rule, part 1, was withdrawn on November 28: units of one side
+share a tile and pass through one another. See "How sharing a tile and
+passing through were restored".)
+
 From the second playthrough (`docs/REVIEW-2026-11.md`, S5 to S8 and S15),
 and the loose end of horse archers along the field's edge. No ruling was
 changed: holding the ground alone for an hour wins, orders go by rider,
@@ -6954,3 +6958,238 @@ What follows from it:
   held crossing and goes in together; branch
   `worktree-agent-a94af84bcb93a711c`, commit 1ff7ec6) is not merged: it
   did not change the outcome, and its purpose is withdrawn.
+
+## Rulings, November 28, 2026 (units share a tile and pass through one another)
+
+Zach, having played the game (November 28, 2026):
+
+- "does not look like units can overlap in the same space. same tile but
+  that does not matter."
+- Asked what he meant: "Units were supposed to be able to overlap and pass
+  through one another but that does not look like the case"
+- Told that enemies still do not pass through each other, they fight:
+  "Only friendly units can do that"
+
+So: units of one side share tiles and pass through one another; units of
+opposite sides never do. This is his direction of October 21 ("Stacking":
+units may share a tile instead of blocking each other, with penalties once
+a tile holds more than a threshold, growing worse the more it holds; it
+replaces one-unit-per-tile occupancy). The marching in column of November
+24 ("How columns, wavering under fire and flight were mended", part 1) was
+never his ruling: it was an instruction to an earlier agent, to cure armies
+packing onto one tile, and it went against that direction. It is withdrawn,
+and with it the line "A ford or bridge still takes one unit at a time" in
+the rulings of the same day above.
+
+### How sharing a tile and passing through were restored (Claude's choices, open to change)
+
+Measured against main at 96e8ff5, the same seeds before and after.
+
+**What a unit does now.**
+- *Meeting its own men* on the march: it walks onto their tile and on
+  through, or stops among them if that is where it was sent. It does not
+  wait for a friend's tile, go round a friend, or hold back on a bank.
+- *At a ford or bridge*: as on any tile. As many units as the tile holds
+  may stand on it or cross it at once.
+- *When it crowds*: what limits a tile is the crowding table and its cap,
+  as directed (`tables.CROWDING`, unchanged): up to 100 men organized; 150
+  crowded (-1 in a fight); 200 compressed (-2, a tenth of its march); 250
+  crushing (-3, a quarter); 300 critical (-4, half its march, and heart
+  lost in each round of fighting); no more than 300 men on a tile. These
+  are his table with the thresholds quartered for 25 m tiles, and the
+  movement losses of October 29 ("Crowding punishes fighting, not
+  moving"); checked against both, and tested ("the crowding table is
+  Zach's density table quartered ..."). The player is told when his men
+  stand packed at the end of ten minutes, as before: "Spears' ranks were
+  critical: 300 men packed onto one spot ..., which blunts their
+  fighting".
+- *Enemies* never share a tile and never pass through each other. A tile
+  with an enemy on it is never entered (`occupancy.js`, `canEnter`), and
+  movement goes a step at a time for every unit in turn, so two units
+  marching at each other along a road stop face to face; there is no
+  stepping through. One looking for a fight that comes up beside an enemy
+  stops and fights; one only marching stops at him, or walks round him
+  where there is open ground (ruled October 21: coming beside an enemy is
+  not a forced fight). A broken unit runs round an enemy in its way, never
+  through him (kept, below). A unit shoved back onto an enemy's tile is
+  not moved (`crush`), and the winner follows up only into ground no enemy
+  holds. Checked after every order in the 8,800 battles of the fairness
+  measure below, before and after: no tile ever held both sides. As his
+  direction and the older rulings say. Tested: "a unit never shares a tile
+  with, or passes through, an enemy unit: two sides marching at each other
+  along one road meet, and fight".
+
+**Removed.** `makeWay` and the `keepApart` switch in
+`movement/simultaneous.js`, and with them everything added only to cope
+with waiting: a unit waiting on a friend who waits on it (two units
+marching opposite ways along a road), men only standing on a road being
+gone in among after all, the extra pass of the tick when a unit halted, the
+`queued` report, and the rule in `battle.js` that a unit queued behind its
+own men kept its order. `tables.MARCH` (`ROUND`, `CROSSINGS`) is gone from
+`tables.js`. Its test file is retired to
+`archive/src/engine/battle/tests/columns.test.js`; the tests that asserted
+the rule ("units sent along a road at the same time march in column, one
+unit to a tile ...", "a ford passes one unit at a time ...", "a column held
+up at a ford by its head in a fight waits on the bank ...") are gone with
+it; "two units of one side marching opposite ways ... pass each other",
+"a unit whose road ... is held by a friend standing on it ... goes on
+through him" and "a unit going at an enemy may still step in beside a
+friend already fighting him" are rewritten in
+`battle/tests/pass-through.test.js`; the three flight tests moved, as they
+were, to `battle/tests/flight.test.js`.
+
+**Kept**, as nothing to do with blocking: a wavering unit calling the
+Commander once (`smallFire`); broken units running for their edge by the
+open way, round the enemy, and rallying when cut off (`flightPath`; its
+step round an enemy in the resolver, which was switched on with
+`keepApart`, is now always on: only running units use it); horse archers
+with their backs to the field's edge; the Commander caught running
+(`COMMANDER.CAUGHT`); units forming up side by side at a place they are all
+sent to (`formUp.js`: it only gives each a tile to make for, and no unit
+waits for another; on the way they pass through one another); a searching
+unit that gets no nearer its place giving it up (`SEARCH.STUCK`); seeded
+ties of who steps first; the step into a crossing (`crossing.js`).
+
+**Added: a step onto a crowded tile costs what the crowding costs**
+(`occupancy.js`, `crowdingOnEntering`, `crowdedStep`). Before, the table's
+movement loss was taken only from the tile a unit began its ten minutes
+on, so a unit marching through a packed tile paid nothing. Now a step onto
+a tile its own men stand on is dearer by the tier the tile would be in with
+it there: onto 100 men (200 with its own) a tenth dearer, onto 200 (300,
+critical) twice the cost. Tested: "a ford holds as many men as any tile,
+and pays for crowding as any tile does". *Guessed*; the other reading is
+that his "-25% move" was only ever meant for a unit standing in the press,
+not one going by.
+
+**The forming-up places, measured again.** Between two computer armies of
+the same faction, 400 battles a field and kind with the west called red
+and 400 with it called blue (800 in all, the same seeds before and after;
+a night or draw counts a half), the west's share:
+
+| Field, kind | before (main) | the rule alone | after (places below) | red-west / blue-west after |
+|---|---|---|---|---|
+| Crownhill, pitched | 45.6% | 47.9% | 47.8% | 49.5 / 46.0 |
+| Crownhill, the fords | 48.0% | 40.6% | 48.3% | 47.6 / 49.0 |
+| Ashford, pitched | 45.4% | 46.3% | 45.3% | 46.5 / 44.1 |
+| Ashford, the bridge | 57.6% | 70.9% | 49.1% | 47.5 / 50.8 |
+| Thornwood, pitched | 55.4% | 51.3% | 50.6% | 54.8 / 46.5 |
+| Thornwood, the knoll | 57.4% | 40.6% | 48.3% | 50.3 / 46.3 |
+| Raven Ridge, pitched | 43.9% | 42.4% | 48.9% | 49.3 / 48.6 |
+| Raven Ridge, the gap | 47.2% | 47.6% | 47.3% | 46.0 / 48.5 |
+| Greywater, pitched | 55.8% | 47.9% | 46.4% | 47.5 / 45.3 |
+| Greywater, Elderby | 42.6% | 41.8% | 49.3% | 49.6 / 48.9 |
+| Greywater, camps | 53.6% | 47.8% | 47.4% | 49.8 / 45.0 |
+
+(Main was already outside 45 to 55% on six of these with the column rule:
+this measure names the sides both ways and uses more battles than the
+rounds before.) Places moved, each for one kind only (`deployFor`), the
+others left where they were since they measure fair:
+- *Ashford, the bridge*: the west at (6, 27), under the Low Downs (was
+  (8, 25)). 43 to 52% a tile either way for either army (400 battles
+  each). Its first unit reaches the bridge 11.5 minutes after the east's,
+  so the test that both armies are as long marching allows a quarter hour
+  on Ashford (from as near as the east, the west won 71%). (7, 26) passed
+  the ten minutes at 47.6% but was 45 to 70% a tile either way.
+- *Crownhill, the fords*: west (12, 23), east (27, 17) (were (11, 23),
+  (27, 18)). 48 to 55% a tile either way but one, the west a tile south
+  (36%). (26, 17) gave 50% but stands five tiles from Miller's Crossing,
+  and an army starts six or more from any ground (a test).
+- *Thornwood, the knoll*: west (6, 21), east (34, 21) (were (6, 20),
+  (35, 20)). 40 to 55% a tile either way but one, the east a tile on
+  (62%). Who reaches the knoll first decides most of these battles, and a
+  tile on the road through the wood often decides that: the east at
+  (36, 20) gives 78%.
+- *Raven Ridge, pitched*: west (7, 19), east (29, 24), by the river below
+  the Stone Ford (were (9, 19), (31, 22)). With the east at x 30 or more
+  the west won 36 to 47% wherever it stood (36 places tried); at x 28 or
+  29, 50 to 59%. 51 to 57% a tile either way but one, the east a tile
+  further east (41%).
+- *Greywater, Elderby*: west (13, 41), east (66, 38) (were (14, 41),
+  (64, 38)). 41 to 53% a tile either way but one, the east a tile south
+  (59%).
+Every field has a cliff a tile away somewhere: "fair a tile either way" is
+met in most directions, not all, and each exception is in the map's
+comment. Not moved back: the places bent for columns that still measure
+fair (Ashford's east at (33, 25), Crownhill's east at (30, 24) for the
+pitched battle, Thornwood's west at (6, 20) for battles of no kind).
+Ashford's east put back at (32, 25) for the bridge gave 69%. *Guessed*:
+the other reading puts every place back where it was before columns and
+tunes from there.
+
+**Elderby's bridge** is left four abreast, as drawn: with it, all three
+kinds on Greywater are even (above). Not measured two abreast.
+
+**Two battles of the soak that did not end within 150 turns** (no day;
+red gives no orders; Crownhill, Kush against Berbers, and against Sarmatia
+led by a cautious Commander, seed 5). Neither was a jam of men piled on a
+tile; in both, both armies were worn to men who would not go in again,
+and the computer's last fit unit fought alone while the rest stood.
+- *Mended in the planner*: a worn unit (heart at or under its Commander's
+  `pullOut`) stays out of the fight only while a steadier unit that will
+  close with the enemy is there to fight in its place; slingers or horse
+  archers alone do not count (`opponent/planner.js`, `anyFit`; tested: "a
+  worn unit stays out of the fight only while a steadier one that will
+  close with the enemy is there ..."). Before,
+  four worn units stood while one band of slingers searched the whole
+  field for the last two enemy units, unseen ten tiles off: 170 turns; now
+  122. *Guessed*: the other reading leaves the planner as it was.
+- The other, against Sarmatia, ends at 154 turns: horse archers shoot down
+  the last of an enemy who stands still. Slow, not stuck. The soak's limit
+  is raised from 150 to 200 turns, with the reason in its header.
+- The old bug of units packed before a wood never moving stays mended: no
+  battle of the soak stalled on a packed tile, and every fairness battle
+  ended (8,800 before and after).
+
+**The other measures, before and after.**
+- Battle length, median (mean) minutes, the same fairness battles:
+  Crownhill pitched 170 (182) -> 170 (183), fords 280 (331) -> 220 (273);
+  Ashford 150 (167) -> 140 (172), bridge 130 (149) -> 130 (146); Thornwood
+  170 (184) -> 160 (177), knoll 140 (145) -> 120 (133); Raven Ridge 220
+  (226) -> 200 (221), gap 110 (124) -> 120 (143); Greywater 180 (227) ->
+  170 (209), Elderby 180 (230) -> 180 (220), camps 400 (490) -> 390 (469).
+- How they end (of 800): Crownhill's fords by the ground 301 -> 496, an
+  army broken 411 -> 262, night 85 -> 41; Raven Gap by the ground 290 ->
+  388, broken 497 -> 390, night 11 -> 20; Thorn Knoll by the ground 201 ->
+  139, broken 593 -> 656; the Old Mill Bridge by the ground 279 -> 291;
+  Elderby 43 -> 38. Pitched battles end by an army broken, as before (797
+  to 800 of 800).
+- Crowding events a battle (a unit's ranks crowded or worse, told to its
+  side; critical in brackets): Crownhill 10.4 (0.7) -> 16.4 (1.1), fords
+  5.5 (0) -> 8.1 (0.1); Ashford 11.6 (1.2) -> 16.5 (1.6), bridge 11.5
+  (1.0) -> 14.6 (1.1); Thornwood 14.1 (0.8) -> 22.4 (2.4), knoll 13.4
+  (1.7) -> 19.2 (2.4); Raven Ridge 10.1 (0.8) -> 14.1 (0.7), gap 8.2 (0.3)
+  -> 13.5 (0.6); Greywater 18.7 (1.9) -> 37.3 (5.5), Elderby 17.9 (1.7) ->
+  40.4 (5.0), camps 40.4 (4.8) -> 71.5 (11.0). More, as it should be:
+  units that share ground pay for it, and are told.
+- Units halted with their way blocked, a battle: Crownhill's fords 0.45 ->
+  0.35, Thorn Knoll 0.26 -> 0.02, elsewhere about none before and after.
+- Battles that come to nothing (`no-fight.js`, 570 each): the computer
+  0 -> 0 (night 11 -> 5); pitched 0 -> 0 (night 1 -> 0; two quiet hours
+  15 -> 20); against an idle player 0 -> 0.
+- Characters (`character-league.js --rounds 4`, against the field):
+  steady 48 -> 46%, bold 52 -> 47%, cautious 50 -> 56%. **Worse**: the
+  cautious Commander, who pulls worn units out early, gains now that they
+  step back through the men behind them. His `pullOut` at 35 and 30 gave
+  55 and 54%: not that alone. Left; not tuned here.
+- The Commander taken (`captive-league.js --battles 2000 --policy wait`,
+  the 1 km fields): 1 in 24.7 -> 1 in 23.3 (ruled about 1 in 19 to 24).
+- Camps on Greywater (`camps.js --battles 240`, mirror): the west 53 ->
+  49%; over in a day 206 -> 217, two days 31 -> 22, three 3 -> 1; 8.4 ->
+  7.7 hours; a camp burned in 50 -> 59% of battles, always by the side
+  that lost; rallied in camp 1467 -> 1352.
+- The soak: every battle ends (within 200 turns; above).
+- `npm run balance`: unchanged, every line (a duel has no march).
+- Nothing was tuned so that a plain order wins (ruled November 28).
+
+**Fingerprints retaken** (old values in their headers):
+`asked-unchanged`, `messengers-unchanged`, `attack-named-unchanged`,
+`follow-unchanged`, and `camps.test.js`'s battles without camps. **Tests
+whose seeded battles moved**, the smallest change each (in `src/web`):
+`night.test.js` Ashford seed 4 -> 6 (three tests; seed 4 now ends with the
+field held at nightfall) and the man who ran, Thornwood seed 2 -> 263 (of
+seeds 1 to 360 the only one where a unit of his runs off the field and
+night ends the battle); `verdict.test.js`, the horse that broke and
+rallied, seed 1 -> 8, and ground held and lost, Raven Ridge seed 3 -> 2;
+`follow.test.js` looks after two turns, not three (by the fourth the
+velites have met the enemy at the ford, now nearer, and broken). And in
+`harness/tests/first-battle.test.js`, Ashford's quarter hour (above).

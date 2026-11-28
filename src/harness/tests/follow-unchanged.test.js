@@ -22,6 +22,11 @@
 // round two). They were 7675a063 11 (greywater rome germania 5), 150f188e
 // 16 (ravenridge thrace sarmatia 4), 3c83cec6 25 (thornwood macedon
 // parthia 3).
+//
+// Retaken when units of one side were let share a tile and pass through
+// one another again, the marching in column withdrawn (ruled November 28;
+// docs/DECISIONS.md, "How sharing a tile and passing through were
+// restored"). They were 24ae0710 16 (greywater rome germania 5), dcef9521 44 (ravenridge thrace sarmatia 4), 192f4dc9 32 (thornwood macedon parthia 3).
 
 const { test } = require('node:test')
 const assert = require('node:assert/strict')
@@ -45,9 +50,9 @@ const BATTLES = [
 ]
 
 const BEFORE = {
-  'thornwood macedon parthia 3': '192f4dc9 32',
-  'ravenridge thrace sarmatia 4': 'dcef9521 44',
-  'greywater rome germania 5': '24ae0710 16'
+  'thornwood macedon parthia 3': '118333b6 24',
+  'ravenridge thrace sarmatia 4': '535e7ced 15',
+  'greywater rome germania 5': '7f743ff6 12'
 }
 
 function fight([field, red, blue, seed]) {

@@ -10,7 +10,9 @@
 //
 // An enemy's tile is never entered: walking into an enemy is contact, and
 // contact is combat's business, not movement's. Passing THROUGH friends and
-// stopping among them are both allowed while the tile has room.
+// stopping among them are both allowed while the tile has room, a ford or a
+// bridge as much as any tile, and a step onto a crowded tile costs what the
+// crowding costs (crowdedStep).
 
 const { livingUnits } = require('../world')
 const { positionKey } = require('../map/labels')
@@ -103,7 +105,26 @@ function crowdedRange(unit, tier) {
   return Math.min(unit.movementRange, Math.max(CROWDING.MIN_MOVE, reduced))
 }
 
+// The crowding a unit would stand in on stepping onto a tile: its own men
+// and the friends already there (an enemy's tile is never entered). A tile
+// with no one else on it is no crowding; nor is one it may not enter, over
+// the cap (canEnter says why it stops).
+function crowdingOnEntering(occupancy, unit, position) {
+  const friends = unitsAt(occupancy, position).filter(u => u !== unit && u.side === unit.side)
+  if (friends.length === 0) return CROWDING.TIERS[0]
+  const men = menOn(friends) + Math.max(0, unit.strength)
+  if (men > CROWDING.CAP) return CROWDING.TIERS[0]
+  return crowdingTier(men, friends.length + 1)
+}
+
+// What one step costs through crowding: the tier's share of movement lost
+// (move) makes the step dearer by as much (a half lost, twice the cost).
+function crowdedStep(cost, tier) {
+  if (!tier || !tier.move || !Number.isFinite(cost)) return cost
+  return Math.round(cost / (1 - tier.move) * 100) / 100
+}
+
 module.exports = {
   buildOccupancy, unitsAt, getUnitAt, isOccupied, menOn, moveUnit, canEnter,
-  crowdingTier, crowdingByUnit, crowdedRange
+  crowdingTier, crowdingByUnit, crowdedRange, crowdingOnEntering, crowdedStep
 }

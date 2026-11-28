@@ -109,7 +109,9 @@ test('the next day against the computer, its army is the one it had at nightfall
   const app = await start(store)
   try {
     const commander = (await app.api('POST', '/api/commanders', { faction: 'rome' })).body.token
-    const made = (await app.api('POST', '/api/battles', { opponent: 'standing', side: 'red', seed: 4, commander, map: 'ashford', enemyFaction: 'han', turnLimit: 6 })).body
+    // (Seed 6, not 4, since units of one side pass through one another,
+    // November 28: seed 4 now ends with the field held at nightfall.)
+    const made = (await app.api('POST', '/api/battles', { opponent: 'standing', side: 'red', seed: 6, commander, map: 'ashford', enemyFaction: 'han', turnLimit: 6 })).body
     const game = await untilNight(app, store, made.seats, 'everyone advance on the enemy')
     assert.equal(game.outcome.reason, 'night fell')
     const left = atNightfall(game, 'blue')
@@ -136,7 +138,9 @@ test('the next day, your army is the men left at nightfall: no recruits come in 
   const app = await start(store)
   try {
     const commander = (await app.api('POST', '/api/commanders', { faction: 'rome' })).body.token
-    const made = (await app.api('POST', '/api/battles', { opponent: 'standing', side: 'red', seed: 4, commander, map: 'ashford', enemyFaction: 'han', turnLimit: 6 })).body
+    // (Seed 6, not 4, since units of one side pass through one another,
+    // November 28: seed 4 now ends with the field held at nightfall.)
+    const made = (await app.api('POST', '/api/battles', { opponent: 'standing', side: 'red', seed: 6, commander, map: 'ashford', enemyFaction: 'han', turnLimit: 6 })).body
     const game = await untilNight(app, store, made.seats, 'everyone advance on the enemy')
     const left = atNightfall(game, 'red')
     assert.ok([...left.values()].some(n => n < 100), 'you lost men in the day')
@@ -172,7 +176,10 @@ test('the next day, men who ran come back to the standards in the night; the dea
     // (A battle for ground, as every battle was until November 25. Seed 2,
     // not 27, since ties of who steps first are a seeded draw, not by name:
     // round two of "How the kinds of battle were built".)
-    const made = (await app.api('POST', '/api/battles', { opponent: 'standing', side: 'red', seed: 2, map: 'thornwood', faction: 'rome', enemyFaction: 'carthage', turnLimit: 10, kind: 'ground' })).body
+    // (Seed 263, not 2, since units of one side pass through one another,
+    // November 28: of seeds 1 to 360 it is the one in which a unit of his
+    // runs off the field in the day and night ends the battle.)
+    const made = (await app.api('POST', '/api/battles', { opponent: 'standing', side: 'red', seed: 263, map: 'thornwood', faction: 'rome', enemyFaction: 'carthage', turnLimit: 10, kind: 'ground' })).body
     const game = await untilNight(app, store, made.seats, 'everyone advance on the enemy')
     assert.equal(game.outcome.reason, 'night fell')
     const ran = game.battle.fledUnits.filter(u => u.side === 'red' && u.strength > 0)
@@ -234,7 +241,9 @@ test('the verdict of a night tells you the enemy\'s army comes to the next day a
   const store = createBattleStore({})
   const app = await start(store)
   try {
-    const made = (await app.api('POST', '/api/battles', { opponent: 'standing', side: 'red', seed: 4, map: 'ashford', faction: 'rome', enemyFaction: 'han', turnLimit: 6 })).body
+    // (Seed 6, not 4, since units of one side pass through one another,
+    // November 28: seed 4 now ends with the field held at nightfall.)
+    const made = (await app.api('POST', '/api/battles', { opponent: 'standing', side: 'red', seed: 6, map: 'ashford', faction: 'rome', enemyFaction: 'han', turnLimit: 6 })).body
     await untilNight(app, store, made.seats, 'everyone advance on the enemy')
     const tent = (await app.api('GET', `/api/seat/${made.seats.red}`)).body
     assert.match(tent.verdict.night.againNote, /Both armies come as they stand after today, yours and the enemy's/)

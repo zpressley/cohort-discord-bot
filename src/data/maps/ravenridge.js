@@ -100,7 +100,13 @@ module.exports = {
   // Stone Ford on it; whoever went looking met the other at the gap. From
   // here 48 to 57% a tile either way (53% at (9, 19); 60 battles each).
   // docs/DECISIONS.md, as above.
-  deployFor: { pitched: { west: { x: 9, y: 19 }, east: { x: 31, y: 22 } } },
+  // Since units pass through one another (November 28), the west two
+  // tiles back, at (7, 19), and the east by the river below the Stone
+  // Ford, at (29, 24): from (9, 19) and (31, 22) the west won 42% (800
+  // battles, the sides named both ways), and 36 to 47% wherever the west
+  // stood; from here 49%, and 51 to 57% a tile either way but one: the
+  // east a tile further east, at (30, 24), 41%. docs/DECISIONS.md, "How sharing a tile and passing through were restored".
+  deployFor: { pitched: { west: { x: 7, y: 19 }, east: { x: 29, y: 24 } } },
   // The ground to fight for (engine/orchestrator/victory.js, objectiveArea):
   // the saddle where the road goes through the ridge, held from on it (the
   // open ground between the two halves of the ridge, not the whole road).
