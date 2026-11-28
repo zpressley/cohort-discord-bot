@@ -176,9 +176,8 @@ a { color: var(--accent); }
 .battle-link.going .stands { font-size: 15px; font-weight: 600; color: var(--ink); }
 .menu-entry { flex-direction: column; gap: 2px; padding: 8px 16px; text-align: center; }
 .menu-entry .note { font-size: 13px; }
-.more-over { display: flex; flex-direction: column; gap: 14px; }
-.more-over summary { min-height: 44px; display: flex; align-items: center; cursor: pointer; font-size: 15px; }
-.more-over[open] summary { margin-bottom: 14px; }
+.more-over > .battle-link { margin-top: 14px; }
+.more-over summary { min-height: 44px; display: flex; align-items: center; cursor: pointer; font-size: 15px; text-decoration: underline; }
 .field { display: flex; flex-direction: column; gap: 6px; font-size: 14px; font-weight: 600; }
 .field select, .field input[type="text"] { min-height: 44px; padding: 0 10px; font: inherit; font-weight: normal; font-size: 15px; background: var(--panel-raised); color: var(--ink); border: 1px solid var(--ink-soft); }
 .choice { display: flex; align-items: center; gap: 10px; min-height: 44px; padding: 0 12px; background: var(--panel-raised); border: 1px solid var(--rule); font-weight: normal; }

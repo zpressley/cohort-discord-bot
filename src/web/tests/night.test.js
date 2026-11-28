@@ -309,3 +309,24 @@ test('the notice goes the other way round too: whoever asks first, the other is 
     assert.equal((await app.api('GET', `/api/seat/${next.seats.blue}`)).body.battle.calledOut, undefined)
   } finally { await app.close() }
 })
+
+// Ruled 2026-11-28: a main menu. A battle night ended is listed there as
+// going on while a next day can be fought, and as over once it cannot.
+test('the main menu lists a battle night ended as going on while a next day can still be fought, and not once it is called or cannot be', async () => {
+  const store = createBattleStore({})
+  const app = await start(store)
+  try {
+    const made = (await app.api('POST', '/api/battles', { opponent: 'standing', side: 'red', seed: 3, faction: 'rome', enemyFaction: 'han', turnLimit: 2 })).body
+    const game = await untilNight(app, store, made.seats)
+    assert.equal(game.outcome.reason, 'night fell')
+    const line = async () => (await app.api('GET', `/api/seats?tokens=${made.seats.red}`)).body[0]
+    assert.equal((await line()).fightOn, 'Night has fallen. You can fight again the next day')
+    await app.api('POST', `/api/seat/${made.seats.red}/again`)
+    assert.equal((await line()).fightOn, undefined, 'called: the next day is the battle going on')
+
+    const other = (await app.api('POST', '/api/battles', { opponent: 'standing', side: 'red', seed: 3, faction: 'rome', enemyFaction: 'han', turnLimit: 2 })).body
+    const second = await untilNight(app, store, other.seats)
+    for (const u of second.battle.world.units.filter(x => x.side === 'blue')) u.strength = 0
+    assert.equal((await app.api('GET', `/api/seats?tokens=${other.seats.red}`)).body[0].fightOn, undefined, 'no one left to fight: it is over')
+  } finally { await app.close() }
+})
