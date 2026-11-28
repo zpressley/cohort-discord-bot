@@ -6925,3 +6925,32 @@ rest is the second day's fighting, and as many first-day falls as before.
 No number was changed. The cautious Commander's 58% against steady is
 inside the noise of 120 battles (about 4.5 points either way) and was left.
 
+
+## Rulings, November 28, 2026 (plain orders are not meant to win)
+
+Told that "everyone advance" alone wins only 20 to 50% of pitched battles,
+and offered two ways to raise it (fords three tiles wide; no river between
+the armies in a pitched battle), Zach said:
+
+- "Why would I want everyone advance to win ? that is the least strategic
+  and most boring style of this game... I would think 20% is too high"
+
+What follows from it:
+
+- A single thoughtless order is not tuned to win, in any kind of battle.
+  The measure of a field is that it is fair between two sides that plan
+  (the computer against itself, 45 to 55%), not that one plain order is an
+  even fight.
+- Earlier targets that said otherwise are withdrawn: "a new player's plain
+  order near 40 to 60%" in "How the first battle, being asked, and forming
+  up were built", "How taking ground, news of the ground, and rallying
+  were mended", and rounds two and three of "How the kinds of battle were
+  built". What those changes did for a first battle (blows are struck, the
+  Commander is asked while he can still act, armies come to grips) stands;
+  the win rate of one order was the wrong thing to aim at.
+- A ford or bridge still takes one unit at a time. Attacking a held
+  crossing head-on is meant to be a bad plan.
+- Round three of the kinds of battle (an advance that halts short of a
+  held crossing and goes in together; branch
+  `worktree-agent-a94af84bcb93a711c`, commit 1ff7ec6) is not merged: it
+  did not change the outcome, and its purpose is withdrawn.
